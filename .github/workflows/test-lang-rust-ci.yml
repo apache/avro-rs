@@ -116,6 +116,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout other SDKs
+        uses: actions/checkout@v4
+        with:
+          repository: apache/avro
+          path: main-repo
+
       - name: Rust Toolchain
         uses: dtolnay/rust-toolchain@nightly
         with:
@@ -154,25 +160,27 @@ jobs:
             17
             21
 
-      - name: 'Setup Maven 3.9.6'
+      - name: 'Setup Maven 3.9.9'
         uses: stCarolas/setup-maven@d6af6abeda15e98926a57b5aa970a96bb37f97d1 # v5
         with:
-          maven-version: 3.9.6
+          maven-version: 3.9.9
 
       - name: Install Java Avro for Interop Test
-        working-directory: .
+        working-directory: main-repo
         run: mvn -B install -PskipQuality
 
       - name: Create Interop Data Directory
-        working-directory: .
+        working-directory: main-repo
         run: mkdir -p build/interop/data
 
       - name: Generate Interop Resources
-        working-directory: lang/java/avro
+        working-directory: main-repo/lang/java/avro
         run: mvn -B -P interop-data-generate generate-resources
 
       - name: Generate interop data
-        run: ./build.sh interop-data-generate
+        run: |
+          ln -s main-repo/build build
+          ./build.sh interop-data-generate
 
       - name: Rust reads interop files created by Java and Rust
         run: ./build.sh interop-data-test
@@ -205,7 +213,7 @@ jobs:
 
 
       - name: Perl reads interop files created by Java and Rust
-        working-directory: lang/perl
+        working-directory: main-repo/lang/perl
         run: ./build.sh interop-data-test
 
   web-assembly:
