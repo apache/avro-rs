@@ -21,7 +21,6 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = "Apache Avro tests helper."
-authors.workspace = true
 license.workspace = true
 repository.workspace = true
 keywords = ["avro", "data", "serialization", "test"]
