@@ -178,12 +178,10 @@ jobs:
         run: mvn -B -P interop-data-generate generate-resources
 
       - name: Generate interop data
-        run: |
-          ln -s main-repo/build build
-          ./build.sh interop-data-generate
+        run: INTEROP_ROOT_FOLDER="main-repo" ./build.sh interop-data-generate
 
       - name: Rust reads interop files created by Java and Rust
-        run: ./build.sh interop-data-test
+        run: INTEROP_ROOT_FOLDER="main-repo" ./build.sh interop-data-test
 
       - uses: shogo82148/actions-setup-perl@v1
         with:

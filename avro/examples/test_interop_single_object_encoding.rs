@@ -16,14 +16,17 @@
 // under the License.
 
 use apache_avro::{schema::AvroSchema, types::Value};
-
-const RESOURCES_FOLDER: &str = "../../share/test/data/messageV1";
+use std::error::Error;
 
 struct InteropMessage;
 
 impl AvroSchema for InteropMessage {
     fn get_schema() -> apache_avro::Schema {
-        let schema = std::fs::read_to_string(format!("{RESOURCES_FOLDER}/test_schema.avsc"))
+        let interop_root_folder: String = std::env::var("INTEROP_ROOT_FOLDER")
+            .expect("INTEROP_ROOT_FOLDER env var should be set");
+        let resource_folder = format!("{interop_root_folder}/share/test/data/messageV1");
+
+        let schema = std::fs::read_to_string(format!("{resource_folder}/test_schema.avsc"))
             .expect("File should exist with schema inside");
         apache_avro::Schema::parse_str(schema.as_str())
             .expect("File should exist with schema inside")
@@ -48,11 +51,16 @@ impl From<InteropMessage> for Value {
     }
 }
 
-fn main() {
-    let single_object = std::fs::read(format!("{RESOURCES_FOLDER}/test_message.bin"))
+fn main() -> Result<(), Box<dyn Error>> {
+    let interop_root_folder: String = std::env::var("INTEROP_ROOT_FOLDER")?;
+    let resource_folder = format!("{interop_root_folder}/share/test/data/messageV1");
+
+    let single_object = std::fs::read(format!("{resource_folder}/test_message.bin"))
         .expect("File with single object not found or error occurred while reading it.");
     test_write(&single_object);
     test_read(single_object);
+
+    Ok(())
 }
 
 fn test_write(expected: &[u8]) {
