@@ -18,7 +18,6 @@
 [package]
 name = "hello-wasm"
 version = "0.1.0"
-authors.workspace = true
 description = "A demo project for testing apache_avro in WebAssembly"
 license.workspace = true
 readme = "README.md"
