@@ -27,7 +27,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut expected_user_metadata: HashMap<String, Vec<u8>> = HashMap::new();
     expected_user_metadata.insert("user_metadata".to_string(), b"someByteArray".to_vec());
 
-    let data_dir = std::fs::read_dir("../../build/interop/data/")
+    let interop_root_folder: String = std::env::var("INTEROP_ROOT_FOLDER")?;
+    let data_dir = std::fs::read_dir(format!("{interop_root_folder}/build/interop/data/"))
         .expect("Unable to list the interop data directory");
 
     let mut errors = Vec::new();
