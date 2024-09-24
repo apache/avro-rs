@@ -32,8 +32,6 @@ github:
   features:
     issues: true
     pull_requests: true
-    projects: false
-    releases: false
     wiki: false
   protected_tags:
     - "rel/*"
