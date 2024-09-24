@@ -22,6 +22,7 @@ use crate::{
     },
     Schema,
 };
+use log::{debug, error};
 use std::{fmt::Debug, sync::OnceLock};
 
 /// A trait that compares two schemata for equality.

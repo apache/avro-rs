@@ -17,8 +17,6 @@
 
 #![cfg(target_arch = "wasm32")]
 
-extern crate wasm_bindgen_test;
-
 use std::io::BufWriter;
 use wasm_bindgen_test::*;
 
