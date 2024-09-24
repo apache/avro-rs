@@ -18,7 +18,6 @@
 [package]
 name = "apache-avro-derive"
 version.workspace = true
-authors.workspace = true
 description = "A library for deriving Avro schemata from Rust structs and enums"
 license.workspace = true
 repository.workspace = true
