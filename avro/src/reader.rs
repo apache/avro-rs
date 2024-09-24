@@ -27,6 +27,7 @@ use crate::{
     types::Value,
     util, AvroResult, Codec, Error,
 };
+use log::warn;
 use serde::de::DeserializeOwned;
 use serde_json::from_slice;
 use std::{

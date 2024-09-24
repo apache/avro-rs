@@ -16,6 +16,7 @@
 // under the License.
 
 use crate::{schema::Namespace, AvroResult, Error};
+use log::debug;
 use regex_lite::Regex;
 use std::sync::OnceLock;
 

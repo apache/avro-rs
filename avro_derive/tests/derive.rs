@@ -22,11 +22,8 @@ use apache_avro::{
 };
 use apache_avro_derive::*;
 use proptest::prelude::*;
-use serde::{de::DeserializeOwned, ser::Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::HashMap;
-
-#[macro_use]
-extern crate serde;
 
 #[cfg(test)]
 mod test_derive {

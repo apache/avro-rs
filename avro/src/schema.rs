@@ -27,6 +27,7 @@ use crate::{
     AvroResult,
 };
 use digest::Digest;
+use log::{debug, error, warn};
 use serde::{
     ser::{SerializeMap, SerializeSeq},
     Deserialize, Serialize, Serializer,

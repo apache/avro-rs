@@ -27,6 +27,7 @@ use crate::{
     AvroResult, Error,
 };
 use bigdecimal::BigDecimal;
+use log::{debug, error};
 use serde_json::{Number, Value as JsonValue};
 use std::{
     borrow::Borrow,

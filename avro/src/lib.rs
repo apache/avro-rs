@@ -894,9 +894,6 @@ pub use writer::{
 #[cfg(feature = "derive")]
 pub use apache_avro_derive::*;
 
-#[macro_use]
-extern crate log;
-
 /// A convenience type alias for `Result`s with `Error`s.
 pub type AvroResult<T> = Result<T, Error>;
 
