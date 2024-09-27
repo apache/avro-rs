@@ -669,7 +669,8 @@ impl RecordField {
         validate_record_field_name(&name)?;
 
         // TODO: "type" = "<record name>"
-        let schema = parser.parse_complex(field, &enclosing_record.namespace)?;
+        let schema =
+            parser.parse_complex(field, &enclosing_record.namespace, ParseLocation::FromField)?;
 
         let default = field.get("default").cloned();
         Self::resolve_default_value(
@@ -1006,6 +1007,16 @@ fn parse_json_integer_for_decimal(value: &serde_json::Number) -> Result<DecimalM
     })
 }
 
+#[derive(Debug, Default)]
+enum ParseLocation {
+    /// When the parse is happening at root level
+    #[default]
+    Root,
+
+    /// When the parse is happening inside a record field
+    FromField,
+}
+
 #[derive(Default)]
 struct Parser {
     input_schemas: HashMap<Name, Value>,
@@ -1232,7 +1243,9 @@ impl Parser {
     fn parse(&mut self, value: &Value, enclosing_namespace: &Namespace) -> AvroResult<Schema> {
         match *value {
             Value::String(ref t) => self.parse_known_schema(t.as_str(), enclosing_namespace),
-            Value::Object(ref data) => self.parse_complex(data, enclosing_namespace),
+            Value::Object(ref data) => {
+                self.parse_complex(data, enclosing_namespace, ParseLocation::Root)
+            }
             Value::Array(ref data) => self.parse_union(data, enclosing_namespace),
             _ => Err(Error::ParseSchemaFromValidJson),
         }
@@ -1294,6 +1307,11 @@ impl Parser {
             return Ok(resolving_schema.clone());
         }
 
+        // For good error reporting we add this check
+        if name.name == *"record" {
+            return Err(Error::InvalidSchemaRecord(name.to_string()));
+        }
+
         let value = self
             .input_schemas
             .remove(&fully_qualified_name)
@@ -1353,6 +1371,7 @@ impl Parser {
         &mut self,
         complex: &Map<String, Value>,
         enclosing_namespace: &Namespace,
+        parse_location: ParseLocation,
     ) -> AvroResult<Schema> {
         // Try to parse this as a native complex type.
         fn parse_as_native_complex(
@@ -1542,14 +1561,19 @@ impl Parser {
         }
         match complex.get("type") {
             Some(Value::String(t)) => match t.as_str() {
-                "record" => self.parse_record(complex, enclosing_namespace),
+                "record" => match parse_location {
+                    ParseLocation::Root => self.parse_record(complex, enclosing_namespace),
+                    ParseLocation::FromField => self.fetch_schema_ref(t, enclosing_namespace),
+                },
                 "enum" => self.parse_enum(complex, enclosing_namespace),
                 "array" => self.parse_array(complex, enclosing_namespace),
                 "map" => self.parse_map(complex, enclosing_namespace),
                 "fixed" => self.parse_fixed(complex, enclosing_namespace),
                 other => self.parse_known_schema(other, enclosing_namespace),
             },
-            Some(Value::Object(data)) => self.parse_complex(data, enclosing_namespace),
+            Some(Value::Object(data)) => {
+                self.parse_complex(data, enclosing_namespace, ParseLocation::Root)
+            }
             Some(Value::Array(variants)) => self.parse_union(variants, enclosing_namespace),
             Some(unknown) => Err(Error::GetComplexType(unknown.clone())),
             None => Err(Error::GetComplexTypeField),
@@ -4932,7 +4956,7 @@ mod tests {
                     "type": "Bar"
                 }
             ]
-        } 
+        }
         "#;
 
         #[derive(
@@ -6819,6 +6843,64 @@ mod tests {
             canonical_form
         );
         assert_eq!("92f2ccef718c6754", fp_rabin.to_string());
+        Ok(())
+    }
+
+    #[test]
+    fn avro_4055_should_fail_to_parse_invalid_schema() -> TestResult {
+        // This is invalid because the record type should be inside the type field.
+        let invalid_schema_str = r#"
+        {
+        "type": "record",
+        "name": "SampleSchema",
+        "fields": [
+            {
+            "name": "order",
+            "type": "record",
+            "fields": [
+                {
+                "name": "order_number",
+                "type": ["null", "string"],
+                "default": null
+                },
+                { "name": "order_date", "type": "string" }
+            ]
+            }
+        ]
+        }"#;
+
+        let schema = Schema::parse_str(invalid_schema_str);
+        assert!(schema.is_err());
+        assert_eq!(
+            schema.unwrap_err().to_string(),
+            "Invalid schema: There is no type called 'record', if you meant to create a record, it should be defined inside type. Please review the specification"
+        );
+
+        let valid_schema = r#"
+        {
+            "type": "record",
+            "name": "SampleSchema",
+            "fields": [
+                {
+                "name": "order",
+                "type": {
+                    "type": "record",
+                    "name": "Order",
+                    "fields": [
+                    {
+                        "name": "order_number",
+                        "type": ["null", "string"],
+                        "default": null
+                    },
+                    { "name": "order_date", "type": "string" }
+                    ]
+                }
+                }
+            ]
+        }"#;
+        let schema = Schema::parse_str(valid_schema);
+        assert!(schema.is_ok());
+
         Ok(())
     }
 }
