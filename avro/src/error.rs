@@ -446,6 +446,9 @@ pub enum Error {
     #[error("Failed to write buffer bytes during flush: {0}")]
     WriteBytes(#[source] std::io::Error),
 
+    #[error("Failed to flush inner writer during flush: {0}")]
+    FlushWriter(#[source] std::io::Error),
+
     #[error("Failed to write marker: {0}")]
     WriteMarker(#[source] std::io::Error),
 

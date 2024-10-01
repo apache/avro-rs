@@ -315,6 +315,8 @@ impl<'a, W: Write> Writer<'a, W> {
         self.buffer.clear();
         self.num_values = 0;
 
+        self.writer.flush().map_err(Error::FlushWriter)?;
+
         Ok(num_bytes)
     }
 
