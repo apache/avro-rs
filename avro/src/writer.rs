@@ -659,7 +659,7 @@ fn generate_sync_marker() -> [u8; 16] {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::{cell::RefCell, rc::Rc};
 
     use super::*;
     use crate::{
@@ -1462,17 +1462,17 @@ mod tests {
         "#;
 
         #[derive(Clone, Default)]
-        struct TestBuffer(Arc<Mutex<Vec<u8>>>);
+        struct TestBuffer(Rc<RefCell<Vec<u8>>>);
 
         impl TestBuffer {
             fn len(&self) -> usize {
-                self.0.try_lock().unwrap().len()
+                self.0.borrow().len()
             }
         }
 
         impl Write for TestBuffer {
             fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-                self.0.try_lock().unwrap().write(buf)
+                self.0.borrow_mut().write(buf)
             }
 
             fn flush(&mut self) -> std::io::Result<()> {
