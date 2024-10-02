@@ -315,6 +315,8 @@ impl<'a, W: Write> Writer<'a, W> {
         self.buffer.clear();
         self.num_values = 0;
 
+        self.writer.flush().map_err(Error::FlushWriter)?;
+
         Ok(num_bytes)
     }
 
@@ -657,6 +659,8 @@ fn generate_sync_marker() -> [u8; 16] {
 
 #[cfg(test)]
 mod tests {
+    use std::{cell::RefCell, rc::Rc};
+
     use super::*;
     use crate::{
         decimal::Decimal,
@@ -1442,6 +1446,60 @@ mod tests {
                 );
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn avro_4063_flush_applies_to_inner_writer() -> TestResult {
+        const SCHEMA: &str = r#"
+        {
+            "type": "record",
+            "name": "ExampleSchema",
+            "fields": [
+                {"name": "exampleField", "type": "string"}
+            ]
+        }
+        "#;
+
+        #[derive(Clone, Default)]
+        struct TestBuffer(Rc<RefCell<Vec<u8>>>);
+
+        impl TestBuffer {
+            fn len(&self) -> usize {
+                self.0.borrow().len()
+            }
+        }
+
+        impl Write for TestBuffer {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.0.borrow_mut().write(buf)
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let shared_buffer = TestBuffer::default();
+
+        let buffered_writer = std::io::BufWriter::new(shared_buffer.clone());
+
+        let schema = Schema::parse_str(SCHEMA)?;
+
+        let mut writer = Writer::new(&schema, buffered_writer);
+
+        let mut record = Record::new(writer.schema()).unwrap();
+        record.put("exampleField", "value");
+
+        writer.append(record)?;
+        writer.flush()?;
+
+        assert_eq!(
+            shared_buffer.len(),
+            167,
+            "the test buffer was not fully written to after Writer::flush was called"
+        );
+
         Ok(())
     }
 }
