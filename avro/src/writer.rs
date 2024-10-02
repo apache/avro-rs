@@ -1450,7 +1450,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_4063_flush_applies_to_inner_writer() {
+    fn avro_4063_flush_applies_to_inner_writer() -> TestResult {
         const SCHEMA: &str = r#"
         {
             "type": "record",
@@ -1470,7 +1470,7 @@ mod tests {
             }
         }
 
-        impl std::io::Write for TestBuffer {
+        impl Write for TestBuffer {
             fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
                 self.0.try_lock().unwrap().write(buf)
             }
@@ -1484,16 +1484,22 @@ mod tests {
 
         let buffered_writer = std::io::BufWriter::new(shared_buffer.clone());
 
-        let schema = Schema::parse_str(SCHEMA).unwrap();
+        let schema = Schema::parse_str(SCHEMA)?;
 
         let mut writer = Writer::new(&schema, buffered_writer);
 
         let mut record = Record::new(writer.schema()).unwrap();
         record.put("exampleField", "value");
 
-        writer.append(record).unwrap();
-        writer.flush().unwrap();
+        writer.append(record)?;
+        writer.flush()?;
 
-        assert_eq!(shared_buffer.len(), 167, "the test buffer was not fully written to after Writer::flush was called");
+        assert_eq!(
+            shared_buffer.len(),
+            167,
+            "the test buffer was not fully written to after Writer::flush was called"
+        );
+
+        Ok(())
     }
 }
