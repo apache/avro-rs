@@ -669,8 +669,11 @@ impl RecordField {
         validate_record_field_name(&name)?;
 
         // TODO: "type" = "<record name>"
-        let schema =
-            parser.parse_complex(field, &enclosing_record.namespace, RecordSchemaParseLocation::FromField)?;
+        let schema = parser.parse_complex(
+            field,
+            &enclosing_record.namespace,
+            RecordSchemaParseLocation::FromField,
+        )?;
 
         let default = field.get("default").cloned();
         Self::resolve_default_value(
@@ -1308,8 +1311,11 @@ impl Parser {
         }
 
         // For good error reporting we add this check
-        if name.name == *"record" {
-            return Err(Error::InvalidSchemaRecord(name.to_string()));
+        match name.name.as_str() {
+            "record" | "enum" | "fixed" => {
+                return Err(Error::InvalidSchemaRecord(name.to_string()));
+            }
+            _ => (),
         }
 
         let value = self
@@ -1562,8 +1568,12 @@ impl Parser {
         match complex.get("type") {
             Some(Value::String(t)) => match t.as_str() {
                 "record" => match parse_location {
-                    RecordSchemaParseLocation::Root => self.parse_record(complex, enclosing_namespace),
-                    RecordSchemaParseLocation::FromField => self.fetch_schema_ref(t, enclosing_namespace),
+                    RecordSchemaParseLocation::Root => {
+                        self.parse_record(complex, enclosing_namespace)
+                    }
+                    RecordSchemaParseLocation::FromField => {
+                        self.fetch_schema_ref(t, enclosing_namespace)
+                    }
                 },
                 "enum" => self.parse_enum(complex, enclosing_namespace),
                 "array" => self.parse_array(complex, enclosing_namespace),
@@ -6873,7 +6883,7 @@ mod tests {
         assert!(schema.is_err());
         assert_eq!(
             schema.unwrap_err().to_string(),
-            "Invalid schema: There is no type called 'record', if you meant to create a record, it should be defined inside type. Please review the specification"
+            "Invalid schema: There is no type called 'record', if you meant to define a non-primitive schema, it should be defined inside `type` attribute. Please review the specification"
         );
 
         let valid_schema = r#"
