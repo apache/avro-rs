@@ -670,7 +670,7 @@ impl RecordField {
 
         // TODO: "type" = "<record name>"
         let schema =
-            parser.parse_complex(field, &enclosing_record.namespace, ParseLocation::FromField)?;
+            parser.parse_complex(field, &enclosing_record.namespace, RecordSchemaParseLocation::FromField)?;
 
         let default = field.get("default").cloned();
         Self::resolve_default_value(
@@ -1008,7 +1008,7 @@ fn parse_json_integer_for_decimal(value: &serde_json::Number) -> Result<DecimalM
 }
 
 #[derive(Debug, Default)]
-enum ParseLocation {
+enum RecordSchemaParseLocation {
     /// When the parse is happening at root level
     #[default]
     Root,
@@ -1244,7 +1244,7 @@ impl Parser {
         match *value {
             Value::String(ref t) => self.parse_known_schema(t.as_str(), enclosing_namespace),
             Value::Object(ref data) => {
-                self.parse_complex(data, enclosing_namespace, ParseLocation::Root)
+                self.parse_complex(data, enclosing_namespace, RecordSchemaParseLocation::Root)
             }
             Value::Array(ref data) => self.parse_union(data, enclosing_namespace),
             _ => Err(Error::ParseSchemaFromValidJson),
@@ -1371,7 +1371,7 @@ impl Parser {
         &mut self,
         complex: &Map<String, Value>,
         enclosing_namespace: &Namespace,
-        parse_location: ParseLocation,
+        parse_location: RecordSchemaParseLocation,
     ) -> AvroResult<Schema> {
         // Try to parse this as a native complex type.
         fn parse_as_native_complex(
@@ -1562,8 +1562,8 @@ impl Parser {
         match complex.get("type") {
             Some(Value::String(t)) => match t.as_str() {
                 "record" => match parse_location {
-                    ParseLocation::Root => self.parse_record(complex, enclosing_namespace),
-                    ParseLocation::FromField => self.fetch_schema_ref(t, enclosing_namespace),
+                    RecordSchemaParseLocation::Root => self.parse_record(complex, enclosing_namespace),
+                    RecordSchemaParseLocation::FromField => self.fetch_schema_ref(t, enclosing_namespace),
                 },
                 "enum" => self.parse_enum(complex, enclosing_namespace),
                 "array" => self.parse_array(complex, enclosing_namespace),
@@ -1572,7 +1572,7 @@ impl Parser {
                 other => self.parse_known_schema(other, enclosing_namespace),
             },
             Some(Value::Object(data)) => {
-                self.parse_complex(data, enclosing_namespace, ParseLocation::Root)
+                self.parse_complex(data, enclosing_namespace, RecordSchemaParseLocation::Root)
             }
             Some(Value::Array(variants)) => self.parse_union(variants, enclosing_namespace),
             Some(unknown) => Err(Error::GetComplexType(unknown.clone())),
