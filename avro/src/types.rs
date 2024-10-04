@@ -2771,35 +2771,37 @@ Field with name '"b"' is not a member of the map items"#,
         use crate::ser::Serializer;
         use serde::Serialize;
 
-        let schema_str = r#"{
+        let schema_str = r#"
+        {
             "type": "record",
             "name": "NamespacedMessage",
             [NAMESPACE]
             "fields": [
                 {
-                    "type": "record",
                     "name": "field_a",
-                    "fields": [
-                        {
-                            "name": "enum_a",
-                            "type": {
+                    "type": {
+                        "type": "record",
+                        "name": "NestedMessage",
+                        "fields": [
+                            {
+                                "name": "enum_a",
+                                "type": {
                                 "type": "enum",
                                 "name": "EnumType",
-                                "symbols": [
-                                    "SYMBOL_1",
-                                    "SYMBOL_2"
-                                ],
+                                "symbols": ["SYMBOL_1", "SYMBOL_2"],
                                 "default": "SYMBOL_1"
+                                }
+                            },
+                            {
+                                "name": "enum_b",
+                                "type": "EnumType"
                             }
-                        },
-                        {
-                            "name": "enum_b",
-                            "type": "EnumType"
-                        }
-                    ]
+                        ]
+                    }
                 }
             ]
-        }"#;
+        }
+        "#;
         let schema_str = schema_str.replace(
             "[NAMESPACE]",
             if with_namespace {

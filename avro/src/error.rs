@@ -350,6 +350,9 @@ pub enum Error {
     #[error("Invalid namespace {0}. It must match the regex '{1}'")]
     InvalidNamespace(String, &'static str),
 
+    #[error("Invalid schema: There is no type called '{0}', if you meant to define a non-primitive schema, it should be defined inside `type` attribute. Please review the specification")]
+    InvalidSchemaRecord(String),
+
     #[error("Duplicate enum symbol {0}")]
     EnumSymbolDuplicate(String),
 
