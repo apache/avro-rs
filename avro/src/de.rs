@@ -272,6 +272,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a Deserializer<'de> {
                 Value::Map(ref items) => visitor.visit_map(MapDeserializer::new(items)),
                 Value::Bytes(ref bytes) | Value::Fixed(_, ref bytes) => visitor.visit_bytes(bytes),
                 Value::Decimal(ref d) => visitor.visit_bytes(&d.to_vec()?),
+                Value::Enum(_, ref s) => visitor.visit_borrowed_str(s),
                 _ => Err(de::Error::custom(format!(
                     "unsupported union: {:?}",
                     self.input
@@ -284,6 +285,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a Deserializer<'de> {
             Value::Map(ref items) => visitor.visit_map(MapDeserializer::new(items)),
             Value::Bytes(ref bytes) | Value::Fixed(_, ref bytes) => visitor.visit_bytes(bytes),
             Value::Decimal(ref d) => visitor.visit_bytes(&d.to_vec()?),
+            Value::Enum(_, s) => visitor.visit_borrowed_str(s),
             value => Err(de::Error::custom(format!(
                 "incorrect value of type: {:?}",
                 crate::schema::SchemaKind::from(value)
@@ -1243,11 +1245,17 @@ mod tests {
         }
 
         #[derive(Debug, Deserialize, PartialEq, Eq)]
+        enum EnumInStruct {
+            Val1,
+        }
+
+        #[derive(Debug, Deserialize, PartialEq, Eq)]
         struct StructWithMissingFields {
             a_string: String,
             a_record: Option<RecordInUnion>,
             an_array: Option<[bool; 2]>,
             a_union_map: Option<HashMap<String, i64>>,
+            an_enum: EnumInStruct,
         }
 
         let raw_map: HashMap<String, i64> = [
@@ -1415,6 +1423,11 @@ mod tests {
                 "a_non_existing_union_map".to_string(),
                 Value::Union(0, Box::new(Value::Map(HashMap::new()))),
             ),
+            ("an_enum".to_string(), Value::Enum(0, "Val1".to_owned())),
+            (
+                "a_non_existing_enum".to_string(),
+                Value::Enum(0, "AnotherVariant".to_owned()),
+            ),
         ]);
 
         let deserialized: StructWithMissingFields = crate::from_value(&record)?;
@@ -1425,6 +1438,7 @@ mod tests {
             }),
             an_array: Some([true, false]),
             a_union_map: Some(raw_map),
+            an_enum: EnumInStruct::Val1,
         };
         assert_eq!(deserialized, reference);
         Ok(())
