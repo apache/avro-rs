@@ -15,6 +15,21 @@
 // specific language governing permissions and limitations
 // under the License.
 
+//! [![rust continuous integration][rust continuous integration img]][rust continuous integration]
+//! [![rust clippy check][rust clippy check img]][rust clippy check]
+//! [![rust security audit][rust security audit img]][rust security audit]
+//! [![rust continuous integration ARM64][rust continuous integration ARM64 img]][rust continuous integration ARM64]
+//!
+//! [rust continuous integration]: https://github.com/apache/avro-rs/actions/workflows/test-lang-rust-ci.yml
+//! [rust continuous integration ARM64]: https://github.com/apache/avro-rs/actions/workflows/test-lang-rust-ci-ARM.yml
+//! [rust clippy check]:           https://github.com/apache/avro-rs/actions/workflows/test-lang-rust-clippy.yml
+//! [rust security audit]:         https://github.com/apache/avro-rs/actions/workflows/test-lang-rust-audit.yml
+//!
+//! [rust continuous integration img]: https://github.com/apache/avro-rs/actions/workflows/test-lang-rust-ci.yml/badge.svg
+//! [rust clippy check img]:           https://github.com/apache/avro-rs/actions/workflows/test-lang-rust-clippy.yml/badge.svg
+//! [rust security audit img]:         https://github.com/apache/avro-rs/actions/workflows/test-lang-rust-audit.yml/badge.svg
+//! [rust continuous integration ARM64 img]: https://github.com/apache/avro-rs/actions/workflows/test-lang-rust-ci-ARM.yml/badge.svg
+//!
 //! A library for working with [Apache Avro](https://avro.apache.org/) in Rust.
 //!
 //! Please check our [documentation](https://docs.rs/apache-avro) for examples, tutorials and API reference.
@@ -88,7 +103,11 @@
 //! # Upgrading to a newer minor version
 //!
 //! The library is still in beta, so there might be backward-incompatible changes between minor
-//! versions. If you have troubles upgrading, check the [version upgrade guide](https://github.com/apache/avro/blob/main/lang/rust/migration_guide.md).
+//! versions. If you have troubles upgrading, check the release notes.
+//!
+//! # Minimum supported Rust version
+//!
+//! 1.73.0
 //!
 //! # Defining a schema
 //!
