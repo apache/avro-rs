@@ -118,7 +118,7 @@ versions. If you have troubles upgrading, check the release notes.
 
 ## Minimum supported Rust version
 
-1.73.0
+1.74.0
 
 ## Defining a schema
 
