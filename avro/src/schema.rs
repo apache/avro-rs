@@ -46,7 +46,7 @@ use strum_macros::{Display, EnumDiscriminants, EnumString};
 
 /// Represents an Avro schema fingerprint
 /// More information about Avro schema fingerprints can be found in the
-/// [Avro Schema Fingerprint documentation](https://avro.apache.org/docs/current/specification/#schema-fingerprints)
+/// [Avro Schema Fingerprint documentation](https://avro.apache.org/docs/++version++/specification/#schema-fingerprints)
 pub struct SchemaFingerprint {
     pub bytes: Vec<u8>,
 }
@@ -67,7 +67,7 @@ impl fmt::Display for SchemaFingerprint {
 
 /// Represents any valid Avro schema
 /// More information about Avro schemas can be found in the
-/// [Avro Specification](https://avro.apache.org/docs/current/specification/#schema-declaration)
+/// [Avro Specification](https://avro.apache.org/docs/++version++/specification/#schema-declaration)
 #[derive(Clone, Debug, EnumDiscriminants, Display)]
 #[strum_discriminants(name(SchemaKind), derive(Hash, Ord, PartialOrd))]
 pub enum Schema {
@@ -228,7 +228,7 @@ impl From<&types::Value> for SchemaKind {
 /// `aliases` can also be defined, to facilitate schema evolution.
 ///
 /// More information about schema names can be found in the
-/// [Avro specification](https://avro.apache.org/docs/current/specification/#names)
+/// [Avro specification](https://avro.apache.org/docs/++version++/specification/#names)
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Name {
     pub name: String,
@@ -298,7 +298,7 @@ impl Name {
     /// Return the `fullname` of this `Name`
     ///
     /// More information about fullnames can be found in the
-    /// [Avro specification](https://avro.apache.org/docs/current/specification/#names)
+    /// [Avro specification](https://avro.apache.org/docs/++version++/specification/#names)
     pub fn fullname(&self, default_namespace: Namespace) -> String {
         if self.name.contains('.') {
             self.name.clone()
@@ -1037,7 +1037,7 @@ impl Schema {
     /// Converts `self` into its [Parsing Canonical Form].
     ///
     /// [Parsing Canonical Form]:
-    /// https://avro.apache.org/docs/current/specification/#parsing-canonical-form-for-schemas
+    /// https://avro.apache.org/docs/++version++/specification/#parsing-canonical-form-for-schemas
     pub fn canonical_form(&self) -> String {
         let json = serde_json::to_value(self)
             .unwrap_or_else(|e| panic!("Cannot parse Schema from JSON: {e}"));
@@ -1047,9 +1047,9 @@ impl Schema {
     /// Generate [fingerprint] of Schema's [Parsing Canonical Form].
     ///
     /// [Parsing Canonical Form]:
-    /// https://avro.apache.org/docs/current/specification/#parsing-canonical-form-for-schemas
+    /// https://avro.apache.org/docs/++version++/specification/#parsing-canonical-form-for-schemas
     /// [fingerprint]:
-    /// https://avro.apache.org/docs/current/specification/#schema-fingerprints
+    /// https://avro.apache.org/docs/++version++/specification/#schema-fingerprints
     pub fn fingerprint<D: Digest>(&self) -> SchemaFingerprint {
         let mut d = D::new();
         d.update(self.canonical_form());
@@ -1930,7 +1930,7 @@ impl Parser {
 // to the namespace of the name it is an alias for. For example, if a type named "a.b"
 // has aliases of "c" and "x.y", then the fully qualified names of its aliases are "a.c"
 // and "x.y".
-// https://avro.apache.org/docs/current/specification/#aliases
+// https://avro.apache.org/docs/++version++/specification/#aliases
 fn fix_aliases_namespace(aliases: Option<Vec<String>>, namespace: &Namespace) -> Aliases {
     aliases.map(|aliases| {
         aliases
@@ -2194,7 +2194,7 @@ impl Serialize for RecordField {
 }
 
 /// Parses a **valid** avro schema into the Parsing Canonical Form.
-/// https://avro.apache.org/docs/current/specification/#parsing-canonical-form-for-schemas
+/// https://avro.apache.org/docs/++version++/specification/#parsing-canonical-form-for-schemas
 fn parsing_canonical_form(schema: &Value) -> String {
     match schema {
         Value::Object(map) => pcf_map(map),
