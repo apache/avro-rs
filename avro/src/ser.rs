@@ -493,11 +493,13 @@ mod tests {
     use serde::{Deserialize, Serialize};
     use serial_test::serial;
     use std::sync::atomic::Ordering;
+    use crate::Decimal;
 
     #[derive(Debug, Deserialize, Serialize, Clone)]
     struct Test {
         a: i64,
         b: String,
+        decimal: Decimal
     }
 
     #[derive(Debug, Deserialize, Serialize)]
@@ -688,10 +690,12 @@ mod tests {
         let test = Test {
             a: 27,
             b: "foo".to_owned(),
+            decimal: Decimal::from(vec![1, 24]),
         };
         let expected = Value::Record(vec![
             ("a".to_owned(), Value::Long(27)),
             ("b".to_owned(), Value::String("foo".to_owned())),
+            ("decimal".to_owned(), Value::Bytes(vec![1, 24])),
         ]);
 
         assert_eq!(to_value(test.clone())?, expected);
@@ -704,6 +708,7 @@ mod tests {
                 Value::Record(vec![
                     ("a".to_owned(), Value::Long(27)),
                     ("b".to_owned(), Value::String("foo".to_owned())),
+                    ("decimal".to_owned(), Value::Bytes(vec![1, 24])),
                 ]),
             ),
             ("b".to_owned(), Value::Int(35)),

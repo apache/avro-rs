@@ -17,12 +17,59 @@
 
 use crate::{AvroResult, Error};
 use num_bigint::{BigInt, Sign};
+use serde::{Deserialize, Serialize, Serializer};
+use serde::de::SeqAccess;
 
-#[derive(Debug, Clone, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq)]
 pub struct Decimal {
     value: BigInt,
     len: usize,
 }
+
+impl Serialize for Decimal {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer
+    {
+        let bytes = &*self.to_vec().unwrap();
+        serializer.serialize_bytes(bytes)
+    }
+}
+impl<'de> Deserialize<'de> for Decimal {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct DecimalVisitor;
+        impl<'de> serde::de::Visitor<'de> for DecimalVisitor {
+            type Value = Decimal;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a byte slice or seq of bytes")
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Decimal::from(v))
+            }
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let mut bytes = Vec::new();
+                while let Some(value) = seq.next_element::<u8>()? {
+                    bytes.push(value);
+                }
+
+                Ok(Decimal::from(bytes))
+            }
+        }
+        deserializer.deserialize_bytes(DecimalVisitor)
+    }
+}
+
 
 // We only care about value equality, not byte length. Can two equal `BigInt`s have two different
 // byte lengths?
@@ -134,7 +181,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_3949_decimal_serde() -> TestResult {
+    fn avro_decimal_serde() -> TestResult {
         let decimal = Decimal::from(&[1, 2, 3]);
 
         let ser = serde_json::to_string(&decimal)?;
