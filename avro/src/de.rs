@@ -771,7 +771,7 @@ mod tests {
     struct Test {
         a: i64,
         b: String,
-        c: Decimal
+        c: Decimal,
     }
 
     #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]

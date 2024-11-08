@@ -488,18 +488,18 @@ pub fn to_value<S: Serialize>(value: S) -> Result<Value, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Decimal;
     use apache_avro_test_helper::TestResult;
     use pretty_assertions::assert_eq;
     use serde::{Deserialize, Serialize};
     use serial_test::serial;
     use std::sync::atomic::Ordering;
-    use crate::Decimal;
 
     #[derive(Debug, Deserialize, Serialize, Clone)]
     struct Test {
         a: i64,
         b: String,
-        decimal: Decimal
+        decimal: Decimal,
     }
 
     #[derive(Debug, Deserialize, Serialize)]

@@ -17,8 +17,7 @@
 
 use crate::{AvroResult, Error};
 use num_bigint::{BigInt, Sign};
-use serde::{Deserialize, Serialize, Serializer};
-use serde::de::SeqAccess;
+use serde::{de::SeqAccess, Deserialize, Serialize, Serializer};
 
 #[derive(Debug, Clone, Eq)]
 pub struct Decimal {
@@ -29,7 +28,7 @@ pub struct Decimal {
 impl Serialize for Decimal {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer
+        S: Serializer,
     {
         let bytes = &*self.to_vec().unwrap();
         serializer.serialize_bytes(bytes)
@@ -69,7 +68,6 @@ impl<'de> Deserialize<'de> for Decimal {
         deserializer.deserialize_bytes(DecimalVisitor)
     }
 }
-
 
 // We only care about value equality, not byte length. Can two equal `BigInt`s have two different
 // byte lengths?
