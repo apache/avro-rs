@@ -771,6 +771,7 @@ mod tests {
     struct Test {
         a: i64,
         b: String,
+        c: Decimal,
     }
 
     #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -864,10 +865,12 @@ mod tests {
         let test = Value::Record(vec![
             ("a".to_owned(), Value::Long(27)),
             ("b".to_owned(), Value::String("foo".to_owned())),
+            ("c".to_owned(), Value::Decimal(Decimal::from(vec![1, 24]))),
         ]);
         let expected = Test {
             a: 27,
             b: "foo".to_owned(),
+            c: Decimal::from(vec![1, 24]),
         };
         let final_value: Test = from_value(&test)?;
         assert_eq!(final_value, expected);
@@ -878,6 +881,7 @@ mod tests {
                 Value::Record(vec![
                     ("a".to_owned(), Value::Long(27)),
                     ("b".to_owned(), Value::String("foo".to_owned())),
+                    ("c".to_owned(), Value::Decimal(Decimal::from(vec![1, 24]))),
                 ]),
             ),
             ("b".to_owned(), Value::Int(35)),
