@@ -30,8 +30,10 @@ impl Serialize for Decimal {
     where
         S: Serializer,
     {
-        let bytes = &*self.to_vec().unwrap();
-        serializer.serialize_bytes(bytes)
+        match self.to_vec() {
+            Ok(ref bytes) => serializer.serialize_bytes(bytes),
+            Err(e) => Err(serde::ser::Error::custom(e)),
+        }
     }
 }
 impl<'de> Deserialize<'de> for Decimal {
@@ -179,7 +181,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_decimal_serde() -> TestResult {
+    fn avro_3949_decimal_serde() -> TestResult {
         let decimal = Decimal::from(&[1, 2, 3]);
 
         let ser = serde_json::to_string(&decimal)?;
