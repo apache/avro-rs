@@ -2509,7 +2509,7 @@ pub mod derive {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rabin::Rabin;
+    use crate::{rabin::Rabin, SpecificSingleObjectWriter};
     use apache_avro_test_helper::{
         logger::{assert_logged, assert_not_logged},
         TestResult,
@@ -6439,6 +6439,44 @@ mod tests {
         });
         let parse_result = Schema::parse(&schema)?;
         assert_eq!(parse_result, Schema::Uuid);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_53_uuid_with_fixed() -> TestResult {
+        #[derive(Debug, Serialize, Deserialize)]
+        struct Comment {
+            id: crate::Uuid,
+        }
+
+        impl AvroSchema for Comment {
+            fn get_schema() -> Schema {
+                Schema::parse_str(
+                    r#"{
+                        "type" : "record",
+                        "name" : "Comment",
+                        "fields" : [ {
+                          "name" : "id",
+                          "type" : {
+                            "type" : "fixed",
+                            "size" : 16,
+                            "logicalType" : "uuid",
+                            "name": "FixedUUID"
+                          }
+                        } ]
+                     }"#,
+                )
+                .expect("Invalid Comment Avro schema")
+            }
+        }
+
+        let payload = Comment {
+            id: "de2df598-9948-4988-b00a-a41c0e287398".parse()?,
+        };
+        let mut buffer = Vec::new();
+        SpecificSingleObjectWriter::<Comment>::with_capacity(10)?
+            .write_ref(&payload, &mut buffer)?;
 
         Ok(())
     }
