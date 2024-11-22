@@ -272,6 +272,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a Deserializer<'de> {
                 Value::Map(ref items) => visitor.visit_map(MapDeserializer::new(items)),
                 Value::Bytes(ref bytes) | Value::Fixed(_, ref bytes) => visitor.visit_bytes(bytes),
                 Value::Decimal(ref d) => visitor.visit_bytes(&d.to_vec()?),
+                Value::BigDecimal(ref d) => visitor.visit_string(d.to_string()),
                 Value::Enum(_, ref s) => visitor.visit_borrowed_str(s),
                 _ => Err(de::Error::custom(format!(
                     "unsupported union: {:?}",
@@ -285,6 +286,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a Deserializer<'de> {
             Value::Map(ref items) => visitor.visit_map(MapDeserializer::new(items)),
             Value::Bytes(ref bytes) | Value::Fixed(_, ref bytes) => visitor.visit_bytes(bytes),
             Value::Decimal(ref d) => visitor.visit_bytes(&d.to_vec()?),
+            Value::BigDecimal(ref d) => visitor.visit_string(d.to_string()),
             Value::Enum(_, s) => visitor.visit_borrowed_str(s),
             value => Err(de::Error::custom(format!(
                 "incorrect value of type: {:?}",
@@ -367,6 +369,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a Deserializer<'de> {
             }
             Value::Uuid(ref u) => visitor.visit_bytes(u.as_bytes()),
             Value::Decimal(ref d) => visitor.visit_bytes(&d.to_vec()?),
+            Value::BigDecimal(ref d) => visitor.visit_string(d.to_string()),
             _ => Err(de::Error::custom(format!(
                 "Expected a String|Bytes|Fixed|Uuid|Decimal, but got {:?}",
                 self.input
@@ -671,6 +674,7 @@ pub fn from_value<'de, D: Deserialize<'de>>(value: &'de Value) -> Result<D, Erro
 
 #[cfg(test)]
 mod tests {
+    use bigdecimal::BigDecimal;
     use num_bigint::BigInt;
     use pretty_assertions::assert_eq;
     use serde::{Deserialize, Serialize};
@@ -772,6 +776,7 @@ mod tests {
         a: i64,
         b: String,
         c: Decimal,
+        d: BigDecimal,
     }
 
     #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -866,11 +871,16 @@ mod tests {
             ("a".to_owned(), Value::Long(27)),
             ("b".to_owned(), Value::String("foo".to_owned())),
             ("c".to_owned(), Value::Decimal(Decimal::from(vec![1, 24]))),
+            (
+                "d".to_owned(),
+                Value::BigDecimal(BigDecimal::new(BigInt::from(12), 2)),
+            ),
         ]);
         let expected = Test {
             a: 27,
             b: "foo".to_owned(),
             c: Decimal::from(vec![1, 24]),
+            d: BigDecimal::new(BigInt::from(12), 2),
         };
         let final_value: Test = from_value(&test)?;
         assert_eq!(final_value, expected);
@@ -882,6 +892,10 @@ mod tests {
                     ("a".to_owned(), Value::Long(27)),
                     ("b".to_owned(), Value::String("foo".to_owned())),
                     ("c".to_owned(), Value::Decimal(Decimal::from(vec![1, 24]))),
+                    (
+                        "d".to_owned(),
+                        Value::BigDecimal(BigDecimal::new(BigInt::from(12), 2)),
+                    ),
                 ]),
             ),
             ("b".to_owned(), Value::Int(35)),

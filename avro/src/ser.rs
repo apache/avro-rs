@@ -490,6 +490,8 @@ mod tests {
     use super::*;
     use crate::Decimal;
     use apache_avro_test_helper::TestResult;
+    use bigdecimal::BigDecimal;
+    use num_bigint::BigInt;
     use pretty_assertions::assert_eq;
     use serde::{Deserialize, Serialize};
     use serial_test::serial;
@@ -500,6 +502,7 @@ mod tests {
         a: i64,
         b: String,
         decimal: Decimal,
+        big_decimal: BigDecimal,
     }
 
     #[derive(Debug, Deserialize, Serialize)]
@@ -691,11 +694,13 @@ mod tests {
             a: 27,
             b: "foo".to_owned(),
             decimal: Decimal::from(vec![1, 24]),
+            big_decimal: BigDecimal::new(BigInt::from(12), 2),
         };
         let expected = Value::Record(vec![
             ("a".to_owned(), Value::Long(27)),
             ("b".to_owned(), Value::String("foo".to_owned())),
             ("decimal".to_owned(), Value::Bytes(vec![1, 24])),
+            ("big_decimal".to_owned(), Value::String("0.12".into())),
         ]);
 
         assert_eq!(to_value(test.clone())?, expected);
@@ -709,6 +714,7 @@ mod tests {
                     ("a".to_owned(), Value::Long(27)),
                     ("b".to_owned(), Value::String("foo".to_owned())),
                     ("decimal".to_owned(), Value::Bytes(vec![1, 24])),
+                    ("big_decimal".to_owned(), Value::String("0.12".into())),
                 ]),
             ),
             ("b".to_owned(), Value::Int(35)),
