@@ -16,13 +16,12 @@
 // under the License.
 
 use apache_avro::{
-    from_value,
-    schema::{derive::AvroSchemaComponent, AvroSchema},
-    Reader, Schema, Writer,
+    Reader, Schema, Writer, from_value,
+    schema::{AvroSchema, derive::AvroSchemaComponent},
 };
 use apache_avro_derive::*;
 use proptest::prelude::*;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::collections::HashMap;
 
 #[cfg(test)]

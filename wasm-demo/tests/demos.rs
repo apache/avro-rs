@@ -20,7 +20,7 @@
 use std::io::BufWriter;
 use wasm_bindgen_test::*;
 
-use apache_avro::{from_value, to_value, types::Record, Codec, Reader, Schema, Writer};
+use apache_avro::{Codec, Reader, Schema, Writer, from_value, to_value, types::Record};
 use serde::{Deserialize, Serialize};
 
 wasm_bindgen_test_configure!(run_in_browser);

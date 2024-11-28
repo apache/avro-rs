@@ -16,8 +16,8 @@
 // under the License.
 
 use apache_avro::{
-    types::{Record, Value},
     Codec, DeflateSettings, Reader, Schema, Writer,
+    types::{Record, Value},
 };
 use apache_avro_test_helper::TestResult;
 use miniz_oxide::deflate::CompressionLevel;

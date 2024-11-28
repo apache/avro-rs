@@ -16,10 +16,10 @@
 // under the License.
 
 use apache_avro::{
-    from_avro_datum_reader_schemata, from_avro_datum_schemata, to_avro_datum_schemata,
-    types::Value, Codec, Reader, Schema, Writer,
+    Codec, Reader, Schema, Writer, from_avro_datum_reader_schemata, from_avro_datum_schemata,
+    to_avro_datum_schemata, types::Value,
 };
-use apache_avro_test_helper::{init, TestResult};
+use apache_avro_test_helper::{TestResult, init};
 
 static SCHEMA_A_STR: &str = r#"{
         "name": "A",

@@ -21,7 +21,7 @@ use crate::{
     schema::{EnumSchema, FixedSchema, RecordSchema, Schema, SchemaKind},
 };
 use std::{
-    collections::{hash_map::DefaultHasher, HashSet},
+    collections::{HashSet, hash_map::DefaultHasher},
     hash::Hasher,
     ptr,
 };
@@ -460,7 +460,7 @@ impl SchemaCompatibility {
                 _ => {
                     return Err(CompatibilityError::Inconclusive(String::from(
                         "readers_schema",
-                    )))
+                    )));
                 }
             };
         }
@@ -524,8 +524,8 @@ impl SchemaCompatibility {
 mod tests {
     use super::*;
     use crate::{
-        types::{Record, Value},
         Codec, Reader, Writer,
+        types::{Record, Value},
     };
     use apache_avro_test_helper::TestResult;
     use rstest::*;
@@ -735,9 +735,11 @@ mod tests {
             (nested_record(), nested_optional_record()),
         ];
 
-        assert!(incompatible_schemas
-            .iter()
-            .any(|(reader, writer)| SchemaCompatibility::can_read(writer, reader).is_err()));
+        assert!(
+            incompatible_schemas
+                .iter()
+                .any(|(reader, writer)| SchemaCompatibility::can_read(writer, reader).is_err())
+        );
     }
 
     #[rstest]
@@ -1068,9 +1070,11 @@ mod tests {
             (nested_optional_record(), nested_record()),
         ];
 
-        assert!(compatible_schemas
-            .iter()
-            .all(|(reader, writer)| SchemaCompatibility::can_read(writer, reader).is_ok()));
+        assert!(
+            compatible_schemas
+                .iter()
+                .all(|(reader, writer)| SchemaCompatibility::can_read(writer, reader).is_ok())
+        );
     }
 
     fn writer_schema() -> Schema {
@@ -1684,24 +1688,26 @@ mod tests {
         let schemas = [
             (
                 Schema::parse_str(
-                r#"{
+                    r#"{
                     "type": "record",
                     "name": "StatisticsMap",
                     "fields": [
                         {"name": "average", "type": "int", "default": 0},
                         {"name": "success", "type": {"type": "map", "values": "int"}}
                     ]
-                }"#)?,
+                }"#,
+                )?,
                 Schema::parse_str(
-                        r#"{
+                    r#"{
                     "type": "record",
                     "name": "StatisticsMap",
                     "fields": [
                         {"name": "average", "type": "int", "default": 0},
                         {"name": "success", "type": ["null", {"type": "map", "values": "int"}], "default": null}
                     ]
-                }"#)?,
-                "Incompatible schemata! Field 'success' in reader schema does not match the type in the writer schema"
+                }"#,
+                )?,
+                "Incompatible schemata! Field 'success' in reader schema does not match the type in the writer schema",
             ),
             (
                 Schema::parse_str(
@@ -1711,17 +1717,19 @@ mod tests {
                         "fields": [
                             {"name": "max_values", "type": {"type": "array", "items": "int"}}
                         ]
-                    }"#)?,
-                    Schema::parse_str(
+                    }"#,
+                )?,
+                Schema::parse_str(
                     r#"{
                         "type": "record",
                         "name": "StatisticsArray",
                         "fields": [
                             {"name": "max_values", "type": ["null", {"type": "array", "items": "int"}], "default": null}
                         ]
-                    }"#)?,
-                    "Incompatible schemata! Field 'max_values' in reader schema does not match the type in the writer schema"
-            )
+                    }"#,
+                )?,
+                "Incompatible schemata! Field 'max_values' in reader schema does not match the type in the writer schema",
+            ),
         ];
 
         for (schema_1, schema_2, error) in schemas {

@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{from_avro_datum, to_avro_datum, to_value, types, Schema};
+use apache_avro::{Schema, from_avro_datum, to_avro_datum, to_value, types};
 use apache_avro_test_helper::TestResult;
 
 #[test]
@@ -611,8 +611,8 @@ fn deserialize_union_with_different_enum_order_defined_in_record() -> TestResult
 }
 
 #[test]
-fn deserialize_union_with_record_with_enum_defined_inline_reader_has_different_indices(
-) -> TestResult {
+fn deserialize_union_with_record_with_enum_defined_inline_reader_has_different_indices()
+-> TestResult {
     #[derive(
         Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone, serde::Deserialize, serde::Serialize,
     )]

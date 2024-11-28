@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{types::Value, Codec, Reader, Schema, Writer};
+use apache_avro::{Codec, Reader, Schema, Writer, types::Value};
 use apache_avro_test_helper::TestResult;
 use std::{
     fmt,

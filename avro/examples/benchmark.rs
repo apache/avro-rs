@@ -16,9 +16,9 @@
 // under the License.
 
 use apache_avro::{
+    Reader, Writer,
     schema::Schema,
     types::{Record, Value},
-    Reader, Writer,
 };
 use apache_avro_test_helper::TestResult;
 use std::{
