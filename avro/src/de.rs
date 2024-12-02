@@ -230,7 +230,7 @@ impl<'de> de::VariantAccess<'de> for EnumDeserializer<'de> {
     }
 }
 
-impl<'a, 'de> de::Deserializer<'de> for &'a Deserializer<'de> {
+impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
     type Error = Error;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -1504,7 +1504,7 @@ mod tests {
             D: serde::Deserializer<'de>,
         {
             struct BytesVisitor;
-            impl<'de> serde::de::Visitor<'de> for BytesVisitor {
+            impl Visitor<'_> for BytesVisitor {
                 type Value = Bytes;
 
                 fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

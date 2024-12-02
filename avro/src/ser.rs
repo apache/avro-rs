@@ -346,7 +346,7 @@ impl ser::SerializeTupleStruct for SeqSerializer {
     }
 }
 
-impl<'a> ser::SerializeSeq for SeqVariantSerializer<'a> {
+impl ser::SerializeSeq for SeqVariantSerializer<'_> {
     type Ok = Value;
     type Error = Error;
 
@@ -372,7 +372,7 @@ impl<'a> ser::SerializeSeq for SeqVariantSerializer<'a> {
     }
 }
 
-impl<'a> ser::SerializeTupleVariant for SeqVariantSerializer<'a> {
+impl ser::SerializeTupleVariant for SeqVariantSerializer<'_> {
     type Ok = Value;
     type Error = Error;
 
@@ -447,7 +447,7 @@ impl ser::SerializeStruct for StructSerializer {
     }
 }
 
-impl<'a> ser::SerializeStructVariant for StructVariantSerializer<'a> {
+impl ser::SerializeStructVariant for StructVariantSerializer<'_> {
     type Ok = Value;
     type Error = Error;
 
