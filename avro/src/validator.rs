@@ -102,7 +102,7 @@ impl SchemaNamespaceValidator for SpecificationValidator {
     fn validate(&self, ns: &str) -> AvroResult<()> {
         let regex = SchemaNamespaceValidator::regex(self);
         if !regex.is_match(ns) {
-            return Err(Error::InvalidNamespace(ns.to_string(), regex.as_str()));
+            Err(Error::InvalidNamespace(ns.to_string(), regex.as_str()))
         } else {
             Ok(())
         }

@@ -306,7 +306,7 @@ fn read_codec(metadata: &HashMap<String, Value>) -> AvroResult<Codec> {
             Err(err) => Err(err),
         });
 
-    result.unwrap_or_else(|| Ok(Codec::Null))
+    result.unwrap_or(Ok(Codec::Null))
 }
 
 /// Main interface for reading Avro formatted values.
@@ -415,7 +415,7 @@ impl<'a, R: Read> Reader<'a, R> {
     }
 }
 
-impl<'a, R: Read> Iterator for Reader<'a, R> {
+impl<R: Read> Iterator for Reader<'_, R> {
     type Item = AvroResult<Value>;
 
     fn next(&mut self) -> Option<Self::Item> {

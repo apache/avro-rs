@@ -231,7 +231,7 @@ pub struct Record<'a> {
     schema_lookup: &'a BTreeMap<String, usize>,
 }
 
-impl<'a> Record<'a> {
+impl Record<'_> {
     /// Create a `Record` given a `Schema`.
     ///
     /// If the `Schema` is not a `Schema::Record` variant, `None` will be returned.
