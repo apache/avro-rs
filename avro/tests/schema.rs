@@ -2103,7 +2103,7 @@ fn test_independent_canonical_form_primitives() -> TestResult {
         assert_eq!(schemata.len(), 4);
         let test_schema = schemata
             .iter()
-            .find(|a| a.name().unwrap().to_string() == "RecWithDeps".to_string())
+            .find(|a| a.name().unwrap().to_string() == *"RecWithDeps")
             .unwrap();
 
         assert_eq!(
@@ -2247,7 +2247,7 @@ fn test_independent_canonical_form_usages() -> TestResult {
                 "ns.Rec" => {
                     assert_eq!(s.independent_canonical_form(&schemata), s.canonical_form());
                 }
-                _ => assert!(false),
+                _ => panic!(),
             }
         }
     }
