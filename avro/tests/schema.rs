@@ -2089,13 +2089,13 @@ fn test_independent_canonical_form_primitives() -> TestResult {
         ]
     }"#;
 
-
     let independent_schema = Schema::parse_str(record_with_no_dependencies)?;
     let schema_strs = [
         fixed_primitive,
         enum_primitive,
         record_primitive,
-        record_with_dependencies];
+        record_with_dependencies,
+    ];
 
     for schema_str_perm in permutations(&schema_strs) {
         let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
@@ -2103,7 +2103,8 @@ fn test_independent_canonical_form_primitives() -> TestResult {
         assert_eq!(schemata.len(), 4);
         let test_schema = schemata
             .iter()
-            .find(|a|a.name().unwrap().to_string() == "RecWithDeps".to_string()).unwrap();
+            .find(|a| a.name().unwrap().to_string() == "RecWithDeps".to_string())
+            .unwrap();
 
         assert_eq!(
             independent_schema.independent_canonical_form(&schemata),
@@ -2112,7 +2113,8 @@ fn test_independent_canonical_form_primitives() -> TestResult {
 
         assert_eq!(
             independent_schema.canonical_form(),
-            test_schema.independent_canonical_form(&schemata));
+            test_schema.independent_canonical_form(&schemata)
+        );
     }
     Ok(())
 }
@@ -2210,7 +2212,8 @@ fn test_independent_canonical_form_usages() -> TestResult {
         record_usage,
         array_usage,
         map_usage,
-        union_usage];
+        union_usage,
+    ];
 
     for schema_str_perm in permutations(&schema_strs) {
         let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
@@ -2222,31 +2225,28 @@ fn test_independent_canonical_form_usages() -> TestResult {
                         s.independent_canonical_form(&schemata),
                         Schema::parse_str(record_usage_independent)?.canonical_form()
                     );
-                },
+                }
                 "ArrayUsage" => {
                     assert_eq!(
                         s.independent_canonical_form(&schemata),
                         Schema::parse_str(array_usage_independent)?.canonical_form()
                     );
-                },
+                }
                 "UnionUsage" => {
                     assert_eq!(
                         s.independent_canonical_form(&schemata),
                         Schema::parse_str(union_usage_independent)?.canonical_form()
                     );
-                },
+                }
                 "MapUsage" => {
                     assert_eq!(
                         s.independent_canonical_form(&schemata),
                         Schema::parse_str(map_usage_independent)?.canonical_form()
                     );
-                },
+                }
                 "ns.Rec" => {
-                    assert_eq!(
-                        s.independent_canonical_form(&schemata),
-                        s.canonical_form()
-                    );
-                },
+                    assert_eq!(s.independent_canonical_form(&schemata), s.canonical_form());
+                }
                 _ => assert!(false),
             }
         }

@@ -1043,7 +1043,7 @@ impl Schema {
         let json = serde_json::to_value(self)
             .unwrap_or_else(|e| panic!("Cannot parse Schema from JSON: {e}"));
         let mut defined_names = HashSet::new();
-        parsing_canonical_form(&json,&mut defined_names)
+        parsing_canonical_form(&json, &mut defined_names)
     }
 
     /// Returns the [Parsing Canonical Form] of `self` that is self contained (not dependent on
@@ -1051,12 +1051,11 @@ impl Schema {
     ///
     /// [Parsing Canonical Form]:
     /// https://avro.apache.org/docs/current/specification/#parsing-canonical-form-for-schemas
-    pub fn independent_canonical_form(&self,schemata: &Vec<Schema>) -> String {
+    pub fn independent_canonical_form(&self, schemata: &Vec<Schema>) -> String {
         let mut d = self.clone();
         d.denormalize(schemata);
         d.canonical_form()
     }
-
 
     /// Generate [fingerprint] of Schema's [Parsing Canonical Form].
     ///
@@ -1261,9 +1260,9 @@ impl Schema {
         })
     }
 
-    fn denormalize(&mut self,schemata: &Vec<Schema>)  {
+    fn denormalize(&mut self, schemata: &Vec<Schema>) {
         match self {
-            Ref{name} => {
+            Ref { name } => {
                 let repl = schemata.iter().find(|s| {
                     if let Some(n) = s.name() {
                         if *n == *name {
@@ -1272,24 +1271,26 @@ impl Schema {
                     }
                     false
                 });
-                if let Some(r) = repl { *self = r.clone(); }
-            },
+                if let Some(r) = repl {
+                    *self = r.clone();
+                }
+            }
             Schema::Record(r) => {
                 for rr in &mut r.fields {
                     rr.schema.denormalize(schemata);
                 }
-            },
+            }
             Schema::Array(a) => {
                 a.items.denormalize(schemata);
-            },
+            }
             Schema::Map(m) => {
                 m.types.denormalize(schemata);
-            },
+            }
             Schema::Union(u) => {
                 for uu in &mut u.schemas {
                     uu.denormalize(schemata);
                 }
-            },
+            }
             _ => (),
         }
     }
@@ -2301,13 +2302,17 @@ fn parsing_canonical_form(schema: &Value, defined_names: &mut HashSet<String>) -
     }
 }
 
-fn pcf_map(schema: &Map<String, Value>,defined_names: &mut HashSet<String>) -> String {
+fn pcf_map(schema: &Map<String, Value>, defined_names: &mut HashSet<String>) -> String {
     // Look for the namespace variant up front.
     let ns = schema.get("namespace").and_then(|v| v.as_str());
     let typ = schema.get("type").and_then(|v| v.as_str());
     let raw_name = schema.get("name").and_then(|v| v.as_str());
     let name = if is_named_type(typ) {
-        Some(format!("{}{}", ns.map_or("".to_string(), |n| { format!("{n}.") }), raw_name.unwrap_or_default()))
+        Some(format!(
+            "{}{}",
+            ns.map_or("".to_string(), |n| { format!("{n}.") }),
+            raw_name.unwrap_or_default()
+        ))
     } else {
         None
     };
@@ -2362,7 +2367,11 @@ fn pcf_map(schema: &Map<String, Value>,defined_names: &mut HashSet<String>) -> S
         // For anything else, recursively process the result.
         fields.push((
             k,
-            format!("{}:{}", pcf_string(k), parsing_canonical_form(v,defined_names)),
+            format!(
+                "{}:{}",
+                pcf_string(k),
+                parsing_canonical_form(v, defined_names)
+            ),
         ));
     }
 
@@ -2383,10 +2392,10 @@ fn is_named_type(typ: Option<&str>) -> bool {
     )
 }
 
-fn pcf_array(arr: &[Value],defined_names: &mut HashSet<String>) -> String {
+fn pcf_array(arr: &[Value], defined_names: &mut HashSet<String>) -> String {
     let inter = arr
         .iter()
-        .map(|a|parsing_canonical_form(a,defined_names))
+        .map(|a| parsing_canonical_form(a, defined_names))
         .collect::<Vec<String>>()
         .join(",");
     format!("[{inter}]")
