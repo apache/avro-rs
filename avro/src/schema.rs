@@ -35,7 +35,7 @@ use serde::{
 };
 use serde_json::{Map, Value};
 use std::{
-    borrow::{Borrow, Cow},
+    borrow::Borrow,
     collections::{BTreeMap, HashMap, HashSet},
     fmt,
     fmt::Debug,
@@ -43,6 +43,8 @@ use std::{
     io::Read,
     str::FromStr,
 };
+#[allow(unused_imports)]
+use std::borrow::Cow;
 use strum_macros::{Display, EnumDiscriminants, EnumString};
 
 /// Represents an Avro schema fingerprint
