@@ -2017,3 +2017,239 @@ fn test_avro_3851_read_default_value_for_enum() -> TestResult {
 
     Ok(())
 }
+
+#[test]
+fn test_independent_canonical_form_primitives() -> TestResult {
+    init();
+    let record_primitive = r#"{
+        "name": "Rec",
+        "namespace": "ns",
+        "type": "record",
+        "fields": [
+            {"name": "v", "type": "int"}
+        ]
+    }"#;
+
+    let enum_primitive = r#"{
+        "name": "En",
+        "type": "enum",
+        "symbols": [ "bar0", "bar1" ]
+    }"#;
+
+    let fixed_primitive = r#"{
+        "name": "Fix",
+        "type": "fixed",
+        "size": 4
+    }"#;
+
+    let record_with_dependencies = r#"{
+        "name": "RecWithDeps",
+        "type": "record",
+        "fields": [
+            {"name": "v1", "type": "ns.Rec"},
+            {"name": "v2", "type": "En"},
+            {"name": "v3", "type": "Fix"},
+            {"name": "v4", "type": "ns.Rec"},
+            {"name": "v5", "type": "En"},
+            {"name": "v6", "type": "Fix"}
+        ]
+    }"#;
+
+    let record_with_no_dependencies = r#"{
+        "name": "RecWithDeps",
+        "type": "record",
+        "fields": [
+            {
+                "name": "v1", "type": {
+                    "name": "Rec",
+                    "namespace": "ns",
+                    "type": "record",
+                    "fields": [
+                        {"name": "v", "type": "int"}
+                    ]
+                }
+            },
+            {
+                "name": "v2", "type": {
+                    "name": "En",
+                    "type": "enum",
+                    "symbols": [ "bar0", "bar1" ]
+                }
+            },
+            {"name": "v3", "type":
+                {
+                    "name": "Fix",
+                    "type": "fixed",
+                    "size": 4
+                }
+            },
+            {"name": "v4", "type": "ns.Rec"},
+            {"name": "v5", "type": "En"},
+            {"name": "v6", "type": "Fix"}
+        ]
+    }"#;
+
+
+    let independent_schema = Schema::parse_str(record_with_no_dependencies)?;
+    let schema_strs = [
+        fixed_primitive,
+        enum_primitive,
+        record_primitive,
+        record_with_dependencies];
+
+    for schema_str_perm in permutations(&schema_strs) {
+        let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
+        let schemata = Schema::parse_list(&schema_str_perm)?;
+        assert_eq!(schemata.len(), 4);
+        let test_schema = schemata
+            .iter()
+            .find(|a|a.name().unwrap().to_string() == "RecWithDeps".to_string()).unwrap();
+
+        assert_eq!(
+            independent_schema.independent_canonical_form(&schemata),
+            independent_schema.canonical_form()
+        );
+
+        assert_eq!(
+            independent_schema.canonical_form(),
+            test_schema.independent_canonical_form(&schemata));
+    }
+    Ok(())
+}
+
+#[test]
+fn test_independent_canonical_form_usages() -> TestResult {
+    init();
+    let record_primitive = r#"{
+        "name": "Rec",
+        "namespace": "ns",
+        "type": "record",
+        "fields": [
+            {"name": "v", "type": "int"}
+        ]
+    }"#;
+
+    let record_usage = r#"{
+        "name": "RecUsage",
+        "type": "record",
+        "fields": [
+            {"name": "v1", "type": "ns.Rec"},
+            {"name": "v2", "type": "ns.Rec"}
+        ]
+    }"#;
+    let record_usage_independent = r#"{
+        "name": "RecUsage",
+        "type": "record",
+        "fields": [
+            {"name": "v1", "type": {
+                "name": "ns.Rec", "type": "record","fields": [{"name": "v", "type": "int"}]}
+            },
+            {"name": "v2", "type": "ns.Rec"}
+        ]
+    }"#;
+
+    let array_usage = r#"{
+        "name": "ArrayUsage",
+        "type": "record",
+        "fields": [
+            {"name": "field_one", "type": {"type": "array", "items": "ns.Rec"}},
+            {"name": "field_two", "type": {"type": "array", "items": "ns.Rec"}}
+        ]
+    }"#;
+    let array_usage_independent = r#"{
+        "name": "ArrayUsage",
+        "type": "record",
+        "fields": [
+            {"name": "field_one", "type": {"type": "array", "items": {
+                "name": "ns.Rec", "type": "record","fields": [{"name": "v", "type": "int"}]}
+            }},
+            {"name": "field_two", "type": {"type": "array", "items": "ns.Rec"}}
+        ]
+    }"#;
+
+    let union_usage = r#"{
+        "name": "UnionUsage",
+        "type": "record",
+        "fields": [
+            {"name": "field_one", "type": ["null", "ns.Rec"]},
+            {"name": "field_two", "type": ["null", "ns.Rec"]}
+        ]
+    }"#;
+    let union_usage_independent = r#"{
+        "name": "UnionUsage",
+        "type": "record",
+        "fields": [
+            {"name": "field_one", "type": ["null", {
+                "name": "ns.Rec", "type": "record","fields": [{"name": "v", "type": "int"}]}
+            ]},
+            {"name": "field_two", "type": ["null", "ns.Rec"]}
+        ]
+    }"#;
+
+    let map_usage = r#"{
+        "name": "MapUsage",
+        "type": "record",
+        "fields": [
+            {"name": "field_one", "type": {"type": "map", "values": "ns.Rec"}},
+            {"name": "field_two", "type": {"type": "map", "values": "ns.Rec"}}
+        ]
+    }"#;
+    let map_usage_independent = r#"{
+        "name": "MapUsage",
+        "type": "record",
+        "fields": [
+            {"name": "field_one", "type": {"type": "map", "values": {
+                "name": "ns.Rec", "type": "record","fields": [{"name": "v", "type": "int"}]}
+            }},
+            {"name": "field_two", "type": {"type": "map", "values": "ns.Rec"}}
+        ]
+    }"#;
+
+    let schema_strs = [
+        record_primitive,
+        record_usage,
+        array_usage,
+        map_usage,
+        union_usage];
+
+    for schema_str_perm in permutations(&schema_strs) {
+        let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
+        let schemata = Schema::parse_list(&schema_str_perm)?;
+        for s in &schemata {
+            match s.name().unwrap().to_string().as_str() {
+                "RecUsage" => {
+                    assert_eq!(
+                        s.independent_canonical_form(&schemata),
+                        Schema::parse_str(record_usage_independent)?.canonical_form()
+                    );
+                },
+                "ArrayUsage" => {
+                    assert_eq!(
+                        s.independent_canonical_form(&schemata),
+                        Schema::parse_str(array_usage_independent)?.canonical_form()
+                    );
+                },
+                "UnionUsage" => {
+                    assert_eq!(
+                        s.independent_canonical_form(&schemata),
+                        Schema::parse_str(union_usage_independent)?.canonical_form()
+                    );
+                },
+                "MapUsage" => {
+                    assert_eq!(
+                        s.independent_canonical_form(&schemata),
+                        Schema::parse_str(map_usage_independent)?.canonical_form()
+                    );
+                },
+                "ns.Rec" => {
+                    assert_eq!(
+                        s.independent_canonical_form(&schemata),
+                        s.canonical_form()
+                    );
+                },
+                _ => assert!(false),
+            }
+        }
+    }
+    Ok(())
+}
