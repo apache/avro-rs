@@ -43,8 +43,6 @@ use std::{
     io::Read,
     str::FromStr,
 };
-#[allow(unused_imports)]
-use std::borrow::Cow;
 use strum_macros::{Display, EnumDiscriminants, EnumString};
 
 /// Represents an Avro schema fingerprint
@@ -1265,9 +1263,9 @@ impl Schema {
     fn denormalize(&mut self, schemata: &Vec<Schema>) {
         match self {
             Ref { name } => {
-                let repl = schemata.iter().find(|s| {
-                    s.name().map(|n| *n == *name).unwrap_or(false)
-                });
+                let repl = schemata
+                    .iter()
+                    .find(|s| s.name().map(|n| *n == *name).unwrap_or(false));
                 if let Some(r) = repl {
                     let mut denorm = r.clone();
                     denorm.denormalize(schemata);
@@ -2440,6 +2438,7 @@ pub trait AvroSchema {
 #[cfg(feature = "derive")]
 pub mod derive {
     use super::*;
+    use std::borrow::Cow;
 
     /// Trait for types that serve as fully defined components inside an Avro data model. Derive
     /// implementation available through `derive` feature. This is what is implemented by

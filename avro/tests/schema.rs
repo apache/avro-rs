@@ -2305,20 +2305,19 @@ fn test_independent_canonical_form_deep_recursion() -> TestResult {
 
     }"#;
 
-
-    let schema_strs = [
-        record_primitive,
-        record_usage,
-        record_usage_usage,
-    ];
+    let schema_strs = [record_primitive, record_usage, record_usage_usage];
 
     for schema_str_perm in permutations(&schema_strs) {
         let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
         let schemata = Schema::parse_list(&schema_str_perm)?;
-        let ruu = schemata.iter().find(|s|s.name().unwrap().to_string().as_str() == "RecUsageUsage").unwrap();
+        let ruu = schemata
+            .iter()
+            .find(|s| s.name().unwrap().to_string().as_str() == "RecUsageUsage")
+            .unwrap();
         assert_eq!(
             ruu.independent_canonical_form(&schemata),
-            Schema::parse_str(record_usage_usage_independent)?.canonical_form());
+            Schema::parse_str(record_usage_usage_independent)?.canonical_form()
+        );
     }
     Ok(())
 }
