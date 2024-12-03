@@ -2349,7 +2349,7 @@ fn pcf_map(schema: &Map<String, Value>, defined_names: &mut HashSet<String>) -> 
         // Fully qualify the name, if it isn't already ([FULLNAMES] rule).
         if k == "name" {
             if let Some(ref n) = name {
-                fields.push((k, format!("{}:{}", pcf_string(k), pcf_string(&n))));
+                fields.push((k, format!("{}:{}", pcf_string(k), pcf_string(n))));
                 continue;
             }
         }
