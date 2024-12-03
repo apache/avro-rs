@@ -1266,15 +1266,12 @@ impl Schema {
         match self {
             Ref { name } => {
                 let repl = schemata.iter().find(|s| {
-                    if let Some(n) = s.name() {
-                        if *n == *name {
-                            return true;
-                        }
-                    }
-                    false
+                    s.name().map(|n| *n == *name).unwrap_or(false)
                 });
                 if let Some(r) = repl {
-                    *self = r.clone();
+                    let mut denorm = r.clone();
+                    denorm.denormalize(schemata);
+                    *self = denorm;
                 }
             }
             Schema::Record(r) => {
