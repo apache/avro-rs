@@ -2253,3 +2253,72 @@ fn test_independent_canonical_form_usages() -> TestResult {
     }
     Ok(())
 }
+
+#[test]
+fn test_independent_canonical_form_deep_recursion() -> TestResult {
+    init();
+    let record_primitive = r#"{
+        "name": "Rec",
+        "namespace": "ns",
+        "type": "record",
+        "fields": [
+            {"name": "v", "type": "int"}
+        ]
+    }"#;
+
+    let record_usage = r#"{
+        "name": "RecUsage",
+        "type": "record",
+        "fields": [
+            {"name": "v1", "type": "ns.Rec"},
+            {"name": "v2", "type": "ns.Rec"}
+        ]
+    }"#;
+
+    let record_usage_usage = r#"{
+        "name": "RecUsageUsage",
+        "type": "record",
+        "fields": [
+            {"name": "r1", "type": "RecUsage"},
+            {"name": "r2", "type": "RecUsage"}
+        ]
+    }"#;
+
+    let record_usage_usage_independent = r#"{
+        "name": "RecUsageUsage",
+        "type": "record",
+        "fields": [
+            {"name": "r1", "type": {
+                "name": "RecUsage",
+                "type": "record",
+                "fields": [
+                    {
+                        "name": "v1", "type": {
+                            "name": "ns.Rec", "type": "record","fields": [{"name": "v", "type": "int"}]
+                        }
+                    },
+                    {"name": "v2", "type": "ns.Rec"}
+                ]
+            }},
+            {"name": "r2", "type": "RecUsage"}
+        ]
+
+    }"#;
+
+
+    let schema_strs = [
+        record_primitive,
+        record_usage,
+        record_usage_usage,
+    ];
+
+    for schema_str_perm in permutations(&schema_strs) {
+        let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
+        let schemata = Schema::parse_list(&schema_str_perm)?;
+        let ruu = schemata.iter().find(|s|s.name().unwrap().to_string().as_str() == "RecUsageUsage").unwrap();
+        assert_eq!(
+            ruu.independent_canonical_form(&schemata),
+            Schema::parse_str(record_usage_usage_independent)?.canonical_form());
+    }
+    Ok(())
+}
