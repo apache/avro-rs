@@ -2515,6 +2515,8 @@ mod tests {
         TestResult,
     };
     use serde_json::json;
+    use serial_test::serial;
+    use std::sync::atomic::Ordering;
 
     #[test]
     fn test_invalid_schema() {
@@ -6444,6 +6446,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(serde_is_human_readable)]
     fn avro_rs_53_uuid_with_fixed() -> TestResult {
         #[derive(Debug, Serialize, Deserialize)]
         struct Comment {
@@ -6475,6 +6478,10 @@ mod tests {
             id: "de2df598-9948-4988-b00a-a41c0e287398".parse()?,
         };
         let mut buffer = Vec::new();
+
+        let is_human_readable = true;
+        crate::util::SERDE_HUMAN_READABLE.store(is_human_readable, Ordering::Release);
+
         SpecificSingleObjectWriter::<Comment>::with_capacity(10)?
             .write_ref(&payload, &mut buffer)?;
 
