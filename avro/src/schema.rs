@@ -1276,18 +1276,18 @@ impl Schema {
             }
             Schema::Record(r) => {
                 for rr in &mut r.fields {
-                    let _ = rr.schema.denormalize(schemata)?;
+                    rr.schema.denormalize(schemata)?;
                 }
             }
             Schema::Array(a) => {
-                let _ = a.items.denormalize(schemata)?;
+                a.items.denormalize(schemata)?;
             }
             Schema::Map(m) => {
-                let _ = m.types.denormalize(schemata)?;
+                m.types.denormalize(schemata)?;
             }
             Schema::Union(u) => {
                 for uu in &mut u.schemas {
-                    let _ = uu.denormalize(schemata)?;
+                    uu.denormalize(schemata)?;
                 }
             }
             _ => (),
