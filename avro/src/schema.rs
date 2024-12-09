@@ -1051,10 +1051,10 @@ impl Schema {
     ///
     /// [Parsing Canonical Form]:
     /// https://avro.apache.org/docs/current/specification/#parsing-canonical-form-for-schemas
-    pub fn independent_canonical_form(&self, schemata: &Vec<Schema>) -> String {
+    pub fn independent_canonical_form(&self, schemata: &Vec<Schema>) -> Result<String, Error> {
         let mut d = self.clone();
-        d.denormalize(schemata);
-        d.canonical_form()
+        d.denormalize(schemata)?;
+        Ok(d.canonical_form())
     }
 
     /// Generate [fingerprint] of Schema's [Parsing Canonical Form].
@@ -1260,7 +1260,7 @@ impl Schema {
         })
     }
 
-    fn denormalize(&mut self, schemata: &Vec<Schema>) {
+    fn denormalize(&mut self, schemata: &Vec<Schema>) -> AvroResult<()> {
         match self {
             Ref { name } => {
                 let repl = schemata
@@ -1268,28 +1268,31 @@ impl Schema {
                     .find(|s| s.name().map(|n| *n == *name).unwrap_or(false));
                 if let Some(r) = repl {
                     let mut denorm = r.clone();
-                    denorm.denormalize(schemata);
+                    denorm.denormalize(schemata)?;
                     *self = denorm;
+                } else {
+                    return Err(Error::SchemaResolutionError(name.clone()));
                 }
             }
             Schema::Record(r) => {
                 for rr in &mut r.fields {
-                    rr.schema.denormalize(schemata);
+                    let _ = rr.schema.denormalize(schemata)?;
                 }
             }
             Schema::Array(a) => {
-                a.items.denormalize(schemata);
+                let _ = a.items.denormalize(schemata)?;
             }
             Schema::Map(m) => {
-                m.types.denormalize(schemata);
+                let _ = m.types.denormalize(schemata)?;
             }
             Schema::Union(u) => {
                 for uu in &mut u.schemas {
-                    uu.denormalize(schemata);
+                    let _ = uu.denormalize(schemata)?;
                 }
             }
             _ => (),
         }
+        Ok(())
     }
 }
 

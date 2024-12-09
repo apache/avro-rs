@@ -2107,13 +2107,13 @@ fn test_independent_canonical_form_primitives() -> TestResult {
             .unwrap();
 
         assert_eq!(
-            independent_schema.independent_canonical_form(&schemata),
+            independent_schema.independent_canonical_form(&schemata)?,
             independent_schema.canonical_form()
         );
 
         assert_eq!(
             independent_schema.canonical_form(),
-            test_schema.independent_canonical_form(&schemata)
+            test_schema.independent_canonical_form(&schemata)?
         );
     }
     Ok(())
@@ -2222,30 +2222,30 @@ fn test_independent_canonical_form_usages() -> TestResult {
             match s.name().unwrap().to_string().as_str() {
                 "RecUsage" => {
                     assert_eq!(
-                        s.independent_canonical_form(&schemata),
+                        s.independent_canonical_form(&schemata)?,
                         Schema::parse_str(record_usage_independent)?.canonical_form()
                     );
                 }
                 "ArrayUsage" => {
                     assert_eq!(
-                        s.independent_canonical_form(&schemata),
+                        s.independent_canonical_form(&schemata)?,
                         Schema::parse_str(array_usage_independent)?.canonical_form()
                     );
                 }
                 "UnionUsage" => {
                     assert_eq!(
-                        s.independent_canonical_form(&schemata),
+                        s.independent_canonical_form(&schemata)?,
                         Schema::parse_str(union_usage_independent)?.canonical_form()
                     );
                 }
                 "MapUsage" => {
                     assert_eq!(
-                        s.independent_canonical_form(&schemata),
+                        s.independent_canonical_form(&schemata)?,
                         Schema::parse_str(map_usage_independent)?.canonical_form()
                     );
                 }
                 "ns.Rec" => {
-                    assert_eq!(s.independent_canonical_form(&schemata), s.canonical_form());
+                    assert_eq!(s.independent_canonical_form(&schemata)?, s.canonical_form());
                 }
                 _ => panic!(),
             }
@@ -2315,9 +2315,40 @@ fn test_independent_canonical_form_deep_recursion() -> TestResult {
             .find(|s| s.name().unwrap().to_string().as_str() == "RecUsageUsage")
             .unwrap();
         assert_eq!(
-            ruu.independent_canonical_form(&schemata),
+            ruu.independent_canonical_form(&schemata)?,
             Schema::parse_str(record_usage_usage_independent)?.canonical_form()
         );
     }
+    Ok(())
+}
+
+#[test]
+fn test_independent_canonical_form_missing_ref() -> TestResult {
+    init();
+    let record_primitive = r#"{
+        "name": "Rec",
+        "namespace": "ns",
+        "type": "record",
+        "fields": [
+            {"name": "v", "type": "int"}
+        ]
+    }"#;
+
+    let record_usage = r#"{
+        "name": "RecUsage",
+        "type": "record",
+        "fields": [
+            {"name": "v1", "type": "ns.Rec"}
+        ]
+    }"#;
+
+    let schema_strs = [record_primitive, record_usage];
+    let schemata = Schema::parse_list(&schema_strs)?;
+    assert!(
+        matches!(
+            schemata[1].independent_canonical_form(&vec![]).err().unwrap(),  //NOTE - we're passing in an empty schemata
+            Error::SchemaResolutionError(..)
+        )
+    );
     Ok(())
 }
