@@ -2344,11 +2344,12 @@ fn test_independent_canonical_form_missing_ref() -> TestResult {
 
     let schema_strs = [record_primitive, record_usage];
     let schemata = Schema::parse_list(&schema_strs)?;
-    assert!(
-        matches!(
-            schemata[1].independent_canonical_form(&vec![]).err().unwrap(),  //NOTE - we're passing in an empty schemata
-            Error::SchemaResolutionError(..)
-        )
-    );
+    assert!(matches!(
+        schemata[1]
+            .independent_canonical_form(&vec![])
+            .err()
+            .unwrap(), //NOTE - we're passing in an empty schemata
+        Error::SchemaResolutionError(..)
+    ));
     Ok(())
 }
