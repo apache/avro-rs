@@ -25,6 +25,7 @@ use crate::{
         validate_schema_name,
     },
     AvroResult,
+    Schema::Ref,
 };
 use digest::Digest;
 use log::{debug, error, warn};
@@ -34,7 +35,7 @@ use serde::{
 };
 use serde_json::{Map, Value};
 use std::{
-    borrow::{Borrow, Cow},
+    borrow::Borrow,
     collections::{BTreeMap, HashMap, HashSet},
     fmt,
     fmt::Debug,
@@ -1041,7 +1042,19 @@ impl Schema {
     pub fn canonical_form(&self) -> String {
         let json = serde_json::to_value(self)
             .unwrap_or_else(|e| panic!("Cannot parse Schema from JSON: {e}"));
-        parsing_canonical_form(&json)
+        let mut defined_names = HashSet::new();
+        parsing_canonical_form(&json, &mut defined_names)
+    }
+
+    /// Returns the [Parsing Canonical Form] of `self` that is self contained (not dependent on
+    /// any definitions in `schemata`)
+    ///
+    /// [Parsing Canonical Form]:
+    /// https://avro.apache.org/docs/current/specification/#parsing-canonical-form-for-schemas
+    pub fn independent_canonical_form(&self, schemata: &Vec<Schema>) -> Result<String, Error> {
+        let mut d = self.clone();
+        d.denormalize(schemata)?;
+        Ok(d.canonical_form())
     }
 
     /// Generate [fingerprint] of Schema's [Parsing Canonical Form].
@@ -1201,6 +1214,41 @@ impl Schema {
             items: Box::new(items),
             attributes,
         })
+    }
+
+    fn denormalize(&mut self, schemata: &Vec<Schema>) -> AvroResult<()> {
+        match self {
+            Ref { name } => {
+                let repl = schemata
+                    .iter()
+                    .find(|s| s.name().map(|n| *n == *name).unwrap_or(false));
+                if let Some(r) = repl {
+                    let mut denorm = r.clone();
+                    denorm.denormalize(schemata)?;
+                    *self = denorm;
+                } else {
+                    return Err(Error::SchemaResolutionError(name.clone()));
+                }
+            }
+            Schema::Record(r) => {
+                for rr in &mut r.fields {
+                    rr.schema.denormalize(schemata)?;
+                }
+            }
+            Schema::Array(a) => {
+                a.items.denormalize(schemata)?;
+            }
+            Schema::Map(m) => {
+                m.types.denormalize(schemata)?;
+            }
+            Schema::Union(u) => {
+                for uu in &mut u.schemas {
+                    uu.denormalize(schemata)?;
+                }
+            }
+            _ => (),
+        }
+        Ok(())
     }
 }
 
@@ -2195,19 +2243,39 @@ impl Serialize for RecordField {
 
 /// Parses a **valid** avro schema into the Parsing Canonical Form.
 /// https://avro.apache.org/docs/current/specification/#parsing-canonical-form-for-schemas
-fn parsing_canonical_form(schema: &Value) -> String {
+fn parsing_canonical_form(schema: &Value, defined_names: &mut HashSet<String>) -> String {
     match schema {
-        Value::Object(map) => pcf_map(map),
+        Value::Object(map) => pcf_map(map, defined_names),
         Value::String(s) => pcf_string(s),
-        Value::Array(v) => pcf_array(v),
+        Value::Array(v) => pcf_array(v, defined_names),
         json => panic!("got invalid JSON value for canonical form of schema: {json}"),
     }
 }
 
-fn pcf_map(schema: &Map<String, Value>) -> String {
+fn pcf_map(schema: &Map<String, Value>, defined_names: &mut HashSet<String>) -> String {
     // Look for the namespace variant up front.
     let ns = schema.get("namespace").and_then(|v| v.as_str());
     let typ = schema.get("type").and_then(|v| v.as_str());
+    let raw_name = schema.get("name").and_then(|v| v.as_str());
+    let name = if is_named_type(typ) {
+        Some(format!(
+            "{}{}",
+            ns.map_or("".to_string(), |n| { format!("{n}.") }),
+            raw_name.unwrap_or_default()
+        ))
+    } else {
+        None
+    };
+
+    //if this is already a defined type, early return
+    if let Some(ref n) = name {
+        if defined_names.get(n).is_some() {
+            return pcf_string(n);
+        } else {
+            defined_names.insert(n.clone());
+        }
+    }
+
     let mut fields = Vec::new();
     for (k, v) in schema {
         // Reduce primitive types to their simple form. ([PRIMITIVE] rule)
@@ -2230,17 +2298,10 @@ fn pcf_map(schema: &Map<String, Value>) -> String {
 
         // Fully qualify the name, if it isn't already ([FULLNAMES] rule).
         if k == "name" {
-            // Invariant: Only valid schemas. Must be a string.
-            let name = v.as_str().unwrap();
-            let n = match ns {
-                Some(namespace) if is_named_type(typ) && !name.contains('.') => {
-                    Cow::Owned(format!("{namespace}.{name}"))
-                }
-                _ => Cow::Borrowed(name),
-            };
-
-            fields.push((k, format!("{}:{}", pcf_string(k), pcf_string(&n))));
-            continue;
+            if let Some(ref n) = name {
+                fields.push((k, format!("{}:{}", pcf_string(k), pcf_string(n))));
+                continue;
+            }
         }
 
         // Strip off quotes surrounding "size" type, if they exist ([INTEGERS] rule).
@@ -2256,7 +2317,11 @@ fn pcf_map(schema: &Map<String, Value>) -> String {
         // For anything else, recursively process the result.
         fields.push((
             k,
-            format!("{}:{}", pcf_string(k), parsing_canonical_form(v)),
+            format!(
+                "{}:{}",
+                pcf_string(k),
+                parsing_canonical_form(v, defined_names)
+            ),
         ));
     }
 
@@ -2277,10 +2342,10 @@ fn is_named_type(typ: Option<&str>) -> bool {
     )
 }
 
-fn pcf_array(arr: &[Value]) -> String {
+fn pcf_array(arr: &[Value], defined_names: &mut HashSet<String>) -> String {
     let inter = arr
         .iter()
-        .map(parsing_canonical_form)
+        .map(|a| parsing_canonical_form(a, defined_names))
         .collect::<Vec<String>>()
         .join(",");
     format!("[{inter}]")
@@ -2326,6 +2391,7 @@ pub trait AvroSchema {
 #[cfg(feature = "derive")]
 pub mod derive {
     use super::*;
+    use std::borrow::Cow;
 
     /// Trait for types that serve as fully defined components inside an Avro data model. Derive
     /// implementation available through `derive` feature. This is what is implemented by
@@ -3238,7 +3304,7 @@ mod tests {
         assert_eq!(schema, expected);
 
         let canonical_form = &schema.canonical_form();
-        let expected = r#"{"name":"record","type":"record","fields":[{"name":"enum","type":{"name":"enum","type":"enum","symbols":["one","two","three"]}},{"name":"next","type":{"name":"enum","type":"enum","symbols":["one","two","three"]}}]}"#;
+        let expected = r#"{"name":"record","type":"record","fields":[{"name":"enum","type":{"name":"enum","type":"enum","symbols":["one","two","three"]}},{"name":"next","type":"enum"}]}"#;
         assert_eq!(canonical_form, &expected);
 
         Ok(())
@@ -3322,7 +3388,7 @@ mod tests {
         assert_eq!(schema, expected);
 
         let canonical_form = &schema.canonical_form();
-        let expected = r#"{"name":"record","type":"record","fields":[{"name":"fixed","type":{"name":"fixed","type":"fixed","size":456}},{"name":"next","type":{"name":"fixed","type":"fixed","size":456}}]}"#;
+        let expected = r#"{"name":"record","type":"record","fields":[{"name":"fixed","type":{"name":"fixed","type":"fixed","size":456}},{"name":"next","type":"fixed"}]}"#;
         assert_eq!(canonical_form, &expected);
 
         Ok(())
