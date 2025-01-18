@@ -1108,7 +1108,10 @@ impl Schema {
     /// # Arguments
     /// * `schema` - the JSON string of the schema to parse
     /// * `schemata` - a slice of additional schemas that is used to resolve cross-references
-    pub fn parse_str_with_list(schema: &str, schemata: &[&str]) -> AvroResult<(Schema, Vec<Schema>)> {
+    pub fn parse_str_with_list(
+        schema: &str,
+        schemata: &[&str],
+    ) -> AvroResult<(Schema, Vec<Schema>)> {
         let mut input_schemas: HashMap<Name, Value> = HashMap::with_capacity(schemata.len());
         let mut input_order: Vec<Name> = Vec::with_capacity(schemata.len());
         for json in schemata {
@@ -2763,7 +2766,8 @@ mod tests {
 
         let schema_str_c = r#"["A", "B"]"#;
 
-        let (schema_c, schemata) = Schema::parse_str_with_list(schema_str_c, &[schema_str_a, schema_str_b])?;
+        let (schema_c, schemata) =
+            Schema::parse_str_with_list(schema_str_c, &[schema_str_a, schema_str_b])?;
 
         let schema_a_expected = Schema::Record(RecordSchema {
             name: Name::new("A")?,
