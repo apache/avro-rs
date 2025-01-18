@@ -2758,8 +2758,8 @@ mod tests {
 
         let schema_str_c = r#"["A", "B"]"#;
 
-        let schema_c = Schema::parse_str_with_list(schema_str_c, &[schema_str_a, schema_str_b])?
-            .clone();
+        let schema_c =
+            Schema::parse_str_with_list(schema_str_c, &[schema_str_a, schema_str_b])?.clone();
 
         let schema_c_expected = Schema::Union(UnionSchema::new(vec![
             Schema::Ref {
