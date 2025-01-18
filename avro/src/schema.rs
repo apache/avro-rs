@@ -1104,15 +1104,18 @@ impl Schema {
     /// during parsing.
     ///
     /// If two of the named input schemas have the same fullname, an Error will be returned.
-    pub fn parse_str_with_list(schema: &str, input: &[&str]) -> AvroResult<Schema> {
-        let mut input_schemas: HashMap<Name, Value> = HashMap::with_capacity(input.len());
-        let mut input_order: Vec<Name> = Vec::with_capacity(input.len());
-        for js in input {
-            let schema: Value = serde_json::from_str(js).map_err(Error::ParseSchemaJson)?;
+    ///
+    /// # Arguments
+    /// * `schema` - the JSON string of the schema to parse
+    /// * `schemata` - a slice of additional schemas that is used to resolve cross-references
+    pub fn parse_str_with_list(schema: &str, schemata: &[&str]) -> AvroResult<Schema> {
+        let mut input_schemas: HashMap<Name, Value> = HashMap::with_capacity(schemata.len());
+        let mut input_order: Vec<Name> = Vec::with_capacity(schemata.len());
+        for json in schemata {
+            let schema: Value = serde_json::from_str(json).map_err(Error::ParseSchemaJson)?;
             if let Value::Object(inner) = &schema {
                 let name = Name::parse(inner, &None)?;
-                let previous_value = input_schemas.insert(name.clone(), schema);
-                if previous_value.is_some() {
+                if let Some(_previous) = input_schemas.insert(name.clone(), schema) {
                     return Err(Error::NameCollision(name.fullname(None)));
                 }
                 input_order.push(name);
@@ -1124,7 +1127,7 @@ impl Schema {
             input_schemas,
             resolving_schemas: HashMap::default(),
             input_order,
-            parsed_schemas: HashMap::with_capacity(input.len()),
+            parsed_schemas: HashMap::with_capacity(schemata.len()),
         };
         parser.parse_input_schemas()?;
 
@@ -2738,7 +2741,7 @@ mod tests {
     }
 
     #[test]
-    fn test_root_union_of_records() -> TestResult {
+    fn avro_rs_104_test_root_union_of_records() -> TestResult {
         // A and B are the same except the name.
         let schema_str_a = r#"{
             "name": "A",
@@ -2758,8 +2761,7 @@ mod tests {
 
         let schema_str_c = r#"["A", "B"]"#;
 
-        let schema_c =
-            Schema::parse_str_with_list(schema_str_c, &[schema_str_a, schema_str_b])?.clone();
+        let schema_c = Schema::parse_str_with_list(schema_str_c, &[schema_str_a, schema_str_b])?;
 
         let schema_c_expected = Schema::Union(UnionSchema::new(vec![
             Schema::Ref {
@@ -2771,6 +2773,66 @@ mod tests {
         ])?);
 
         assert_eq!(schema_c, schema_c_expected);
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_104_test_root_union_of_records_name_collision() -> TestResult {
+        // A and B are exactly the same.
+        let schema_str_a1 = r#"{
+            "name": "A",
+            "type": "record",
+            "fields": [
+                {"name": "field_one", "type": "float"}
+            ]
+        }"#;
+
+        let schema_str_a2 = r#"{
+            "name": "A",
+            "type": "record",
+            "fields": [
+                {"name": "field_one", "type": "float"}
+            ]
+        }"#;
+
+        let schema_str_c = r#"["A", "A"]"#;
+
+        match Schema::parse_str_with_list(schema_str_c, &[schema_str_a1, schema_str_a2]) {
+            Ok(_) => unreachable!("Expected an error that the name is already defined"),
+            Err(e) => assert_eq!(
+                e.to_string(),
+                "Two schemas with the same fullname were given: \"A\""
+            ),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_104_test_root_union_of_records_no_name() -> TestResult {
+        let schema_str_a = r#"{
+            "name": "A",
+            "type": "record",
+            "fields": [
+                {"name": "field_one", "type": "float"}
+            ]
+        }"#;
+
+        // B has no name field.
+        let schema_str_b = r#"{
+            "type": "record",
+            "fields": [
+                {"name": "field_one", "type": "float"}
+            ]
+        }"#;
+
+        let schema_str_c = r#"["A", "A"]"#;
+
+        match Schema::parse_str_with_list(schema_str_c, &[schema_str_a, schema_str_b]) {
+            Ok(_) => unreachable!("Expected an error that schema_str_b is missing a name field"),
+            Err(e) => assert_eq!(e.to_string(), "No `name` field"),
+        }
+
         Ok(())
     }
 
