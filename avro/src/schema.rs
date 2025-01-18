@@ -1064,7 +1064,7 @@ impl Schema {
         parser.parse_str(input)
     }
 
-    /// Create a array of `Schema`'s from a list of named JSON Avro schemas (Record, Enum, and
+    /// Create an array of `Schema`'s from a list of named JSON Avro schemas (Record, Enum, and
     /// Fixed).
     ///
     /// It is allowed that the schemas have cross-dependencies; these will be resolved
@@ -1094,6 +1094,42 @@ impl Schema {
             parsed_schemas: HashMap::with_capacity(input.len()),
         };
         parser.parse_list()
+    }
+
+    /// Create a `Schema` from a string representing a JSON Avro schema,
+    /// along with an array of `Schema`'s from a list of named JSON Avro schemas (Record, Enum, and
+    /// Fixed).
+    ///
+    /// It is allowed that the schemas have cross-dependencies; these will be resolved
+    /// during parsing.
+    ///
+    /// If two of the named input schemas have the same fullname, an Error will be returned.
+    pub fn parse_str_with_list(schema: &str, input: &[&str]) -> AvroResult<Schema> {
+        let mut input_schemas: HashMap<Name, Value> = HashMap::with_capacity(input.len());
+        let mut input_order: Vec<Name> = Vec::with_capacity(input.len());
+        for js in input {
+            let schema: Value = serde_json::from_str(js).map_err(Error::ParseSchemaJson)?;
+            if let Value::Object(inner) = &schema {
+                let name = Name::parse(inner, &None)?;
+                let previous_value = input_schemas.insert(name.clone(), schema);
+                if previous_value.is_some() {
+                    return Err(Error::NameCollision(name.fullname(None)));
+                }
+                input_order.push(name);
+            } else {
+                return Err(Error::GetNameField);
+            }
+        }
+        let mut parser = Parser {
+            input_schemas,
+            resolving_schemas: HashMap::default(),
+            input_order,
+            parsed_schemas: HashMap::with_capacity(input.len()),
+        };
+        parser.parse_input_schemas()?;
+
+        let value = serde_json::from_str(schema).map_err(Error::ParseSchemaJson)?;
+        parser.parse(&value, &None)
     }
 
     /// Create a `Schema` from a reader which implements [`Read`].
@@ -1214,6 +1250,21 @@ impl Parser {
     /// Create an array of `Schema`'s from an iterator of JSON Avro schemas. It is allowed that
     /// the schemas have cross-dependencies; these will be resolved during parsing.
     fn parse_list(&mut self) -> Result<Vec<Schema>, Error> {
+        self.parse_input_schemas()?;
+
+        let mut parsed_schemas = Vec::with_capacity(self.parsed_schemas.len());
+        for name in self.input_order.drain(0..) {
+            let parsed = self
+                .parsed_schemas
+                .remove(&name)
+                .expect("One of the input schemas was unexpectedly not parsed");
+            parsed_schemas.push(parsed);
+        }
+        Ok(parsed_schemas)
+    }
+
+    /// Convert the input schemas to parsed_schemas
+    fn parse_input_schemas(&mut self) -> Result<(), Error> {
         while !self.input_schemas.is_empty() {
             let next_name = self
                 .input_schemas
@@ -1229,16 +1280,7 @@ impl Parser {
             self.parsed_schemas
                 .insert(get_schema_type_name(name, value), parsed);
         }
-
-        let mut parsed_schemas = Vec::with_capacity(self.parsed_schemas.len());
-        for name in self.input_order.drain(0..) {
-            let parsed = self
-                .parsed_schemas
-                .remove(&name)
-                .expect("One of the input schemas was unexpectedly not parsed");
-            parsed_schemas.push(parsed);
-        }
-        Ok(parsed_schemas)
+        Ok(())
     }
 
     /// Create a `Schema` from a `serde_json::Value` representing a JSON Avro
@@ -2690,6 +2732,43 @@ mod tests {
             lookup: BTreeMap::from_iter(vec![("field_one".to_string(), 0)]),
             attributes: Default::default(),
         });
+
+        assert_eq!(schema_c, schema_c_expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_root_union_of_records() -> TestResult {
+        // A and B are the same except the name.
+        let schema_str_a = r#"{
+            "name": "A",
+            "type": "record",
+            "fields": [
+                {"name": "field_one", "type": "float"}
+            ]
+        }"#;
+
+        let schema_str_b = r#"{
+            "name": "B",
+            "type": "record",
+            "fields": [
+                {"name": "field_one", "type": "float"}
+            ]
+        }"#;
+
+        let schema_str_c = r#"["A", "B"]"#;
+
+        let schema_c = Schema::parse_str_with_list(schema_str_c, &[schema_str_a, schema_str_b])?
+            .clone();
+
+        let schema_c_expected = Schema::Union(UnionSchema::new(vec![
+            Schema::Ref {
+                name: Name::new("A")?,
+            },
+            Schema::Ref {
+                name: Name::new("B")?,
+            },
+        ])?);
 
         assert_eq!(schema_c, schema_c_expected);
         Ok(())
