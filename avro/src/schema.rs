@@ -1108,7 +1108,7 @@ impl Schema {
     /// # Arguments
     /// * `schema` - the JSON string of the schema to parse
     /// * `schemata` - a slice of additional schemas that is used to resolve cross-references
-    pub fn parse_str_with_list(schema: &str, schemata: &[&str]) -> AvroResult<Schema> {
+    pub fn parse_str_with_list(schema: &str, schemata: &[&str]) -> AvroResult<(Schema, Vec<Schema>)> {
         let mut input_schemas: HashMap<Name, Value> = HashMap::with_capacity(schemata.len());
         let mut input_order: Vec<Name> = Vec::with_capacity(schemata.len());
         for json in schemata {
@@ -1132,7 +1132,9 @@ impl Schema {
         parser.parse_input_schemas()?;
 
         let value = serde_json::from_str(schema).map_err(Error::ParseSchemaJson)?;
-        parser.parse(&value, &None)
+        let schema = parser.parse(&value, &None)?;
+        let schemata = parser.parse_list()?;
+        Ok((schema, schemata))
     }
 
     /// Create a `Schema` from a reader which implements [`Read`].
@@ -2761,7 +2763,43 @@ mod tests {
 
         let schema_str_c = r#"["A", "B"]"#;
 
-        let schema_c = Schema::parse_str_with_list(schema_str_c, &[schema_str_a, schema_str_b])?;
+        let (schema_c, schemata) = Schema::parse_str_with_list(schema_str_c, &[schema_str_a, schema_str_b])?;
+
+        let schema_a_expected = Schema::Record(RecordSchema {
+            name: Name::new("A")?,
+            aliases: None,
+            doc: None,
+            fields: vec![RecordField {
+                name: "field_one".to_string(),
+                doc: None,
+                default: None,
+                aliases: None,
+                schema: Schema::Float,
+                order: RecordFieldOrder::Ignore,
+                position: 0,
+                custom_attributes: Default::default(),
+            }],
+            lookup: BTreeMap::from_iter(vec![("field_one".to_string(), 0)]),
+            attributes: Default::default(),
+        });
+
+        let schema_b_expected = Schema::Record(RecordSchema {
+            name: Name::new("B")?,
+            aliases: None,
+            doc: None,
+            fields: vec![RecordField {
+                name: "field_one".to_string(),
+                doc: None,
+                default: None,
+                aliases: None,
+                schema: Schema::Float,
+                order: RecordFieldOrder::Ignore,
+                position: 0,
+                custom_attributes: Default::default(),
+            }],
+            lookup: BTreeMap::from_iter(vec![("field_one".to_string(), 0)]),
+            attributes: Default::default(),
+        });
 
         let schema_c_expected = Schema::Union(UnionSchema::new(vec![
             Schema::Ref {
@@ -2773,6 +2811,9 @@ mod tests {
         ])?);
 
         assert_eq!(schema_c, schema_c_expected);
+        assert_eq!(schemata[0], schema_a_expected);
+        assert_eq!(schemata[1], schema_b_expected);
+
         Ok(())
     }
 
