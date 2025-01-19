@@ -18,7 +18,7 @@
 use crate::{schema::Documentation, AvroResult, Error};
 use serde_json::{Map, Value};
 use std::{
-    io::Read,
+    io::{self, Read, Write},
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         Once,
@@ -79,12 +79,12 @@ pub fn read_long<R: Read>(reader: &mut R) -> AvroResult<i64> {
     zag_i64(reader)
 }
 
-pub fn zig_i32(n: i32, buffer: &mut Vec<u8>) {
+pub fn zig_i32<W: Write>(n: i32, buffer: W) -> AvroResult<()> {
     zig_i64(n as i64, buffer)
 }
 
-pub fn zig_i64(n: i64, buffer: &mut Vec<u8>) {
-    encode_variable(((n << 1) ^ (n >> 63)) as u64, buffer)
+pub fn zig_i64<W: Write>(n: i64, writer: W) -> AvroResult<()> {
+    encode_variable(((n << 1) ^ (n >> 63)) as u64, writer)
 }
 
 pub fn zag_i32<R: Read>(reader: &mut R) -> AvroResult<i32> {
@@ -101,7 +101,8 @@ pub fn zag_i64<R: Read>(reader: &mut R) -> AvroResult<i64> {
     })
 }
 
-fn encode_variable(mut z: u64, buffer: &mut Vec<u8>) {
+fn encode_variable<W: Write>(mut z: u64, mut writer: W) -> AvroResult<()> {
+    let mut buffer: Vec<u8> = Vec::with_capacity(8);
     loop {
         if z <= 0x7F {
             buffer.push((z & 0x7F) as u8);
@@ -111,6 +112,8 @@ fn encode_variable(mut z: u64, buffer: &mut Vec<u8>) {
             z >>= 7;
         }
     }
+    writer.write(buffer.as_slice()).map_err(|e| Error::WriteBytes(e))?;
+    Ok(())
 }
 
 fn decode_variable<R: Read>(reader: &mut R) -> AvroResult<u64> {

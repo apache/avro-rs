@@ -17,47 +17,49 @@
 
 use crate::{
     bigdecimal::serialize_big_decimal,
+    error::Error,
     schema::{
         DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, RecordSchema, ResolvedSchema,
         Schema, SchemaKind, UnionSchema,
     },
     types::{Value, ValueKind},
     util::{zig_i32, zig_i64},
-    AvroResult, Error,
+    AvroResult,
 };
 use log::error;
-use std::{borrow::Borrow, collections::HashMap};
+use std::{borrow::Borrow, collections::HashMap, io::Write};
 
 /// Encode a `Value` into avro format.
 ///
 /// **NOTE** This will not perform schema validation. The value is assumed to
 /// be valid with regards to the schema. Schema are needed only to guide the
 /// encoding for complex type values.
-pub fn encode(value: &Value, schema: &Schema, buffer: &mut Vec<u8>) -> AvroResult<()> {
+pub fn encode<W: Write>(value: &Value, schema: &Schema, buffer: W) -> AvroResult<()> {
     let rs = ResolvedSchema::try_from(schema)?;
     encode_internal(value, schema, rs.get_names(), &None, buffer)
 }
 
-pub(crate) fn encode_bytes<B: AsRef<[u8]> + ?Sized>(s: &B, buffer: &mut Vec<u8>) {
+pub(crate) fn encode_bytes<B: AsRef<[u8]> + ?Sized, W: Write>(s: &B, mut buffer: W) -> AvroResult<()> {
     let bytes = s.as_ref();
-    encode_long(bytes.len() as i64, buffer);
-    buffer.extend_from_slice(bytes);
+    encode_long(bytes.len() as i64, &mut buffer)?;
+    buffer.write(bytes).map_err(|e| Error::WriteBytes(e))?;
+    Ok(())
 }
 
-pub(crate) fn encode_long(i: i64, buffer: &mut Vec<u8>) {
-    zig_i64(i, buffer)
+pub(crate) fn encode_long<W: Write>(i: i64, writer: W) -> AvroResult<()> {
+    zig_i64(i, writer)
 }
 
-fn encode_int(i: i32, buffer: &mut Vec<u8>) {
-    zig_i32(i, buffer)
+pub(crate) fn encode_int<W: Write>(i: i32, writer: W) -> AvroResult<()> {
+    zig_i32(i, writer)
 }
 
-pub(crate) fn encode_internal<S: Borrow<Schema>>(
+pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
     value: &Value,
     schema: &Schema,
     names: &HashMap<Name, S>,
     enclosing_namespace: &Namespace,
-    buffer: &mut Vec<u8>,
+    mut buffer: W,
 ) -> AvroResult<()> {
     if let Schema::Ref { ref name } = schema {
         let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
@@ -77,13 +79,13 @@ pub(crate) fn encode_internal<S: Borrow<Schema>>(
                             supported_schema: vec![SchemaKind::Null, SchemaKind::Union],
                         })
                     }
-                    Some(p) => encode_long(p as i64, buffer),
+                    Some(p) => encode_long(p as i64, buffer)?,
                 }
             } // else {()}
         }
-        Value::Boolean(b) => buffer.push(u8::from(*b)),
+        Value::Boolean(b) => buffer.write(&[u8::from(*b)]).map(|_| ()).map_err(|e| Error::WriteBytes(e))?,
         // Pattern | Pattern here to signify that these _must_ have the same encoding.
-        Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => encode_int(*i, buffer),
+        Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => encode_int(*i, buffer)?,
         Value::Long(i)
         | Value::TimestampMillis(i)
         | Value::TimestampMicros(i)
@@ -91,9 +93,9 @@ pub(crate) fn encode_internal<S: Borrow<Schema>>(
         | Value::LocalTimestampMillis(i)
         | Value::LocalTimestampMicros(i)
         | Value::LocalTimestampNanos(i)
-        | Value::TimeMicros(i) => encode_long(*i, buffer),
-        Value::Float(x) => buffer.extend_from_slice(&x.to_le_bytes()),
-        Value::Double(x) => buffer.extend_from_slice(&x.to_le_bytes()),
+        | Value::TimeMicros(i) => encode_long(*i, buffer)?,
+        Value::Float(x) => buffer.write(&x.to_le_bytes()).map(|_| ()).map_err(|e| Error::WriteBytes(e))?,
+        Value::Double(x) => buffer.write(&x.to_le_bytes()).map(|_| ()).map_err(|e| Error::WriteBytes(e))?,
         Value::Decimal(decimal) => match schema {
             Schema::Decimal(DecimalSchema { inner, .. }) => match *inner.clone() {
                 Schema::Fixed(FixedSchema { size, .. }) => {
@@ -120,7 +122,7 @@ pub(crate) fn encode_internal<S: Borrow<Schema>>(
         },
         &Value::Duration(duration) => {
             let slice: [u8; 12] = duration.into();
-            buffer.extend_from_slice(&slice);
+            buffer.write(&slice).map_err(|e| Error::WriteBytes(e))?;
         }
         Value::Uuid(uuid) => match *schema {
             Schema::Uuid | Schema::String => encode_bytes(
@@ -128,14 +130,14 @@ pub(crate) fn encode_internal<S: Borrow<Schema>>(
                 #[allow(clippy::unnecessary_to_owned)]
                 &uuid.to_string(),
                 buffer,
-            ),
+            )?,
             Schema::Fixed(FixedSchema { size, .. }) => {
                 if size != 16 {
                     return Err(Error::ConvertFixedToUuid(size));
                 }
 
                 let bytes = uuid.as_bytes();
-                encode_bytes(bytes, buffer)
+                encode_bytes(bytes, buffer)?
             }
             _ => {
                 return Err(Error::EncodeValueAsSchemaError {
@@ -146,11 +148,11 @@ pub(crate) fn encode_internal<S: Borrow<Schema>>(
         },
         Value::BigDecimal(bg) => {
             let buf: Vec<u8> = serialize_big_decimal(bg);
-            buffer.extend_from_slice(buf.as_slice());
+            buffer.write(buf.as_slice()).map_err(|e| Error::WriteBytes(e))?;
         }
         Value::Bytes(bytes) => match *schema {
-            Schema::Bytes => encode_bytes(bytes, buffer),
-            Schema::Fixed { .. } => buffer.extend(bytes),
+            Schema::Bytes => encode_bytes(bytes, buffer)?,
+            Schema::Fixed { .. } => buffer.write(bytes.as_slice()).map(|_| ()).map_err(|e| Error::WriteBytes(e))?,
             _ => {
                 return Err(Error::EncodeValueAsSchemaError {
                     value_kind: ValueKind::Bytes,
@@ -160,11 +162,11 @@ pub(crate) fn encode_internal<S: Borrow<Schema>>(
         },
         Value::String(s) => match *schema {
             Schema::String | Schema::Uuid => {
-                encode_bytes(s, buffer);
+                encode_bytes(s, &mut buffer)?;
             }
             Schema::Enum(EnumSchema { ref symbols, .. }) => {
                 if let Some(index) = symbols.iter().position(|item| item == s) {
-                    encode_int(index as i32, buffer);
+                    encode_int(index as i32, &mut buffer)?;
                 } else {
                     error!("Invalid symbol string {:?}.", &s[..]);
                     return Err(Error::GetEnumSymbol(s.clone()));
@@ -177,16 +179,16 @@ pub(crate) fn encode_internal<S: Borrow<Schema>>(
                 });
             }
         },
-        Value::Fixed(_, bytes) => buffer.extend(bytes),
-        Value::Enum(i, _) => encode_int(*i as i32, buffer),
+        Value::Fixed(_, bytes) => buffer.write(bytes.as_slice()).map(|_| ()).map_err(|e| Error::WriteBytes(e))?,
+        Value::Enum(i, _) => encode_int(*i as i32, buffer)?,
         Value::Union(idx, item) => {
             if let Schema::Union(ref inner) = *schema {
                 let inner_schema = inner
                     .schemas
                     .get(*idx as usize)
                     .expect("Invalid Union validation occurred");
-                encode_long(*idx as i64, buffer);
-                encode_internal(item, inner_schema, names, enclosing_namespace, buffer)?;
+                encode_long(*idx as i64, &mut buffer)?;
+                encode_internal(item, inner_schema, names, enclosing_namespace, &mut buffer)?;
             } else {
                 error!("invalid schema type for Union: {:?}", schema);
                 return Err(Error::EncodeValueAsSchemaError {
@@ -198,12 +200,12 @@ pub(crate) fn encode_internal<S: Borrow<Schema>>(
         Value::Array(items) => {
             if let Schema::Array(ref inner) = *schema {
                 if !items.is_empty() {
-                    encode_long(items.len() as i64, buffer);
+                    encode_long(items.len() as i64, &mut buffer)?;
                     for item in items.iter() {
-                        encode_internal(item, &inner.items, names, enclosing_namespace, buffer)?;
+                        encode_internal(item, &inner.items, names, enclosing_namespace, &mut buffer)?;
                     }
                 }
-                buffer.push(0u8);
+                buffer.write(&[0u8]).map_err(|e| Error::WriteBytes(e))?;
             } else {
                 error!("invalid schema type for Array: {:?}", schema);
                 return Err(Error::EncodeValueAsSchemaError {
@@ -215,13 +217,13 @@ pub(crate) fn encode_internal<S: Borrow<Schema>>(
         Value::Map(items) => {
             if let Schema::Map(ref inner) = *schema {
                 if !items.is_empty() {
-                    encode_long(items.len() as i64, buffer);
+                    encode_long(items.len() as i64, &mut buffer)?;
                     for (key, value) in items {
-                        encode_bytes(key, buffer);
-                        encode_internal(value, &inner.types, names, enclosing_namespace, buffer)?;
+                        encode_bytes(key, &mut buffer)?;
+                        encode_internal(value, &inner.types, names, enclosing_namespace, &mut buffer)?;
                     }
                 }
-                buffer.push(0u8);
+                buffer.write(&[0u8]).map_err(|e| Error::WriteBytes(e))?;
             } else {
                 error!("invalid schema type for Map: {:?}", schema);
                 return Err(Error::EncodeValueAsSchemaError {
@@ -260,7 +262,7 @@ pub(crate) fn encode_internal<S: Borrow<Schema>>(
                             &schema_field.schema,
                             names,
                             &record_namespace,
-                            buffer,
+                            &mut buffer,
                         )?;
                     } else {
                         return Err(Error::NoEntryInLookupTable(
@@ -270,13 +272,16 @@ pub(crate) fn encode_internal<S: Borrow<Schema>>(
                     }
                 }
             } else if let Schema::Union(UnionSchema { schemas, .. }) = schema {
-                let original_size = buffer.len();
+                let mut union_buffer: Vec<u8> = Vec::new();
                 for (index, schema) in schemas.iter().enumerate() {
-                    encode_long(index as i64, buffer);
-                    match encode_internal(value, schema, names, enclosing_namespace, buffer) {
-                        Ok(_) => return Ok(()),
+                    encode_long(index as i64, &mut union_buffer)?;
+                    match encode_internal(value, schema, names, enclosing_namespace, &mut union_buffer) {
+                        Ok(_) => {
+                            buffer.write(union_buffer.as_slice()).map_err(|e| Error::WriteBytes(e))?;
+                            return Ok(())
+                        },
                         Err(_) => {
-                            buffer.truncate(original_size); //undo any partial encoding
+                            union_buffer.clear(); //undo any partial encoding
                         }
                     }
                 }
