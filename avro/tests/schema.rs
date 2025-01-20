@@ -2019,7 +2019,7 @@ fn test_avro_3851_read_default_value_for_enum() -> TestResult {
 }
 
 #[test]
-fn test_independent_canonical_form_primitives() -> TestResult {
+fn avro_rs_66_test_independent_canonical_form_primitives() -> TestResult {
     init();
     let record_primitive = r#"{
         "name": "Rec",
@@ -2100,7 +2100,7 @@ fn test_independent_canonical_form_primitives() -> TestResult {
     for schema_str_perm in permutations(&schema_strs) {
         let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
         let schemata = Schema::parse_list(&schema_str_perm)?;
-        assert_eq!(schemata.len(), 4);
+        assert_eq!(schemata.len(), schema_strs.len());
         let test_schema = schemata
             .iter()
             .find(|a| a.name().unwrap().to_string() == *"RecWithDeps")
@@ -2120,7 +2120,7 @@ fn test_independent_canonical_form_primitives() -> TestResult {
 }
 
 #[test]
-fn test_independent_canonical_form_usages() -> TestResult {
+fn avro_rs_66_test_independent_canonical_form_usages() -> TestResult {
     init();
     let record_primitive = r#"{
         "name": "Rec",
@@ -2218,36 +2218,39 @@ fn test_independent_canonical_form_usages() -> TestResult {
     for schema_str_perm in permutations(&schema_strs) {
         let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
         let schemata = Schema::parse_list(&schema_str_perm)?;
-        for s in &schemata {
-            match s.name().unwrap().to_string().as_str() {
+        for schema in &schemata {
+            match schema.name().unwrap().to_string().as_str() {
                 "RecUsage" => {
                     assert_eq!(
-                        s.independent_canonical_form(&schemata)?,
+                        schema.independent_canonical_form(&schemata)?,
                         Schema::parse_str(record_usage_independent)?.canonical_form()
                     );
                 }
                 "ArrayUsage" => {
                     assert_eq!(
-                        s.independent_canonical_form(&schemata)?,
+                        schema.independent_canonical_form(&schemata)?,
                         Schema::parse_str(array_usage_independent)?.canonical_form()
                     );
                 }
                 "UnionUsage" => {
                     assert_eq!(
-                        s.independent_canonical_form(&schemata)?,
+                        schema.independent_canonical_form(&schemata)?,
                         Schema::parse_str(union_usage_independent)?.canonical_form()
                     );
                 }
                 "MapUsage" => {
                     assert_eq!(
-                        s.independent_canonical_form(&schemata)?,
+                        schema.independent_canonical_form(&schemata)?,
                         Schema::parse_str(map_usage_independent)?.canonical_form()
                     );
                 }
                 "ns.Rec" => {
-                    assert_eq!(s.independent_canonical_form(&schemata)?, s.canonical_form());
+                    assert_eq!(
+                        schema.independent_canonical_form(&schemata)?,
+                        schema.canonical_form()
+                    );
                 }
-                _ => panic!(),
+                other => unreachable!("Unknown schema name: {}", other),
             }
         }
     }
@@ -2255,7 +2258,7 @@ fn test_independent_canonical_form_usages() -> TestResult {
 }
 
 #[test]
-fn test_independent_canonical_form_deep_recursion() -> TestResult {
+fn avro_rs_66_test_independent_canonical_form_deep_recursion() -> TestResult {
     init();
     let record_primitive = r#"{
         "name": "Rec",
@@ -2323,7 +2326,7 @@ fn test_independent_canonical_form_deep_recursion() -> TestResult {
 }
 
 #[test]
-fn test_independent_canonical_form_missing_ref() -> TestResult {
+fn avro_rs_66_test_independent_canonical_form_missing_ref() -> TestResult {
     init();
     let record_primitive = r#"{
         "name": "Rec",
@@ -2345,11 +2348,8 @@ fn test_independent_canonical_form_missing_ref() -> TestResult {
     let schema_strs = [record_primitive, record_usage];
     let schemata = Schema::parse_list(&schema_strs)?;
     assert!(matches!(
-        schemata[1]
-            .independent_canonical_form(&vec![])
-            .err()
-            .unwrap(), //NOTE - we're passing in an empty schemata
-        Error::SchemaResolutionError(..)
+        schemata[1].independent_canonical_form(&Vec::with_capacity(0)), //NOTE - we're passing in an empty schemata
+        Err(Error::SchemaResolutionError(..))
     ));
     Ok(())
 }

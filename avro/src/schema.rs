@@ -25,7 +25,6 @@ use crate::{
         validate_schema_name,
     },
     AvroResult,
-    Schema::Ref,
 };
 use digest::Digest;
 use log::{debug, error, warn};
@@ -1052,9 +1051,9 @@ impl Schema {
     /// [Parsing Canonical Form]:
     /// https://avro.apache.org/docs/current/specification/#parsing-canonical-form-for-schemas
     pub fn independent_canonical_form(&self, schemata: &Vec<Schema>) -> Result<String, Error> {
-        let mut d = self.clone();
-        d.denormalize(schemata)?;
-        Ok(d.canonical_form())
+        let mut this = self.clone();
+        this.denormalize(schemata)?;
+        Ok(this.canonical_form())
     }
 
     /// Generate [fingerprint] of Schema's [Parsing Canonical Form].
@@ -1262,32 +1261,32 @@ impl Schema {
 
     fn denormalize(&mut self, schemata: &Vec<Schema>) -> AvroResult<()> {
         match self {
-            Ref { name } => {
-                let repl = schemata
+            Schema::Ref { name } => {
+                let replacement_schema = schemata
                     .iter()
                     .find(|s| s.name().map(|n| *n == *name).unwrap_or(false));
-                if let Some(r) = repl {
-                    let mut denorm = r.clone();
+                if let Some(schema) = replacement_schema {
+                    let mut denorm = schema.clone();
                     denorm.denormalize(schemata)?;
                     *self = denorm;
                 } else {
                     return Err(Error::SchemaResolutionError(name.clone()));
                 }
             }
-            Schema::Record(r) => {
-                for rr in &mut r.fields {
-                    rr.schema.denormalize(schemata)?;
+            Schema::Record(record_schema) => {
+                for field in &mut record_schema.fields {
+                    field.schema.denormalize(schemata)?;
                 }
             }
-            Schema::Array(a) => {
-                a.items.denormalize(schemata)?;
+            Schema::Array(array_schema) => {
+                array_schema.items.denormalize(schemata)?;
             }
-            Schema::Map(m) => {
-                m.types.denormalize(schemata)?;
+            Schema::Map(map_schema) => {
+                map_schema.types.denormalize(schemata)?;
             }
-            Schema::Union(u) => {
-                for uu in &mut u.schemas {
-                    uu.denormalize(schemata)?;
+            Schema::Union(union_schema) => {
+                for schema in &mut union_schema.schemas {
+                    schema.denormalize(schemata)?;
                 }
             }
             _ => (),
@@ -2319,7 +2318,7 @@ fn pcf_map(schema: &Map<String, Value>, defined_names: &mut HashSet<String>) -> 
 
     //if this is already a defined type, early return
     if let Some(ref n) = name {
-        if defined_names.get(n).is_some() {
+        if defined_names.contains(n) {
             return pcf_string(n);
         } else {
             defined_names.insert(n.clone());
@@ -2349,7 +2348,7 @@ fn pcf_map(schema: &Map<String, Value>, defined_names: &mut HashSet<String>) -> 
         // Fully qualify the name, if it isn't already ([FULLNAMES] rule).
         if k == "name" {
             if let Some(ref n) = name {
-                fields.push((k, format!("{}:{}", pcf_string(k), pcf_string(n))));
+                fields.push(("name", format!("{}:{}", pcf_string(k), pcf_string(n))));
                 continue;
             }
         }
