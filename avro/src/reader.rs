@@ -461,14 +461,42 @@ pub fn from_avro_datum<R: Read>(
 /// In case a reader `Schema` is provided, schema resolution will also be performed.
 pub fn from_avro_datum_schemata<R: Read>(
     writer_schema: &Schema,
-    schemata: Vec<&Schema>,
+    writer_schemata: Vec<&Schema>,
     reader: &mut R,
     reader_schema: Option<&Schema>,
 ) -> AvroResult<Value> {
-    let rs = ResolvedSchema::try_from(schemata)?;
+    from_avro_datum_reader_schemata(
+        writer_schema,
+        writer_schemata,
+        reader,
+        reader_schema,
+        Vec::with_capacity(0),
+    )
+}
+
+/// Decode a `Value` encoded in Avro format given the provided `Schema` and anything implementing `io::Read`
+/// to read from.
+/// If the writer schema is incomplete, i.e. contains `Schema::Ref`s then it will use the provided
+/// schemata to resolve any dependencies.
+///
+/// In case a reader `Schema` is provided, schema resolution will also be performed.
+pub fn from_avro_datum_reader_schemata<R: Read>(
+    writer_schema: &Schema,
+    writer_schemata: Vec<&Schema>,
+    reader: &mut R,
+    reader_schema: Option<&Schema>,
+    reader_schemata: Vec<&Schema>,
+) -> AvroResult<Value> {
+    let rs = ResolvedSchema::try_from(writer_schemata)?;
     let value = decode_internal(writer_schema, rs.get_names(), &None, reader)?;
     match reader_schema {
-        Some(schema) => value.resolve(schema),
+        Some(schema) => {
+            if reader_schemata.is_empty() {
+                value.resolve(schema)
+            } else {
+                value.resolve_schemata(schema, reader_schemata)
+            }
+        }
         None => Ok(value),
     }
 }

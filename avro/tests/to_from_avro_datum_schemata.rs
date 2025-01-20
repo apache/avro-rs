@@ -16,7 +16,8 @@
 // under the License.
 
 use apache_avro::{
-    from_avro_datum_schemata, to_avro_datum_schemata, types::Value, Codec, Reader, Schema, Writer,
+    from_avro_datum_reader_schemata, from_avro_datum_schemata, to_avro_datum_schemata,
+    types::Value, Codec, Reader, Schema, Writer,
 };
 use apache_avro_test_helper::{init, TestResult};
 
@@ -55,6 +56,36 @@ fn test_avro_3683_multiple_schemata_to_from_avro_datum() -> TestResult {
     assert_eq!(actual, expected);
 
     let value = from_avro_datum_schemata(schema_b, schemata, &mut actual.as_slice(), None)?;
+    assert_eq!(value, record);
+
+    Ok(())
+}
+
+#[test]
+fn avro_rs_106_test_multiple_schemata_to_from_avro_datum_with_resolution() -> TestResult {
+    init();
+
+    let record: Value = Value::Record(vec![(
+        String::from("field_b"),
+        Value::Record(vec![(String::from("field_a"), Value::Float(1.0))]),
+    )]);
+
+    let schemata: Vec<Schema> = Schema::parse_list(&[SCHEMA_A_STR, SCHEMA_B_STR])?;
+    let schemata: Vec<&Schema> = schemata.iter().collect();
+
+    // this is the Schema we want to use for write/read
+    let schema_b = schemata[1];
+    let expected: Vec<u8> = vec![0, 0, 128, 63];
+    let actual = to_avro_datum_schemata(schema_b, schemata.clone(), record.clone())?;
+    assert_eq!(actual, expected);
+
+    let value = from_avro_datum_reader_schemata(
+        schema_b,
+        schemata.clone(),
+        &mut actual.as_slice(),
+        Some(schema_b),
+        schemata,
+    )?;
     assert_eq!(value, record);
 
     Ok(())
