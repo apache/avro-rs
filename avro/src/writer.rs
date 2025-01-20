@@ -17,12 +17,7 @@
 
 //! Logic handling writing in Avro format at user level.
 use crate::{
-    encode::{encode, encode_internal, encode_to_vec},
-    rabin::Rabin,
-    schema::{AvroSchema, ResolvedOwnedSchema, ResolvedSchema, Schema},
-    ser::Serializer,
-    types::Value,
-    AvroResult, Codec, Error,
+    encode::{encode, encode_internal, encode_to_vec}, rabin::Rabin, schema::{AvroSchema, Name, ResolvedOwnedSchema, ResolvedSchema, Schema}, ser::Serializer, ser_direct::DirectSerializer, types::Value, AvroResult, Codec, Error
 };
 use serde::Serialize;
 use std::{collections::HashMap, io::Write, marker::PhantomData};
@@ -45,7 +40,7 @@ pub struct Writer<'a, W> {
     buffer: Vec<u8>,
     #[builder(skip)]
     serializer: Serializer,
-    #[builder(skip)]
+    #[builder(default = 0, setter(skip))]
     num_values: usize,
     #[builder(default = generate_sync_marker())]
     marker: [u8; 16],
@@ -200,8 +195,26 @@ impl<'a, W: Write> Writer<'a, W> {
     /// internal buffering for performance reasons. If you want to be sure the value has been
     /// written, then call [`flush`](struct.Writer.html#method.flush).
     pub fn append_ser<S: Serialize>(&mut self, value: S) -> AvroResult<usize> {
-        let avro_value = value.serialize(&mut self.serializer)?;
-        self.append(avro_value)
+        let n = self.maybe_write_header()?;
+
+        match self.resolved_schema {
+            Some(ref rs) => {
+                let mut serializer = DirectSerializer::new(&mut self.buffer, &self.schema, rs.get_names(), None);
+                value.serialize(&mut serializer)?;
+                self.num_values += 1;
+
+                if self.buffer.len() >= self.block_size {
+                    return self.flush().map(|b| b + n);
+                }
+
+                Ok(n)
+            }
+            None => {
+                let rs = ResolvedSchema::try_from(self.schema)?;
+                self.resolved_schema = Some(rs);
+                self.append_ser(value)                
+            }
+        }
     }
 
     /// Extend a `Writer` with an `Iterator` of compatible values (implementing the `ToAvro`
@@ -514,6 +527,8 @@ where
     T: AvroSchema,
 {
     inner: GenericSingleObjectWriter,
+    schema: Schema,
+    header_written: bool,
     _model: PhantomData<T>,
 }
 
@@ -525,6 +540,8 @@ where
         let schema = T::get_schema();
         Ok(SpecificSingleObjectWriter {
             inner: GenericSingleObjectWriter::new_with_capacity(&schema, buffer_cap)?,
+            schema,
+            header_written: false,
             _model: PhantomData,
         })
     }
@@ -549,9 +566,18 @@ where
     /// Write the referenced Serialize object to the provided Write object. Returns a result with
     /// the number of bytes written including the header
     pub fn write_ref<W: Write>(&mut self, data: &T, writer: &mut W) -> AvroResult<usize> {
-        let mut serializer = Serializer::default();
-        let v = data.serialize(&mut serializer)?;
-        self.inner.write_value_ref(&v, writer)
+        let mut bytes_written: usize = 0;
+
+        if !self.header_written {
+            bytes_written += writer.write(self.inner.buffer.as_slice()).map_err(|e| Error::WriteBytes(e))?;
+            self.header_written = true;
+        }
+
+        let names: HashMap<Name, &Schema> = HashMap::new();
+        let mut serializer = DirectSerializer::new(writer, &self.schema, &names, None);
+        bytes_written += data.serialize(&mut serializer)?;
+
+        Ok(bytes_written)
     }
 
     /// Write the Serialize object to the provided Write object. Returns a result with the number
@@ -976,8 +1002,8 @@ mod tests {
         assert_eq!(n1 + n2, result.len());
 
         let mut data = Vec::new();
-        zig_i64(27, &mut data);
-        zig_i64(3, &mut data);
+        zig_i64(27, &mut data)?;
+        zig_i64(3, &mut data)?;
         data.extend(b"foo");
 
         // starts with magic
@@ -1011,8 +1037,8 @@ mod tests {
         assert_eq!(n1 + n2, result.len());
 
         let mut data = Vec::new();
-        zig_i64(27, &mut data);
-        zig_i64(3, &mut data);
+        zig_i64(27, &mut data)?;
+        zig_i64(3, &mut data)?;
         data.extend(b"foo");
         data.extend(data.clone());
 
@@ -1054,8 +1080,8 @@ mod tests {
         assert_eq!(n1 + n2 + n3, result.len());
 
         let mut data = Vec::new();
-        zig_i64(27, &mut data);
-        zig_i64(3, &mut data);
+        zig_i64(27, &mut data)?;
+        zig_i64(3, &mut data)?;
         data.extend(b"foo");
         data.extend(data.clone());
         Codec::Deflate.compress(&mut data)?;

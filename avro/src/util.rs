@@ -79,11 +79,11 @@ pub fn read_long<R: Read>(reader: &mut R) -> AvroResult<i64> {
     zag_i64(reader)
 }
 
-pub fn zig_i32<W: Write>(n: i32, buffer: W) -> AvroResult<()> {
+pub fn zig_i32<W: Write>(n: i32, buffer: W) -> AvroResult<usize> {
     zig_i64(n as i64, buffer)
 }
 
-pub fn zig_i64<W: Write>(n: i64, writer: W) -> AvroResult<()> {
+pub fn zig_i64<W: Write>(n: i64, writer: W) -> AvroResult<usize> {
     encode_variable(((n << 1) ^ (n >> 63)) as u64, writer)
 }
 
@@ -101,7 +101,7 @@ pub fn zag_i64<R: Read>(reader: &mut R) -> AvroResult<i64> {
     })
 }
 
-fn encode_variable<W: Write>(mut z: u64, mut writer: W) -> AvroResult<()> {
+fn encode_variable<W: Write>(mut z: u64, mut writer: W) -> AvroResult<usize> {
     let mut buffer: Vec<u8> = Vec::with_capacity(8);
     loop {
         if z <= 0x7F {
@@ -112,8 +112,7 @@ fn encode_variable<W: Write>(mut z: u64, mut writer: W) -> AvroResult<()> {
             z >>= 7;
         }
     }
-    writer.write(buffer.as_slice()).map_err(|e| Error::WriteBytes(e))?;
-    Ok(())
+    writer.write(buffer.as_slice()).map_err(|e| Error::WriteBytes(e))
 }
 
 fn decode_variable<R: Read>(reader: &mut R) -> AvroResult<u64> {
