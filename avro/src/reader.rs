@@ -461,11 +461,11 @@ pub fn from_avro_datum<R: Read>(
 /// In case a reader `Schema` is provided, schema resolution will also be performed.
 pub fn from_avro_datum_schemata<R: Read>(
     writer_schema: &Schema,
-    schemata: Vec<&Schema>,
+    writer_schemata: Vec<&Schema>,
     reader: &mut R,
     reader_schema: Option<&Schema>,
 ) -> AvroResult<Value> {
-    let rs = ResolvedSchema::try_from(schemata)?;
+    let rs = ResolvedSchema::try_from(writer_schemata)?;
     let value = decode_internal(writer_schema, rs.get_names(), &None, reader)?;
     match reader_schema {
         Some(schema) => value.resolve(schema),
@@ -481,12 +481,12 @@ pub fn from_avro_datum_schemata<R: Read>(
 /// In case a reader `Schema` is provided, schema resolution will also be performed.
 pub fn from_avro_datum_reader_schemata<R: Read>(
     writer_schema: &Schema,
-    schemata: Vec<&Schema>,
+    writer_schemata: Vec<&Schema>,
     reader: &mut R,
     reader_schema: Option<&Schema>,
     reader_schemata: Vec<&Schema>,
 ) -> AvroResult<Value> {
-    let rs = ResolvedSchema::try_from(schemata)?;
+    let rs = ResolvedSchema::try_from(writer_schemata)?;
     let value = decode_internal(writer_schema, rs.get_names(), &None, reader)?;
     match reader_schema {
         Some(schema) => value.resolve_schemata(schema, reader_schemata),

@@ -62,7 +62,7 @@ fn test_avro_3683_multiple_schemata_to_from_avro_datum() -> TestResult {
 }
 
 #[test]
-fn test_multiple_schemata_to_from_avro_datum_with_resolution() -> TestResult {
+fn avro_rs_106_test_multiple_schemata_to_from_avro_datum_with_resolution() -> TestResult {
     init();
 
     let record: Value = Value::Record(vec![(
