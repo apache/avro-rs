@@ -898,8 +898,8 @@ pub use decimal::Decimal;
 pub use duration::{Days, Duration, Millis, Months};
 pub use error::Error;
 pub use reader::{
-    from_avro_datum, from_avro_datum_schemata, read_marker, GenericSingleObjectReader, Reader,
-    SpecificSingleObjectReader,
+    from_avro_datum, from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
+    GenericSingleObjectReader, Reader, SpecificSingleObjectReader,
 };
 pub use schema::{AvroSchema, Schema};
 pub use ser::to_value;
