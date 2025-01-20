@@ -38,25 +38,22 @@ jobs:
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
-        runner:
-          - ubuntu-24.04
-          - ubuntu-24.04-arm
         rust:
           - 'stable'
           - 'beta'
           - 'nightly'
           - '1.74.0'  # MSRV
-        target:
-          - x86_64-unknown-linux-gnu
-          - wasm32-unknown-unknown
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04
+            target: wasm32-unknown-unknown
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            target: wasm32-unknown-unknown
 
     steps:
-      - name: DEBUG
-        if: ${{ matrix.runner }} == 'ubuntu-24.04-arm'
-        run: |
-          set -x
-          which rustup
-          rustup --help
       - name: Checkout
         uses: actions/checkout@v4
 
