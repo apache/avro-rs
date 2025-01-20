@@ -623,11 +623,12 @@ pub(crate) fn resolve_names_with_schemata(
 }
 
 /// Represents a `field` in a `record` Avro schema.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(bon::Builder, Clone, Debug, PartialEq)]
 pub struct RecordField {
     /// Name of the field.
     pub name: String,
     /// Documentation of the field.
+    #[builder(default)]
     pub doc: Documentation,
     /// Aliases of the field's name. They have no namespace.
     pub aliases: Option<Vec<String>>,
@@ -640,10 +641,13 @@ pub struct RecordField {
     /// Order of the field.
     ///
     /// **NOTE** This currently has no effect.
+    #[builder(default = RecordFieldOrder::Ignore)]
     pub order: RecordFieldOrder,
     /// Position of the field in the list of `field` of its parent `Schema`
+    #[builder(default)]
     pub position: usize,
     /// A collection of all unknown fields in the record field.
+    #[builder(default = BTreeMap::new())]
     pub custom_attributes: BTreeMap<String, Value>,
 }
 
@@ -788,13 +792,15 @@ impl RecordField {
 }
 
 /// A description of an Enum schema.
-#[derive(Debug, Clone)]
+#[derive(bon::Builder, Debug, Clone)]
 pub struct RecordSchema {
     /// The name of the schema
     pub name: Name,
     /// The aliases of the schema
+    #[builder(default)]
     pub aliases: Aliases,
     /// The documentation of the schema
+    #[builder(default)]
     pub doc: Documentation,
     /// The set of fields of the schema
     pub fields: Vec<RecordField>,
@@ -802,40 +808,47 @@ pub struct RecordSchema {
     /// of `fields`.
     pub lookup: BTreeMap<String, usize>,
     /// The custom attributes of the schema
+    #[builder(default = BTreeMap::new())]
     pub attributes: BTreeMap<String, Value>,
 }
 
 /// A description of an Enum schema.
-#[derive(Debug, Clone)]
+#[derive(bon::Builder, Debug, Clone)]
 pub struct EnumSchema {
     /// The name of the schema
     pub name: Name,
     /// The aliases of the schema
+    #[builder(default)]
     pub aliases: Aliases,
     /// The documentation of the schema
+    #[builder(default)]
     pub doc: Documentation,
     /// The set of symbols of the schema
     pub symbols: Vec<String>,
     /// An optional default symbol used for compatibility
     pub default: Option<String>,
     /// The custom attributes of the schema
+    #[builder(default = BTreeMap::new())]
     pub attributes: BTreeMap<String, Value>,
 }
 
 /// A description of a Union schema.
-#[derive(Debug, Clone)]
+#[derive(bon::Builder, Debug, Clone)]
 pub struct FixedSchema {
     /// The name of the schema
     pub name: Name,
     /// The aliases of the schema
+    #[builder(default)]
     pub aliases: Aliases,
     /// The documentation of the schema
+    #[builder(default)]
     pub doc: Documentation,
     /// The size of the fixed schema
     pub size: usize,
     /// An optional default symbol used for compatibility
     pub default: Option<String>,
     /// The custom attributes of the schema
+    #[builder(default = BTreeMap::new())]
     pub attributes: BTreeMap<String, Value>,
 }
 
@@ -2644,12 +2657,9 @@ mod tests {
 
     #[test]
     fn test_avro_3621_nullable_record_field() -> TestResult {
-        let nullable_record_field = RecordField {
-            name: "next".to_string(),
-            doc: None,
-            default: None,
-            aliases: None,
-            schema: Schema::Union(UnionSchema::new(vec![
+        let nullable_record_field = RecordField::builder()
+            .name("next".to_string())
+            .schema(Schema::Union(UnionSchema::new(vec![
                 Schema::Null,
                 Schema::Ref {
                     name: Name {
@@ -2657,24 +2667,20 @@ mod tests {
                         namespace: None,
                     },
                 },
-            ])?),
-            order: RecordFieldOrder::Ascending,
-            position: 1,
-            custom_attributes: Default::default(),
-        };
+            ])?))
+            .order(RecordFieldOrder::Ascending)
+            .position(1)
+            .build();
 
         assert!(nullable_record_field.is_nullable());
 
-        let non_nullable_record_field = RecordField {
-            name: "next".to_string(),
-            doc: None,
-            default: Some(json!(2)),
-            aliases: None,
-            schema: Schema::Long,
-            order: RecordFieldOrder::Ascending,
-            position: 1,
-            custom_attributes: Default::default(),
-        };
+        let non_nullable_record_field = RecordField::builder()
+            .name("next".to_string())
+            .default(json!(2))
+            .schema(Schema::Long)
+            .order(RecordFieldOrder::Ascending)
+            .position(1)
+            .build();
 
         assert!(!non_nullable_record_field.is_nullable());
         Ok(())
@@ -2716,30 +2722,23 @@ mod tests {
             .unwrap()
             .clone();
 
-        let schema_c_expected = Schema::Record(RecordSchema {
-            name: Name::new("C")?,
-            aliases: None,
-            doc: None,
-            fields: vec![RecordField {
-                name: "field_one".to_string(),
-                doc: None,
-                default: None,
-                aliases: None,
-                schema: Schema::Union(UnionSchema::new(vec![
-                    Schema::Ref {
-                        name: Name::new("A")?,
-                    },
-                    Schema::Ref {
-                        name: Name::new("B")?,
-                    },
-                ])?),
-                order: RecordFieldOrder::Ignore,
-                position: 0,
-                custom_attributes: Default::default(),
-            }],
-            lookup: BTreeMap::from_iter(vec![("field_one".to_string(), 0)]),
-            attributes: Default::default(),
-        });
+        let schema_c_expected = Schema::Record(
+            RecordSchema::builder()
+                .name(Name::new("C")?)
+                .fields(vec![RecordField::builder()
+                    .name("field_one".to_string())
+                    .schema(Schema::Union(UnionSchema::new(vec![
+                        Schema::Ref {
+                            name: Name::new("A")?,
+                        },
+                        Schema::Ref {
+                            name: Name::new("B")?,
+                        },
+                    ])?))
+                    .build()])
+                .lookup(BTreeMap::from_iter(vec![("field_one".to_string(), 0)]))
+                .build(),
+        );
 
         assert_eq!(schema_c, schema_c_expected);
         Ok(())
@@ -3382,17 +3381,16 @@ mod tests {
                     doc: None,
                     default: None,
                     aliases: None,
-                    schema: Schema::Enum(EnumSchema {
-                        name: Name {
-                            name: "enum".to_owned(),
-                            namespace: None,
-                        },
-                        aliases: None,
-                        doc: None,
-                        symbols: vec!["one".to_string(), "two".to_string(), "three".to_string()],
-                        default: None,
-                        attributes: Default::default(),
-                    }),
+                    schema: Schema::Enum(
+                        EnumSchema::builder()
+                            .name(Name::new("enum")?)
+                            .symbols(vec![
+                                "one".to_string(),
+                                "two".to_string(),
+                                "three".to_string(),
+                            ])
+                            .build(),
+                    ),
                     order: RecordFieldOrder::Ascending,
                     position: 0,
                     custom_attributes: Default::default(),
