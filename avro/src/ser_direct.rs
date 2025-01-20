@@ -11,15 +11,16 @@ use crate::schema::NamesRef;
 use crate::schema::{Namespace, RecordSchema, Schema};
 use crate::types::Value;
 
-const COLLECTION_SERIALIZER_INIT_BUFFER_SIZE: usize = 1024;
-const COLLECTION_SERIALIZER_BUFFER_SOFT_LIMIT: usize = 768;
+const RECORD_FIELD_INIT_BUFFER_SIZE: usize = 64;
+const COLLECTION_SERIALIZER_ITEM_LIMIT: usize = 1024;
+const COLLECTION_SERIALIZER_DEFAULT_INIT_ITEM_CAPACITY: usize = 32;
 const SINGLE_VALUE_INIT_BUFFER_SIZE: usize = 128;
 
 pub struct DirectSerializeSeq<'a, 's, W: Write> {
     ser: &'a mut DirectSerializer<'s, W>,
     item_schema: &'s Schema,
-    item_count: i64,
-    data_buffer: Vec<u8>,
+    item_buffer_size: usize,
+    item_buffers: Vec<Vec<u8>>,
     bytes_written: usize,
 }
 
@@ -27,44 +28,47 @@ impl<'a, 's, W: Write> DirectSerializeSeq<'a, 's, W> {
     fn new(
         ser: &'a mut DirectSerializer<'s, W>,
         item_schema: &'s Schema,
+        len: Option<usize>,
     ) -> DirectSerializeSeq<'a, 's, W> {
         DirectSerializeSeq {
             ser,
             item_schema,
-            item_count: 0,
-            data_buffer: Vec::with_capacity(COLLECTION_SERIALIZER_INIT_BUFFER_SIZE),
+            item_buffer_size: SINGLE_VALUE_INIT_BUFFER_SIZE,
+            item_buffers: Vec::with_capacity(len.unwrap_or(COLLECTION_SERIALIZER_DEFAULT_INIT_ITEM_CAPACITY)),
             bytes_written: 0,
         }
     }
 
     fn write_buffered_items(&mut self) -> Result<(), Error> {
-        if self.item_count > 0 {
-            self.bytes_written += encode_long(self.item_count, &mut self.ser.writer)?;
-            self.bytes_written += self
-                .ser
-                .writer
-                .write(self.data_buffer.as_slice())
-                .map_err(|e| Error::WriteBytes(e))?;
-
-            self.data_buffer.clear();
-            self.item_count = 0;
+        if self.item_buffers.len() > 0 {
+            self.bytes_written += encode_long(self.item_buffers.len() as i64, &mut self.ser.writer)?;
+            for item in self.item_buffers.drain(..) {
+                self.bytes_written += self
+                    .ser
+                    .writer
+                    .write(item.as_slice())
+                    .map_err(|e| Error::WriteBytes(e))?;
+            }
         }
 
         Ok(())
     }
 
     fn serialize_element<T: ser::Serialize>(&mut self, value: &T) -> Result<(), Error> {
+        let mut item_buffer: Vec<u8> = Vec::with_capacity(self.item_buffer_size);
         let mut item_ser = DirectSerializer::new(
-            &mut self.data_buffer,
+            &mut item_buffer,
             &self.item_schema,
             &self.ser.names,
             self.ser.enclosing_namespace.clone(),
         );
         value.serialize(&mut item_ser)?;
 
-        self.item_count += 1;
+        self.item_buffer_size = std::cmp::max(self.item_buffer_size, item_buffer.len() + 16);
 
-        if self.data_buffer.len() > COLLECTION_SERIALIZER_BUFFER_SOFT_LIMIT {
+        self.item_buffers.push(item_buffer);
+
+        if self.item_buffers.len() > COLLECTION_SERIALIZER_ITEM_LIMIT {
             self.write_buffered_items()?;
         }
 
@@ -118,8 +122,8 @@ impl<'a, 's, W: Write> ser::SerializeTuple for DirectSerializeSeq<'a, 's, W> {
 pub struct DirectSerializeMap<'a, 's, W: Write> {
     ser: &'a mut DirectSerializer<'s, W>,
     item_schema: &'s Schema,
-    item_count: i64,
-    data_buffer: Vec<u8>,
+    item_buffer_size: usize,
+    item_buffers: Vec<Vec<u8>>,
     bytes_written: usize,
 }
 
@@ -127,24 +131,27 @@ impl<'a, 's, W: Write> DirectSerializeMap<'a, 's, W> {
     fn new(
         ser: &'a mut DirectSerializer<'s, W>,
         item_schema: &'s Schema,
+        len: Option<usize>,
     ) -> DirectSerializeMap<'a, 's, W> {
         DirectSerializeMap {
             ser,
             item_schema,
-            item_count: 0,
-            data_buffer: Vec::with_capacity(COLLECTION_SERIALIZER_INIT_BUFFER_SIZE),
+            item_buffer_size: SINGLE_VALUE_INIT_BUFFER_SIZE,
+            item_buffers: Vec::with_capacity(len.unwrap_or(COLLECTION_SERIALIZER_DEFAULT_INIT_ITEM_CAPACITY)),
             bytes_written: 0,
         }
     }
 
     fn write_buffered_items(&mut self) -> Result<(), Error> {
-        if self.item_count > 0 {
-            self.bytes_written += encode_long(self.item_count, &mut self.ser.writer)?;
-            self.bytes_written += self
-                .ser
-                .writer
-                .write(self.data_buffer.as_slice())
-                .map_err(|e| Error::WriteBytes(e))?;
+        if self.item_buffers.len() > 0 {
+            self.bytes_written += encode_long(self.item_buffers.len() as i64, &mut self.ser.writer)?;
+            for item in self.item_buffers.drain(..) {
+                self.bytes_written += self
+                    .ser
+                    .writer
+                    .write(item.as_slice())
+                    .map_err(|e| Error::WriteBytes(e))?;
+            }
         }
 
         Ok(())
@@ -159,14 +166,18 @@ impl<'a, 's, W: Write> ser::SerializeMap for DirectSerializeMap<'a, 's, W> {
     where
         T: ?Sized + ser::Serialize,
     {
+        let mut element_buffer: Vec<u8> = Vec::with_capacity(self.item_buffer_size);
         let string_schema = Schema::String;
         let mut key_ser = DirectSerializer::new(
-            &mut self.data_buffer,
+            &mut element_buffer,
             &string_schema,
             &self.ser.names,
             self.ser.enclosing_namespace.clone(),
         );
         key.serialize(&mut key_ser)?;
+
+        self.item_buffers.push(element_buffer);
+
         Ok(())
     }
 
@@ -174,17 +185,19 @@ impl<'a, 's, W: Write> ser::SerializeMap for DirectSerializeMap<'a, 's, W> {
     where
         T: ?Sized + ser::Serialize,
     {
+        let last_index = self.item_buffers.len()-1;
+        let element_buffer = &mut self.item_buffers[last_index];
         let mut val_ser = DirectSerializer::new(
-            &mut self.data_buffer,
+            element_buffer,
             self.item_schema,
             &self.ser.names,
             self.ser.enclosing_namespace.clone(),
         );
         value.serialize(&mut val_ser)?;
 
-        self.item_count += 1;
+        self.item_buffer_size = std::cmp::max(self.item_buffer_size, element_buffer.len() + 16);
 
-        if self.data_buffer.len() > COLLECTION_SERIALIZER_BUFFER_SOFT_LIMIT {
+        if self.item_buffers.len() > COLLECTION_SERIALIZER_ITEM_LIMIT {
             self.write_buffered_items()?;
         }
 
@@ -246,7 +259,7 @@ impl<'a, 's, W: Write> DirectSerializeStruct<'a, 's, W> {
         self.item_count += 1;
 
         // Write any buffered data to the stream that has now become next in line
-        while let Some(buffer) = self.buffered_fields[self.item_count].take() {
+        while let Some(buffer) = self.buffered_fields.get_mut(self.item_count).and_then(|b| b.take()) {
             self.bytes_written += self
                 .ser
                 .writer
@@ -293,29 +306,28 @@ impl<'a, 's, W: Write> ser::SerializeStruct
             self.serialize_next_field(&value)?;
             return Ok(());
         } else {
-            for (i, field) in self.record_schema.fields.iter().skip(self.item_count).enumerate() {
-                let field_matches = match &field.aliases {
-                    Some(aliases) => key == field.name.as_str() || aliases.iter().any(|a| key == a.as_str()),
-                    None => key == field.name.as_str()
-                };
-
-                if field_matches {
-                    if i < self.item_count {
-                        return Err(Error::FieldNameDuplicate(String::from(key)));
+            if self.item_count < self.record_schema.fields.len() {
+                for i in self.item_count..self.record_schema.fields.len() {
+                    let field = &self.record_schema.fields[i];
+                    let field_matches = match &field.aliases {
+                        Some(aliases) => key == field.name.as_str() || aliases.iter().any(|a| key == a.as_str()),
+                        None => key == field.name.as_str()
+                    };
+    
+                    if field_matches {
+                        let mut buffer: Vec<u8> = Vec::with_capacity(RECORD_FIELD_INIT_BUFFER_SIZE);
+                        let mut value_ser = DirectSerializer::new(
+                            &mut buffer,
+                            &field.schema,
+                            &self.ser.names,
+                            self.ser.enclosing_namespace.clone(),
+                        );
+                        value.serialize(&mut value_ser)?;
+    
+                        self.buffered_fields[i] = Some(buffer);
+    
+                        return Ok(());
                     }
-
-                    let mut buffer: Vec<u8> = Vec::with_capacity(SINGLE_VALUE_INIT_BUFFER_SIZE);
-                    let mut value_ser = DirectSerializer::new(
-                        &mut buffer,
-                        &field.schema,
-                        &self.ser.names,
-                        self.ser.enclosing_namespace.clone(),
-                    );
-                    value.serialize(&mut value_ser)?;
-
-                    self.buffered_fields[i] = Some(buffer);
-
-                    return Ok(());
                 }
             }
 
@@ -937,7 +949,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
         match schema {
-            Schema::Array(sch) => Ok(DirectSerializeSeq::new(self, sch.items.as_ref())),
+            Schema::Array(sch) => Ok(DirectSerializeSeq::new(self, sch.items.as_ref(), len)),
             _ => Err(Error::Validation),
         }
     }
@@ -946,7 +958,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
         match schema {
-            Schema::Array(sch) => Ok(DirectSerializeSeq::new(self, sch.items.as_ref())),
+            Schema::Array(sch) => Ok(DirectSerializeSeq::new(self, sch.items.as_ref(), Some(len))),
             _ => Err(Error::Validation),
         }
     }
@@ -960,7 +972,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
 
         match schema {
             Schema::Array(sch) => Ok(DirectSerializeTupleStruct::Array(DirectSerializeSeq::new(
-                self, &sch.items,
+                self, &sch.items, Some(len)
             ))),
             Schema::Record(sch) => Ok(DirectSerializeTupleStruct::Record(
                 DirectSerializeStruct::new(self, &sch, len),
@@ -997,7 +1009,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
         match schema {
-            Schema::Map(sch) => Ok(DirectSerializeMap::new(self, sch.types.as_ref())),
+            Schema::Map(sch) => Ok(DirectSerializeMap::new(self, sch.types.as_ref(), len)),
             _ => Err(Error::Validation),
         }
     }

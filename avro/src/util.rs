@@ -102,7 +102,7 @@ pub fn zag_i64<R: Read>(reader: &mut R) -> AvroResult<i64> {
 }
 
 fn encode_variable<W: Write>(mut z: u64, mut writer: W) -> AvroResult<usize> {
-    let mut buffer: [u8; 4] = [0, 0, 0, 0];
+    let mut buffer = [0u8; 10];
     let mut i: usize = 0;
     loop {
         if z <= 0x7F {
