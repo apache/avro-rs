@@ -51,6 +51,12 @@ jobs:
           - wasm32-unknown-unknown
 
     steps:
+      - name: DEBUG
+        if: ${{ matrix.runner }} == 'ubuntu-24.04-arm'
+        run: |
+          set -x
+          which rustup
+          rustup --help
       - name: Checkout
         uses: actions/checkout@v4
 
