@@ -628,9 +628,7 @@ impl Value {
     /// in the Avro specification for the full set of rules of schema
     /// resolution.
     pub fn resolve(self, schema: &Schema) -> AvroResult<Self> {
-        let enclosing_namespace = schema.namespace();
-        let rs = ResolvedSchema::try_from(schema)?;
-        self.resolve_internal(schema, rs.get_names(), &enclosing_namespace, &None)
+        self.resolve_schemata(schema, Vec::with_capacity(0))
     }
 
     /// Attempt to perform schema resolution on the value, with the given
@@ -641,7 +639,11 @@ impl Value {
     /// resolution.
     pub fn resolve_schemata(self, schema: &Schema, schemata: Vec<&Schema>) -> AvroResult<Self> {
         let enclosing_namespace = schema.namespace();
-        let rs = ResolvedSchema::try_from(schemata)?;
+        let rs = if schemata.is_empty() {
+            ResolvedSchema::try_from(schema)?
+        } else {
+            ResolvedSchema::try_from(schemata)?
+        };
         self.resolve_internal(schema, rs.get_names(), &enclosing_namespace, &None)
     }
 
