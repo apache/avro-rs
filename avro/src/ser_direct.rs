@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::io::Write;
 
@@ -207,7 +207,7 @@ pub struct DirectSerializeStruct<'a, 's, W: Write> {
     ser: &'a mut DirectSerializer<'s, W>,
     record_schema: &'s RecordSchema,
     item_count: usize,
-    buffered_fields: HashMap<usize, Vec<u8>>,
+    buffered_fields: BTreeMap<usize, Vec<u8>>,
     bytes_written: usize,
 }
 
@@ -220,7 +220,7 @@ impl<'a, 's, W: Write> DirectSerializeStruct<'a, 's, W> {
             ser,
             record_schema,
             item_count: 0,
-            buffered_fields: HashMap::new(),
+            buffered_fields: BTreeMap::new(),
             bytes_written: 0,
         }
     }

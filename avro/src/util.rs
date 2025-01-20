@@ -102,17 +102,20 @@ pub fn zag_i64<R: Read>(reader: &mut R) -> AvroResult<i64> {
 }
 
 fn encode_variable<W: Write>(mut z: u64, mut writer: W) -> AvroResult<usize> {
-    let mut buffer: Vec<u8> = Vec::with_capacity(8);
+    let mut buffer: [u8; 4] = [0, 0, 0, 0];
+    let mut i: usize = 0;
     loop {
         if z <= 0x7F {
-            buffer.push((z & 0x7F) as u8);
+            buffer[i] = (z & 0x7F) as u8;
+            i += 1;
             break;
         } else {
-            buffer.push((0x80 | (z & 0x7F)) as u8);
+            buffer[i] = (0x80 | (z & 0x7F)) as u8;
+            i += 1;
             z >>= 7;
         }
     }
-    writer.write(buffer.as_slice()).map_err(|e| Error::WriteBytes(e))
+    writer.write(&buffer[..i]).map_err(|e| Error::WriteBytes(e))
 }
 
 fn decode_variable<R: Read>(reader: &mut R) -> AvroResult<u64> {
