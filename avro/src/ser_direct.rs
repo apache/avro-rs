@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fmt;
 use std::io::Write;
 
@@ -207,7 +207,7 @@ pub struct DirectSerializeStruct<'a, 's, W: Write> {
     ser: &'a mut DirectSerializer<'s, W>,
     record_schema: &'s RecordSchema,
     item_count: usize,
-    buffered_fields: BTreeMap<usize, Vec<u8>>,
+    buffered_fields: Vec<Option<Vec<u8>>>,
     bytes_written: usize,
 }
 
@@ -215,12 +215,13 @@ impl<'a, 's, W: Write> DirectSerializeStruct<'a, 's, W> {
     fn new(
         ser: &'a mut DirectSerializer<'s, W>,
         record_schema: &'s RecordSchema,
+        len: usize,
     ) -> DirectSerializeStruct<'a, 's, W> {
         DirectSerializeStruct {
             ser,
             record_schema,
             item_count: 0,
-            buffered_fields: BTreeMap::new(),
+            buffered_fields: vec![None; len],
             bytes_written: 0,
         }
     }
@@ -245,7 +246,7 @@ impl<'a, 's, W: Write> DirectSerializeStruct<'a, 's, W> {
         self.item_count += 1;
 
         // Write any buffered data to the stream that has now become next in line
-        while let Some(buffer) = self.buffered_fields.remove(&self.item_count) {
+        while let Some(buffer) = self.buffered_fields[self.item_count].take() {
             self.bytes_written += self
                 .ser
                 .writer
@@ -258,12 +259,6 @@ impl<'a, 's, W: Write> DirectSerializeStruct<'a, 's, W> {
     }
 
     fn end(self) -> Result<usize, Error> {
-        if self.item_count < self.record_schema.fields.len() {
-            for i in self.item_count..self.record_schema.fields.len() {
-
-            }
-        }
-        
         if self.item_count != self.record_schema.fields.len() {
             Err(Error::GetField(
                 self.record_schema.fields[self.item_count].name.clone(),
@@ -289,30 +284,22 @@ impl<'a, 's, W: Write> ser::SerializeStruct
         }
 
         let next_field = &self.record_schema.fields[self.item_count];
-        let next_field_names = match &next_field.aliases {
-            Some(aliases) => {
-                let mut names: Vec<&str> = aliases.iter().map(|s| s.as_str()).collect();
-                names.push(next_field.name.as_str());
-                names
-            }
-            None => vec![next_field.name.as_str()]
+        let next_field_matches = match &next_field.aliases {
+            Some(aliases) => key == next_field.name.as_str() || aliases.iter().any(|a| key == a.as_str()),
+            None => key == next_field.name.as_str()
         };
 
-        if next_field_names.iter().any(|&n| key == n) {
+        if next_field_matches {
             self.serialize_next_field(&value)?;
             return Ok(());
         } else {
             for (i, field) in self.record_schema.fields.iter().skip(self.item_count).enumerate() {
-                let field_names = match &field.aliases {
-                    Some(aliases) => {
-                        let mut names: Vec<&str> = aliases.iter().map(|s| s.as_str()).collect();
-                        names.push(field.name.as_str());
-                        names
-                    }
-                    None => vec![field.name.as_str()]
+                let field_matches = match &field.aliases {
+                    Some(aliases) => key == field.name.as_str() || aliases.iter().any(|a| key == a.as_str()),
+                    None => key == field.name.as_str()
                 };
 
-                if field_names.iter().any(|&n| key == n) {
+                if field_matches {
                     if i < self.item_count {
                         return Err(Error::FieldNameDuplicate(String::from(key)));
                     }
@@ -326,7 +313,7 @@ impl<'a, 's, W: Write> ser::SerializeStruct
                     );
                     value.serialize(&mut value_ser)?;
 
-                    self.buffered_fields.insert(i, buffer);
+                    self.buffered_fields[i] = Some(buffer);
 
                     return Ok(());
                 }
@@ -445,51 +432,6 @@ impl<'s, W: Write> DirectSerializer<'s,  W> {
         }
     }
 
-    fn write_int<T>(&mut self, v: T, int_type: &'static str) -> Result<usize, Error>
-    where
-        T: TryInto<i32> + TryInto<i64>,
-        <T as TryInto<i32>>::Error: fmt::Display,
-        <T as TryInto<i64>>::Error: fmt::Display,
-    {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
-
-        match schema {
-            Schema::Int | Schema::TimeMillis | Schema::Date => {
-                let int_value: i32 = v.try_into().map_err(|e: <T as TryInto<i32>>::Error| {
-                    Error::SerializeValue(e.to_string())
-                })?;
-                encode_int(int_value, &mut self.writer)
-            }
-            Schema::Long
-            | Schema::TimeMicros
-            | Schema::TimestampMillis
-            | Schema::TimestampMicros
-            | Schema::TimestampNanos
-            | Schema::LocalTimestampMillis
-            | Schema::LocalTimestampMicros
-            | Schema::LocalTimestampNanos => {
-                let long_value: i64 = v.try_into().map_err(|e: <T as TryInto<i64>>::Error| {
-                    Error::SerializeValue(e.to_string())
-                })?;
-                encode_long(long_value, &mut self.writer)
-            }
-            _ => {
-                let long_value: i64 = v.try_into().map_err(|e: <T as TryInto<i64>>::Error| {
-                    Error::SerializeValue(e.to_string())
-                })?;
-
-                Err(Error::ValidationWithReason {
-                    value: Value::Long(long_value),
-                    schema: schema.clone(),
-                    reason: format!(
-                        "{} cannot be converted to the expected schema type",
-                        int_type
-                    ),
-                })
-            }
-        }
-    }
-
     fn write_bytes(&mut self, bytes: &[u8]) -> Result<usize, Error> {
         let mut bytes_written: usize = 0;
 
@@ -518,35 +460,223 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     }
 
     fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
-        self.write_int(v, "i8")
+        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+
+        match schema {
+            Schema::Int | Schema::TimeMillis | Schema::Date => {
+                encode_int(v as i32, &mut self.writer)
+            }
+            Schema::Long
+            | Schema::TimeMicros
+            | Schema::TimestampMillis
+            | Schema::TimestampMicros
+            | Schema::TimestampNanos
+            | Schema::LocalTimestampMillis
+            | Schema::LocalTimestampMicros
+            | Schema::LocalTimestampNanos => {
+                encode_long(v as i64, &mut self.writer)
+            }
+            _ => {
+                Err(Error::ValidationWithReason {
+                    value: Value::Int(v as i32),
+                    schema: schema.clone(),
+                    reason: String::from("i8 cannot be converted to the expected schema type")
+                })
+            }
+        }
     }
 
     fn serialize_i16(self, v: i16) -> Result<Self::Ok, Self::Error> {
-        self.write_int(v, "i16")
+        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+
+        match schema {
+            Schema::Int | Schema::TimeMillis | Schema::Date => {
+                encode_int(v as i32, &mut self.writer)
+            }
+            Schema::Long
+            | Schema::TimeMicros
+            | Schema::TimestampMillis
+            | Schema::TimestampMicros
+            | Schema::TimestampNanos
+            | Schema::LocalTimestampMillis
+            | Schema::LocalTimestampMicros
+            | Schema::LocalTimestampNanos => {
+                encode_long(v as i64, &mut self.writer)
+            }
+            _ => {
+                Err(Error::ValidationWithReason {
+                    value: Value::Int(v as i32),
+                    schema: schema.clone(),
+                    reason: String::from("i16 cannot be converted to the expected schema type")
+                })
+            }
+        }
     }
 
     fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
-        self.write_int(v, "i32")
+        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+
+        match schema {
+            Schema::Int | Schema::TimeMillis | Schema::Date => {
+                encode_int(v, &mut self.writer)
+            }
+            Schema::Long
+            | Schema::TimeMicros
+            | Schema::TimestampMillis
+            | Schema::TimestampMicros
+            | Schema::TimestampNanos
+            | Schema::LocalTimestampMillis
+            | Schema::LocalTimestampMicros
+            | Schema::LocalTimestampNanos => {
+                encode_long(v as i64, &mut self.writer)
+            }
+            _ => {
+                Err(Error::ValidationWithReason {
+                    value: Value::Int(v),
+                    schema: schema.clone(),
+                    reason: String::from("i32 cannot be converted to the expected schema type")
+                })
+            }
+        }
     }
 
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-        self.write_int(v, "i64")
+        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+
+        match schema {
+            Schema::Int | Schema::TimeMillis | Schema::Date => {
+                let int_value = i32::try_from(v).map_err(|_| Error::Validation)?;
+                encode_int(int_value, &mut self.writer)
+            }
+            Schema::Long
+            | Schema::TimeMicros
+            | Schema::TimestampMillis
+            | Schema::TimestampMicros
+            | Schema::TimestampNanos
+            | Schema::LocalTimestampMillis
+            | Schema::LocalTimestampMicros
+            | Schema::LocalTimestampNanos => {
+                encode_long(v, &mut self.writer)
+            }
+            _ => {
+                Err(Error::ValidationWithReason {
+                    value: Value::Long(v),
+                    schema: schema.clone(),
+                    reason: String::from("i16 cannot be converted to the expected schema type")
+                })
+            }
+        }
     }
 
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
-        self.write_int(v, "u8")
+        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+
+        match schema {
+            Schema::Int | Schema::TimeMillis | Schema::Date => {
+                encode_int(v as i32, &mut self.writer)
+            }
+            Schema::Long
+            | Schema::TimeMicros
+            | Schema::TimestampMillis
+            | Schema::TimestampMicros
+            | Schema::TimestampNanos
+            | Schema::LocalTimestampMillis
+            | Schema::LocalTimestampMicros
+            | Schema::LocalTimestampNanos => {
+                encode_long(v as i64, &mut self.writer)
+            }
+            _ => {
+                Err(Error::ValidationWithReason {
+                    value: Value::Int(v as i32),
+                    schema: schema.clone(),
+                    reason: String::from("u8 cannot be converted to the expected schema type")
+                })
+            }
+        }
     }
 
     fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
-        self.write_int(v, "u16")
+        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+
+        match schema {
+            Schema::Int | Schema::TimeMillis | Schema::Date => {
+                encode_int(v as i32, &mut self.writer)
+            }
+            Schema::Long
+            | Schema::TimeMicros
+            | Schema::TimestampMillis
+            | Schema::TimestampMicros
+            | Schema::TimestampNanos
+            | Schema::LocalTimestampMillis
+            | Schema::LocalTimestampMicros
+            | Schema::LocalTimestampNanos => {
+                encode_long(v as i64, &mut self.writer)
+            }
+            _ => {
+                Err(Error::ValidationWithReason {
+                    value: Value::Int(v as i32),
+                    schema: schema.clone(),
+                    reason: String::from("u16 cannot be converted to the expected schema type")
+                })
+            }
+        }
     }
 
     fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
-        self.write_int(v, "u32")
+        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+
+        match schema {
+            Schema::Int | Schema::TimeMillis | Schema::Date => {
+                let int_value = i32::try_from(v).map_err(|_| Error::Validation)?;
+                encode_int(int_value, &mut self.writer)
+            }
+            Schema::Long
+            | Schema::TimeMicros
+            | Schema::TimestampMillis
+            | Schema::TimestampMicros
+            | Schema::TimestampNanos
+            | Schema::LocalTimestampMillis
+            | Schema::LocalTimestampMicros
+            | Schema::LocalTimestampNanos => {
+                encode_long(v as i64, &mut self.writer)
+            }
+            _ => {
+                Err(Error::ValidationWithReason {
+                    value: Value::Long(v as i64),
+                    schema: schema.clone(),
+                    reason: String::from("u32 cannot be converted to the expected schema type")
+                })
+            }
+        }
     }
 
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
-        self.write_int(v, "u64")
+        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+
+        match schema {
+            Schema::Int | Schema::TimeMillis | Schema::Date => {
+                let int_value = i32::try_from(v).map_err(|_| Error::Validation)?;
+                encode_int(int_value, &mut self.writer)
+            }
+            Schema::Long
+            | Schema::TimeMicros
+            | Schema::TimestampMillis
+            | Schema::TimestampMicros
+            | Schema::TimestampNanos
+            | Schema::LocalTimestampMillis
+            | Schema::LocalTimestampMicros
+            | Schema::LocalTimestampNanos => {
+                let long_value = i64::try_from(v).map_err(|_| Error::Validation)?;
+                encode_long(long_value, &mut self.writer)
+            }
+            _ => {
+                Err(Error::ValidationWithReason {
+                    value: Value::Int(v as i32),
+                    schema: schema.clone(),
+                    reason: String::from("i16 cannot be converted to the expected schema type")
+                })
+            }
+        }
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
@@ -674,20 +804,13 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         match schema {
             Schema::Union(sch) => {
                 if sch.schemas.len() == 2 {
-                    for i in 0..2 {
-                        match &sch.schemas[i] {
-                            Schema::Null => {
-                                continue;
-                            }
-                            _ => {
-                                if let Schema::Null = &sch.schemas[(i + 1) % 2] {
-                                    encode_int(i as i32, &mut self.writer)?;
-                                    self.schema_stack.push(&sch.schemas[i]);
-                                    return value.serialize(self);
-                                }
-                            }
-                        }
+                    let mut some_index = 0;
+                    if let Schema::Null = sch.schemas[0] {
+                        some_index = 1;
                     }
+                    encode_int(some_index as i32, &mut self.writer)?;
+                    self.schema_stack.push(&sch.schemas[some_index]);
+                    return value.serialize(self);
                 }
 
                 Err(Error::ValidationWithReason {
@@ -748,13 +871,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                     });
                 }
 
-                let variant_index_int = i32::try_from(variant_index).map_err(|_| {
-                    Error::SerializeValue(String::from(
-                        "Enum variant index does not fit into an integer value",
-                    ))
-                })?;
-
-                encode_int(variant_index_int, &mut self.writer)
+                encode_int(variant_index as i32, &mut self.writer)
             }
             Schema::Union(sch) => {
                 if variant_index as usize >= sch.schemas.len() {
@@ -765,13 +882,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                     });
                 }
 
-                let variant_index_int = i32::try_from(variant_index).map_err(|_| {
-                    Error::SerializeValue(String::from(
-                        "Union variant index does not fit into an integer value",
-                    ))
-                })?;
-
-                encode_int(variant_index_int, &mut self.writer)?;
+                encode_int(variant_index as i32, &mut self.writer)?;
                 self.schema_stack.push(&sch.schemas[variant_index as usize]);
                 self.serialize_unit_struct(name)
             }
@@ -852,7 +963,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                 self, &sch.items,
             ))),
             Schema::Record(sch) => Ok(DirectSerializeTupleStruct::Record(
-                DirectSerializeStruct::new(self, &sch),
+                DirectSerializeStruct::new(self, &sch, len),
             )),
             _ => Err(Error::Validation),
         }
@@ -899,7 +1010,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
         match schema {
-            Schema::Record(sch) => Ok(DirectSerializeStruct::new(self, sch)),
+            Schema::Record(sch) => Ok(DirectSerializeStruct::new(self, sch, len)),
             _ => Err(Error::Validation),
         }
     }
