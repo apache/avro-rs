@@ -415,14 +415,12 @@ mod tests {
     fn test_negative_decimal_value() -> TestResult {
         use crate::{encode::encode, schema::Name};
         use num_bigint::ToBigInt;
-        let inner = Box::new(Schema::Fixed(FixedSchema {
-            size: 2,
-            doc: None,
-            name: Name::new("decimal")?,
-            aliases: None,
-            default: None,
-            attributes: Default::default(),
-        }));
+        let inner = Box::new(Schema::Fixed(
+            FixedSchema::builder()
+                .name(Name::new("decimal")?)
+                .size(2)
+                .build(),
+        ));
         let schema = Schema::Decimal(DecimalSchema {
             inner,
             precision: 4,

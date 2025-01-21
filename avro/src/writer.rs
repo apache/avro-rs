@@ -31,21 +31,21 @@ const DEFAULT_BLOCK_SIZE: usize = 16000;
 const AVRO_OBJECT_HEADER: &[u8] = b"Obj\x01";
 
 /// Main interface for writing Avro formatted values.
-#[derive(typed_builder::TypedBuilder)]
+#[derive(bon::Builder)]
 pub struct Writer<'a, W> {
     schema: &'a Schema,
     writer: W,
-    #[builder(default, setter(skip))]
+    #[builder(skip)]
     resolved_schema: Option<ResolvedSchema<'a>>,
     #[builder(default = Codec::Null)]
     codec: Codec,
     #[builder(default = DEFAULT_BLOCK_SIZE)]
     block_size: usize,
-    #[builder(default = Vec::with_capacity(block_size), setter(skip))]
+    #[builder(skip = Vec::with_capacity(block_size))]
     buffer: Vec<u8>,
-    #[builder(default, setter(skip))]
+    #[builder(skip)]
     serializer: Serializer,
-    #[builder(default = 0, setter(skip))]
+    #[builder(skip)]
     num_values: usize,
     #[builder(default = generate_sync_marker())]
     marker: [u8; 16],
