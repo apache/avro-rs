@@ -443,6 +443,13 @@ pub enum Error {
     #[error("Failed to serialize value into Avro value: {0}")]
     SerializeValue(String),
 
+    #[error("Failed to serialize value of type {value_type} using schema {schema:?}: {value}")]
+    SerializeValueWithSchema{
+        value_type: &'static str,
+        value: String,
+        schema: Schema
+    },
+
     #[error("Failed to deserialize Avro value into value: {0}")]
     DeserializeValue(String),
 
