@@ -79,7 +79,7 @@ zstd = { default-features = false, version = "0.13.2", optional = true }
 quad-rand = { default-features = false, version = "0.2.3" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-rand = { default-features = false, version = "0.8.5", features = ["default"] }
+rand = { default-features = false, version = "0.9.0", features = ["default"] }
 
 [dev-dependencies]
 anyhow = { default-features = false, version = "1.0.95", features = ["std"] }
