@@ -424,9 +424,18 @@ dependencies = [
 
 [[package]]
 name = "ctor"
-version = "0.3.1"
+version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bba74424191d99c617a172ef126d429f62fe54aba1002c4d36e49403ce4b00a2"
+checksum = "035a5c3c87da8be7a0e5ebd6fbabcccd8651a59c27197096d1dfd74f312aaee5"
+dependencies = [
+ "ctor-proc-macro",
+]
+
+[[package]]
+name = "ctor-proc-macro"
+version = "0.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "107adb396b2d8e7766e79151083ce1cc624b51dfd1c23e0429c50226bba693eb"
 
 [[package]]
 name = "darling"
