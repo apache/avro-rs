@@ -269,6 +269,13 @@ impl Record<'_> {
             self.fields[position].1 = value.into()
         }
     }
+
+    ///
+    /// Get the value for a given field name. Returns `None` if the field is not present in the schema
+    pub fn get(&self, field: &str) -> Option<&Value> {
+        self.schema_lookup.get(field)
+            .map(|&position| &self.fields[position].1)
+    }
 }
 
 impl<'a> From<Record<'a>> for Value {
@@ -3223,5 +3230,37 @@ Field with name '"b"' is not a member of the map items"#,
             }
         }
         Ok(())
+    }
+
+    #[test]
+    fn get_from_record() {
+        let schema = r#"
+        {
+            "type": "record",
+            "name": "NamespacedMessage",
+            "namespace": "space",
+            "fields": [
+                {
+                    "name": "foo",
+                    "type": "string"
+                },
+                {
+                    "name": "bar",
+                    "type": "long"
+                }
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        let mut record = Record::new(&schema).unwrap();
+        record.put("foo", "hello");
+        record.put("bar", 123_i64);
+
+        assert_eq!(record.get("foo").unwrap().clone(), Value::String("hello".to_string()));
+        assert_eq!(record.get("bar").unwrap().clone(), Value::Long(123));
+
+        // also make sure it doesn't fail but return None for non-existing field
+        assert_eq!(record.get("baz"), None);
     }
 }
