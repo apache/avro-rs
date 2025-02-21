@@ -270,8 +270,8 @@ impl Record<'_> {
         }
     }
 
-    ///
-    /// Get the value for a given field name. Returns `None` if the field is not present in the schema
+    /// Get the value for a given field name.
+    /// Returns `None` if the field is not present in the schema
     pub fn get(&self, field: &str) -> Option<&Value> {
         self.schema_lookup
             .get(field)
@@ -3234,7 +3234,7 @@ Field with name '"b"' is not a member of the map items"#,
     }
 
     #[test]
-    fn get_from_record() {
+    fn avro_rs_130_get_from_record() -> TestResult {
         let schema = r#"
         {
             "type": "record",
@@ -3253,18 +3253,20 @@ Field with name '"b"' is not a member of the map items"#,
         }
         "#;
 
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = Schema::parse_str(schema)?;
         let mut record = Record::new(&schema).unwrap();
         record.put("foo", "hello");
         record.put("bar", 123_i64);
 
         assert_eq!(
-            record.get("foo").unwrap().clone(),
-            Value::String("hello".to_string())
+            record.get("foo").unwrap(),
+            &Value::String("hello".to_string())
         );
-        assert_eq!(record.get("bar").unwrap().clone(), Value::Long(123));
+        assert_eq!(record.get("bar").unwrap(), &Value::Long(123));
 
         // also make sure it doesn't fail but return None for non-existing field
         assert_eq!(record.get("baz"), None);
+
+        Ok(())
     }
 }
