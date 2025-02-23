@@ -1157,3 +1157,116 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use serde::Serializer;
+
+    #[test]
+    fn test_serialize_null() {
+        let schema = Schema::Null;
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+
+        serializer.serialize_unit().unwrap();
+        serializer.serialize_none().unwrap();
+
+        assert_eq!(buffer.as_slice(), Vec::<u8>::new().as_slice());
+    }
+
+    #[test]
+    fn test_serialize_bool() {
+        let schema = Schema::Boolean;
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+
+        serializer.serialize_bool(true).unwrap();
+        serializer.serialize_bool(false).unwrap();
+
+        assert_eq!(buffer.as_slice(), &[1, 0]);
+    }
+
+    #[test]
+    fn test_serialize_int() {
+        let schema = Schema::Int;
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+
+        serializer.serialize_u8(4).unwrap();
+        serializer.serialize_u16(31).unwrap();
+        serializer.serialize_u32(13).unwrap();
+        serializer.serialize_i8(7).unwrap();
+        serializer.serialize_i16(-57).unwrap();
+        serializer.serialize_i32(129).unwrap();
+
+        assert_eq!(buffer.as_slice(), &[8, 62, 26, 14, 113, 130, 2]);
+    }
+
+
+    #[test]
+    fn test_serialize_long() {
+        let schema = Schema::Long;
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+
+        serializer.serialize_u8(4).unwrap();
+        serializer.serialize_u16(31).unwrap();
+        serializer.serialize_u32(13).unwrap();
+        serializer.serialize_u64(291).unwrap();
+        serializer.serialize_i8(7).unwrap();
+        serializer.serialize_i16(-57).unwrap();
+        serializer.serialize_i32(129).unwrap();
+        serializer.serialize_i64(-432).unwrap();
+
+        assert_eq!(buffer.as_slice(), &[8, 62, 26, 198, 4, 14, 113, 130, 2, 223, 6]);
+    }
+
+    #[test]
+    fn test_serialize_float() {
+        let schema = Schema::Float;
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+
+        serializer.serialize_f32(4.7).unwrap();
+        serializer.serialize_f64(-14.1).unwrap();
+
+        assert_eq!(buffer.as_slice(), &[102, 102, 150, 64, 154, 153, 97, 193]);
+    }
+
+    #[test]
+    fn test_serialize_double() {
+        let schema = Schema::Float;
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+
+        serializer.serialize_f32(4.7).unwrap();
+        serializer.serialize_f64(-14.1).unwrap();
+
+        assert_eq!(buffer.as_slice(), &[102, 102, 150, 64, 154, 153, 97, 193]);
+    }
+
+    #[test]
+    fn test_serialize_bytes() {
+        let schema = Schema::Bytes;
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+
+        serializer.serialize_char('a').unwrap();
+        serializer.serialize_str("test").unwrap();
+        serializer.serialize_bytes(&[12, 3, 7, 91, 4]).unwrap();
+
+        assert_eq!(buffer.as_slice(), &[2, 97, 8, 116, 101, 115, 116, 10, 12, 3, 7, 91, 4]);
+    }
+
+
+
+}
