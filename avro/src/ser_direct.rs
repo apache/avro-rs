@@ -900,6 +900,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                 0 => Ok(0),
                 _ => Err(create_error()),
             },
+            Schema::Null => Ok(0),
             Schema::Ref { name: ref_name } => {
                 let ref_schema = self.get_ref_schema(ref_name)?;
                 self.schema_stack.push(ref_schema);
@@ -1162,7 +1163,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use serde::Serializer;
+    use serde::{ser::{SerializeMap, SerializeStruct}, Serializer};
 
     #[test]
     fn test_serialize_null() {
@@ -1264,7 +1265,125 @@ mod tests {
         serializer.serialize_str("test").unwrap();
         serializer.serialize_bytes(&[12, 3, 7, 91, 4]).unwrap();
 
-        assert_eq!(buffer.as_slice(), &[2, 97, 8, 116, 101, 115, 116, 10, 12, 3, 7, 91, 4]);
+        assert_eq!(buffer.as_slice(), &[2, b'a', 8, b't', b'e', b's', b't', 10, 12, 3, 7, 91, 4]);
+    }
+
+    #[test]
+    fn test_serialize_string() {
+        let schema = Schema::String;
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+
+        serializer.serialize_char('a').unwrap();
+        serializer.serialize_str("test").unwrap();
+        serializer.serialize_bytes(&[12, 3, 7, 91, 4]).unwrap();
+
+        assert_eq!(buffer.as_slice(), &[2, b'a', 8, b't', b'e', b's', b't', 10, 12, 3, 7, 91, 4]);
+    }
+
+    #[test]
+    fn test_serialize_record() {
+        let schema = Schema::parse_str(r#"{
+            "type": "record",
+            "name": "MyRecord",
+            "fields": [
+                {"name": "stringField", "type": "string"},
+                {"name": "intField", "type": "int"}
+            ]
+        }"#).unwrap();
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+
+        let mut struct_ser = serializer.serialize_struct("MyRecord", 2).unwrap();
+        struct_ser.serialize_field("stringField", "test").unwrap();
+        struct_ser.serialize_field("intField", &10i32).unwrap();
+        struct_ser.end().unwrap();
+
+        assert_eq!(buffer.as_slice(), &[8, b't', b'e', b's', b't', 20]);
+    }
+
+    #[test]
+    fn test_serialize_empty_record() {
+        let schema = Schema::parse_str(r#"{
+            "type": "record",
+            "name": "EmptyRecord",
+            "fields": []
+        }"#).unwrap();
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+
+        serializer.serialize_unit_struct("EmptyRecord").unwrap();
+
+        assert_eq!(buffer.len(), 0);
+    }
+
+    #[test]
+    fn test_serialize_array() {
+        let schema = Schema::parse_str(r#"{
+            "type": "array",
+            "items": "long"
+        }"#).unwrap();
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+
+        let mut seq_serializer = serializer.serialize_seq(None).unwrap();
+        seq_serializer.serialize_element(&10i64).unwrap();
+        seq_serializer.serialize_element(&5i64).unwrap();
+        seq_serializer.serialize_element(&400i64).unwrap();
+        seq_serializer.end().unwrap();
+
+        assert_eq!(buffer.as_slice(), &[6, 20, 10, 160, 6, 0]);
+    }
+
+    #[test]
+    fn test_serialize_map() {
+        let schema = Schema::parse_str(r#"{
+            "type": "map",
+            "values": "long"
+        }"#).unwrap();
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+
+        let mut map_serializer = serializer.serialize_map(None).unwrap();
+        map_serializer.serialize_key("item1").unwrap();
+        map_serializer.serialize_value(&10i64).unwrap();
+        map_serializer.serialize_key("item2").unwrap();
+        map_serializer.serialize_value(&400i64).unwrap();
+        map_serializer.end().unwrap();
+
+        assert_eq!(buffer.as_slice(), &[4, 10, b'i', b't', b'e', b'm', b'1', 20, 10, b'i', b't', b'e', b'm', b'2', 160, 6, 0]);
+    }
+
+    #[test]
+    fn test_serialize_nullable() {
+        let schema = Schema::parse_str(r#"{
+            "type": ["null", "long"]
+        }"#).unwrap();
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+
+        serializer.serialize_some(&10i64).unwrap();
+        serializer.serialize_none().unwrap();
+        serializer.serialize_newtype_variant("Nullable", 1, "Some", &400i64).unwrap();
+        serializer.serialize_unit_variant("Nullable", 0, "Null").unwrap();
+
+        assert_eq!(buffer.as_slice(), &[2, 20, 0, 2, 160, 6, 0]);
+    }
+
+    #[test]
+    fn test_serialize_union() {
+        
     }
 
 
