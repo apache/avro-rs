@@ -809,7 +809,24 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                     Err(create_error())
                 }
             }
-            Schema::Decimal(_) => self.write_bytes(v),
+            Schema::Decimal(sch) => {
+                match sch.inner.as_ref() {
+                    Schema::Bytes => self.write_bytes(v),
+                    Schema::Fixed(fixed_sch) => {
+                        match fixed_sch.size.checked_sub(v.len()) {
+                            Some(pad) => {
+                                let pad_val = match v.len() { 0 => 0, _ => v[0] };
+                                let padding = vec![pad_val; pad];
+                                self.writer.write(padding.as_slice()).map_err(|e| Error::WriteBytes(e))?;
+                                self.writer.write(v).map_err(|e| Error::WriteBytes(e))
+                            }
+                            None => Err(Error::CompareFixedSizes{ size: fixed_sch.size, n: v.len() })
+                        }
+                    },
+                    _ => Err(create_error())
+                }
+                
+            },
             Schema::Ref { name } => {
                 let ref_schema = self.get_ref_schema(name)?;
                 self.schema_stack.push(ref_schema);
@@ -1484,6 +1501,27 @@ mod tests {
         val.serialize(&mut serializer).unwrap();
 
         assert_eq!(buffer.as_slice(), &[4, 251, 155]);
+    }
+
+    #[test]
+    fn test_serialize_decimal_fixed() {
+        let schema = Schema::parse_str(r#"{
+            "type": "fixed",
+            "name": "FixedDecimal",
+            "size": 8,
+            "logicalType": "decimal",
+            "precision": 16,
+            "scale": 2
+        }"#).unwrap();
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+
+        let val = Decimal::from(&[0, 0, 0, 0, 0, 0, 251, 155]);
+        val.serialize(&mut serializer).unwrap();
+
+        assert_eq!(buffer.as_slice(), &[0, 0, 0, 0, 0, 0, 251, 155]);
     }
 
     #[test]
