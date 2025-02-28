@@ -25,13 +25,19 @@ pub use bigdecimal::BigDecimal;
 use num_bigint::BigInt;
 use std::io::Read;
 
-pub(crate) fn serialize_big_decimal(decimal: &BigDecimal) -> Vec<u8> {
-    // encode big decimal, without global size
+pub(crate) fn big_decimal_as_bytes(decimal: &BigDecimal) -> Vec<u8> {
     let mut buffer: Vec<u8> = Vec::new();
     let (big_int, exponent): (BigInt, i64) = decimal.as_bigint_and_exponent();
     let big_endian_value: Vec<u8> = big_int.to_signed_bytes_be();
     encode_bytes(&big_endian_value, &mut buffer);
     encode_long(exponent, &mut buffer);
+
+    buffer
+}
+
+pub(crate) fn serialize_big_decimal(decimal: &BigDecimal) -> Vec<u8> {
+    // encode big decimal, without global size
+    let buffer = big_decimal_as_bytes(decimal);
 
     // encode global size and content
     let mut final_buffer: Vec<u8> = Vec::new();
