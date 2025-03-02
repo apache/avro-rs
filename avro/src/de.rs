@@ -18,7 +18,7 @@
 //! Logic for serde-compatible deserialization.
 use crate::{bytes::DE_BYTES_BORROWED, types::Value, Error};
 use serde::{
-    de::{self, DeserializeSeed, Visitor},
+    de::{self, DeserializeSeed, Visitor, Deserializer as _},
     forward_to_deserialize_any, Deserialize,
 };
 use std::{
@@ -53,6 +53,11 @@ pub struct EnumUnitDeserializer<'a> {
 
 pub struct EnumDeserializer<'de> {
     input: &'de [(String, Value)],
+}
+
+struct UnionDeserializer<'de> {
+    input: &'static str,
+    value: &'de Value
 }
 
 impl<'de> Deserializer<'de> {
@@ -96,6 +101,12 @@ impl<'a> EnumUnitDeserializer<'a> {
 impl<'de> EnumDeserializer<'de> {
     pub fn new(input: &'de [(String, Value)]) -> Self {
         EnumDeserializer { input }
+    }
+}
+
+impl<'de> UnionDeserializer<'de> {
+    pub fn new(input: &'static str, value: &'de Value) -> Self {
+        UnionDeserializer { input, value }
     }
 }
 
@@ -227,6 +238,51 @@ impl<'de> de::VariantAccess<'de> for EnumDeserializer<'de> {
                 )
             },
         )
+    }
+}
+
+impl<'de> de::EnumAccess<'de> for UnionDeserializer<'de> {
+    type Error = Error;
+    type Variant = Self;
+
+    fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant), Self::Error>
+    where
+        V: DeserializeSeed<'de> {
+        Ok((seed.deserialize(StringDeserializer { input: String::from(self.input) })?, self))
+    }
+}
+
+impl<'de> de::VariantAccess<'de> for UnionDeserializer<'de> {
+    type Error = Error;
+
+    fn unit_variant(self) -> Result<(), Self::Error> {
+        match self.value {
+            Value::Null => Ok(()),
+            _ => Err(Error::GetNull(self.value.clone()))
+        }
+    }
+
+    fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value, Self::Error>
+    where
+        T: DeserializeSeed<'de> {
+        seed.deserialize(&Deserializer::new(self.value))
+    }
+
+    fn tuple_variant<V>(self, len: usize, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de> {
+        Deserializer::new(self.value).deserialize_tuple(len, visitor)
+    }
+
+    fn struct_variant<V>(
+        self,
+        fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de> {
+        let des = Deserializer::new(self.value);
+        des.deserialize_struct(self.input, fields, visitor)
     }
 }
 
@@ -527,7 +583,7 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
     fn deserialize_enum<V>(
         self,
         _enum_name: &'static str,
-        _variants: &'static [&'static str],
+        variants: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value, Self::Error>
     where
@@ -537,6 +593,11 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
             // This branch can be anything...
             Value::Record(ref fields) => visitor.visit_enum(EnumDeserializer::new(fields)),
             Value::String(ref field) => visitor.visit_enum(EnumUnitDeserializer::new(field)),
+            Value::Union(idx, ref inner) => if (idx as usize) < variants.len() {
+                visitor.visit_enum(UnionDeserializer::new(variants[idx as usize], inner.as_ref()))
+            } else {
+                Err(Error::GetUnionVariant { index: idx as i64, num_variants: variants.len() })
+            }
             // This has to be a unit Enum
             Value::Enum(_index, ref field) => visitor.visit_enum(EnumUnitDeserializer::new(field)),
             _ => Err(de::Error::custom(format!(

@@ -450,6 +450,13 @@ pub enum Error {
         schema: Schema
     },
 
+    #[error("Failed to serialize field '{field_name}' for record {record_schema:?}: {error}")]
+    SerializeRecordFieldWithSchema {
+        field_name: &'static str,
+        record_schema: Schema,
+        error: Box<Error>
+    },
+
     #[error("Failed to deserialize Avro value into value: {0}")]
     DeserializeValue(String),
 
