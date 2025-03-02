@@ -42,7 +42,7 @@ const RAW_SMALL_SCHEMA: &str = r#"
 
 #[derive(Serialize, Clone)]
 struct SmallRecord {
-  field: String
+    field: String,
 }
 
 const RAW_BIG_SCHEMA: &str = r#"
@@ -112,20 +112,20 @@ const RAW_BIG_SCHEMA: &str = r#"
 
 #[derive(Serialize, Clone)]
 struct MailingAddress {
-  street: String,
-  city: String,
-  state_prov: String,
-  country: String,
-  zip: String
+    street: String,
+    city: String,
+    state_prov: String,
+    country: String,
+    zip: String,
 }
 
 #[derive(Serialize, Clone)]
 struct BigRecord {
-  username: String,
-  age: i32,
-  phone: String,
-  housenum: String,
-  address: MailingAddress 
+    username: String,
+    age: i32,
+    phone: String,
+    housenum: String,
+    address: MailingAddress,
 }
 
 const RAW_ADDRESS_SCHEMA: &str = r#"
@@ -173,11 +173,11 @@ fn make_small_record() -> anyhow::Result<(Schema, Value)> {
 }
 
 fn make_small_record_ser() -> anyhow::Result<(Schema, SmallRecord)> {
-  let small_schema = Schema::parse_str(RAW_SMALL_SCHEMA)?;
-  let small_record = SmallRecord {
-    field: String::from("foo")
-  };
-  Ok((small_schema, small_record))
+    let small_schema = Schema::parse_str(RAW_SMALL_SCHEMA)?;
+    let small_record = SmallRecord {
+        field: String::from("foo"),
+    };
+    Ok((small_schema, small_record))
 }
 
 fn make_big_record() -> anyhow::Result<(Schema, Value)> {
@@ -204,21 +204,21 @@ fn make_big_record() -> anyhow::Result<(Schema, Value)> {
 }
 
 fn make_big_record_ser() -> anyhow::Result<(Schema, BigRecord)> {
-  let big_schema = Schema::parse_str(RAW_BIG_SCHEMA)?;
-  let big_record = BigRecord {
-    username: String::from("username"),
-    age: 10,
-    phone: String::from("000000000"),
-    housenum: String::from("0000"),
-    address: MailingAddress {
-      street: String::from("street"),
-      city: String::from("city"),
-      state_prov: String::from("state_prov"),
-      country: String::from("country"),
-      zip: String::from("zip")
-    }
-  };
-  Ok((big_schema, big_record))
+    let big_schema = Schema::parse_str(RAW_BIG_SCHEMA)?;
+    let big_record = BigRecord {
+        username: String::from("username"),
+        age: 10,
+        phone: String::from("000000000"),
+        housenum: String::from("0000"),
+        address: MailingAddress {
+            street: String::from("street"),
+            city: String::from("city"),
+            state_prov: String::from("state_prov"),
+            country: String::from("country"),
+            zip: String::from("zip"),
+        },
+    };
+    Ok((big_schema, big_record))
 }
 
 fn make_records(record: Value, count: usize) -> Vec<Value> {
@@ -226,7 +226,7 @@ fn make_records(record: Value, count: usize) -> Vec<Value> {
 }
 
 fn make_records_ser<T: Serialize + Clone>(record: T, count: usize) -> Vec<T> {
-  std::iter::repeat(record).take(count).collect()
+    std::iter::repeat(record).take(count).collect()
 }
 
 fn write(schema: &Schema, records: &[Value]) -> AvroResult<Vec<u8>> {
@@ -236,9 +236,9 @@ fn write(schema: &Schema, records: &[Value]) -> AvroResult<Vec<u8>> {
 }
 
 fn write_ser<T: Serialize>(schema: &Schema, records: &[T]) -> AvroResult<Vec<u8>> {
-  let mut writer = Writer::new(schema, Vec::new());
-  writer.extend_ser(records).unwrap();
-  writer.into_inner()
+    let mut writer = Writer::new(schema, Vec::new());
+    writer.extend_ser(records).unwrap();
+    writer.into_inner()
 }
 
 fn read(schema: &Schema, bytes: &[u8]) -> anyhow::Result<()> {
@@ -272,15 +272,15 @@ fn bench_write(
 }
 
 fn bench_write_ser<T: Serialize + Clone>(
-  c: &mut Criterion,
-  make_record: impl Fn() -> anyhow::Result<(Schema, T)>,
-  n_records: usize,
-  name: &str
+    c: &mut Criterion,
+    make_record: impl Fn() -> anyhow::Result<(Schema, T)>,
+    n_records: usize,
+    name: &str,
 ) -> anyhow::Result<()> {
-  let (schema, record) = make_record()?;
-  let records = make_records_ser(record, n_records);
-  c.bench_function(name, |b| b.iter(|| write_ser(&schema, &records)));
-  Ok(())
+    let (schema, record) = make_record()?;
+    let records = make_records_ser(record, n_records);
+    c.bench_function(name, |b| b.iter(|| write_ser(&schema, &records)));
+    Ok(())
 }
 
 fn bench_read(
@@ -307,7 +307,13 @@ fn bench_small_schema_write_1_record(c: &mut Criterion) {
 }
 
 fn bench_small_schema_write_1_record_ser(c: &mut Criterion) {
-    bench_write_ser(c, make_small_record_ser, 1, "small schema, write 1 record (serde way)").unwrap();
+    bench_write_ser(
+        c,
+        make_small_record_ser,
+        1,
+        "small schema, write 1 record (serde way)",
+    )
+    .unwrap();
 }
 
 fn bench_small_schema_write_100_record(c: &mut Criterion) {
@@ -315,7 +321,13 @@ fn bench_small_schema_write_100_record(c: &mut Criterion) {
 }
 
 fn bench_small_schema_write_100_record_ser(c: &mut Criterion) {
-    bench_write_ser(c, make_small_record_ser, 100, "small schema, write 100 records (serde way)").unwrap();
+    bench_write_ser(
+        c,
+        make_small_record_ser,
+        100,
+        "small schema, write 100 records (serde way)",
+    )
+    .unwrap();
 }
 
 fn bench_small_schema_write_10_000_record(c: &mut Criterion) {
@@ -329,7 +341,13 @@ fn bench_small_schema_write_10_000_record(c: &mut Criterion) {
 }
 
 fn bench_small_schema_write_10_000_record_ser(c: &mut Criterion) {
-    bench_write_ser(c, make_small_record_ser, 10_000, "small schema, write 10k records (serde way)").unwrap()
+    bench_write_ser(
+        c,
+        make_small_record_ser,
+        10_000,
+        "small schema, write 10k records (serde way)",
+    )
+    .unwrap()
 }
 
 fn bench_small_schema_read_1_record(c: &mut Criterion) {
@@ -355,23 +373,41 @@ fn bench_big_schema_write_1_record(c: &mut Criterion) {
 }
 
 fn bench_big_schema_write_1_record_ser(c: &mut Criterion) {
-    bench_write_ser(c, make_big_record_ser, 1, "big schema, write 1 record (serde way)").unwrap();
+    bench_write_ser(
+        c,
+        make_big_record_ser,
+        1,
+        "big schema, write 1 record (serde way)",
+    )
+    .unwrap();
 }
 
 fn bench_big_schema_write_100_record(c: &mut Criterion) {
-  bench_write(c, make_big_record, 100, "big schema, write 100 records").unwrap();
+    bench_write(c, make_big_record, 100, "big schema, write 100 records").unwrap();
 }
 
 fn bench_big_schema_write_100_record_ser(c: &mut Criterion) {
-    bench_write_ser(c, make_big_record_ser, 100, "big schema, write 100 records (serde way)").unwrap();
+    bench_write_ser(
+        c,
+        make_big_record_ser,
+        100,
+        "big schema, write 100 records (serde way)",
+    )
+    .unwrap();
 }
 
 fn bench_big_schema_write_10_000_record(c: &mut Criterion) {
-  bench_write(c, make_big_record, 10_000, "big schema, write 10k records").unwrap();
+    bench_write(c, make_big_record, 10_000, "big schema, write 10k records").unwrap();
 }
 
 fn bench_big_schema_write_10_000_record_ser(c: &mut Criterion) {
-  bench_write_ser(c, make_big_record_ser, 10_000, "big scheam, write 10k records (serde way)").unwrap();
+    bench_write_ser(
+        c,
+        make_big_record_ser,
+        10_000,
+        "big scheam, write 10k records (serde way)",
+    )
+    .unwrap();
 }
 
 fn bench_big_schema_read_1_record(c: &mut Criterion) {
@@ -411,11 +447,11 @@ criterion_group!(
 );
 
 criterion_group!(
-  benches_ser,
-  bench_small_schema_write_1_record_ser,
-  bench_small_schema_write_100_record_ser,
-  bench_big_schema_write_1_record_ser,
-  bench_big_schema_write_100_record_ser,
+    benches_ser,
+    bench_small_schema_write_1_record_ser,
+    bench_small_schema_write_100_record_ser,
+    bench_big_schema_write_1_record_ser,
+    bench_big_schema_write_100_record_ser,
 );
 
 criterion_group!(
@@ -444,4 +480,10 @@ criterion_group!(
         bench_big_schema_read_100_000_record,
 );
 
-criterion_main!(benches, benches_ser, long_benches, long_benches_ser, very_long_benches);
+criterion_main!(
+    benches,
+    benches_ser,
+    long_benches,
+    long_benches_ser,
+    very_long_benches
+);

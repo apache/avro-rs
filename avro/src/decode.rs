@@ -128,7 +128,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
 
             // use a Vec to be able re-read the bytes more than once if needed
             let mut reader = Vec::with_capacity(len + 1);
-            encode_long(len as i64, &mut reader);
+            encode_long(len as i64, &mut reader)?;
             reader.extend_from_slice(&bytes);
 
             let decode_from_string = |reader| match decode_internal(

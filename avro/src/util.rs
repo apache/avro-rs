@@ -18,7 +18,7 @@
 use crate::{schema::Documentation, AvroResult, Error};
 use serde_json::{Map, Value};
 use std::{
-    io::{self, Read, Write},
+    io::{Read, Write},
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         Once,

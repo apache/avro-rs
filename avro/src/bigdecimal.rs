@@ -29,8 +29,9 @@ pub(crate) fn big_decimal_as_bytes(decimal: &BigDecimal) -> Vec<u8> {
     let mut buffer: Vec<u8> = Vec::new();
     let (big_int, exponent): (BigInt, i64) = decimal.as_bigint_and_exponent();
     let big_endian_value: Vec<u8> = big_int.to_signed_bytes_be();
-    encode_bytes(&big_endian_value, &mut buffer);
-    encode_long(exponent, &mut buffer);
+    encode_bytes(&big_endian_value, &mut buffer)
+        .expect("Writing to a Vec<u8> expected to not fail");
+    encode_long(exponent, &mut buffer).expect("Writing to a Vec<u8> expected to not fail");
 
     buffer
 }
@@ -41,7 +42,7 @@ pub(crate) fn serialize_big_decimal(decimal: &BigDecimal) -> Vec<u8> {
 
     // encode global size and content
     let mut final_buffer: Vec<u8> = Vec::new();
-    encode_bytes(&buffer, &mut final_buffer);
+    encode_bytes(&buffer, &mut final_buffer).expect("Writing to a Vec<u8> expected to not fail");
     final_buffer
 }
 

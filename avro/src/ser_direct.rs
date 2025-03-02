@@ -1104,7 +1104,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                             self.schema_stack.push(variant_sch);
                             return self.serialize_unit_struct(name);
                         }
-                        Schema::Null | Schema::Ref{ name: _ } => {
+                        Schema::Null | Schema::Ref { name: _ } => {
                             encode_int(i as i32, &mut *self.writer)?;
                             self.schema_stack.push(variant_sch);
                             return self.serialize_unit_struct(name);
@@ -1208,8 +1208,8 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
 
         let create_error = || {
             let len_str = len
-            .map(|l| format!("{}", l))
-            .unwrap_or_else(|| String::from("?"));
+                .map(|l| format!("{}", l))
+                .unwrap_or_else(|| String::from("?"));
 
             Error::SerializeValueWithSchema {
                 value_type: "sequence",
@@ -1233,7 +1233,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                 }
                 Err(create_error())
             }
-            _ => Err(create_error())
+            _ => Err(create_error()),
         }
     }
 
@@ -1295,10 +1295,12 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             Schema::Union(sch) => {
                 for (i, variant_sch) in sch.schemas.iter().enumerate() {
                     match variant_sch {
-                        Schema::Record(inner) => if inner.fields.len() == len {
-                            encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_sch);
-                            return self.serialize_tuple_struct(name, len);
+                        Schema::Record(inner) => {
+                            if inner.fields.len() == len {
+                                encode_int(i as i32, &mut *self.writer)?;
+                                self.schema_stack.push(variant_sch);
+                                return self.serialize_tuple_struct(name, len);
+                            }
                         }
                         Schema::Array(_) | Schema::Ref { name: _ } => {
                             encode_int(i as i32, &mut *self.writer)?;
@@ -1352,8 +1354,8 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
 
         let create_error = || {
             let len_str = len
-            .map(|l| format!("{}", l))
-            .unwrap_or_else(|| String::from("?"));
+                .map(|l| format!("{}", l))
+                .unwrap_or_else(|| String::from("?"));
 
             Error::SerializeValueWithSchema {
                 value_type: "map",
@@ -1377,7 +1379,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                 }
                 Err(create_error())
             }
-            _ => Err(create_error())
+            _ => Err(create_error()),
         }
     }
 
@@ -1404,7 +1406,9 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             Schema::Union(sch) => {
                 for (i, variant_sch) in sch.schemas.iter().enumerate() {
                     match variant_sch {
-                        Schema::Record(inner) if inner.fields.len() == len && &inner.name.name == name => {
+                        Schema::Record(inner)
+                            if inner.fields.len() == len && &inner.name.name == name =>
+                        {
                             encode_int(i as i32, &mut *self.writer)?;
                             self.schema_stack.push(variant_sch);
                             return self.serialize_struct(name, len);

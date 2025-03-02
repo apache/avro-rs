@@ -17,7 +17,12 @@
 
 //! Logic handling writing in Avro format at user level.
 use crate::{
-    encode::{encode, encode_internal, encode_to_vec}, rabin::Rabin, schema::{AvroSchema, Name, ResolvedOwnedSchema, ResolvedSchema, Schema}, ser::Serializer, ser_direct::DirectSerializer, types::Value, AvroResult, Codec, Error
+    encode::{encode, encode_internal, encode_to_vec},
+    rabin::Rabin,
+    schema::{AvroSchema, Name, ResolvedOwnedSchema, ResolvedSchema, Schema},
+    ser_direct::DirectSerializer,
+    types::Value,
+    AvroResult, Codec, Error,
 };
 use serde::Serialize;
 use std::{collections::HashMap, io::Write, marker::PhantomData};
@@ -199,7 +204,8 @@ impl<'a, W: Write> Writer<'a, W> {
 
         match self.resolved_schema {
             Some(ref rs) => {
-                let mut serializer = DirectSerializer::new(&mut self.buffer, &self.schema, rs.get_names(), None);
+                let mut serializer =
+                    DirectSerializer::new(&mut self.buffer, &self.schema, rs.get_names(), None);
                 value.serialize(&mut serializer)?;
                 self.num_values += 1;
 
@@ -212,7 +218,7 @@ impl<'a, W: Write> Writer<'a, W> {
             None => {
                 let rs = ResolvedSchema::try_from(self.schema)?;
                 self.resolved_schema = Some(rs);
-                self.append_ser(value)                
+                self.append_ser(value)
             }
         }
     }
@@ -569,7 +575,9 @@ where
         let mut bytes_written: usize = 0;
 
         if !self.header_written {
-            bytes_written += writer.write(self.inner.buffer.as_slice()).map_err(|e| Error::WriteBytes(e))?;
+            bytes_written += writer
+                .write(self.inner.buffer.as_slice())
+                .map_err(|e| Error::WriteBytes(e))?;
             self.header_written = true;
         }
 
