@@ -44,8 +44,6 @@ pub struct Writer<'a, W> {
     #[builder(skip = Vec::with_capacity(block_size))]
     buffer: Vec<u8>,
     #[builder(skip)]
-    serializer: Serializer,
-    #[builder(default = 0, setter(skip))]
     num_values: usize,
     #[builder(default = generate_sync_marker())]
     marker: [u8; 16],
@@ -738,8 +736,8 @@ mod tests {
         record.put("b", "foo");
 
         let mut expected = Vec::new();
-        zig_i64(27, &mut expected);
-        zig_i64(3, &mut expected);
+        zig_i64(27, &mut expected)?;
+        zig_i64(3, &mut expected)?;
         expected.extend([b'f', b'o', b'o']);
 
         assert_eq!(to_avro_datum(&schema, record)?, expected);
@@ -753,8 +751,8 @@ mod tests {
         let union = Value::Union(1, Box::new(Value::Long(3)));
 
         let mut expected = Vec::new();
-        zig_i64(1, &mut expected);
-        zig_i64(3, &mut expected);
+        zig_i64(1, &mut expected)?;
+        zig_i64(3, &mut expected)?;
 
         assert_eq!(to_avro_datum(&schema, union)?, expected);
 
@@ -767,7 +765,7 @@ mod tests {
         let union = Value::Union(0, Box::new(Value::Null));
 
         let mut expected = Vec::new();
-        zig_i64(0, &mut expected);
+        zig_i64(0, &mut expected)?;
 
         assert_eq!(to_avro_datum(&schema, union)?, expected);
 
@@ -935,8 +933,8 @@ mod tests {
         assert_eq!(n1 + n2 + n3, result.len());
 
         let mut data = Vec::new();
-        zig_i64(27, &mut data);
-        zig_i64(3, &mut data);
+        zig_i64(27, &mut data)?;
+        zig_i64(3, &mut data)?;
         data.extend(b"foo");
         data.extend(data.clone());
 
@@ -970,8 +968,8 @@ mod tests {
         assert_eq!(n1 + n2, result.len());
 
         let mut data = Vec::new();
-        zig_i64(27, &mut data);
-        zig_i64(3, &mut data);
+        zig_i64(27, &mut data)?;
+        zig_i64(3, &mut data)?;
         data.extend(b"foo");
         data.extend(data.clone());
 
@@ -1166,11 +1164,11 @@ mod tests {
 
         let mut data = Vec::new();
         // byte indicating not null
-        zig_i64(1, &mut data);
-        zig_i64(1234, &mut data);
+        zig_i64(1, &mut data)?;
+        zig_i64(1234, &mut data)?;
 
         // byte indicating null
-        zig_i64(0, &mut data);
+        zig_i64(0, &mut data)?;
         codec.compress(&mut data)?;
 
         // starts with magic
