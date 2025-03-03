@@ -56,7 +56,7 @@ name = "single"
 apache-avro-derive = { default-features = false, version = "0.18.0", path = "../avro_derive", optional = true }
 bigdecimal = { default-features = false, version = "0.4.7", features = ["std", "serde"] }
 bon = { default-features = false, version = "3.3.2" }
-bzip2 = { version = "0.5.1", optional = true }
+bzip2 = { version = "0.5.2", optional = true }
 crc32fast = { default-features = false, version = "1.4.2", optional = true }
 digest = { default-features = false, version = "0.10.7", features = ["core-api"] }
 libflate = { default-features = false, version = "2.1.0", features = ["std"] }
