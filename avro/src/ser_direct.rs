@@ -1,14 +1,12 @@
-use std::borrow::Cow;
-use std::io::Write;
+use std::{borrow::Cow, io::Write};
 
 use serde::ser;
 
-use crate::encode::encode_int;
-use crate::encode::encode_long;
-use crate::error::Error;
-use crate::schema::Name;
-use crate::schema::NamesRef;
-use crate::schema::{Namespace, RecordSchema, Schema};
+use crate::{
+    encode::{encode_int, encode_long},
+    error::Error,
+    schema::{Name, NamesRef, Namespace, RecordSchema, Schema},
+};
 
 const RECORD_FIELD_INIT_BUFFER_SIZE: usize = 64;
 const COLLECTION_SERIALIZER_ITEM_LIMIT: usize = 1024;
@@ -884,7 +882,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         match schema {
             Schema::String | Schema::Bytes | Schema::Uuid => self.write_bytes(v.as_bytes()),
             Schema::Fixed(sch) => {
-                if v.as_bytes().len() == sch.size {
+                if v.len() == sch.size {
                     self.writer.write(v.as_bytes()).map_err(Error::WriteBytes)
                 } else {
                     Err(create_error())
@@ -1454,9 +1452,9 @@ mod tests {
     use serde_bytes::{ByteArray, ByteBuf, Bytes};
     use std::collections::{BTreeMap, HashMap};
 
-    use crate::bigdecimal::big_decimal_as_bytes;
-    use crate::decimal::Decimal;
-    use crate::{Days, Duration, Millis, Months};
+    use crate::{
+        bigdecimal::big_decimal_as_bytes, decimal::Decimal, Days, Duration, Millis, Months,
+    };
 
     #[test]
     fn test_serialize_null() {
