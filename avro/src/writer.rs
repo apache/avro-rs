@@ -203,7 +203,7 @@ impl<'a, W: Write> Writer<'a, W> {
         match self.resolved_schema {
             Some(ref rs) => {
                 let mut serializer =
-                    DirectSerializer::new(&mut self.buffer, &self.schema, rs.get_names(), None);
+                    DirectSerializer::new(&mut self.buffer, self.schema, rs.get_names(), None);
                 value.serialize(&mut serializer)?;
                 self.num_values += 1;
 
@@ -575,7 +575,7 @@ where
         if !self.header_written {
             bytes_written += writer
                 .write(self.inner.buffer.as_slice())
-                .map_err(|e| Error::WriteBytes(e))?;
+                .map_err(Error::WriteBytes)?;
             self.header_written = true;
         }
 

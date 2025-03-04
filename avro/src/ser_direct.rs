@@ -41,7 +41,7 @@ impl<'a, 's, W: Write> DirectSerializeSeq<'a, 's, W> {
     }
 
     fn write_buffered_items(&mut self) -> Result<(), Error> {
-        if self.item_buffers.len() > 0 {
+        if !self.item_buffers.is_empty() {
             self.bytes_written +=
                 encode_long(self.item_buffers.len() as i64, &mut self.ser.writer)?;
             for item in self.item_buffers.drain(..) {
@@ -49,7 +49,7 @@ impl<'a, 's, W: Write> DirectSerializeSeq<'a, 's, W> {
                     .ser
                     .writer
                     .write(item.as_slice())
-                    .map_err(|e| Error::WriteBytes(e))?;
+                    .map_err(Error::WriteBytes)?;
             }
         }
 
@@ -60,8 +60,8 @@ impl<'a, 's, W: Write> DirectSerializeSeq<'a, 's, W> {
         let mut item_buffer: Vec<u8> = Vec::with_capacity(self.item_buffer_size);
         let mut item_ser = DirectSerializer::new(
             &mut item_buffer,
-            &self.item_schema,
-            &self.ser.names,
+            self.item_schema,
+            self.ser.names,
             self.ser.enclosing_namespace.clone(),
         );
         value.serialize(&mut item_ser)?;
@@ -79,17 +79,13 @@ impl<'a, 's, W: Write> DirectSerializeSeq<'a, 's, W> {
 
     fn end(mut self) -> Result<usize, Error> {
         self.write_buffered_items()?;
-        self.bytes_written += self
-            .ser
-            .writer
-            .write(&[0u8])
-            .map_err(|e| Error::WriteBytes(e))?;
+        self.bytes_written += self.ser.writer.write(&[0u8]).map_err(Error::WriteBytes)?;
 
         Ok(self.bytes_written)
     }
 }
 
-impl<'a, 's, W: Write> ser::SerializeSeq for DirectSerializeSeq<'a, 's, W> {
+impl<W: Write> ser::SerializeSeq for DirectSerializeSeq<'_, '_, W> {
     type Ok = usize;
     type Error = Error;
 
@@ -105,7 +101,7 @@ impl<'a, 's, W: Write> ser::SerializeSeq for DirectSerializeSeq<'a, 's, W> {
     }
 }
 
-impl<'a, 's, W: Write> ser::SerializeTuple for DirectSerializeSeq<'a, 's, W> {
+impl<W: Write> ser::SerializeTuple for DirectSerializeSeq<'_, '_, W> {
     type Ok = usize;
     type Error = Error;
 
@@ -147,7 +143,7 @@ impl<'a, 's, W: Write> DirectSerializeMap<'a, 's, W> {
     }
 
     fn write_buffered_items(&mut self) -> Result<(), Error> {
-        if self.item_buffers.len() > 0 {
+        if !self.item_buffers.is_empty() {
             self.bytes_written +=
                 encode_long(self.item_buffers.len() as i64, &mut self.ser.writer)?;
             for item in self.item_buffers.drain(..) {
@@ -155,7 +151,7 @@ impl<'a, 's, W: Write> DirectSerializeMap<'a, 's, W> {
                     .ser
                     .writer
                     .write(item.as_slice())
-                    .map_err(|e| Error::WriteBytes(e))?;
+                    .map_err(Error::WriteBytes)?;
             }
         }
 
@@ -163,7 +159,7 @@ impl<'a, 's, W: Write> DirectSerializeMap<'a, 's, W> {
     }
 }
 
-impl<'a, 's, W: Write> ser::SerializeMap for DirectSerializeMap<'a, 's, W> {
+impl<W: Write> ser::SerializeMap for DirectSerializeMap<'_, '_, W> {
     type Ok = usize;
     type Error = Error;
 
@@ -176,7 +172,7 @@ impl<'a, 's, W: Write> ser::SerializeMap for DirectSerializeMap<'a, 's, W> {
         let mut key_ser = DirectSerializer::new(
             &mut element_buffer,
             &string_schema,
-            &self.ser.names,
+            self.ser.names,
             self.ser.enclosing_namespace.clone(),
         );
         key.serialize(&mut key_ser)?;
@@ -195,7 +191,7 @@ impl<'a, 's, W: Write> ser::SerializeMap for DirectSerializeMap<'a, 's, W> {
         let mut val_ser = DirectSerializer::new(
             element_buffer,
             self.item_schema,
-            &self.ser.names,
+            self.ser.names,
             self.ser.enclosing_namespace.clone(),
         );
         value.serialize(&mut val_ser)?;
@@ -211,11 +207,7 @@ impl<'a, 's, W: Write> ser::SerializeMap for DirectSerializeMap<'a, 's, W> {
 
     fn end(mut self) -> Result<Self::Ok, Self::Error> {
         self.write_buffered_items()?;
-        self.bytes_written += self
-            .ser
-            .writer
-            .write(&[0u8])
-            .map_err(|e| Error::WriteBytes(e))?;
+        self.bytes_written += self.ser.writer.write(&[0u8]).map_err(Error::WriteBytes)?;
 
         Ok(self.bytes_written)
     }
@@ -256,7 +248,7 @@ impl<'a, 's, W: Write> DirectSerializeStruct<'a, 's, W> {
         let mut value_ser = DirectSerializer::new(
             &mut *self.ser.writer,
             &next_field.schema,
-            &self.ser.names,
+            self.ser.names,
             self.ser.enclosing_namespace.clone(),
         );
         self.bytes_written += value.serialize(&mut value_ser)?;
@@ -273,7 +265,7 @@ impl<'a, 's, W: Write> DirectSerializeStruct<'a, 's, W> {
                 .ser
                 .writer
                 .write(buffer.as_slice())
-                .map_err(|e| Error::WriteBytes(e))?;
+                .map_err(Error::WriteBytes)?;
             self.item_count += 1;
         }
 
@@ -291,7 +283,7 @@ impl<'a, 's, W: Write> DirectSerializeStruct<'a, 's, W> {
     }
 }
 
-impl<'a, 's, W: Write> ser::SerializeStruct for DirectSerializeStruct<'a, 's, W> {
+impl<W: Write> ser::SerializeStruct for DirectSerializeStruct<'_, '_, W> {
     type Ok = usize;
     type Error = Error;
 
@@ -319,7 +311,7 @@ impl<'a, 's, W: Write> ser::SerializeStruct for DirectSerializeStruct<'a, 's, W>
                     error: Box::new(e),
                 }
             })?;
-            return Ok(());
+            Ok(())
         } else {
             if self.item_count < self.record_schema.fields.len() {
                 for i in self.item_count..self.record_schema.fields.len() {
@@ -336,7 +328,7 @@ impl<'a, 's, W: Write> ser::SerializeStruct for DirectSerializeStruct<'a, 's, W>
                         let mut value_ser = DirectSerializer::new(
                             &mut buffer,
                             &field.schema,
-                            &self.ser.names,
+                            self.ser.names,
                             self.ser.enclosing_namespace.clone(),
                         );
                         value.serialize(&mut value_ser).map_err(|e| {
@@ -354,7 +346,7 @@ impl<'a, 's, W: Write> ser::SerializeStruct for DirectSerializeStruct<'a, 's, W>
                 }
             }
 
-            return Err(Error::FieldName(String::from(key)));
+            Err(Error::FieldName(String::from(key)))
         }
     }
 
@@ -363,7 +355,7 @@ impl<'a, 's, W: Write> ser::SerializeStruct for DirectSerializeStruct<'a, 's, W>
     }
 }
 
-impl<'a, 's, W: Write> ser::SerializeStructVariant for DirectSerializeStruct<'a, 's, W> {
+impl<W: Write> ser::SerializeStructVariant for DirectSerializeStruct<'_, '_, W> {
     type Ok = usize;
     type Error = Error;
 
@@ -384,7 +376,7 @@ pub enum DirectSerializeTupleStruct<'a, 's, W: Write> {
     Array(DirectSerializeSeq<'a, 's, W>),
 }
 
-impl<'a, 's, W: Write> DirectSerializeTupleStruct<'a, 's, W> {
+impl<W: Write> DirectSerializeTupleStruct<'_, '_, W> {
     fn serialize_field<T>(&mut self, value: &T) -> Result<(), Error>
     where
         T: ?Sized + ser::Serialize,
@@ -405,7 +397,7 @@ impl<'a, 's, W: Write> DirectSerializeTupleStruct<'a, 's, W> {
     }
 }
 
-impl<'a, 's, W: Write> ser::SerializeTupleStruct for DirectSerializeTupleStruct<'a, 's, W> {
+impl<W: Write> ser::SerializeTupleStruct for DirectSerializeTupleStruct<'_, '_, W> {
     type Ok = usize;
     type Error = Error;
 
@@ -421,7 +413,7 @@ impl<'a, 's, W: Write> ser::SerializeTupleStruct for DirectSerializeTupleStruct<
     }
 }
 
-impl<'a, 's, W: Write> ser::SerializeTupleVariant for DirectSerializeTupleStruct<'a, 's, W> {
+impl<W: Write> ser::SerializeTupleVariant for DirectSerializeTupleStruct<'_, '_, W> {
     type Ok = usize;
     type Error = Error;
 
@@ -470,7 +462,7 @@ impl<'s, W: Write> DirectSerializer<'s, W> {
             }),
         };
 
-        let ref_schema = self.names.get(full_name.as_ref()).map(|s| *s);
+        let ref_schema = self.names.get(full_name.as_ref()).copied();
 
         ref_schema.ok_or_else(|| Error::SchemaResolutionError(full_name.as_ref().clone()))
     }
@@ -479,7 +471,7 @@ impl<'s, W: Write> DirectSerializer<'s, W> {
         let mut bytes_written: usize = 0;
 
         bytes_written += encode_long(bytes.len() as i64, &mut self.writer)?;
-        bytes_written += self.writer.write(bytes).map_err(|e| Error::WriteBytes(e))?;
+        bytes_written += self.writer.write(bytes).map_err(Error::WriteBytes)?;
 
         Ok(bytes_written)
     }
@@ -506,10 +498,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         };
 
         match schema {
-            Schema::Boolean => self
-                .writer
-                .write(&[u8::from(v)])
-                .map_err(|e| Error::WriteBytes(e)),
+            Schema::Boolean => self.writer.write(&[u8::from(v)]).map_err(Error::WriteBytes),
             Schema::Union(sch) => {
                 for (i, variant_sch) in sch.schemas.iter().enumerate() {
                     match variant_sch {
@@ -798,11 +787,11 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             Schema::Float => self
                 .writer
                 .write(&v.to_le_bytes())
-                .map_err(|e| Error::WriteBytes(e)),
+                .map_err(Error::WriteBytes),
             Schema::Double => self
                 .writer
                 .write(&(v as f64).to_le_bytes())
-                .map_err(|e| Error::WriteBytes(e)),
+                .map_err(Error::WriteBytes),
             Schema::Union(sch) => {
                 for (i, variant_sch) in sch.schemas.iter().enumerate() {
                     match variant_sch {
@@ -833,11 +822,11 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             Schema::Float => self
                 .writer
                 .write(&(v as f32).to_le_bytes())
-                .map_err(|e| Error::WriteBytes(e)),
+                .map_err(Error::WriteBytes),
             Schema::Double => self
                 .writer
                 .write(&v.to_le_bytes())
-                .map_err(|e| Error::WriteBytes(e)),
+                .map_err(Error::WriteBytes),
             Schema::Union(sch) => {
                 for (i, variant_sch) in sch.schemas.iter().enumerate() {
                     match variant_sch {
@@ -896,9 +885,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             Schema::String | Schema::Bytes | Schema::Uuid => self.write_bytes(v.as_bytes()),
             Schema::Fixed(sch) => {
                 if v.as_bytes().len() == sch.size {
-                    self.writer
-                        .write(v.as_bytes())
-                        .map_err(|e| Error::WriteBytes(e))
+                    self.writer.write(v.as_bytes()).map_err(Error::WriteBytes)
                 } else {
                     Err(create_error())
                 }
@@ -937,13 +924,13 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
 
             let mut v_str = String::with_capacity(v.len());
             for b in v {
-                if let Err(_) = write!(&mut v_str, "{:x}", b) {
+                if write!(&mut v_str, "{:x}", b).is_err() {
                     v_str.push_str("??");
                 }
             }
             Error::SerializeValueWithSchema {
                 value_type: "bytes",
-                value: format!("{}", v_str),
+                value: v_str,
                 schema: schema.clone(),
             }
         };
@@ -954,14 +941,14 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             }
             Schema::Fixed(sch) => {
                 if v.len() == sch.size {
-                    self.writer.write(v).map_err(|e| Error::WriteBytes(e))
+                    self.writer.write(v).map_err(Error::WriteBytes)
                 } else {
                     Err(create_error())
                 }
             }
             Schema::Duration => {
                 if v.len() == 12 {
-                    self.writer.write(v).map_err(|e| Error::WriteBytes(e))
+                    self.writer.write(v).map_err(Error::WriteBytes)
                 } else {
                     Err(create_error())
                 }
@@ -977,8 +964,8 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         let padding = vec![pad_val; pad];
                         self.writer
                             .write(padding.as_slice())
-                            .map_err(|e| Error::WriteBytes(e))?;
-                        self.writer.write(v).map_err(|e| Error::WriteBytes(e))
+                            .map_err(Error::WriteBytes)?;
+                        self.writer.write(v).map_err(Error::WriteBytes)
                     }
                     None => Err(Error::CompareFixedSizes {
                         size: fixed_sch.size,
@@ -1081,7 +1068,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
 
         let create_error = || Error::SerializeValueWithSchema {
             value_type: "unit struct",
-            value: format!("{}", name),
+            value: String::from(name),
             schema: schema.clone(),
         };
 
@@ -1099,7 +1086,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             Schema::Union(sch) => {
                 for (i, variant_sch) in sch.schemas.iter().enumerate() {
                     match variant_sch {
-                        Schema::Record(sch) if sch.fields.len() == 0 => {
+                        Schema::Record(sch) if sch.fields.is_empty() => {
                             encode_int(i as i32, &mut *self.writer)?;
                             self.schema_stack.push(variant_sch);
                             return self.serialize_unit_struct(name);
@@ -1285,7 +1272,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                 Some(len),
             ))),
             Schema::Record(sch) => Ok(DirectSerializeTupleStruct::Record(
-                DirectSerializeStruct::new(self, &sch, len),
+                DirectSerializeStruct::new(self, sch, len),
             )),
             Schema::Ref { name: ref_name } => {
                 let ref_schema = self.get_ref_schema(ref_name)?;
@@ -1407,7 +1394,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                 for (i, variant_sch) in sch.schemas.iter().enumerate() {
                     match variant_sch {
                         Schema::Record(inner)
-                            if inner.fields.len() == len && &inner.name.name == name =>
+                            if inner.fields.len() == len && inner.name.name == name =>
                         {
                             encode_int(i as i32, &mut *self.writer)?;
                             self.schema_stack.push(variant_sch);
@@ -1995,7 +1982,7 @@ mod tests {
 
     #[test]
     fn test_serialize_timestamp() {
-        for precision in vec!["millis", "micros", "nanos"] {
+        for precision in ["millis", "micros", "nanos"] {
             let schema = Schema::parse_str(&format!(
                 r#"{{
                 "type": "long",
@@ -2024,14 +2011,14 @@ mod tests {
 
     #[test]
     fn test_serialize_duration() {
-        let schema = Schema::parse_str(&format!(
+        let schema = Schema::parse_str(
             r#"{{
             "type": "fixed",
             "size": 12,
             "name": "duration",
             "logicalType": "duration"
-        }}"#
-        ))
+        }}"#,
+        )
         .unwrap();
 
         let mut buffer: Vec<u8> = Vec::new();

@@ -45,7 +45,7 @@ pub(crate) fn encode_bytes<B: AsRef<[u8]> + ?Sized, W: Write>(
 ) -> AvroResult<()> {
     let bytes = s.as_ref();
     encode_long(bytes.len() as i64, &mut buffer)?;
-    buffer.write(bytes).map_err(|e| Error::WriteBytes(e))?;
+    buffer.write(bytes).map_err(Error::WriteBytes)?;
     Ok(())
 }
 
@@ -89,7 +89,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
         Value::Boolean(b) => buffer
             .write(&[u8::from(*b)])
             .map(|_| ())
-            .map_err(|e| Error::WriteBytes(e))?,
+            .map_err(Error::WriteBytes)?,
         // Pattern | Pattern here to signify that these _must_ have the same encoding.
         Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => {
             encode_int(*i, buffer).map(|_| ())?
@@ -105,11 +105,11 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
         Value::Float(x) => buffer
             .write(&x.to_le_bytes())
             .map(|_| ())
-            .map_err(|e| Error::WriteBytes(e))?,
+            .map_err(Error::WriteBytes)?,
         Value::Double(x) => buffer
             .write(&x.to_le_bytes())
             .map(|_| ())
-            .map_err(|e| Error::WriteBytes(e))?,
+            .map_err(Error::WriteBytes)?,
         Value::Decimal(decimal) => match schema {
             Schema::Decimal(DecimalSchema { inner, .. }) => match *inner.clone() {
                 Schema::Fixed(FixedSchema { size, .. }) => {
@@ -136,7 +136,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
         },
         &Value::Duration(duration) => {
             let slice: [u8; 12] = duration.into();
-            buffer.write(&slice).map_err(|e| Error::WriteBytes(e))?;
+            buffer.write(&slice).map_err(Error::WriteBytes)?;
         }
         Value::Uuid(uuid) => match *schema {
             Schema::Uuid | Schema::String => encode_bytes(
@@ -162,16 +162,14 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
         },
         Value::BigDecimal(bg) => {
             let buf: Vec<u8> = serialize_big_decimal(bg);
-            buffer
-                .write(buf.as_slice())
-                .map_err(|e| Error::WriteBytes(e))?;
+            buffer.write(buf.as_slice()).map_err(Error::WriteBytes)?;
         }
         Value::Bytes(bytes) => match *schema {
             Schema::Bytes => encode_bytes(bytes, buffer)?,
             Schema::Fixed { .. } => buffer
                 .write(bytes.as_slice())
                 .map(|_| ())
-                .map_err(|e| Error::WriteBytes(e))?,
+                .map_err(Error::WriteBytes)?,
             _ => {
                 return Err(Error::EncodeValueAsSchemaError {
                     value_kind: ValueKind::Bytes,
@@ -201,7 +199,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
         Value::Fixed(_, bytes) => buffer
             .write(bytes.as_slice())
             .map(|_| ())
-            .map_err(|e| Error::WriteBytes(e))?,
+            .map_err(Error::WriteBytes)?,
         Value::Enum(i, _) => encode_int(*i as i32, buffer).map(|_| ())?,
         Value::Union(idx, item) => {
             if let Schema::Union(ref inner) = *schema {
@@ -233,7 +231,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                         )?;
                     }
                 }
-                buffer.write(&[0u8]).map_err(|e| Error::WriteBytes(e))?;
+                buffer.write(&[0u8]).map_err(Error::WriteBytes)?;
             } else {
                 error!("invalid schema type for Array: {:?}", schema);
                 return Err(Error::EncodeValueAsSchemaError {
@@ -257,7 +255,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                         )?;
                     }
                 }
-                buffer.write(&[0u8]).map_err(|e| Error::WriteBytes(e))?;
+                buffer.write(&[0u8]).map_err(Error::WriteBytes)?;
             } else {
                 error!("invalid schema type for Map: {:?}", schema);
                 return Err(Error::EncodeValueAsSchemaError {
@@ -320,7 +318,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                         Ok(_) => {
                             buffer
                                 .write(union_buffer.as_slice())
-                                .map_err(|e| Error::WriteBytes(e))?;
+                                .map_err(Error::WriteBytes)?;
                             return Ok(());
                         }
                         Err(_) => {

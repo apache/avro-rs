@@ -115,7 +115,7 @@ fn encode_variable<W: Write>(mut z: u64, mut writer: W) -> AvroResult<usize> {
             z >>= 7;
         }
     }
-    writer.write(&buffer[..i]).map_err(|e| Error::WriteBytes(e))
+    writer.write(&buffer[..i]).map_err(Error::WriteBytes)
 }
 
 fn decode_variable<R: Read>(reader: &mut R) -> AvroResult<u64> {
