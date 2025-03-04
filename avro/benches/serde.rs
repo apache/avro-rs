@@ -237,7 +237,7 @@ fn write(schema: &Schema, records: &[Value]) -> AvroResult<Vec<u8>> {
 
 fn write_ser<T: Serialize>(schema: &Schema, records: &[T]) -> AvroResult<Vec<u8>> {
     let mut writer = Writer::new(schema, Vec::new());
-    writer.extend_ser(records).unwrap();
+    writer.extend_ser(records)?;
     writer.into_inner()
 }
 
