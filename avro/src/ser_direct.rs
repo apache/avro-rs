@@ -2027,12 +2027,12 @@ mod tests {
     #[test]
     fn test_serialize_duration() {
         let schema = Schema::parse_str(
-            r#"{{
+            r#"{
             "type": "fixed",
             "size": 12,
             "name": "duration",
             "logicalType": "duration"
-        }}"#,
+        }"#,
         )
         .unwrap();
 
