@@ -1346,19 +1346,19 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                 self.schema_stack.push(ref_schema);
                 self.serialize_tuple_struct(name, len)
             }
-            Schema::Union(sch) => {
-                for (i, variant_sch) in sch.schemas.iter().enumerate() {
-                    match variant_sch {
+            Schema::Union(union_schema) => {
+                for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
+                    match variant_schema {
                         Schema::Record(inner) => {
                             if inner.fields.len() == len {
                                 encode_int(i as i32, &mut *self.writer)?;
-                                self.schema_stack.push(variant_sch);
+                                self.schema_stack.push(variant_schema);
                                 return self.serialize_tuple_struct(name, len);
                             }
                         }
                         Schema::Array(_) | Schema::Ref { name: _ } => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_sch);
+                            self.schema_stack.push(variant_schema);
                             return self.serialize_tuple_struct(name, len);
                         }
                         _ => { /* skip */ }
@@ -1389,8 +1389,8 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         };
 
         match schema {
-            Schema::Union(sch) => {
-                let variant_schema = sch
+            Schema::Union(union_schema) => {
+                let variant_schema = union_schema
                     .schemas
                     .get(variant_index as usize)
                     .ok_or_else(create_error)?;
@@ -1419,9 +1419,13 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         };
 
         match schema {
-            Schema::Map(sch) => Ok(DirectSerializeMap::new(self, sch.types.as_ref(), len)),
-            Schema::Union(sch) => {
-                for (i, variant_sch) in sch.schemas.iter().enumerate() {
+            Schema::Map(map_schema) => Ok(DirectSerializeMap::new(
+                self,
+                map_schema.types.as_ref(),
+                len,
+            )),
+            Schema::Union(union_schema) => {
+                for (i, variant_sch) in union_schema.schemas.iter().enumerate() {
                     match variant_sch {
                         Schema::Map(_) => {
                             encode_int(i as i32, &mut *self.writer)?;
@@ -1451,25 +1455,27 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         };
 
         match schema {
-            Schema::Record(sch) => Ok(DirectSerializeStruct::new(self, sch, len)),
+            Schema::Record(record_schema) => {
+                Ok(DirectSerializeStruct::new(self, record_schema, len))
+            }
             Schema::Ref { name: ref_name } => {
                 let ref_schema = self.get_ref_schema(ref_name)?;
                 self.schema_stack.push(ref_schema);
                 self.serialize_struct(name, len)
             }
-            Schema::Union(sch) => {
-                for (i, variant_sch) in sch.schemas.iter().enumerate() {
-                    match variant_sch {
+            Schema::Union(union_schema) => {
+                for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
+                    match variant_schema {
                         Schema::Record(inner)
                             if inner.fields.len() == len && inner.name.name == name =>
                         {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_sch);
+                            self.schema_stack.push(variant_schema);
                             return self.serialize_struct(name, len);
                         }
                         Schema::Ref { name: _ } => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_sch);
+                            self.schema_stack.push(variant_schema);
                             return self.serialize_struct(name, len);
                         }
                         _ => { /* skip */ }
@@ -1497,8 +1503,8 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         };
 
         match schema {
-            Schema::Union(sch) => {
-                let variant_schema = sch
+            Schema::Union(union_schema) => {
+                let variant_schema = union_schema
                     .schemas
                     .get(variant_index as usize)
                     .ok_or_else(create_error)?;
@@ -1523,7 +1529,10 @@ mod tests {
     use num_bigint::{BigInt, Sign};
     use serde::Serialize;
     use serde_bytes::{ByteArray, ByteBuf, Bytes};
-    use std::collections::{BTreeMap, HashMap};
+    use std::{
+        collections::{BTreeMap, HashMap},
+        marker::PhantomData,
+    };
 
     #[test]
     fn test_serialize_null() -> TestResult {
@@ -1532,8 +1541,12 @@ mod tests {
         let names = HashMap::new();
         let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
 
-        ().serialize(&mut serializer).unwrap();
-        (None as Option<()>).serialize(&mut serializer)?;
+        ().serialize(&mut serializer)?;
+        None::<()>.serialize(&mut serializer)?;
+        None::<i32>.serialize(&mut serializer)?;
+        None::<String>.serialize(&mut serializer)?;
+        assert!("".serialize(&mut serializer).is_err());
+        assert!(Some("").serialize(&mut serializer).is_err());
 
         assert_eq!(buffer.as_slice(), Vec::<u8>::new().as_slice());
 
@@ -1549,6 +1562,8 @@ mod tests {
 
         true.serialize(&mut serializer)?;
         false.serialize(&mut serializer)?;
+        assert!("".serialize(&mut serializer).is_err());
+        assert!(Some("").serialize(&mut serializer).is_err());
 
         assert_eq!(buffer.as_slice(), &[1, 0]);
 
@@ -1568,6 +1583,8 @@ mod tests {
         7i8.serialize(&mut serializer)?;
         (-57i16).serialize(&mut serializer)?;
         129i32.serialize(&mut serializer)?;
+        assert!("".serialize(&mut serializer).is_err());
+        assert!(Some("").serialize(&mut serializer).is_err());
 
         assert_eq!(buffer.as_slice(), &[8, 62, 26, 14, 113, 130, 2]);
 
@@ -1589,6 +1606,8 @@ mod tests {
         (-57i16).serialize(&mut serializer)?;
         129i32.serialize(&mut serializer)?;
         (-432i64).serialize(&mut serializer)?;
+        assert!("".serialize(&mut serializer).is_err());
+        assert!(Some("").serialize(&mut serializer).is_err());
 
         assert_eq!(
             buffer.as_slice(),
@@ -1607,6 +1626,8 @@ mod tests {
 
         4.7f32.serialize(&mut serializer)?;
         (-14.1f64).serialize(&mut serializer)?;
+        assert!("".serialize(&mut serializer).is_err());
+        assert!(Some("").serialize(&mut serializer).is_err());
 
         assert_eq!(buffer.as_slice(), &[102, 102, 150, 64, 154, 153, 97, 193]);
 
@@ -1622,6 +1643,8 @@ mod tests {
 
         4.7f32.serialize(&mut serializer)?;
         (-14.1f64).serialize(&mut serializer)?;
+        assert!("".serialize(&mut serializer).is_err());
+        assert!(Some("").serialize(&mut serializer).is_err());
 
         assert_eq!(buffer.as_slice(), &[102, 102, 150, 64, 154, 153, 97, 193]);
 
@@ -1638,6 +1661,8 @@ mod tests {
         'a'.serialize(&mut serializer)?;
         "test".serialize(&mut serializer)?;
         Bytes::new(&[12, 3, 7, 91, 4]).serialize(&mut serializer)?;
+        assert!(().serialize(&mut serializer).is_err());
+        assert!(PhantomData::<String>.serialize(&mut serializer).is_err());
 
         assert_eq!(
             buffer.as_slice(),
@@ -1657,6 +1682,8 @@ mod tests {
         'a'.serialize(&mut serializer)?;
         "test".serialize(&mut serializer)?;
         Bytes::new(&[12, 3, 7, 91, 4]).serialize(&mut serializer)?;
+        assert!(().serialize(&mut serializer).is_err());
+        assert!(PhantomData::<String>.serialize(&mut serializer).is_err());
 
         assert_eq!(
             buffer.as_slice(),
@@ -1681,20 +1708,36 @@ mod tests {
 
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
-        struct TestRecord {
-            pub string_field: String,
-            pub int_field: i32,
+        struct GoodTestRecord {
+            string_field: String,
+            int_field: i32,
+        }
+
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct BadTestRecord {
+            foo_string_field: String,
+            bar_int_field: i32,
         }
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
         let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
 
-        let record = TestRecord {
+        let good_record = GoodTestRecord {
             string_field: String::from("test"),
             int_field: 10,
         };
-        record.serialize(&mut serializer)?;
+        good_record.serialize(&mut serializer)?;
+
+        let bad_record = BadTestRecord {
+            foo_string_field: String::from("test"),
+            bar_int_field: 10,
+        };
+        assert!(bad_record.serialize(&mut serializer).is_err());
+
+        assert!("".serialize(&mut serializer).is_err());
+        assert!(Some("").serialize(&mut serializer).is_err());
 
         assert_eq!(buffer.as_slice(), &[8, b't', b'e', b's', b't', 20]);
 
@@ -1711,14 +1754,38 @@ mod tests {
         }"#,
         )?;
 
-        #[derive(Serialize)]
-        struct EmptyRecord;
-
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
         let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
 
+        #[derive(Serialize)]
+        struct EmptyRecord;
         EmptyRecord.serialize(&mut serializer)?;
+
+        #[derive(Serialize)]
+        struct NonEmptyRecord {
+            foo: String,
+        }
+        let record = NonEmptyRecord {
+            foo: "bar".to_string(),
+        };
+        match record.serialize(&mut serializer) {
+            Err(Error::FieldName(field_name)) if field_name == "foo" => (),
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
+
+        match ().serialize(&mut serializer) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "none"); // TODO this must be 'unit' ?!
+                assert_eq!(value, "None"); // TODO: this must be '()' ?!
+                assert_eq!(schema, schema);
+            }
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
 
         assert_eq!(buffer.len(), 0);
 
@@ -1751,6 +1818,18 @@ mod tests {
         Suit::Hearts.serialize(&mut serializer)?;
         Suit::Diamonds.serialize(&mut serializer)?;
         Suit::Clubs.serialize(&mut serializer)?;
+        match None::<()>.serialize(&mut serializer) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "none");
+                assert_eq!(value, "None");
+                assert_eq!(schema, schema);
+            }
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
 
         assert_eq!(buffer.as_slice(), &[0, 2, 4, 6]);
 
@@ -1772,6 +1851,19 @@ mod tests {
 
         let arr: Vec<i64> = vec![10, 5, 400];
         arr.serialize(&mut serializer)?;
+
+        match vec![1_f32].serialize(&mut serializer) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "f32");
+                assert_eq!(value, "1");
+                assert_eq!(schema, schema);
+            }
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
 
         assert_eq!(buffer.as_slice(), &[6, 20, 10, 160, 6, 0]);
 
@@ -1797,6 +1889,21 @@ mod tests {
 
         map.serialize(&mut serializer)?;
 
+        let mut map: BTreeMap<String, &str> = BTreeMap::new();
+        map.insert(String::from("item1"), "value1");
+        match map.serialize(&mut serializer) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "string");
+                assert_eq!(value, "value1");
+                assert_eq!(schema, schema);
+            }
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
+
         assert_eq!(
             buffer.as_slice(),
             &[
@@ -1809,7 +1916,7 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_nullable() -> TestResult {
+    fn test_serialize_nullable_union() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "type": ["null", "long"]
@@ -1827,9 +1934,22 @@ mod tests {
         let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
 
         Some(10i64).serialize(&mut serializer)?;
-        (None as Option<i64>).serialize(&mut serializer)?;
+        None::<i64>.serialize(&mut serializer)?;
         NullableLong::Long(400).serialize(&mut serializer)?;
         NullableLong::Null.serialize(&mut serializer)?;
+
+        match "invalid".serialize(&mut serializer) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "string");
+                assert_eq!(value, "invalid");
+                assert_eq!(schema, schema);
+            }
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
 
         assert_eq!(buffer.as_slice(), &[2, 20, 0, 2, 160, 6, 0]);
 
@@ -1859,6 +1979,19 @@ mod tests {
         LongOrString::Long(400).serialize(&mut serializer)?;
         LongOrString::Str(String::from("test")).serialize(&mut serializer)?;
 
+        match 1_f64.serialize(&mut serializer) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "f64");
+                assert_eq!(value, "1");
+                assert_eq!(schema, schema);
+            }
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
+
         assert_eq!(
             buffer.as_slice(),
             &[0, 2, 160, 6, 4, 8, b't', b'e', b's', b't']
@@ -1883,13 +2016,55 @@ mod tests {
 
         Bytes::new(&[10, 124, 31, 97, 14, 201, 3, 88]).serialize(&mut serializer)?;
 
+        // non-8 size
+        match Bytes::new(&[10]).serialize(&mut serializer) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "bytes");
+                assert_eq!(value, "a"); // TODO: what is 'a' ?!
+                assert_eq!(schema, schema);
+            }
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
+
+        // array
+        match [1; 8].serialize(&mut serializer) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "tuple"); // TODO: why is this 'tuple' ?!
+                assert_eq!(value, "tuple (len=8)");
+                assert_eq!(schema, schema);
+            }
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
+
+        // slice
+        match &[1, 2, 3, 4, 5, 6, 7, 8].serialize(&mut serializer) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(*value_type, "tuple"); // TODO: why is this 'tuple' ?!
+                assert_eq!(value, "tuple (len=8)");
+                assert_eq!(schema, schema);
+            }
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
+
         assert_eq!(buffer.as_slice(), &[10, 124, 31, 97, 14, 201, 3, 88]);
 
         Ok(())
     }
 
     #[test]
-    fn test_serialize_decimal() -> TestResult {
+    fn test_serialize_decimal_bytes() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "type": "bytes",
@@ -1905,6 +2080,19 @@ mod tests {
 
         let val = Decimal::from(&[251, 155]);
         val.serialize(&mut serializer)?;
+
+        match ().serialize(&mut serializer) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "none");
+                assert_eq!(value, "None");
+                assert_eq!(schema, schema);
+            }
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
 
         assert_eq!(buffer.as_slice(), &[4, 251, 155]);
 
@@ -1931,6 +2119,19 @@ mod tests {
         let val = Decimal::from(&[0, 0, 0, 0, 0, 0, 251, 155]);
         val.serialize(&mut serializer)?;
 
+        match ().serialize(&mut serializer) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "none");
+                assert_eq!(value, "None");
+                assert_eq!(schema, schema);
+            }
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
+
         assert_eq!(buffer.as_slice(), &[0, 0, 0, 0, 0, 0, 251, 155]);
 
         Ok(())
@@ -1952,6 +2153,19 @@ mod tests {
         let val = BigDecimal::new(BigInt::new(Sign::Plus, vec![50024]), 2);
         ByteBuf::from(big_decimal_as_bytes(&val)).serialize(&mut serializer)?;
 
+        match "".serialize(&mut serializer) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "string");
+                assert_eq!(value, "");
+                assert_eq!(schema, schema);
+            }
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
+
         assert_eq!(buffer.as_slice(), &[10, 6, 0, 195, 104, 4]);
 
         Ok(())
@@ -1971,6 +2185,29 @@ mod tests {
         let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
 
         "8c28da81-238c-4326-bddd-4e3d00cc5099".serialize(&mut serializer)?;
+
+        // TODO: invalid Uuid is not detected
+        // match "8c28da81-238c-4326-bddd".serialize(&mut serializer) {
+        //     Err(Error::SerializeValueWithSchema { value_type, value, schema }) => {
+        //         assert_eq!(value_type, "string");
+        //         assert_eq!(value, "8c28da81-238c-4326-bddd");
+        //         assert_eq!(schema, schema);
+        //     }
+        //     unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        // }
+
+        match 1_u8.serialize(&mut serializer) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "u8");
+                assert_eq!(value, "1");
+                assert_eq!(schema, schema);
+            }
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
 
         assert_eq!(
             buffer.as_slice(),
@@ -1997,11 +2234,24 @@ mod tests {
         let names = HashMap::new();
         let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
 
-        100u8.serialize(&mut serializer)?;
-        1000u16.serialize(&mut serializer)?;
-        10000u32.serialize(&mut serializer)?;
-        1000i16.serialize(&mut serializer)?;
-        10000i32.serialize(&mut serializer)?;
+        100_u8.serialize(&mut serializer)?;
+        1000_u16.serialize(&mut serializer)?;
+        10000_u32.serialize(&mut serializer)?;
+        1000_i16.serialize(&mut serializer)?;
+        10000_i32.serialize(&mut serializer)?;
+
+        match 10000_f32.serialize(&mut serializer) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "f32");
+                assert_eq!(value, "10000");
+                assert_eq!(schema, schema);
+            }
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
 
         assert_eq!(
             buffer.as_slice(),
@@ -2024,11 +2274,24 @@ mod tests {
         let names = HashMap::new();
         let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
 
-        100u8.serialize(&mut serializer)?;
-        1000u16.serialize(&mut serializer)?;
-        10000u32.serialize(&mut serializer)?;
-        1000i16.serialize(&mut serializer)?;
-        10000i32.serialize(&mut serializer)?;
+        100_u8.serialize(&mut serializer)?;
+        1000_u16.serialize(&mut serializer)?;
+        10000_u32.serialize(&mut serializer)?;
+        1000_i16.serialize(&mut serializer)?;
+        10000_i32.serialize(&mut serializer)?;
+
+        match 10000_f32.serialize(&mut serializer) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "f32");
+                assert_eq!(value, "10000");
+                assert_eq!(schema, schema);
+            }
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
 
         assert_eq!(
             buffer.as_slice(),
@@ -2051,12 +2314,25 @@ mod tests {
         let names = HashMap::new();
         let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
 
-        100u8.serialize(&mut serializer)?;
-        1000u16.serialize(&mut serializer)?;
-        10000u32.serialize(&mut serializer)?;
-        1000i16.serialize(&mut serializer)?;
-        10000i32.serialize(&mut serializer)?;
-        10000i64.serialize(&mut serializer)?;
+        100_u8.serialize(&mut serializer)?;
+        1000_u16.serialize(&mut serializer)?;
+        10000_u32.serialize(&mut serializer)?;
+        1000_i16.serialize(&mut serializer)?;
+        10000_i32.serialize(&mut serializer)?;
+        10000_i64.serialize(&mut serializer)?;
+
+        match 10000_f32.serialize(&mut serializer) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "f32");
+                assert_eq!(value, "10000");
+                assert_eq!(schema, schema);
+            }
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
 
         assert_eq!(
             buffer.as_slice(),
@@ -2080,12 +2356,25 @@ mod tests {
             let names = HashMap::new();
             let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
 
-            100u8.serialize(&mut serializer)?;
-            1000u16.serialize(&mut serializer)?;
-            10000u32.serialize(&mut serializer)?;
-            1000i16.serialize(&mut serializer)?;
-            10000i32.serialize(&mut serializer)?;
-            10000i64.serialize(&mut serializer)?;
+            100_u8.serialize(&mut serializer)?;
+            1000_u16.serialize(&mut serializer)?;
+            10000_u32.serialize(&mut serializer)?;
+            1000_i16.serialize(&mut serializer)?;
+            10000_i32.serialize(&mut serializer)?;
+            10000_i64.serialize(&mut serializer)?;
+
+            match 10000_f64.serialize(&mut serializer) {
+                Err(Error::SerializeValueWithSchema {
+                    value_type,
+                    value,
+                    schema,
+                }) => {
+                    assert_eq!(value_type, "f64");
+                    assert_eq!(value, "10000");
+                    assert_eq!(schema, schema);
+                }
+                unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+            }
 
             assert_eq!(
                 buffer.as_slice(),
@@ -2114,6 +2403,19 @@ mod tests {
         let duration_bytes =
             ByteArray::new(Duration::new(Months::new(3), Days::new(2), Millis::new(1200)).into());
         duration_bytes.serialize(&mut serializer)?;
+
+        match [1; 12].serialize(&mut serializer) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "tuple"); // TODO: why is this 'tuple' ?!
+                assert_eq!(value, "tuple (len=12)");
+                assert_eq!(schema, schema);
+            }
+            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
+        }
 
         assert_eq!(buffer.as_slice(), &[3, 0, 0, 0, 2, 0, 0, 0, 176, 4, 0, 0]);
 
