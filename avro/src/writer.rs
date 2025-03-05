@@ -460,7 +460,7 @@ fn write_avro_datum_schemata<T: Into<Value>>(
     schemata: Vec<&Schema>,
     value: T,
     buffer: &mut Vec<u8>,
-) -> AvroResult<()> {
+) -> AvroResult<usize> {
     let avro = value.into();
     let rs = ResolvedSchema::try_from(schemata)?;
     let names = rs.get_names();
@@ -598,7 +598,7 @@ fn write_value_ref_resolved(
     resolved_schema: &ResolvedSchema,
     value: &Value,
     buffer: &mut Vec<u8>,
-) -> AvroResult<()> {
+) -> AvroResult<usize> {
     match value.validate_internal(schema, resolved_schema.get_names(), &schema.namespace()) {
         Some(reason) => Err(Error::ValidationWithReason {
             value: value.clone(),
