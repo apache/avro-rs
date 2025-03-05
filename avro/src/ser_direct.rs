@@ -2151,7 +2151,7 @@ mod tests {
         let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
 
         let val = BigDecimal::new(BigInt::new(Sign::Plus, vec![50024]), 2);
-        ByteBuf::from(big_decimal_as_bytes(&val)).serialize(&mut serializer)?;
+        ByteBuf::from(big_decimal_as_bytes(&val)?).serialize(&mut serializer)?;
 
         match "".serialize(&mut serializer) {
             Err(Error::SerializeValueWithSchema {

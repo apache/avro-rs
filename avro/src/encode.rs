@@ -161,7 +161,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
             }
         },
         Value::BigDecimal(bg) => {
-            let buf: Vec<u8> = serialize_big_decimal(bg);
+            let buf: Vec<u8> = serialize_big_decimal(bg)?;
             buffer.write(buf.as_slice()).map_err(Error::WriteBytes)?;
         }
         Value::Bytes(bytes) => match *schema {
