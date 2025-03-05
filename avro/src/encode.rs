@@ -34,18 +34,18 @@ use std::{borrow::Borrow, collections::HashMap, io::Write};
 /// **NOTE** This will not perform schema validation. The value is assumed to
 /// be valid with regards to the schema. Schema are needed only to guide the
 /// encoding for complex type values.
-pub fn encode<W: Write>(value: &Value, schema: &Schema, buffer: &mut W) -> AvroResult<usize> {
+pub fn encode<W: Write>(value: &Value, schema: &Schema, writer: &mut W) -> AvroResult<usize> {
     let rs = ResolvedSchema::try_from(schema)?;
-    encode_internal(value, schema, rs.get_names(), &None, buffer)
+    encode_internal(value, schema, rs.get_names(), &None, writer)
 }
 
 pub(crate) fn encode_bytes<B: AsRef<[u8]> + ?Sized, W: Write>(
     s: &B,
-    mut buffer: W,
+    mut writer: W,
 ) -> AvroResult<usize> {
     let bytes = s.as_ref();
-    encode_long(bytes.len() as i64, &mut buffer)?;
-    buffer.write(bytes).map_err(Error::WriteBytes)
+    encode_long(bytes.len() as i64, &mut writer)?;
+    writer.write(bytes).map_err(Error::WriteBytes)
 }
 
 pub(crate) fn encode_long<W: Write>(i: i64, writer: W) -> AvroResult<usize> {
@@ -61,14 +61,14 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
     schema: &Schema,
     names: &HashMap<Name, S>,
     enclosing_namespace: &Namespace,
-    buffer: &mut W,
+    writer: &mut W,
 ) -> AvroResult<usize> {
     if let Schema::Ref { ref name } = schema {
         let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
         let resolved = names
             .get(&fully_qualified_name)
             .ok_or(Error::SchemaResolutionError(fully_qualified_name))?;
-        return encode_internal(value, resolved.borrow(), names, enclosing_namespace, buffer);
+        return encode_internal(value, resolved.borrow(), names, enclosing_namespace, writer);
     }
 
     match value {
@@ -79,15 +79,15 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                         value_kind: ValueKind::Null,
                         supported_schema: vec![SchemaKind::Null, SchemaKind::Union],
                     }),
-                    Some(p) => encode_long(p as i64, buffer),
+                    Some(p) => encode_long(p as i64, writer),
                 }
             } else {
                 Ok(0)
             }
         }
-        Value::Boolean(b) => buffer.write(&[u8::from(*b)]).map_err(Error::WriteBytes),
+        Value::Boolean(b) => writer.write(&[u8::from(*b)]).map_err(Error::WriteBytes),
         // Pattern | Pattern here to signify that these _must_ have the same encoding.
-        Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => encode_int(*i, buffer),
+        Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => encode_int(*i, writer),
         Value::Long(i)
         | Value::TimestampMillis(i)
         | Value::TimestampMicros(i)
@@ -95,9 +95,9 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
         | Value::LocalTimestampMillis(i)
         | Value::LocalTimestampMicros(i)
         | Value::LocalTimestampNanos(i)
-        | Value::TimeMicros(i) => encode_long(*i, buffer),
-        Value::Float(x) => buffer.write(&x.to_le_bytes()).map_err(Error::WriteBytes),
-        Value::Double(x) => buffer.write(&x.to_le_bytes()).map_err(Error::WriteBytes),
+        | Value::TimeMicros(i) => encode_long(*i, writer),
+        Value::Float(x) => writer.write(&x.to_le_bytes()).map_err(Error::WriteBytes),
+        Value::Double(x) => writer.write(&x.to_le_bytes()).map_err(Error::WriteBytes),
         Value::Decimal(decimal) => match schema {
             Schema::Decimal(DecimalSchema { inner, .. }) => match *inner.clone() {
                 Schema::Fixed(FixedSchema { size, .. }) => {
@@ -106,9 +106,9 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                     if num_bytes != size {
                         return Err(Error::EncodeDecimalAsFixedError(num_bytes, size));
                     }
-                    encode(&Value::Fixed(size, bytes), inner, buffer)
+                    encode(&Value::Fixed(size, bytes), inner, writer)
                 }
-                Schema::Bytes => encode(&Value::Bytes(decimal.try_into()?), inner, buffer),
+                Schema::Bytes => encode(&Value::Bytes(decimal.try_into()?), inner, writer),
                 _ => Err(Error::ResolveDecimalSchema(SchemaKind::from(
                     *inner.clone(),
                 ))),
@@ -120,14 +120,14 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
         },
         &Value::Duration(duration) => {
             let slice: [u8; 12] = duration.into();
-            buffer.write(&slice).map_err(Error::WriteBytes)
+            writer.write(&slice).map_err(Error::WriteBytes)
         }
         Value::Uuid(uuid) => match *schema {
             Schema::Uuid | Schema::String => encode_bytes(
                 // we need the call .to_string() to properly convert ASCII to UTF-8
                 #[allow(clippy::unnecessary_to_owned)]
                 &uuid.to_string(),
-                buffer,
+                writer,
             ),
             Schema::Fixed(FixedSchema { size, .. }) => {
                 if size != 16 {
@@ -135,7 +135,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                 }
 
                 let bytes = uuid.as_bytes();
-                encode_bytes(bytes, buffer)
+                encode_bytes(bytes, writer)
             }
             _ => Err(Error::EncodeValueAsSchemaError {
                 value_kind: ValueKind::Uuid,
@@ -144,21 +144,21 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
         },
         Value::BigDecimal(bg) => {
             let buf: Vec<u8> = serialize_big_decimal(bg)?;
-            buffer.write(buf.as_slice()).map_err(Error::WriteBytes)
+            writer.write(buf.as_slice()).map_err(Error::WriteBytes)
         }
         Value::Bytes(bytes) => match *schema {
-            Schema::Bytes => encode_bytes(bytes, buffer),
-            Schema::Fixed { .. } => buffer.write(bytes.as_slice()).map_err(Error::WriteBytes),
+            Schema::Bytes => encode_bytes(bytes, writer),
+            Schema::Fixed { .. } => writer.write(bytes.as_slice()).map_err(Error::WriteBytes),
             _ => Err(Error::EncodeValueAsSchemaError {
                 value_kind: ValueKind::Bytes,
                 supported_schema: vec![SchemaKind::Bytes, SchemaKind::Fixed],
             }),
         },
         Value::String(s) => match *schema {
-            Schema::String | Schema::Uuid => encode_bytes(s, buffer),
+            Schema::String | Schema::Uuid => encode_bytes(s, writer),
             Schema::Enum(EnumSchema { ref symbols, .. }) => {
                 if let Some(index) = symbols.iter().position(|item| item == s) {
-                    encode_int(index as i32, buffer)
+                    encode_int(index as i32, writer)
                 } else {
                     error!("Invalid symbol string {:?}.", &s[..]);
                     Err(Error::GetEnumSymbol(s.clone()))
@@ -169,16 +169,16 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                 supported_schema: vec![SchemaKind::String, SchemaKind::Enum],
             }),
         },
-        Value::Fixed(_, bytes) => buffer.write(bytes.as_slice()).map_err(Error::WriteBytes),
-        Value::Enum(i, _) => encode_int(*i as i32, buffer),
+        Value::Fixed(_, bytes) => writer.write(bytes.as_slice()).map_err(Error::WriteBytes),
+        Value::Enum(i, _) => encode_int(*i as i32, writer),
         Value::Union(idx, item) => {
             if let Schema::Union(ref inner) = *schema {
                 let inner_schema = inner
                     .schemas
                     .get(*idx as usize)
                     .expect("Invalid Union validation occurred");
-                encode_long(*idx as i64, &mut *buffer)?;
-                encode_internal(item, inner_schema, names, enclosing_namespace, &mut *buffer)
+                encode_long(*idx as i64, &mut *writer)?;
+                encode_internal(item, inner_schema, names, enclosing_namespace, &mut *writer)
             } else {
                 error!("invalid schema type for Union: {:?}", schema);
                 Err(Error::EncodeValueAsSchemaError {
@@ -190,18 +190,18 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
         Value::Array(items) => {
             if let Schema::Array(ref inner) = *schema {
                 if !items.is_empty() {
-                    encode_long(items.len() as i64, &mut *buffer)?;
+                    encode_long(items.len() as i64, &mut *writer)?;
                     for item in items.iter() {
                         encode_internal(
                             item,
                             &inner.items,
                             names,
                             enclosing_namespace,
-                            &mut *buffer,
+                            &mut *writer,
                         )?;
                     }
                 }
-                buffer.write(&[0u8]).map_err(Error::WriteBytes)
+                writer.write(&[0u8]).map_err(Error::WriteBytes)
             } else {
                 error!("invalid schema type for Array: {:?}", schema);
                 Err(Error::EncodeValueAsSchemaError {
@@ -213,19 +213,19 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
         Value::Map(items) => {
             if let Schema::Map(ref inner) = *schema {
                 if !items.is_empty() {
-                    encode_long(items.len() as i64, &mut *buffer)?;
+                    encode_long(items.len() as i64, &mut *writer)?;
                     for (key, value) in items {
-                        encode_bytes(key, &mut *buffer)?;
+                        encode_bytes(key, &mut *writer)?;
                         encode_internal(
                             value,
                             &inner.types,
                             names,
                             enclosing_namespace,
-                            &mut *buffer,
+                            &mut *writer,
                         )?;
                     }
                 }
-                buffer.write(&[0u8]).map_err(Error::WriteBytes)
+                writer.write(&[0u8]).map_err(Error::WriteBytes)
             } else {
                 error!("invalid schema type for Map: {:?}", schema);
                 Err(Error::EncodeValueAsSchemaError {
@@ -265,7 +265,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                             &schema_field.schema,
                             names,
                             &record_namespace,
-                            buffer,
+                            writer,
                         )?;
                     } else {
                         return Err(Error::NoEntryInLookupTable(
@@ -288,7 +288,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                     );
                     match encode_res {
                         Ok(_) => {
-                            return buffer
+                            return writer
                                 .write(union_buffer.as_slice())
                                 .map_err(Error::WriteBytes);
                         }
