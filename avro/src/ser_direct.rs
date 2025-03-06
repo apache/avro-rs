@@ -1570,6 +1570,7 @@ mod tests {
         collections::{BTreeMap, HashMap},
         marker::PhantomData,
     };
+    use uuid::Uuid;
 
     #[test]
     fn test_serialize_null() -> TestResult {
@@ -2221,17 +2222,7 @@ mod tests {
         let names = HashMap::new();
         let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
 
-        "8c28da81-238c-4326-bddd-4e3d00cc5099".serialize(&mut serializer)?;
-
-        // TODO: invalid Uuid is not detected
-        // match "8c28da81-238c-4326-bddd".serialize(&mut serializer) {
-        //     Err(Error::SerializeValueWithSchema { value_type, value, schema }) => {
-        //         assert_eq!(value_type, "string");
-        //         assert_eq!(value, "8c28da81-238c-4326-bddd");
-        //         assert_eq!(schema, schema);
-        //     }
-        //     unexpected => panic!("Expected an error. Got: {unexpected:?}"),
-        // }
+        "8c28da81-238c-4326-bddd-4e3d00cc5099".parse::<Uuid>()?.serialize(&mut serializer)?;
 
         match 1_u8.serialize(&mut serializer) {
             Err(Error::SerializeValueWithSchema {
