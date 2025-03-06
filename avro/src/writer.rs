@@ -567,7 +567,7 @@ impl<T> SpecificSingleObjectWriter<T>
 where
     T: AvroSchema + Serialize,
 {
-    /// Write the referenced Serialize object to the provided Write object. Returns a result with
+    /// Write the referenced `Serialize` object to the provided Write object. Returns a result with
     /// the number of bytes written including the header
     pub fn write_ref<W: Write>(&mut self, data: &T, writer: &mut W) -> AvroResult<usize> {
         let mut bytes_written: usize = 0;

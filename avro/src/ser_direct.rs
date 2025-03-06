@@ -1567,10 +1567,10 @@ mod tests {
     use serde::Serialize;
     use serde_bytes::{ByteArray, Bytes};
     use serial_test::serial;
-    use std::sync::atomic::Ordering;
     use std::{
         collections::{BTreeMap, HashMap},
         marker::PhantomData,
+        sync::atomic::Ordering,
     };
     use uuid::Uuid;
 
