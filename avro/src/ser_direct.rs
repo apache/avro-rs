@@ -1080,6 +1080,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
 
         match schema {
             Schema::Null => Ok(0),
+            Schema::Ref { name: _ } => Ok(0),
             Schema::Union(union_schema) => {
                 for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
                     match variant_schema {
@@ -2222,7 +2223,9 @@ mod tests {
         let names = HashMap::new();
         let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
 
-        "8c28da81-238c-4326-bddd-4e3d00cc5099".parse::<Uuid>()?.serialize(&mut serializer)?;
+        "8c28da81-238c-4326-bddd-4e3d00cc5099"
+            .parse::<Uuid>()?
+            .serialize(&mut serializer)?;
 
         match 1_u8.serialize(&mut serializer) {
             Err(Error::SerializeValueWithSchema {
@@ -2463,14 +2466,13 @@ mod tests {
             ]
         }"#,
         )?;
-        dbg!(&schema);
+
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
         struct TestRecord {
             string_field: String,
             int_field: i32,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            #[serde(default)]
+            // #[serde(skip_serializing_if = "Option::is_none")] => Never ignore None!
             inner_record: Option<Box<TestRecord>>,
         }
 
@@ -2483,13 +2485,19 @@ mod tests {
             int_field: 10,
             inner_record: Some(Box::new(TestRecord {
                 string_field: String::from("inner_test"),
-                int_field: 10,
+                int_field: 100,
                 inner_record: None,
             })),
         };
         good_record.serialize(&mut serializer)?;
 
-        assert_eq!(buffer.as_slice(), &[8, b't', b'e', b's', b't', 20]);
+        assert_eq!(
+            buffer.as_slice(),
+            &[
+                8, b't', b'e', b's', b't', 20, 20, b'i', b'n', b'n', b'e', b'r', b'_', b't', b'e',
+                b's', b't', 200, 1
+            ]
+        );
 
         Ok(())
     }
