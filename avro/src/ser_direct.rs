@@ -1558,7 +1558,8 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
 mod tests {
     use super::*;
     use crate::{
-        bigdecimal::big_decimal_as_bytes, decimal::Decimal, Days, Duration, Millis, Months,
+        bigdecimal::big_decimal_as_bytes, decimal::Decimal, schema::ResolvedSchema, Days, Duration,
+        Millis, Months,
     };
     use apache_avro_test_helper::TestResult;
     use bigdecimal::BigDecimal;
@@ -2454,6 +2455,50 @@ mod tests {
         }
 
         assert_eq!(buffer.as_slice(), &[3, 0, 0, 0, 2, 0, 0, 0, 176, 4, 0, 0]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_serialize_recursive_record() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "record",
+            "name": "TestRecord",
+            "fields": [
+                {"name": "stringField", "type": "string"},
+                {"name": "intField", "type": "int"},
+                {"name": "innerRecord", "type": "TestRecord"}
+            ]
+        }"#,
+        )?;
+        dbg!(&schema);
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct TestRecord {
+            string_field: String,
+            int_field: i32,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            #[serde(default)]
+            inner_record: Option<Box<TestRecord>>,
+        }
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let rs = ResolvedSchema::try_from(&schema)?;
+        let mut serializer = DirectSerializer::new(&mut buffer, &schema, rs.get_names(), None);
+
+        let good_record = TestRecord {
+            string_field: String::from("test"),
+            int_field: 10,
+            inner_record: Some(Box::new(TestRecord {
+                string_field: String::from("inner_test"),
+                int_field: 10,
+                inner_record: None,
+            })),
+        };
+        good_record.serialize(&mut serializer)?;
+
+        assert_eq!(buffer.as_slice(), &[8, b't', b'e', b's', b't', 20]);
 
         Ok(())
     }
