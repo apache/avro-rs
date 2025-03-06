@@ -1566,11 +1566,11 @@ mod tests {
     use num_bigint::{BigInt, Sign};
     use serde::Serialize;
     use serde_bytes::{ByteArray, Bytes};
+    use serial_test::serial;
     use std::{
         collections::{BTreeMap, HashMap},
         marker::PhantomData,
     };
-    use serial_test::serial;
     use uuid::Uuid;
 
     #[test]
