@@ -15,6 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+//! Logic for serde-compatible serialization which writes directly to a `Write` stream
+
 use std::{borrow::Cow, io::Write};
 
 use serde::ser;
@@ -30,6 +32,11 @@ const COLLECTION_SERIALIZER_ITEM_LIMIT: usize = 1024;
 const COLLECTION_SERIALIZER_DEFAULT_INIT_ITEM_CAPACITY: usize = 32;
 const SINGLE_VALUE_INIT_BUFFER_SIZE: usize = 128;
 
+/// The sequence serializer for `DirectSerializer`.  `DirectSerializeSeq` may break large arrays up
+/// into multiple blocks to avoid having to obtain the length of the entire array before being able
+/// to write any data to the underlying [`std::fmt::Write`] stream.  (See the [Data Seralization and
+/// Deserialization](https://avro.apache.org/docs/1.12.0/specification/#data-serialization-and-deserialization)
+/// section of the Avro spec for more info.)
 pub struct DirectSerializeSeq<'a, 's, W: Write> {
     ser: &'a mut DirectSerializer<'s, W>,
     item_schema: &'s Schema,
@@ -132,6 +139,11 @@ impl<W: Write> ser::SerializeTuple for DirectSerializeSeq<'_, '_, W> {
     }
 }
 
+/// The map serializer for `DirectSerializer`.  `DirectSerializeMap` may break large maps up
+/// into multiple blocks to avoid having to obtain the length of the entire array before being able
+/// to write any data to the underlying [`std::fmt::Write`] stream.  (See the [Data Seralization and
+/// Deserialization](https://avro.apache.org/docs/1.12.0/specification/#data-serialization-and-deserialization)
+/// section of the Avro spec for more info.)
 pub struct DirectSerializeMap<'a, 's, W: Write> {
     ser: &'a mut DirectSerializer<'s, W>,
     item_schema: &'s Schema,
@@ -228,6 +240,9 @@ impl<W: Write> ser::SerializeMap for DirectSerializeMap<'_, '_, W> {
     }
 }
 
+/// The struct serializer for `DirectSerializer`, which can serialize Avro records.  `DirectSerializeStruct`
+/// can accept fields out of order, but doing so incurs a performance penalty, since it requires
+/// `DirectSerializeStruct` to buffer serialized values in order to write them to the stream in order.
 pub struct DirectSerializeStruct<'a, 's, W: Write> {
     ser: &'a mut DirectSerializer<'s, W>,
     record_schema: &'s RecordSchema,
@@ -386,6 +401,9 @@ impl<W: Write> ser::SerializeStructVariant for DirectSerializeStruct<'_, '_, W> 
     }
 }
 
+/// The tuple struct serializer for `DirectSerializer`.  `DirectSerializeTupleStruct` can serialize to an Avro
+/// array or record.  When serializing to a record, fields must be provided in the correct order, since no
+/// names names are provided.
 pub enum DirectSerializeTupleStruct<'a, 's, W: Write> {
     Record(DirectSerializeStruct<'a, 's, W>),
     Array(DirectSerializeSeq<'a, 's, W>),
@@ -444,6 +462,11 @@ impl<W: Write> ser::SerializeTupleVariant for DirectSerializeTupleStruct<'_, '_,
     }
 }
 
+/// A `serde::se::Serializer` implementation that serializes directly to a [`std::fmt::Write`] using the provided
+/// schema.  If `DirectSerializer` isn't able to match the incoming data with its schema, it will return an error.
+///
+/// A `DirectSerializer` instance can be re-used to serialize multiple values matching the schema to its
+/// [`std::fmt::Write`] stream.
 pub struct DirectSerializer<'s, W: Write> {
     writer: &'s mut W,
     root_schema: &'s Schema,
@@ -453,6 +476,15 @@ pub struct DirectSerializer<'s, W: Write> {
 }
 
 impl<'s, W: Write> DirectSerializer<'s, W> {
+    /// Create a new `DirectSerializer`.
+    ///
+    /// `writer` is the [`std::fmt::Write`] stream to be written to.
+    ///
+    /// `schema` is the schema of the value to be written.
+    ///
+    /// `names` is the mapping of schema names to schemas, to be used for type reference lookups
+    ///
+    /// `enclosing_namespace` is the enclosing namespace to be used for type reference lookups
     pub fn new(
         writer: &'s mut W,
         schema: &'s Schema,

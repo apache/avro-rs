@@ -55,6 +55,17 @@ pub struct EnumDeserializer<'de> {
     input: &'de [(String, Value)],
 }
 
+/// A `serde::de::EnumAccess` and `serde::de::VariantAccess` implementation for deserializing
+/// union types.  A `UnionDeserializer` is returned when deserializing into an enum, and the value
+/// being deserialized is an Avro union.  The enum type being deserialized into should match the
+/// structure of the union type of the value being deserialized, (i.e. matching number of variants
+/// and schemas of variants.)
+///
+/// The `input` field is the name of the variant.  Since Avro union variants don't have names, this
+/// should come from one of the variant names passed into the `serde::de::Deserializer::deserialize_enum`
+/// function call that returned this `UnionDeserializer`
+///
+/// `value` the value of the variant, deserialized into a [`crate::types::Value`].
 struct UnionDeserializer<'de> {
     input: &'static str,
     value: &'de Value,
@@ -245,7 +256,8 @@ impl<'de> de::EnumAccess<'de> for UnionDeserializer<'de> {
     type Error = Error;
     type Variant = Self;
 
-    fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant), Self::Error>
+    /// Deserialize the variant name
+    fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self), Self::Error>
     where
         V: DeserializeSeed<'de>,
     {
