@@ -15,7 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! Logic for serde-compatible serialization which writes directly to a `Write` stream
+//! Logic for serde-compatible schema-aware serialization
+//! which writes directly to a `Write` stream
 
 use std::{borrow::Cow, io::Write};
 
@@ -140,7 +141,7 @@ impl<W: Write> ser::SerializeTuple for DirectSerializeSeq<'_, '_, W> {
 }
 
 /// The map serializer for `DirectSerializer`.  `DirectSerializeMap` may break large maps up
-/// into multiple blocks to avoid having to obtain the length of the entire array before being able
+/// into multiple blocks to avoid having to obtain the size of the entire map before being able
 /// to write any data to the underlying [`std::fmt::Write`] stream.  (See the [Data Seralization and
 /// Deserialization](https://avro.apache.org/docs/1.12.0/specification/#data-serialization-and-deserialization)
 /// section of the Avro spec for more info.)
@@ -403,7 +404,7 @@ impl<W: Write> ser::SerializeStructVariant for DirectSerializeStruct<'_, '_, W> 
 
 /// The tuple struct serializer for `DirectSerializer`.  `DirectSerializeTupleStruct` can serialize to an Avro
 /// array or record.  When serializing to a record, fields must be provided in the correct order, since no
-/// names names are provided.
+/// names are provided.
 pub enum DirectSerializeTupleStruct<'a, 's, W: Write> {
     Record(DirectSerializeStruct<'a, 's, W>),
     Array(DirectSerializeSeq<'a, 's, W>),

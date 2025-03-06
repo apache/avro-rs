@@ -6740,8 +6740,6 @@ mod tests {
             .write_ref(&payload, &mut buffer)?;
         assert_eq!(bytes, 27);
 
-        dbg!(String::from_utf8_lossy(&buffer));
-
         Ok(())
     }
 
