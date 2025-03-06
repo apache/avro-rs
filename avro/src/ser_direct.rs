@@ -2055,14 +2055,14 @@ mod tests {
         Bytes::new(&[10, 124, 31, 97, 14, 201, 3, 88]).serialize(&mut serializer)?;
 
         // non-8 size
-        match Bytes::new(&[10]).serialize(&mut serializer) {
+        match Bytes::new(&[123]).serialize(&mut serializer) {
             Err(Error::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
             }) => {
                 assert_eq!(value_type, "bytes");
-                assert_eq!(value, "a"); // TODO: what is 'a' ?!
+                assert_eq!(value, "7b"); // Bytes represents its values as hexadecimals: '7b' is 123
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
