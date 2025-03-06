@@ -948,7 +948,9 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         };
 
         match schema {
-            Schema::String | Schema::Bytes | Schema::Uuid => self.write_bytes(v.as_bytes()),
+            Schema::String | Schema::Bytes | Schema::Uuid | Schema::BigDecimal => {
+                self.write_bytes(v.as_bytes())
+            }
             Schema::Fixed(fixed_schema) => {
                 if v.len() == fixed_schema.size {
                     self.writer.write(v.as_bytes()).map_err(Error::WriteBytes)
@@ -1558,15 +1560,12 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        bigdecimal::big_decimal_as_bytes, decimal::Decimal, schema::ResolvedSchema, Days, Duration,
-        Millis, Months,
-    };
+    use crate::{decimal::Decimal, schema::ResolvedSchema, Days, Duration, Millis, Months};
     use apache_avro_test_helper::TestResult;
     use bigdecimal::BigDecimal;
     use num_bigint::{BigInt, Sign};
     use serde::Serialize;
-    use serde_bytes::{ByteArray, ByteBuf, Bytes};
+    use serde_bytes::{ByteArray, Bytes};
     use std::{
         collections::{BTreeMap, HashMap},
         marker::PhantomData,
@@ -2190,22 +2189,9 @@ mod tests {
         let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
 
         let val = BigDecimal::new(BigInt::new(Sign::Plus, vec![50024]), 2);
-        ByteBuf::from(big_decimal_as_bytes(&val)?).serialize(&mut serializer)?;
+        val.serialize(&mut serializer)?;
 
-        match "".serialize(&mut serializer) {
-            Err(Error::SerializeValueWithSchema {
-                value_type,
-                value,
-                schema,
-            }) => {
-                assert_eq!(value_type, "string");
-                assert_eq!(value, "");
-                assert_eq!(schema, schema);
-            }
-            unexpected => panic!("Expected an error. Got: {unexpected:?}"),
-        }
-
-        assert_eq!(buffer.as_slice(), &[10, 6, 0, 195, 104, 4]);
+        assert_eq!(buffer.as_slice(), &[12, 53, 48, 48, 46, 50, 52]);
 
         Ok(())
     }
@@ -2462,6 +2448,7 @@ mod tests {
             "fields": [
                 {"name": "stringField", "type": "string"},
                 {"name": "intField", "type": "int"},
+                {"name": "bigDecimalField", "type": {"type":"bytes", "logicalType":"big-decimal"}},
                 {"name": "innerRecord", "type": "TestRecord"}
             ]
         }"#,
@@ -2472,6 +2459,7 @@ mod tests {
         struct TestRecord {
             string_field: String,
             int_field: i32,
+            big_decimal_field: BigDecimal,
             // #[serde(skip_serializing_if = "Option::is_none")] => Never ignore None!
             inner_record: Option<Box<TestRecord>>,
         }
@@ -2483,9 +2471,11 @@ mod tests {
         let good_record = TestRecord {
             string_field: String::from("test"),
             int_field: 10,
+            big_decimal_field: BigDecimal::new(BigInt::new(Sign::Plus, vec![50024]), 2),
             inner_record: Some(Box::new(TestRecord {
                 string_field: String::from("inner_test"),
                 int_field: 100,
+                big_decimal_field: BigDecimal::new(BigInt::new(Sign::Plus, vec![20038]), 2),
                 inner_record: None,
             })),
         };
@@ -2494,8 +2484,8 @@ mod tests {
         assert_eq!(
             buffer.as_slice(),
             &[
-                8, b't', b'e', b's', b't', 20, 20, b'i', b'n', b'n', b'e', b'r', b'_', b't', b'e',
-                b's', b't', 200, 1
+                8, b't', b'e', b's', b't', 20, 12, 53, 48, 48, 46, 50, 52, 20, b'i', b'n', b'n',
+                b'e', b'r', b'_', b't', b'e', b's', b't', 200, 1, 12, 50, 48, 48, 46, 51, 56
             ]
         );
 
