@@ -2448,7 +2448,8 @@ mod tests {
             "fields": [
                 {"name": "stringField", "type": "string"},
                 {"name": "intField", "type": "int"},
-                {"name": "bigDecimalField", "type": {"type":"bytes", "logicalType":"big-decimal"}},
+                {"name": "bigDecimalField", "type": {"type": "bytes", "logicalType": "big-decimal"}},
+                {"name": "uuidField", "type": "fixed", "size": 16, "logicalType": "uuid"},
                 {"name": "innerRecord", "type": "TestRecord"}
             ]
         }"#,
@@ -2460,6 +2461,7 @@ mod tests {
             string_field: String,
             int_field: i32,
             big_decimal_field: BigDecimal,
+            uuid_field: Uuid,
             // #[serde(skip_serializing_if = "Option::is_none")] => Never ignore None!
             inner_record: Option<Box<TestRecord>>,
         }
@@ -2472,10 +2474,12 @@ mod tests {
             string_field: String::from("test"),
             int_field: 10,
             big_decimal_field: BigDecimal::new(BigInt::new(Sign::Plus, vec![50024]), 2),
+            uuid_field: "8c28da81-238c-4326-bddd-4e3d00cc5098".parse::<Uuid>()?,
             inner_record: Some(Box::new(TestRecord {
                 string_field: String::from("inner_test"),
                 int_field: 100,
                 big_decimal_field: BigDecimal::new(BigInt::new(Sign::Plus, vec![20038]), 2),
+                uuid_field: "8c28da81-238c-4326-bddd-4e3d00cc5099".parse::<Uuid>()?,
                 inner_record: None,
             })),
         };
@@ -2484,8 +2488,12 @@ mod tests {
         assert_eq!(
             buffer.as_slice(),
             &[
-                8, b't', b'e', b's', b't', 20, 12, 53, 48, 48, 46, 50, 52, 20, b'i', b'n', b'n',
-                b'e', b'r', b'_', b't', b'e', b's', b't', 200, 1, 12, 50, 48, 48, 46, 51, 56
+                8, 116, 101, 115, 116, 20, 12, 53, 48, 48, 46, 50, 52, 72, 56, 99, 50, 56, 100, 97,
+                56, 49, 45, 50, 51, 56, 99, 45, 52, 51, 50, 54, 45, 98, 100, 100, 100, 45, 52, 101,
+                51, 100, 48, 48, 99, 99, 53, 48, 57, 56, 20, 105, 110, 110, 101, 114, 95, 116, 101,
+                115, 116, 200, 1, 12, 50, 48, 48, 46, 51, 56, 72, 56, 99, 50, 56, 100, 97, 56, 49,
+                45, 50, 51, 56, 99, 45, 52, 51, 50, 54, 45, 98, 100, 100, 100, 45, 52, 101, 51,
+                100, 48, 48, 99, 99, 53, 48, 57, 57
             ]
         );
 
