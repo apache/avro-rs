@@ -1567,6 +1567,7 @@ mod tests {
     use serde::Serialize;
     use serde_bytes::{ByteArray, Bytes};
     use serial_test::serial;
+    use std::sync::atomic::Ordering;
     use std::{
         collections::{BTreeMap, HashMap},
         marker::PhantomData,
@@ -2186,6 +2187,7 @@ mod tests {
         }"#,
         )?;
 
+        crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
         let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
@@ -2208,6 +2210,7 @@ mod tests {
         }"#,
         )?;
 
+        crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
         let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
@@ -2470,6 +2473,7 @@ mod tests {
             inner_record: Option<Box<TestRecord>>,
         }
 
+        crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
         let mut buffer: Vec<u8> = Vec::new();
         let rs = ResolvedSchema::try_from(&schema)?;
         let mut serializer = DirectSerializer::new(&mut buffer, &schema, rs.get_names(), None);
