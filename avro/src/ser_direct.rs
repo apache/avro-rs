@@ -1570,6 +1570,7 @@ mod tests {
         collections::{BTreeMap, HashMap},
         marker::PhantomData,
     };
+    use serial_test::serial;
     use uuid::Uuid;
 
     #[test]
@@ -2176,6 +2177,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(serde_is_human_readable)]
     fn test_serialize_bigdecimal() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
@@ -2197,6 +2199,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(serde_is_human_readable)]
     fn test_serialize_uuid() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
@@ -2440,6 +2443,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(serde_is_human_readable)] // for BigDecimal and Uuid
     fn test_serialize_recursive_record() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
