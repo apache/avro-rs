@@ -1818,8 +1818,8 @@ mod tests {
                 value,
                 schema,
             }) => {
-                assert_eq!(value_type, "none"); // TODO this must be 'unit' ?!
-                assert_eq!(value, "None"); // TODO: this must be '()' ?!
+                assert_eq!(value_type, "none"); // serialize_unit() delegates to serialize_none()
+                assert_eq!(value, "None");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
