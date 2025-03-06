@@ -310,7 +310,6 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
             }
         }
     }
-    // Ok(())
 }
 
 pub fn encode_to_vec(value: &Value, schema: &Schema) -> AvroResult<Vec<u8>> {

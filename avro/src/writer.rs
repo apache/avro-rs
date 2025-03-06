@@ -32,7 +32,7 @@ const AVRO_OBJECT_HEADER: &[u8] = b"Obj\x01";
 
 /// Main interface for writing Avro formatted values.
 #[derive(bon::Builder)]
-pub struct Writer<'a, W> {
+pub struct Writer<'a, W: Write> {
     schema: &'a Schema,
     writer: W,
     #[builder(skip)]

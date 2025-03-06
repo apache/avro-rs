@@ -1548,6 +1548,10 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             _ => Err(create_error()),
         }
     }
+
+    fn is_human_readable(&self) -> bool {
+        crate::util::is_human_readable()
+    }
 }
 
 #[cfg(test)]
