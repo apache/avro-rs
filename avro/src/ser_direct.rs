@@ -954,7 +954,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             Schema::String | Schema::Bytes | Schema::Uuid => self.write_bytes(v.as_bytes()),
             Schema::BigDecimal => {
                 // If we get a string for a `BigDecimal` type, expect a display string representation, such as "12.75"
-                let decimal_val = BigDecimal::from_str(v).map_err(|_| Error::BigDecimalScale)?;
+                let decimal_val = BigDecimal::from_str(v).map_err(|_| create_error())?;
                 let decimal_bytes = big_decimal_as_bytes(&decimal_val)?;
                 self.write_bytes(decimal_bytes.as_slice())
             }
