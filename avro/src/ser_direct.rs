@@ -18,11 +18,13 @@
 //! Logic for serde-compatible schema-aware serialization
 //! which writes directly to a `Write` stream
 
-use std::{borrow::Cow, io::Write};
+use std::{borrow::Cow, io::Write, str::FromStr};
 
+use bigdecimal::BigDecimal;
 use serde::ser;
 
 use crate::{
+    bigdecimal::big_decimal_as_bytes,
     encode::{encode_int, encode_long},
     error::Error,
     schema::{Name, NamesRef, Namespace, RecordSchema, Schema},
@@ -403,8 +405,8 @@ impl<W: Write> ser::SerializeStructVariant for DirectSerializeStruct<'_, '_, W> 
 }
 
 /// The tuple struct serializer for `DirectSerializer`.  `DirectSerializeTupleStruct` can serialize to an Avro
-/// array or record.  When serializing to a record, fields must be provided in the correct order, since no
-/// names are provided.
+/// array, record, or big-decimal.  When serializing to a record, fields must be provided in the correct order,
+/// since no names are provided.
 pub enum DirectSerializeTupleStruct<'a, 's, W: Write> {
     Record(DirectSerializeStruct<'a, 's, W>),
     Array(DirectSerializeSeq<'a, 's, W>),
@@ -949,8 +951,12 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         };
 
         match schema {
-            Schema::String | Schema::Bytes | Schema::Uuid | Schema::BigDecimal => {
-                self.write_bytes(v.as_bytes())
+            Schema::String | Schema::Bytes | Schema::Uuid => self.write_bytes(v.as_bytes()),
+            Schema::BigDecimal => {
+                // If we get a string for a `BigDecimal` type, expect a display string representation, such as "12.75"
+                let decimal_val = BigDecimal::from_str(v).map_err(|_| Error::BigDecimalScale)?;
+                let decimal_bytes = big_decimal_as_bytes(&decimal_val)?;
+                self.write_bytes(decimal_bytes.as_slice())
             }
             Schema::Fixed(fixed_schema) => {
                 if v.len() == fixed_schema.size {
@@ -1083,7 +1089,6 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
 
         match schema {
             Schema::Null => Ok(0),
-            Schema::Ref { name: _ } => Ok(0),
             Schema::Union(union_schema) => {
                 for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
                     match variant_schema {
@@ -2196,7 +2201,7 @@ mod tests {
         let val = BigDecimal::new(BigInt::new(Sign::Plus, vec![50024]), 2);
         val.serialize(&mut serializer)?;
 
-        assert_eq!(buffer.as_slice(), &[12, 53, 48, 48, 46, 50, 52]);
+        assert_eq!(buffer.as_slice(), &[10, 6, 0, 195, 104, 4]);
 
         Ok(())
     }
@@ -2458,7 +2463,7 @@ mod tests {
                 {"name": "intField", "type": "int"},
                 {"name": "bigDecimalField", "type": {"type": "bytes", "logicalType": "big-decimal"}},
                 {"name": "uuidField", "type": "fixed", "size": 16, "logicalType": "uuid"},
-                {"name": "innerRecord", "type": "TestRecord"}
+                {"name": "innerRecord", "type": ["null", "TestRecord"]}
             ]
         }"#,
         )?;
@@ -2497,12 +2502,12 @@ mod tests {
         assert_eq!(
             buffer.as_slice(),
             &[
-                8, 116, 101, 115, 116, 20, 12, 53, 48, 48, 46, 50, 52, 72, 56, 99, 50, 56, 100, 97,
+                8, 116, 101, 115, 116, 20, 10, 6, 0, 195, 104, 4, 72, 56, 99, 50, 56, 100, 97,
                 56, 49, 45, 50, 51, 56, 99, 45, 52, 51, 50, 54, 45, 98, 100, 100, 100, 45, 52, 101,
-                51, 100, 48, 48, 99, 99, 53, 48, 57, 56, 20, 105, 110, 110, 101, 114, 95, 116, 101,
-                115, 116, 200, 1, 12, 50, 48, 48, 46, 51, 56, 72, 56, 99, 50, 56, 100, 97, 56, 49,
-                45, 50, 51, 56, 99, 45, 52, 51, 50, 54, 45, 98, 100, 100, 100, 45, 52, 101, 51,
-                100, 48, 48, 99, 99, 53, 48, 57, 57
+                51, 100, 48, 48, 99, 99, 53, 48, 57, 56, 2, 20, 105, 110, 110, 101, 114, 95, 116,
+                101, 115, 116, 200, 1, 8, 4, 78, 70, 4, 72, 56, 99, 50, 56, 100, 97, 56,
+                49, 45, 50, 51, 56, 99, 45, 52, 51, 50, 54, 45, 98, 100, 100, 100, 45, 52, 101, 51,
+                100, 48, 48, 99, 99, 53, 48, 57, 57, 0
             ]
         );
 
