@@ -32,6 +32,8 @@ yanked = "warn"
 #
 # e.g. "RUSTSEC-0000-0000",
 ignore = [
+    # We need to use dtolnay/paste even though it is not maintained
+    "RUSTSEC-2024-0436"
 ]
 
 # This section is considered when running `cargo deny check licenses`
