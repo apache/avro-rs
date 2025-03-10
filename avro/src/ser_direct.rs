@@ -541,9 +541,9 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || Error::SerializeValueWithSchema {
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "bool",
-            value: format!("{v}"),
+            value: format!("{v}. Cause: {cause}"),
             schema: schema.clone(),
         };
 
@@ -560,9 +560,12 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error())
+                Err(create_error(format!(
+                    "No matching Schema::Bool found in {:?}",
+                    union_schema.schemas
+                )))
             }
-            _ => Err(create_error()),
+            expected => Err(create_error(format!("Expected {expected}. Got: Bool"))),
         }
     }
 
@@ -577,9 +580,9 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || Error::SerializeValueWithSchema {
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "int (i8 | i16 | i32)",
-            value: format!("{v}"),
+            value: format!("{v}. Cause: {cause}"),
             schema: schema.clone(),
         };
 
@@ -614,30 +617,27 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error())
+                Err(create_error(format!(
+                    "Cannot find a matching int-like schema in {union_schema:?}"
+                )))
             }
-            _ => Err(create_error()),
+            expected => Err(create_error(format!("Expected {expected}. Got: Int/Long"))),
         }
     }
 
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = |cause: Option<String>| {
-            let cause = cause
-                .map(|c| format!(". Cause: {}", c))
-                .unwrap_or("".to_string());
-            Error::SerializeValueWithSchema {
-                value_type: "i64",
-                value: format!("{v}{cause}"),
-                schema: schema.clone(),
-            }
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
+            value_type: "i64",
+            value: format!("{v}. Cause: {cause}"),
+            schema: schema.clone(),
         };
 
         match schema {
             Schema::Int | Schema::TimeMillis | Schema::Date => {
                 let int_value =
-                    i32::try_from(v).map_err(|cause| create_error(Some(cause.to_string())))?;
+                    i32::try_from(v).map_err(|cause| create_error(cause.to_string()))?;
                 encode_int(int_value, &mut self.writer)
             }
             Schema::Long
@@ -669,18 +669,21 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error(None))
+                Err(create_error(format!(
+                    "Cannot find a matching int/long-like schema in {:?}",
+                    union_schema.schemas
+                )))
             }
-            _ => Err(create_error(None)),
+            expected => Err(create_error(format!("Expected: {expected}. Got: Int/Long"))),
         }
     }
 
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || Error::SerializeValueWithSchema {
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "u8",
-            value: format!("{v}"),
+            value: format!("{v}. Cause: {cause}"),
             schema: schema.clone(),
         };
 
@@ -697,9 +700,9 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             | Schema::LocalTimestampMicros
             | Schema::LocalTimestampNanos => encode_long(v as i64, &mut self.writer),
             Schema::Bytes => self.write_bytes(&[v]),
-            Schema::Union(sch) => {
-                for (i, variant_sch) in sch.schemas.iter().enumerate() {
-                    match variant_sch {
+            Schema::Union(union_schema) => {
+                for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
+                    match variant_schema {
                         Schema::Int
                         | Schema::TimeMillis
                         | Schema::Date
@@ -713,15 +716,15 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         | Schema::LocalTimestampNanos
                         | Schema::Bytes => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_sch);
+                            self.schema_stack.push(variant_schema);
                             return self.serialize_u8(v);
                         }
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error())
+                Err(create_error(format!("Cannot find a matching Int-like, Long-like or Bytes schema in {union_schema:?}")))
             }
-            _ => Err(create_error()),
+            expected => Err(create_error(format!("Expected: {expected}. Got: Int"))),
         }
     }
 
@@ -732,21 +735,16 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = |cause: Option<String>| {
-            let cause = cause
-                .map(|c| format!(". Cause: {}", c))
-                .unwrap_or("".to_string());
-            Error::SerializeValueWithSchema {
-                value_type: "unsigned int (u16 | u32)",
-                value: format!("{v}{cause}"),
-                schema: schema.clone(),
-            }
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
+            value_type: "unsigned int (u16 | u32)",
+            value: format!("{v}. Cause: {cause}"),
+            schema: schema.clone(),
         };
 
         match schema {
             Schema::Int | Schema::TimeMillis | Schema::Date => {
                 let int_value =
-                    i32::try_from(v).map_err(|cause| create_error(Some(cause.to_string())))?;
+                    i32::try_from(v).map_err(|cause| create_error(cause.to_string()))?;
                 encode_int(int_value, &mut self.writer)
             }
             Schema::Long
@@ -757,9 +755,9 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             | Schema::LocalTimestampMillis
             | Schema::LocalTimestampMicros
             | Schema::LocalTimestampNanos => encode_long(v as i64, &mut self.writer),
-            Schema::Union(sch) => {
-                for (i, variant_sch) in sch.schemas.iter().enumerate() {
-                    match variant_sch {
+            Schema::Union(union_schema) => {
+                for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
+                    match variant_schema {
                         Schema::Int
                         | Schema::TimeMillis
                         | Schema::Date
@@ -772,36 +770,33 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         | Schema::LocalTimestampMicros
                         | Schema::LocalTimestampNanos => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_sch);
+                            self.schema_stack.push(variant_schema);
                             return self.serialize_u32(v);
                         }
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error(None))
+                Err(create_error(format!(
+                    "Cannot find a matching Int-like or Long-like schema in {union_schema:?}"
+                )))
             }
-            _ => Err(create_error(None)),
+            expected => Err(create_error(format!("Expected: {expected}. Got: Int/Long"))),
         }
     }
 
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = |cause: Option<String>| {
-            let cause = cause
-                .map(|c| format!(". Cause: {}", c))
-                .unwrap_or("".to_string());
-            Error::SerializeValueWithSchema {
-                value_type: "u64",
-                value: format!("{v}{cause}"),
-                schema: schema.clone(),
-            }
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
+            value_type: "u64",
+            value: format!("{v}. Cause: {cause}"),
+            schema: schema.clone(),
         };
 
         match schema {
             Schema::Int | Schema::TimeMillis | Schema::Date => {
                 let int_value =
-                    i32::try_from(v).map_err(|cause| create_error(Some(cause.to_string())))?;
+                    i32::try_from(v).map_err(|cause| create_error(cause.to_string()))?;
                 encode_int(int_value, &mut self.writer)
             }
             Schema::Long
@@ -813,12 +808,12 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             | Schema::LocalTimestampMicros
             | Schema::LocalTimestampNanos => {
                 let long_value =
-                    i64::try_from(v).map_err(|cause| create_error(Some(cause.to_string())))?;
+                    i64::try_from(v).map_err(|cause| create_error(cause.to_string()))?;
                 encode_long(long_value, &mut self.writer)
             }
-            Schema::Union(sch) => {
-                for (i, variant_sch) in sch.schemas.iter().enumerate() {
-                    match variant_sch {
+            Schema::Union(union_schema) => {
+                for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
+                    match variant_schema {
                         Schema::Int
                         | Schema::TimeMillis
                         | Schema::Date
@@ -831,24 +826,27 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         | Schema::LocalTimestampMicros
                         | Schema::LocalTimestampNanos => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_sch);
+                            self.schema_stack.push(variant_schema);
                             return self.serialize_u64(v);
                         }
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error(None))
+                Err(create_error(format!(
+                    "Cannot find a matching Int-like or Long-like schema in {:?}",
+                    union_schema.schemas
+                )))
             }
-            _ => Err(create_error(None)),
+            expected => Err(create_error(format!("Expected {expected}. Got: Int/Long"))),
         }
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || Error::SerializeValueWithSchema {
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "f32",
-            value: format!("{v}"),
+            value: format!("{v}. Cause: {cause}"),
             schema: schema.clone(),
         };
 
@@ -872,18 +870,21 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error())
+                Err(create_error(format!(
+                    "Cannot find a Float schema in {:?}",
+                    union_schema.schemas
+                )))
             }
-            _ => Err(create_error()),
+            expected => Err(create_error(format!("Expected: {expected}. Got: Float"))),
         }
     }
 
     fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || Error::SerializeValueWithSchema {
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "f64",
-            value: format!("{v}"),
+            value: format!("{v}. Cause: {cause}"),
             schema: schema.clone(),
         };
 
@@ -907,18 +908,21 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error())
+                Err(create_error(format!(
+                    "Cannot find a Double schema in {:?}",
+                    union_schema.schemas
+                )))
             }
-            _ => Err(create_error()),
+            expected => Err(create_error(format!("Expected: {expected}. Got: Double"))),
         }
     }
 
     fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || Error::SerializeValueWithSchema {
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "char",
-            value: String::from(v),
+            value: format!("{v}. Cause: {cause}"),
             schema: schema.clone(),
         };
 
@@ -935,18 +939,20 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error())
+                Err(create_error(format!(
+                    "Cannot find a matching String or Bytes schema in {union_schema:?}"
+                )))
             }
-            _ => Err(create_error()),
+            expected => Err(create_error(format!("Expected {expected}. Got: char"))),
         }
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || Error::SerializeValueWithSchema {
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "string",
-            value: String::from(v),
+            value: format!("{v}. Cause: {cause}"),
             schema: schema.clone(),
         };
 
@@ -954,7 +960,8 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             Schema::String | Schema::Bytes | Schema::Uuid => self.write_bytes(v.as_bytes()),
             Schema::BigDecimal => {
                 // If we get a string for a `BigDecimal` type, expect a display string representation, such as "12.75"
-                let decimal_val = BigDecimal::from_str(v).map_err(|_| create_error())?;
+                let decimal_val =
+                    BigDecimal::from_str(v).map_err(|e| create_error(e.to_string()))?;
                 let decimal_bytes = big_decimal_as_bytes(&decimal_val)?;
                 self.write_bytes(decimal_bytes.as_slice())
             }
@@ -962,7 +969,11 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                 if v.len() == fixed_schema.size {
                     self.writer.write(v.as_bytes()).map_err(Error::WriteBytes)
                 } else {
-                    Err(create_error())
+                    Err(create_error(format!(
+                        "Fixed schema size ({}) does not match the value length ({})",
+                        fixed_schema.size,
+                        v.len()
+                    )))
                 }
             }
             Schema::Ref { name } => {
@@ -985,18 +996,20 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error())
+                Err(create_error(format!(
+                    "Expected one of the union variants {:?}. Got: String",
+                    union_schema.schemas
+                )))
             }
-            _ => Err(create_error()),
+            expected => Err(create_error(format!("Expected: {expected}. Got: String"))),
         }
     }
 
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || {
+        let create_error = |cause: String| {
             use std::fmt::Write;
-
             let mut v_str = String::with_capacity(v.len());
             for b in v {
                 if write!(&mut v_str, "{:x}", b).is_err() {
@@ -1005,7 +1018,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             }
             Error::SerializeValueWithSchema {
                 value_type: "bytes",
-                value: v_str,
+                value: format!("{v_str}. Cause: {cause}"),
                 schema: schema.clone(),
             }
         };
@@ -1018,17 +1031,17 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                 if v.len() == fixed_schema.size {
                     self.writer.write(v).map_err(Error::WriteBytes)
                 } else {
-                    Err(create_error())
+                    Err(create_error(format!("Fixed schema size ({}) does not match the value length ({})", fixed_schema.size, v.len())))
                 }
             }
             Schema::Duration => {
                 if v.len() == 12 {
                     self.writer.write(v).map_err(Error::WriteBytes)
                 } else {
-                    Err(create_error())
+                    Err(create_error(format!("Duration length must be 12! Got ({})", v.len())))
                 }
             }
-            Schema::Decimal(sch) => match sch.inner.as_ref() {
+            Schema::Decimal(decimal_schema) => match decimal_schema.inner.as_ref() {
                 Schema::Bytes => self.write_bytes(v),
                 Schema::Fixed(fixed_schema) => match fixed_schema.size.checked_sub(v.len()) {
                     Some(pad) => {
@@ -1047,7 +1060,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         n: v.len(),
                     }),
                 },
-                _ => Err(create_error()),
+                unsupported => Err(create_error(format!("Decimal schema's inner should be Bytes or Fixed schema. Got: {unsupported}"))),
             },
             Schema::Ref { name } => {
                 let ref_schema = self.get_ref_schema(name)?;
@@ -1072,18 +1085,18 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error())
+                Err(create_error(format!("Cannot find a matching String, Bytes, Uuid, BigDecimal, Fixed, Duration, Decimal or Ref schema in {union_schema:?}")))
             }
-            _ => Err(create_error()),
+            unsupported => Err(create_error(format!("Expected String, Bytes, Uuid, BigDecimal, Fixed, Duration, Decimal, Ref or Union schema. Got: {unsupported}"))),
         }
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || Error::SerializeValueWithSchema {
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "none",
-            value: String::from("None"),
+            value: format!("None. Cause: {cause}"),
             schema: schema.clone(),
         };
 
@@ -1098,9 +1111,12 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error())
+                Err(create_error(format!(
+                    "Cannot find a matching Null schema in {:?}",
+                    union_schema.schemas
+                )))
             }
-            _ => Err(create_error()),
+            expected => Err(create_error(format!("Expected: {expected}. Got: Null"))),
         }
     }
 
@@ -1110,9 +1126,9 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || Error::SerializeValueWithSchema {
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "some",
-            value: String::from("Some(?)"),
+            value: format!("Some(?). Cause: {cause}"),
             schema: schema.clone(),
         };
 
@@ -1128,7 +1144,10 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         }
                     }
                 }
-                Err(create_error())
+                Err(create_error(format!(
+                    "Cannot find a matching Null schema in {:?}",
+                    union_schema.schemas
+                )))
             }
             _ => value.serialize(self),
         }
@@ -1141,24 +1160,19 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = |cause: Option<String>| {
-            let cause = cause
-                .map(|c| format!(". Cause: {}", c))
-                .unwrap_or("".to_string());
-            Error::SerializeValueWithSchema {
-                value_type: "unit struct",
-                value: format!("{name}{cause}"),
-                schema: schema.clone(),
-            }
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
+            value_type: "unit struct",
+            value: format!("{name}. Cause: {cause}"),
+            schema: schema.clone(),
         };
 
         match schema {
             Schema::Record(sch) => match sch.fields.len() {
                 0 => Ok(0),
-                too_many => Err(create_error(Some(format!(
+                too_many => Err(create_error(format!(
                     "Too many fields: {}. Expected: 0",
                     too_many
-                )))),
+                ))),
             },
             Schema::Null => Ok(0),
             Schema::Ref { name: ref_name } => {
@@ -1182,9 +1196,13 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error(None))
+                Err(create_error(format!(
+                    "Cannot find a matching Null schema in {union_schema:?}"
+                )))
             }
-            _ => Err(create_error(None)),
+            unsupported => Err(create_error(format!(
+                "Expected Null or Union schema. Got: {unsupported}"
+            ))),
         }
     }
 
@@ -1196,36 +1214,31 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     ) -> Result<Self::Ok, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = |cause: Option<String>| {
-            let cause = cause
-                .map(|c| format!(". Cause: {}", c))
-                .unwrap_or("".to_string());
-            Error::SerializeValueWithSchema {
-                value_type: "unit variant",
-                value: format!("{name}::{variant} (index={variant_index}){cause}"),
-                schema: schema.clone(),
-            }
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
+            value_type: "unit variant",
+            value: format!("{name}::{variant} (index={variant_index}). Cause: {cause}"),
+            schema: schema.clone(),
         };
 
         match schema {
             Schema::Enum(enum_schema) => {
                 if variant_index as usize >= enum_schema.symbols.len() {
-                    return Err(create_error(Some(format!(
+                    return Err(create_error(format!(
                         "Variant index out of bounds: {}. The Enum schema has '{}' symbols",
                         variant_index,
                         enum_schema.symbols.len()
-                    ))));
+                    )));
                 }
 
                 encode_int(variant_index as i32, &mut self.writer)
             }
             Schema::Union(union_schema) => {
                 if variant_index as usize >= union_schema.schemas.len() {
-                    return Err(create_error(Some(format!(
+                    return Err(create_error(format!(
                         "Variant index out of bounds: {}. The union schema has '{}' schemas",
                         variant_index,
                         union_schema.schemas.len()
-                    ))));
+                    )));
                 }
 
                 encode_int(variant_index as i32, &mut self.writer)?;
@@ -1238,10 +1251,10 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                 self.schema_stack.push(ref_schema);
                 self.serialize_unit_variant(name, variant_index, variant)
             }
-            unsupported => Err(create_error(Some(format!(
+            unsupported => Err(create_error(format!(
                 "Unsupported schema: {:?}. Expected: Enum, Union or Ref",
                 unsupported
-            )))),
+            ))),
         }
     }
 
@@ -1269,38 +1282,44 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || Error::SerializeValueWithSchema {
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "newtype variant",
-            value: format!("{name}::{variant}(?) (index={variant_index})"),
+            value: format!("{name}::{variant}(?) (index={variant_index}). Cause: {cause}"),
             schema: schema.clone(),
         };
 
         match schema {
-            Schema::Union(sch) => {
-                let variant_schema = sch
+            Schema::Union(union_schema) => {
+                let variant_schema = union_schema
                     .schemas
                     .get(variant_index as usize)
-                    .ok_or_else(create_error)?;
+                    .ok_or_else(|| {
+                        create_error(format!(
+                            "No variant schema at position {variant_index} for {union_schema:?}"
+                        ))
+                    })?;
 
                 encode_int(variant_index as i32, &mut self.writer)?;
                 self.schema_stack.push(variant_schema);
                 self.serialize_newtype_struct(variant, value)
             }
-            _ => Err(create_error()),
+            _ => Err(create_error(format!(
+                "Expected Union schema. Got: {schema}"
+            ))),
         }
     }
 
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || {
+        let create_error = |cause: String| {
             let len_str = len
                 .map(|l| format!("{l}"))
                 .unwrap_or_else(|| String::from("?"));
 
             Error::SerializeValueWithSchema {
                 value_type: "sequence",
-                value: format!("sequence (len={len_str})"),
+                value: format!("sequence (len={len_str}). Cause: {cause}"),
                 schema: schema.clone(),
             }
         };
@@ -1322,18 +1341,20 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error())
+                Err(create_error(format!(
+                    "Expected Array schema in {union_schema:?}"
+                )))
             }
-            _ => Err(create_error()),
+            _ => Err(create_error(format!("Expected: {schema}. Got: Array"))),
         }
     }
 
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || Error::SerializeValueWithSchema {
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "tuple",
-            value: format!("tuple (len={len})"),
+            value: format!("tuple (len={len}). Cause: {cause}"),
             schema: schema.clone(),
         };
 
@@ -1354,9 +1375,11 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error())
+                Err(create_error(format!(
+                    "Expected Array schema in {union_schema:?}"
+                )))
             }
-            _ => Err(create_error()),
+            _ => Err(create_error(format!("Expected: {schema}. Got: Array"))),
         }
     }
 
@@ -1367,9 +1390,12 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     ) -> Result<Self::SerializeTupleStruct, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || Error::SerializeValueWithSchema {
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "tuple struct",
-            value: format!("{name}({})", vec!["?"; len].as_slice().join(",")),
+            value: format!(
+                "{name}({}). Cause: {cause}",
+                vec!["?"; len].as_slice().join(",")
+            ),
             schema: schema.clone(),
         };
 
@@ -1405,9 +1431,13 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error())
+                Err(create_error(format!(
+                    "Expected Record, Array or Ref schema in {union_schema:?}"
+                )))
             }
-            _ => Err(create_error()),
+            _ => Err(create_error(format!(
+                "Expected Record, Array, Ref or Union schema. Got: {schema}"
+            ))),
         }
     }
 
@@ -1420,10 +1450,10 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || Error::SerializeValueWithSchema {
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "tuple variant",
             value: format!(
-                "{name}::{variant}({}) (index={variant_index})",
+                "{name}::{variant}({}) (index={variant_index}). Cause: {cause}",
                 vec!["?"; len].as_slice().join(",")
             ),
             schema: schema.clone(),
@@ -1434,27 +1464,33 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                 let variant_schema = union_schema
                     .schemas
                     .get(variant_index as usize)
-                    .ok_or_else(create_error)?;
+                    .ok_or_else(|| {
+                        create_error(format!(
+                            "Cannot find a variant at position {variant_index} in {union_schema:?}"
+                        ))
+                    })?;
 
                 encode_int(variant_index as i32, &mut self.writer)?;
                 self.schema_stack.push(variant_schema);
                 self.serialize_tuple_struct(variant, len)
             }
-            _ => Err(create_error()),
+            _ => Err(create_error(format!(
+                "Expected Union schema. Got: {schema}"
+            ))),
         }
     }
 
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || {
+        let create_error = |cause: String| {
             let len_str = len
                 .map(|l| format!("{}", l))
                 .unwrap_or_else(|| String::from("?"));
 
             Error::SerializeValueWithSchema {
                 value_type: "map",
-                value: format!("map (size={len_str})"),
+                value: format!("map (size={len_str}). Cause: {cause}"),
                 schema: schema.clone(),
             }
         };
@@ -1466,19 +1502,23 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                 len,
             )),
             Schema::Union(union_schema) => {
-                for (i, variant_sch) in union_schema.schemas.iter().enumerate() {
-                    match variant_sch {
+                for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
+                    match variant_schema {
                         Schema::Map(_) => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_sch);
+                            self.schema_stack.push(variant_schema);
                             return self.serialize_map(len);
                         }
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error())
+                Err(create_error(format!(
+                    "Expected a Map schema in {union_schema:?}"
+                )))
             }
-            _ => Err(create_error()),
+            _ => Err(create_error(format!(
+                "Expected Map or Union schema. Got: {schema}"
+            ))),
         }
     }
 
@@ -1489,9 +1529,9 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     ) -> Result<Self::SerializeStruct, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || Error::SerializeValueWithSchema {
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "struct",
-            value: format!("{name}{{ ... }}"),
+            value: format!("{name}{{ ... }}. Cause: {cause}"),
             schema: schema.clone(),
         };
 
@@ -1522,9 +1562,13 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error())
+                Err(create_error(format!(
+                    "Expected Record or Ref schema in {union_schema:?}"
+                )))
             }
-            _ => Err(create_error()),
+            _ => Err(create_error(format!(
+                "Expected Record, Ref or Union schema. Got: {schema}"
+            ))),
         }
     }
 
@@ -1537,9 +1581,9 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
 
-        let create_error = || Error::SerializeValueWithSchema {
+        let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "struct variant",
-            value: format!("{name}::{variant}{{ ... }} (size={len}"),
+            value: format!("{name}::{variant}{{ ... }} (size={len}. Cause: {cause})"),
             schema: schema.clone(),
         };
 
@@ -1548,13 +1592,19 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                 let variant_schema = union_schema
                     .schemas
                     .get(variant_index as usize)
-                    .ok_or_else(create_error)?;
+                    .ok_or_else(|| {
+                        create_error(format!(
+                            "Cannot find variant at position {variant_index} in {union_schema:?}"
+                        ))
+                    })?;
 
                 encode_int(variant_index as i32, &mut self.writer)?;
                 self.schema_stack.push(variant_schema);
                 self.serialize_struct(variant, len)
             }
-            _ => Err(create_error()),
+            _ => Err(create_error(format!(
+                "Expected Union schema. Got: {schema}"
+            ))),
         }
     }
 
@@ -1827,7 +1877,7 @@ mod tests {
                 schema,
             }) => {
                 assert_eq!(value_type, "none"); // serialize_unit() delegates to serialize_none()
-                assert_eq!(value, "None");
+                assert_eq!(value, "None. Cause: Expected: Record. Got: Null");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -1871,7 +1921,7 @@ mod tests {
                 schema,
             }) => {
                 assert_eq!(value_type, "none");
-                assert_eq!(value, "None");
+                assert_eq!(value, "None. Cause: Expected: Enum. Got: Null");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -1905,7 +1955,7 @@ mod tests {
                 schema,
             }) => {
                 assert_eq!(value_type, "f32");
-                assert_eq!(value, "1");
+                assert_eq!(value, "1. Cause: Expected: Long. Got: Float");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -1944,7 +1994,7 @@ mod tests {
                 schema,
             }) => {
                 assert_eq!(value_type, "string");
-                assert_eq!(value, "value1");
+                assert_eq!(value, "value1. Cause: Expected: Long. Got: String");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -1991,7 +2041,10 @@ mod tests {
                 schema,
             }) => {
                 assert_eq!(value_type, "string");
-                assert_eq!(value, "invalid");
+                assert_eq!(
+                    value,
+                    "invalid. Cause: Expected one of the union variants [Null, Long]. Got: String"
+                );
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2032,7 +2085,10 @@ mod tests {
                 schema,
             }) => {
                 assert_eq!(value_type, "f64");
-                assert_eq!(value, "1");
+                assert_eq!(
+                    value,
+                    "1. Cause: Cannot find a Double schema in [Null, Long, String]"
+                );
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2070,7 +2126,10 @@ mod tests {
                 schema,
             }) => {
                 assert_eq!(value_type, "bytes");
-                assert_eq!(value, "7b"); // Bytes represents its values as hexadecimals: '7b' is 123
+                assert_eq!(
+                    value,
+                    "7b. Cause: Fixed schema size (8) does not match the value length (1)"
+                ); // Bytes represents its values as hexadecimals: '7b' is 123
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2084,7 +2143,7 @@ mod tests {
                 schema,
             }) => {
                 assert_eq!(value_type, "tuple"); // TODO: why is this 'tuple' ?!
-                assert_eq!(value, "tuple (len=8)");
+                assert_eq!(value, "tuple (len=8). Cause: Expected: Fixed. Got: Array");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2098,7 +2157,7 @@ mod tests {
                 schema,
             }) => {
                 assert_eq!(*value_type, "tuple"); // TODO: why is this 'tuple' ?!
-                assert_eq!(value, "tuple (len=8)");
+                assert_eq!(value, "tuple (len=8). Cause: Expected: Fixed. Got: Array");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2134,7 +2193,7 @@ mod tests {
                 schema,
             }) => {
                 assert_eq!(value_type, "none");
-                assert_eq!(value, "None");
+                assert_eq!(value, "None. Cause: Expected: Decimal. Got: Null");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2172,7 +2231,7 @@ mod tests {
                 schema,
             }) => {
                 assert_eq!(value_type, "none");
-                assert_eq!(value, "None");
+                assert_eq!(value, "None. Cause: Expected: Decimal. Got: Null");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2232,7 +2291,7 @@ mod tests {
                 schema,
             }) => {
                 assert_eq!(value_type, "u8");
-                assert_eq!(value, "1");
+                assert_eq!(value, "1. Cause: Expected: Uuid. Got: Int");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2276,7 +2335,7 @@ mod tests {
                 schema,
             }) => {
                 assert_eq!(value_type, "f32");
-                assert_eq!(value, "10000");
+                assert_eq!(value, "10000. Cause: Expected: Date. Got: Float");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2316,7 +2375,7 @@ mod tests {
                 schema,
             }) => {
                 assert_eq!(value_type, "f32");
-                assert_eq!(value, "10000");
+                assert_eq!(value, "10000. Cause: Expected: TimeMillis. Got: Float");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2357,7 +2416,7 @@ mod tests {
                 schema,
             }) => {
                 assert_eq!(value_type, "f32");
-                assert_eq!(value, "10000");
+                assert_eq!(value, "10000. Cause: Expected: TimeMicros. Got: Float");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2398,8 +2457,18 @@ mod tests {
                     value,
                     schema,
                 }) => {
+                    let mut capital_precision = precision.to_string();
+                    if let Some(c) = capital_precision.chars().next() {
+                        capital_precision.replace_range(..1, &c.to_uppercase().to_string());
+                    }
                     assert_eq!(value_type, "f64");
-                    assert_eq!(value, "10000");
+                    assert_eq!(
+                        value,
+                        format!(
+                            "10000. Cause: Expected: Timestamp{}. Got: Double",
+                            capital_precision
+                        )
+                    );
                     assert_eq!(schema, schema);
                 }
                 unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2440,7 +2509,10 @@ mod tests {
                 schema,
             }) => {
                 assert_eq!(value_type, "tuple"); // TODO: why is this 'tuple' ?!
-                assert_eq!(value, "tuple (len=12)");
+                assert_eq!(
+                    value,
+                    "tuple (len=12). Cause: Expected: Duration. Got: Array"
+                );
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
