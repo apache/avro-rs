@@ -18,10 +18,9 @@
 //! Logic for serde-compatible schema-aware serialization
 //! which writes directly to a `Write` stream
 
-use std::{borrow::Cow, io::Write, str::FromStr};
-
 use bigdecimal::BigDecimal;
 use serde::ser;
+use std::{borrow::Cow, collections::LinkedList, io::Write, str::FromStr};
 
 use crate::{
     bigdecimal::big_decimal_as_bytes,
@@ -475,7 +474,7 @@ pub struct DirectSerializer<'s, W: Write> {
     root_schema: &'s Schema,
     names: &'s NamesRef<'s>,
     enclosing_namespace: Namespace,
-    schema_stack: Vec<&'s Schema>,
+    schema_stack: LinkedList<&'s Schema>,
 }
 
 impl<'s, W: Write> DirectSerializer<'s, W> {
@@ -499,7 +498,7 @@ impl<'s, W: Write> DirectSerializer<'s, W> {
             root_schema: schema,
             names,
             enclosing_namespace,
-            schema_stack: Vec::new(),
+            schema_stack: Default::default(),
         }
     }
 
@@ -539,7 +538,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     type SerializeStructVariant = DirectSerializeStruct<'a, 's, W>;
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "bool",
@@ -554,7 +553,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                     match variant_schema {
                         Schema::Boolean => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_bool(v);
                         }
                         _ => { /* skip */ }
@@ -578,7 +577,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     }
 
     fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "int (i8 | i16 | i32)",
@@ -611,7 +610,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         | Schema::LocalTimestampMicros
                         | Schema::LocalTimestampNanos => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_i32(v);
                         }
                         _ => { /* skip */ }
@@ -626,7 +625,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     }
 
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "i64",
@@ -663,7 +662,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         | Schema::LocalTimestampMicros
                         | Schema::LocalTimestampNanos => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_i64(v);
                         }
                         _ => { /* skip */ }
@@ -679,7 +678,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     }
 
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "u8",
@@ -716,7 +715,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         | Schema::LocalTimestampNanos
                         | Schema::Bytes => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_u8(v);
                         }
                         _ => { /* skip */ }
@@ -733,7 +732,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     }
 
     fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "unsigned int (u16 | u32)",
@@ -770,7 +769,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         | Schema::LocalTimestampMicros
                         | Schema::LocalTimestampNanos => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_u32(v);
                         }
                         _ => { /* skip */ }
@@ -785,7 +784,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     }
 
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "u64",
@@ -826,7 +825,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         | Schema::LocalTimestampMicros
                         | Schema::LocalTimestampNanos => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_u64(v);
                         }
                         _ => { /* skip */ }
@@ -842,7 +841,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "f32",
@@ -864,7 +863,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                     match variant_schema {
                         Schema::Float | Schema::Double => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_f32(v);
                         }
                         _ => { /* skip */ }
@@ -880,7 +879,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     }
 
     fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "f64",
@@ -902,7 +901,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                     match variant_schema {
                         Schema::Float | Schema::Double => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_f64(v);
                         }
                         _ => { /* skip */ }
@@ -918,7 +917,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     }
 
     fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "char",
@@ -933,7 +932,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                     match variant_schema {
                         Schema::String | Schema::Bytes => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_char(v);
                         }
                         _ => { /* skip */ }
@@ -948,7 +947,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "string",
@@ -978,7 +977,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             }
             Schema::Ref { name } => {
                 let ref_schema = self.get_ref_schema(name)?;
-                self.schema_stack.push(ref_schema);
+                self.schema_stack.push_back(ref_schema);
                 self.serialize_str(v)
             }
             Schema::Union(union_schema) => {
@@ -990,7 +989,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         | Schema::Fixed(_)
                         | Schema::Ref { name: _ } => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_str(v);
                         }
                         _ => { /* skip */ }
@@ -1006,7 +1005,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     }
 
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| {
             use std::fmt::Write;
@@ -1064,7 +1063,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             },
             Schema::Ref { name } => {
                 let ref_schema = self.get_ref_schema(name)?;
-                self.schema_stack.push(ref_schema);
+                self.schema_stack.push_back(ref_schema);
                 self.serialize_bytes(v)
             }
             Schema::Union(union_schema) => {
@@ -1079,7 +1078,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         | Schema::Decimal(_)
                         | Schema::Ref { name: _ } => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_bytes(v);
                         }
                         _ => { /* skip */ }
@@ -1092,7 +1091,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "none",
@@ -1124,7 +1123,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     where
         T: ?Sized + ser::Serialize,
     {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "some",
@@ -1139,7 +1138,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         Schema::Null => { /* skip */ }
                         _ => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return value.serialize(self);
                         }
                     }
@@ -1158,7 +1157,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     }
 
     fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "unit struct",
@@ -1177,7 +1176,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             Schema::Null => Ok(0),
             Schema::Ref { name: ref_name } => {
                 let ref_schema = self.get_ref_schema(ref_name)?;
-                self.schema_stack.push(ref_schema);
+                self.schema_stack.push_back(ref_schema);
                 self.serialize_unit_struct(name)
             }
             Schema::Union(union_schema) => {
@@ -1185,12 +1184,12 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                     match variant_schema {
                         Schema::Record(record_schema) if record_schema.fields.is_empty() => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_unit_struct(name);
                         }
                         Schema::Null | Schema::Ref { name: _ } => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_unit_struct(name);
                         }
                         _ => { /* skip */ }
@@ -1212,7 +1211,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "unit variant",
@@ -1243,12 +1242,12 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
 
                 encode_int(variant_index as i32, &mut self.writer)?;
                 self.schema_stack
-                    .push(&union_schema.schemas[variant_index as usize]);
+                    .push_back(&union_schema.schemas[variant_index as usize]);
                 self.serialize_unit_struct(name)
             }
             Schema::Ref { name: ref_name } => {
                 let ref_schema = self.get_ref_schema(ref_name)?;
-                self.schema_stack.push(ref_schema);
+                self.schema_stack.push_back(ref_schema);
                 self.serialize_unit_variant(name, variant_index, variant)
             }
             unsupported => Err(create_error(format!(
@@ -1280,7 +1279,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     where
         T: ?Sized + ser::Serialize,
     {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "newtype variant",
@@ -1300,7 +1299,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                     })?;
 
                 encode_int(variant_index as i32, &mut self.writer)?;
-                self.schema_stack.push(variant_schema);
+                self.schema_stack.push_back(variant_schema);
                 self.serialize_newtype_struct(variant, value)
             }
             _ => Err(create_error(format!(
@@ -1310,7 +1309,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     }
 
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| {
             let len_str = len
@@ -1335,7 +1334,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                     match variant_schema {
                         Schema::Array(_) => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_seq(len);
                         }
                         _ => { /* skip */ }
@@ -1350,7 +1349,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     }
 
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "tuple",
@@ -1369,7 +1368,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                     match variant_schema {
                         Schema::Array(_) => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_tuple(len);
                         }
                         _ => { /* skip */ }
@@ -1388,7 +1387,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         name: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleStruct, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "tuple struct",
@@ -1410,7 +1409,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             )),
             Schema::Ref { name: ref_name } => {
                 let ref_schema = self.get_ref_schema(ref_name)?;
-                self.schema_stack.push(ref_schema);
+                self.schema_stack.push_back(ref_schema);
                 self.serialize_tuple_struct(name, len)
             }
             Schema::Union(union_schema) => {
@@ -1419,13 +1418,13 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                         Schema::Record(inner) => {
                             if inner.fields.len() == len {
                                 encode_int(i as i32, &mut *self.writer)?;
-                                self.schema_stack.push(variant_schema);
+                                self.schema_stack.push_back(variant_schema);
                                 return self.serialize_tuple_struct(name, len);
                             }
                         }
                         Schema::Array(_) | Schema::Ref { name: _ } => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_tuple_struct(name, len);
                         }
                         _ => { /* skip */ }
@@ -1448,7 +1447,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "tuple variant",
@@ -1471,7 +1470,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                     })?;
 
                 encode_int(variant_index as i32, &mut self.writer)?;
-                self.schema_stack.push(variant_schema);
+                self.schema_stack.push_back(variant_schema);
                 self.serialize_tuple_struct(variant, len)
             }
             _ => Err(create_error(format!(
@@ -1481,7 +1480,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
     }
 
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| {
             let len_str = len
@@ -1506,7 +1505,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                     match variant_schema {
                         Schema::Map(_) => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_map(len);
                         }
                         _ => { /* skip */ }
@@ -1527,7 +1526,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         name: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "struct",
@@ -1541,7 +1540,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
             }
             Schema::Ref { name: ref_name } => {
                 let ref_schema = self.get_ref_schema(ref_name)?;
-                self.schema_stack.push(ref_schema);
+                self.schema_stack.push_back(ref_schema);
                 self.serialize_struct(name, len)
             }
             Schema::Union(union_schema) => {
@@ -1551,12 +1550,12 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                             if inner.fields.len() == len && inner.name.name == name =>
                         {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_struct(name, len);
                         }
                         Schema::Ref { name: _ } => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            self.schema_stack.push(variant_schema);
+                            self.schema_stack.push_back(variant_schema);
                             return self.serialize_struct(name, len);
                         }
                         _ => { /* skip */ }
@@ -1579,7 +1578,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        let schema = self.schema_stack.pop().unwrap_or(self.root_schema);
+        let schema = self.schema_stack.pop_back().unwrap_or(self.root_schema);
 
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "struct variant",
@@ -1599,7 +1598,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
                     })?;
 
                 encode_int(variant_index as i32, &mut self.writer)?;
-                self.schema_stack.push(variant_schema);
+                self.schema_stack.push_back(variant_schema);
                 self.serialize_struct(variant, len)
             }
             _ => Err(create_error(format!(
