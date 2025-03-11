@@ -6728,11 +6728,17 @@ mod tests {
         };
         let mut buffer = Vec::new();
 
-        let is_human_readable = true;
-        crate::util::SERDE_HUMAN_READABLE.store(is_human_readable, Ordering::Release);
-
-        SpecificSingleObjectWriter::<Comment>::with_capacity(10)?
+        // serialize the Uuid as String
+        crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
+        let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)?
             .write_ref(&payload, &mut buffer)?;
+        assert_eq!(bytes, 47);
+
+        // serialize the Uuid as Bytes
+        crate::util::SERDE_HUMAN_READABLE.store(false, Ordering::Release);
+        let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)?
+            .write_ref(&payload, &mut buffer)?;
+        assert_eq!(bytes, 27);
 
         Ok(())
     }

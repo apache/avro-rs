@@ -19,8 +19,8 @@
 use crate::{
     encode::{encode, encode_internal, encode_to_vec},
     rabin::Rabin,
-    schema::{AvroSchema, ResolvedOwnedSchema, ResolvedSchema, Schema},
-    ser::Serializer,
+    schema::{AvroSchema, Name, ResolvedOwnedSchema, ResolvedSchema, Schema},
+    ser_direct::DirectSerializer,
     types::Value,
     AvroResult, Codec, Error,
 };
@@ -32,7 +32,7 @@ const AVRO_OBJECT_HEADER: &[u8] = b"Obj\x01";
 
 /// Main interface for writing Avro formatted values.
 #[derive(bon::Builder)]
-pub struct Writer<'a, W> {
+pub struct Writer<'a, W: Write> {
     schema: &'a Schema,
     writer: W,
     #[builder(skip)]
@@ -43,8 +43,6 @@ pub struct Writer<'a, W> {
     block_size: usize,
     #[builder(skip = Vec::with_capacity(block_size))]
     buffer: Vec<u8>,
-    #[builder(skip)]
-    serializer: Serializer,
     #[builder(skip)]
     num_values: usize,
     #[builder(default = generate_sync_marker())]
@@ -200,8 +198,27 @@ impl<'a, W: Write> Writer<'a, W> {
     /// internal buffering for performance reasons. If you want to be sure the value has been
     /// written, then call [`flush`](struct.Writer.html#method.flush).
     pub fn append_ser<S: Serialize>(&mut self, value: S) -> AvroResult<usize> {
-        let avro_value = value.serialize(&mut self.serializer)?;
-        self.append(avro_value)
+        let n = self.maybe_write_header()?;
+
+        match self.resolved_schema {
+            Some(ref rs) => {
+                let mut serializer =
+                    DirectSerializer::new(&mut self.buffer, self.schema, rs.get_names(), None);
+                value.serialize(&mut serializer)?;
+                self.num_values += 1;
+
+                if self.buffer.len() >= self.block_size {
+                    return self.flush().map(|b| b + n);
+                }
+
+                Ok(n)
+            }
+            None => {
+                let rs = ResolvedSchema::try_from(self.schema)?;
+                self.resolved_schema = Some(rs);
+                self.append_ser(value)
+            }
+        }
     }
 
     /// Extend a `Writer` with an `Iterator` of compatible values (implementing the `ToAvro`
@@ -443,7 +460,7 @@ fn write_avro_datum_schemata<T: Into<Value>>(
     schemata: Vec<&Schema>,
     value: T,
     buffer: &mut Vec<u8>,
-) -> AvroResult<()> {
+) -> AvroResult<usize> {
     let avro = value.into();
     let rs = ResolvedSchema::try_from(schemata)?;
     let names = rs.get_names();
@@ -514,6 +531,8 @@ where
     T: AvroSchema,
 {
     inner: GenericSingleObjectWriter,
+    schema: Schema,
+    header_written: bool,
     _model: PhantomData<T>,
 }
 
@@ -525,6 +544,8 @@ where
         let schema = T::get_schema();
         Ok(SpecificSingleObjectWriter {
             inner: GenericSingleObjectWriter::new_with_capacity(&schema, buffer_cap)?,
+            schema,
+            header_written: false,
             _model: PhantomData,
         })
     }
@@ -546,12 +567,23 @@ impl<T> SpecificSingleObjectWriter<T>
 where
     T: AvroSchema + Serialize,
 {
-    /// Write the referenced Serialize object to the provided Write object. Returns a result with
+    /// Write the referenced `Serialize` object to the provided Write object. Returns a result with
     /// the number of bytes written including the header
     pub fn write_ref<W: Write>(&mut self, data: &T, writer: &mut W) -> AvroResult<usize> {
-        let mut serializer = Serializer::default();
-        let v = data.serialize(&mut serializer)?;
-        self.inner.write_value_ref(&v, writer)
+        let mut bytes_written: usize = 0;
+
+        if !self.header_written {
+            bytes_written += writer
+                .write(self.inner.buffer.as_slice())
+                .map_err(Error::WriteBytes)?;
+            self.header_written = true;
+        }
+
+        let names: HashMap<Name, &Schema> = HashMap::new();
+        let mut serializer = DirectSerializer::new(writer, &self.schema, &names, None);
+        bytes_written += data.serialize(&mut serializer)?;
+
+        Ok(bytes_written)
     }
 
     /// Write the Serialize object to the provided Write object. Returns a result with the number
@@ -566,7 +598,7 @@ fn write_value_ref_resolved(
     resolved_schema: &ResolvedSchema,
     value: &Value,
     buffer: &mut Vec<u8>,
-) -> AvroResult<()> {
+) -> AvroResult<usize> {
     match value.validate_internal(schema, resolved_schema.get_names(), &schema.namespace()) {
         Some(reason) => Err(Error::ValidationWithReason {
             value: value.clone(),
@@ -704,8 +736,8 @@ mod tests {
         record.put("b", "foo");
 
         let mut expected = Vec::new();
-        zig_i64(27, &mut expected);
-        zig_i64(3, &mut expected);
+        zig_i64(27, &mut expected)?;
+        zig_i64(3, &mut expected)?;
         expected.extend([b'f', b'o', b'o']);
 
         assert_eq!(to_avro_datum(&schema, record)?, expected);
@@ -719,8 +751,8 @@ mod tests {
         let union = Value::Union(1, Box::new(Value::Long(3)));
 
         let mut expected = Vec::new();
-        zig_i64(1, &mut expected);
-        zig_i64(3, &mut expected);
+        zig_i64(1, &mut expected)?;
+        zig_i64(3, &mut expected)?;
 
         assert_eq!(to_avro_datum(&schema, union)?, expected);
 
@@ -733,7 +765,7 @@ mod tests {
         let union = Value::Union(0, Box::new(Value::Null));
 
         let mut expected = Vec::new();
-        zig_i64(0, &mut expected);
+        zig_i64(0, &mut expected)?;
 
         assert_eq!(to_avro_datum(&schema, union)?, expected);
 
@@ -901,8 +933,8 @@ mod tests {
         assert_eq!(n1 + n2 + n3, result.len());
 
         let mut data = Vec::new();
-        zig_i64(27, &mut data);
-        zig_i64(3, &mut data);
+        zig_i64(27, &mut data)?;
+        zig_i64(3, &mut data)?;
         data.extend(b"foo");
         data.extend(data.clone());
 
@@ -936,8 +968,8 @@ mod tests {
         assert_eq!(n1 + n2, result.len());
 
         let mut data = Vec::new();
-        zig_i64(27, &mut data);
-        zig_i64(3, &mut data);
+        zig_i64(27, &mut data)?;
+        zig_i64(3, &mut data)?;
         data.extend(b"foo");
         data.extend(data.clone());
 
@@ -976,8 +1008,8 @@ mod tests {
         assert_eq!(n1 + n2, result.len());
 
         let mut data = Vec::new();
-        zig_i64(27, &mut data);
-        zig_i64(3, &mut data);
+        zig_i64(27, &mut data)?;
+        zig_i64(3, &mut data)?;
         data.extend(b"foo");
 
         // starts with magic
@@ -1011,8 +1043,8 @@ mod tests {
         assert_eq!(n1 + n2, result.len());
 
         let mut data = Vec::new();
-        zig_i64(27, &mut data);
-        zig_i64(3, &mut data);
+        zig_i64(27, &mut data)?;
+        zig_i64(3, &mut data)?;
         data.extend(b"foo");
         data.extend(data.clone());
 
@@ -1054,8 +1086,8 @@ mod tests {
         assert_eq!(n1 + n2 + n3, result.len());
 
         let mut data = Vec::new();
-        zig_i64(27, &mut data);
-        zig_i64(3, &mut data);
+        zig_i64(27, &mut data)?;
+        zig_i64(3, &mut data)?;
         data.extend(b"foo");
         data.extend(data.clone());
         Codec::Deflate.compress(&mut data)?;
@@ -1132,11 +1164,11 @@ mod tests {
 
         let mut data = Vec::new();
         // byte indicating not null
-        zig_i64(1, &mut data);
-        zig_i64(1234, &mut data);
+        zig_i64(1, &mut data)?;
+        zig_i64(1234, &mut data)?;
 
         // byte indicating null
-        zig_i64(0, &mut data);
+        zig_i64(0, &mut data)?;
         codec.compress(&mut data)?;
 
         // starts with magic
@@ -1442,7 +1474,7 @@ mod tests {
             Err(e) => {
                 assert_eq!(
                     e.to_string(),
-                    r#"Value Record([("name", String("RustConf")), ("time", Union(1, Double(12345678.9)))]) does not match schema Record(RecordSchema { name: Name { name: "Conference", namespace: None }, aliases: None, doc: None, fields: [RecordField { name: "name", doc: None, aliases: None, default: None, schema: String, order: Ascending, position: 0, custom_attributes: {} }, RecordField { name: "date", doc: None, aliases: Some(["time2", "time"]), default: None, schema: Union(UnionSchema { schemas: [Null, Long], variant_index: {Null: 0, Long: 1} }), order: Ascending, position: 1, custom_attributes: {} }], lookup: {"date": 1, "name": 0, "time": 1, "time2": 1}, attributes: {} }): Reason: Unsupported value-schema combination! Value: Double(12345678.9), schema: Long"#
+                    r#"Failed to serialize field 'time' for record Record(RecordSchema { name: Name { name: "Conference", namespace: None }, aliases: None, doc: None, fields: [RecordField { name: "name", doc: None, aliases: None, default: None, schema: String, order: Ascending, position: 0, custom_attributes: {} }, RecordField { name: "date", doc: None, aliases: Some(["time2", "time"]), default: None, schema: Union(UnionSchema { schemas: [Null, Long], variant_index: {Null: 0, Long: 1} }), order: Ascending, position: 1, custom_attributes: {} }], lookup: {"date": 1, "name": 0, "time": 1, "time2": 1}, attributes: {} }): Failed to serialize value of type f64 using schema Long: 12345678.9. Cause: Expected: Long. Got: Double"#
                 );
             }
         }

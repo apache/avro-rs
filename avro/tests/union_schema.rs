@@ -54,7 +54,6 @@ struct B {
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-#[serde(untagged)]
 enum UnionAB {
     A(A),
     B(B),
@@ -112,7 +111,6 @@ static SCHEMA_D_STR: &str = r#"{
     }"#;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-#[serde(untagged)]
 enum UnionNoneAB {
     None,
     A(A),
@@ -164,7 +162,6 @@ static SCHEMA_E_STR: &str = r#"{
     }"#;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-#[serde(untagged)]
 enum UnionANoneB {
     A(A),
     None,
@@ -216,7 +213,6 @@ static SCHEMA_F_STR: &str = r#"{
     }"#;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-#[serde(untagged)]
 enum UnionABNone {
     A(A),
     B(B),
