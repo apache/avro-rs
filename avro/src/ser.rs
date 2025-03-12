@@ -15,6 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#![allow(deprecated)]
+
 //! Logic for serde-compatible serialization.
 use crate::{
     bytes::{BytesType, SER_BYTES_TYPE},
@@ -24,6 +26,10 @@ use crate::{
 use serde::{ser, Serialize};
 use std::{collections::HashMap, iter::once};
 
+#[deprecated(
+    since = "0.18.0",
+    note = "Use `crate::ser_schema::SchemaAwareWriteSerializer` instead"
+)]
 #[derive(Clone, Default)]
 pub struct Serializer {}
 

@@ -2687,6 +2687,7 @@ Field with name '"b"' is not a member of the map items"#,
         Ok(())
     }
 
+    #[allow(deprecated)]
     #[test]
     fn test_avro_3460_validation_with_refs_real_struct() -> TestResult {
         use crate::ser::Serializer;
@@ -2777,6 +2778,7 @@ Field with name '"b"' is not a member of the map items"#,
         Ok(())
     }
 
+    #[allow(deprecated)]
     fn avro_3674_with_or_without_namespace(with_namespace: bool) -> TestResult {
         use crate::ser::Serializer;
         use serde::Serialize;
@@ -2870,6 +2872,7 @@ Field with name '"b"' is not a member of the map items"#,
         avro_3674_with_or_without_namespace(true)
     }
 
+    #[allow(deprecated)]
     fn avro_3688_schema_resolution_panic(set_field_b: bool) -> TestResult {
         use crate::ser::Serializer;
         use serde::{Deserialize, Serialize};
