@@ -31,7 +31,7 @@ github:
     squash: true
   features:
     issues: true
-    pull_requests: true
+#    pull_requests: true
     wiki: false
   protected_tags:
     - "rel/*"
