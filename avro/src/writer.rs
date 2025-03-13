@@ -20,7 +20,7 @@ use crate::{
     encode::{encode, encode_internal, encode_to_vec},
     rabin::Rabin,
     schema::{AvroSchema, Name, ResolvedOwnedSchema, ResolvedSchema, Schema},
-    ser_direct::DirectSerializer,
+    ser_schema::SchemaAwareWriteSerializer,
     types::Value,
     AvroResult, Codec, Error,
 };
@@ -202,8 +202,12 @@ impl<'a, W: Write> Writer<'a, W> {
 
         match self.resolved_schema {
             Some(ref rs) => {
-                let mut serializer =
-                    DirectSerializer::new(&mut self.buffer, self.schema, rs.get_names(), None);
+                let mut serializer = SchemaAwareWriteSerializer::new(
+                    &mut self.buffer,
+                    self.schema,
+                    rs.get_names(),
+                    None,
+                );
                 value.serialize(&mut serializer)?;
                 self.num_values += 1;
 
@@ -442,16 +446,16 @@ impl<'a, W: Write> Writer<'a, W> {
 ///
 /// This is an internal function which gets the bytes buffer where to write as parameter instead of
 /// creating a new one like `to_avro_datum`.
-fn write_avro_datum<T: Into<Value>>(
+fn write_avro_datum<T: Into<Value>, W: Write>(
     schema: &Schema,
     value: T,
-    buffer: &mut Vec<u8>,
+    writer: &mut W,
 ) -> Result<(), Error> {
     let avro = value.into();
     if !avro.validate(schema) {
         return Err(Error::Validation);
     }
-    encode(&avro, schema, buffer)?;
+    encode(&avro, schema, writer)?;
     Ok(())
 }
 
@@ -580,7 +584,7 @@ where
         }
 
         let names: HashMap<Name, &Schema> = HashMap::new();
-        let mut serializer = DirectSerializer::new(writer, &self.schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(writer, &self.schema, &names, None);
         bytes_written += data.serialize(&mut serializer)?;
 
         Ok(bytes_written)

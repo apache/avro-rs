@@ -869,7 +869,7 @@ mod encode;
 mod error;
 mod reader;
 mod ser;
-mod ser_direct;
+mod ser_schema;
 mod util;
 mod writer;
 

@@ -18,29 +18,28 @@
 //! Logic for serde-compatible schema-aware serialization
 //! which writes directly to a `Write` stream
 
-use bigdecimal::BigDecimal;
-use serde::ser;
-use std::{borrow::Cow, collections::LinkedList, io::Write, str::FromStr};
-
 use crate::{
     bigdecimal::big_decimal_as_bytes,
     encode::{encode_int, encode_long},
     error::Error,
     schema::{Name, NamesRef, Namespace, RecordSchema, Schema},
 };
+use bigdecimal::BigDecimal;
+use serde::ser;
+use std::{borrow::Cow, collections::LinkedList, io::Write, str::FromStr};
 
 const RECORD_FIELD_INIT_BUFFER_SIZE: usize = 64;
 const COLLECTION_SERIALIZER_ITEM_LIMIT: usize = 1024;
 const COLLECTION_SERIALIZER_DEFAULT_INIT_ITEM_CAPACITY: usize = 32;
 const SINGLE_VALUE_INIT_BUFFER_SIZE: usize = 128;
 
-/// The sequence serializer for `DirectSerializer`.  `DirectSerializeSeq` may break large arrays up
+/// The sequence serializer for `SchemaAwareWriteSerializer`.  `DirectSerializeSeq` may break large arrays up
 /// into multiple blocks to avoid having to obtain the length of the entire array before being able
 /// to write any data to the underlying [`std::fmt::Write`] stream.  (See the [Data Seralization and
 /// Deserialization](https://avro.apache.org/docs/1.12.0/specification/#data-serialization-and-deserialization)
 /// section of the Avro spec for more info.)
 pub struct DirectSerializeSeq<'a, 's, W: Write> {
-    ser: &'a mut DirectSerializer<'s, W>,
+    ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
     item_schema: &'s Schema,
     item_buffer_size: usize,
     item_buffers: Vec<Vec<u8>>,
@@ -49,7 +48,7 @@ pub struct DirectSerializeSeq<'a, 's, W: Write> {
 
 impl<'a, 's, W: Write> DirectSerializeSeq<'a, 's, W> {
     fn new(
-        ser: &'a mut DirectSerializer<'s, W>,
+        ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
         item_schema: &'s Schema,
         len: Option<usize>,
     ) -> DirectSerializeSeq<'a, 's, W> {
@@ -82,7 +81,7 @@ impl<'a, 's, W: Write> DirectSerializeSeq<'a, 's, W> {
 
     fn serialize_element<T: ser::Serialize>(&mut self, value: &T) -> Result<(), Error> {
         let mut item_buffer: Vec<u8> = Vec::with_capacity(self.item_buffer_size);
-        let mut item_ser = DirectSerializer::new(
+        let mut item_ser = SchemaAwareWriteSerializer::new(
             &mut item_buffer,
             self.item_schema,
             self.ser.names,
@@ -141,13 +140,13 @@ impl<W: Write> ser::SerializeTuple for DirectSerializeSeq<'_, '_, W> {
     }
 }
 
-/// The map serializer for `DirectSerializer`.  `DirectSerializeMap` may break large maps up
+/// The map serializer for `SchemaAwareWriteSerializer`.  `DirectSerializeMap` may break large maps up
 /// into multiple blocks to avoid having to obtain the size of the entire map before being able
 /// to write any data to the underlying [`std::fmt::Write`] stream.  (See the [Data Seralization and
 /// Deserialization](https://avro.apache.org/docs/1.12.0/specification/#data-serialization-and-deserialization)
 /// section of the Avro spec for more info.)
 pub struct DirectSerializeMap<'a, 's, W: Write> {
-    ser: &'a mut DirectSerializer<'s, W>,
+    ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
     item_schema: &'s Schema,
     item_buffer_size: usize,
     item_buffers: Vec<Vec<u8>>,
@@ -156,7 +155,7 @@ pub struct DirectSerializeMap<'a, 's, W: Write> {
 
 impl<'a, 's, W: Write> DirectSerializeMap<'a, 's, W> {
     fn new(
-        ser: &'a mut DirectSerializer<'s, W>,
+        ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
         item_schema: &'s Schema,
         len: Option<usize>,
     ) -> DirectSerializeMap<'a, 's, W> {
@@ -198,7 +197,7 @@ impl<W: Write> ser::SerializeMap for DirectSerializeMap<'_, '_, W> {
     {
         let mut element_buffer: Vec<u8> = Vec::with_capacity(self.item_buffer_size);
         let string_schema = Schema::String;
-        let mut key_ser = DirectSerializer::new(
+        let mut key_ser = SchemaAwareWriteSerializer::new(
             &mut element_buffer,
             &string_schema,
             self.ser.names,
@@ -217,7 +216,7 @@ impl<W: Write> ser::SerializeMap for DirectSerializeMap<'_, '_, W> {
     {
         let last_index = self.item_buffers.len() - 1;
         let element_buffer = &mut self.item_buffers[last_index];
-        let mut val_ser = DirectSerializer::new(
+        let mut val_ser = SchemaAwareWriteSerializer::new(
             element_buffer,
             self.item_schema,
             self.ser.names,
@@ -242,11 +241,11 @@ impl<W: Write> ser::SerializeMap for DirectSerializeMap<'_, '_, W> {
     }
 }
 
-/// The struct serializer for `DirectSerializer`, which can serialize Avro records.  `DirectSerializeStruct`
+/// The struct serializer for `SchemaAwareWriteSerializer`, which can serialize Avro records.  `DirectSerializeStruct`
 /// can accept fields out of order, but doing so incurs a performance penalty, since it requires
 /// `DirectSerializeStruct` to buffer serialized values in order to write them to the stream in order.
 pub struct DirectSerializeStruct<'a, 's, W: Write> {
-    ser: &'a mut DirectSerializer<'s, W>,
+    ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
     record_schema: &'s RecordSchema,
     item_count: usize,
     buffered_fields: Vec<Option<Vec<u8>>>,
@@ -255,7 +254,7 @@ pub struct DirectSerializeStruct<'a, 's, W: Write> {
 
 impl<'a, 's, W: Write> DirectSerializeStruct<'a, 's, W> {
     fn new(
-        ser: &'a mut DirectSerializer<'s, W>,
+        ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
         record_schema: &'s RecordSchema,
         len: usize,
     ) -> DirectSerializeStruct<'a, 's, W> {
@@ -277,7 +276,7 @@ impl<'a, 's, W: Write> DirectSerializeStruct<'a, 's, W> {
         );
 
         // If we receive fields in order, write them directly to the main writer
-        let mut value_ser = DirectSerializer::new(
+        let mut value_ser = SchemaAwareWriteSerializer::new(
             &mut *self.ser.writer,
             &next_field.schema,
             self.ser.names,
@@ -357,7 +356,7 @@ impl<W: Write> ser::SerializeStruct for DirectSerializeStruct<'_, '_, W> {
 
                     if field_matches {
                         let mut buffer: Vec<u8> = Vec::with_capacity(RECORD_FIELD_INIT_BUFFER_SIZE);
-                        let mut value_ser = DirectSerializer::new(
+                        let mut value_ser = SchemaAwareWriteSerializer::new(
                             &mut buffer,
                             &field.schema,
                             self.ser.names,
@@ -403,7 +402,7 @@ impl<W: Write> ser::SerializeStructVariant for DirectSerializeStruct<'_, '_, W> 
     }
 }
 
-/// The tuple struct serializer for `DirectSerializer`.  `DirectSerializeTupleStruct` can serialize to an Avro
+/// The tuple struct serializer for `SchemaAwareWriteSerializer`.  `DirectSerializeTupleStruct` can serialize to an Avro
 /// array, record, or big-decimal.  When serializing to a record, fields must be provided in the correct order,
 /// since no names are provided.
 pub enum DirectSerializeTupleStruct<'a, 's, W: Write> {
@@ -465,11 +464,11 @@ impl<W: Write> ser::SerializeTupleVariant for DirectSerializeTupleStruct<'_, '_,
 }
 
 /// A `serde::se::Serializer` implementation that serializes directly to a [`std::fmt::Write`] using the provided
-/// schema.  If `DirectSerializer` isn't able to match the incoming data with its schema, it will return an error.
+/// schema.  If `SchemaAwareWriteSerializer` isn't able to match the incoming data with its schema, it will return an error.
 ///
-/// A `DirectSerializer` instance can be re-used to serialize multiple values matching the schema to its
+/// A `SchemaAwareWriteSerializer` instance can be re-used to serialize multiple values matching the schema to its
 /// [`std::fmt::Write`] stream.
-pub struct DirectSerializer<'s, W: Write> {
+pub struct SchemaAwareWriteSerializer<'s, W: Write> {
     writer: &'s mut W,
     root_schema: &'s Schema,
     names: &'s NamesRef<'s>,
@@ -477,8 +476,8 @@ pub struct DirectSerializer<'s, W: Write> {
     schema_stack: LinkedList<&'s Schema>,
 }
 
-impl<'s, W: Write> DirectSerializer<'s, W> {
-    /// Create a new `DirectSerializer`.
+impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
+    /// Create a new `SchemaAwareWriteSerializer`.
     ///
     /// `writer` is the [`std::fmt::Write`] stream to be written to.
     ///
@@ -492,8 +491,8 @@ impl<'s, W: Write> DirectSerializer<'s, W> {
         schema: &'s Schema,
         names: &'s NamesRef<'s>,
         enclosing_namespace: Namespace,
-    ) -> DirectSerializer<'s, W> {
-        DirectSerializer {
+    ) -> SchemaAwareWriteSerializer<'s, W> {
+        SchemaAwareWriteSerializer {
             writer,
             root_schema: schema,
             names,
@@ -526,7 +525,7 @@ impl<'s, W: Write> DirectSerializer<'s, W> {
     }
 }
 
-impl<'a, 's, W: Write> ser::Serializer for &'a mut DirectSerializer<'s, W> {
+impl<'a, 's, W: Write> ser::Serializer for &'a mut SchemaAwareWriteSerializer<'s, W> {
     type Ok = usize;
     type Error = Error;
     type SerializeSeq = DirectSerializeSeq<'a, 's, W>;
@@ -1634,7 +1633,7 @@ mod tests {
         let schema = Schema::Null;
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         ().serialize(&mut serializer)?;
         None::<()>.serialize(&mut serializer)?;
@@ -1653,7 +1652,7 @@ mod tests {
         let schema = Schema::Boolean;
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         true.serialize(&mut serializer)?;
         false.serialize(&mut serializer)?;
@@ -1670,7 +1669,7 @@ mod tests {
         let schema = Schema::Int;
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         4u8.serialize(&mut serializer)?;
         31u16.serialize(&mut serializer)?;
@@ -1691,7 +1690,7 @@ mod tests {
         let schema = Schema::Long;
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         4u8.serialize(&mut serializer)?;
         31u16.serialize(&mut serializer)?;
@@ -1717,7 +1716,7 @@ mod tests {
         let schema = Schema::Float;
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         4.7f32.serialize(&mut serializer)?;
         (-14.1f64).serialize(&mut serializer)?;
@@ -1734,7 +1733,7 @@ mod tests {
         let schema = Schema::Float;
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         4.7f32.serialize(&mut serializer)?;
         (-14.1f64).serialize(&mut serializer)?;
@@ -1751,7 +1750,7 @@ mod tests {
         let schema = Schema::Bytes;
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         'a'.serialize(&mut serializer)?;
         "test".serialize(&mut serializer)?;
@@ -1772,7 +1771,7 @@ mod tests {
         let schema = Schema::String;
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         'a'.serialize(&mut serializer)?;
         "test".serialize(&mut serializer)?;
@@ -1817,7 +1816,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         let good_record = GoodTestRecord {
             string_field: String::from("test"),
@@ -1851,7 +1850,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         #[derive(Serialize)]
         struct EmptyRecord;
@@ -1907,7 +1906,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         Suit::Spades.serialize(&mut serializer)?;
         Suit::Hearts.serialize(&mut serializer)?;
@@ -1942,7 +1941,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         let arr: Vec<i64> = vec![10, 5, 400];
         arr.serialize(&mut serializer)?;
@@ -1976,7 +1975,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         let mut map: BTreeMap<String, i64> = BTreeMap::new();
         map.insert(String::from("item1"), 10);
@@ -2026,7 +2025,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         Some(10i64).serialize(&mut serializer)?;
         None::<i64>.serialize(&mut serializer)?;
@@ -2071,7 +2070,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         LongOrString::Null.serialize(&mut serializer)?;
         LongOrString::Long(400).serialize(&mut serializer)?;
@@ -2113,7 +2112,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         Bytes::new(&[10, 124, 31, 97, 14, 201, 3, 88]).serialize(&mut serializer)?;
 
@@ -2180,7 +2179,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         let val = Decimal::from(&[251, 155]);
         val.serialize(&mut serializer)?;
@@ -2218,7 +2217,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         let val = Decimal::from(&[0, 0, 0, 0, 0, 0, 251, 155]);
         val.serialize(&mut serializer)?;
@@ -2254,7 +2253,7 @@ mod tests {
         crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         let val = BigDecimal::new(BigInt::new(Sign::Plus, vec![50024]), 2);
         val.serialize(&mut serializer)?;
@@ -2277,7 +2276,7 @@ mod tests {
         crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         "8c28da81-238c-4326-bddd-4e3d00cc5099"
             .parse::<Uuid>()?
@@ -2319,7 +2318,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         100_u8.serialize(&mut serializer)?;
         1000_u16.serialize(&mut serializer)?;
@@ -2359,7 +2358,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         100_u8.serialize(&mut serializer)?;
         1000_u16.serialize(&mut serializer)?;
@@ -2399,7 +2398,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         100_u8.serialize(&mut serializer)?;
         1000_u16.serialize(&mut serializer)?;
@@ -2441,7 +2440,8 @@ mod tests {
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
-            let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+            let mut serializer =
+                SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
             100_u8.serialize(&mut serializer)?;
             1000_u16.serialize(&mut serializer)?;
@@ -2495,7 +2495,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         let duration_bytes =
             ByteArray::new(Duration::new(Months::new(3), Days::new(2), Millis::new(1200)).into());
@@ -2553,7 +2553,8 @@ mod tests {
         crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
         let mut buffer: Vec<u8> = Vec::new();
         let rs = ResolvedSchema::try_from(&schema)?;
-        let mut serializer = DirectSerializer::new(&mut buffer, &schema, rs.get_names(), None);
+        let mut serializer =
+            SchemaAwareWriteSerializer::new(&mut buffer, &schema, rs.get_names(), None);
 
         let good_record = TestRecord {
             string_field: String::from("test"),
