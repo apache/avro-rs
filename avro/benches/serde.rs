@@ -52,8 +52,8 @@ const RAW_BIG_SCHEMA: &str = r#"
   "name": "userInfo",
   "fields": [
     {
-      "default": "NONE",
-      "type": "string",
+      "default": null,
+      "type": ["null", "string"],
       "name": "username"
     },
     {
@@ -62,13 +62,13 @@ const RAW_BIG_SCHEMA: &str = r#"
       "name": "age"
     },
     {
-      "default": "NONE",
-      "type": "string",
+      "default": null,
+      "type": ["null", "string"],
       "name": "phone"
     },
     {
-      "default": "NONE",
-      "type": "string",
+      "default": null,
+      "type": ["null", "string"],
       "name": "housenum"
     },
     {
@@ -121,10 +121,10 @@ struct MailingAddress {
 
 #[derive(Serialize, Clone)]
 struct BigRecord {
-    username: String,
+    username: Option<String>,
     age: i32,
-    phone: String,
-    housenum: String,
+    phone: Option<String>,
+    housenum: Option<String>,
     address: MailingAddress,
 }
 
@@ -192,10 +192,19 @@ fn make_big_record() -> anyhow::Result<(Schema, Value)> {
 
     let big_record = {
         let mut big_record = Record::new(&big_schema).unwrap();
-        big_record.put("username", "username");
+        big_record.put(
+            "username",
+            Value::Union(1, Box::new(Value::String("username".to_owned()))),
+        );
         big_record.put("age", 10i32);
-        big_record.put("phone", "000000000");
-        big_record.put("housenum", "0000");
+        big_record.put(
+            "phone",
+            Value::Union(1, Box::new(Value::String("000000000".to_owned()))),
+        );
+        big_record.put(
+            "housenum",
+            Value::Union(1, Box::new(Value::String("0000".to_owned()))),
+        );
         big_record.put("address", address);
         big_record.into()
     };
@@ -206,10 +215,10 @@ fn make_big_record() -> anyhow::Result<(Schema, Value)> {
 fn make_big_record_ser() -> anyhow::Result<(Schema, BigRecord)> {
     let big_schema = Schema::parse_str(RAW_BIG_SCHEMA)?;
     let big_record = BigRecord {
-        username: String::from("username"),
+        username: Some(String::from("username")),
         age: 10,
-        phone: String::from("000000000"),
-        housenum: String::from("0000"),
+        phone: Some(String::from("000000000")),
+        housenum: Some(String::from("0000")),
         address: MailingAddress {
             street: String::from("street"),
             city: String::from("city"),
