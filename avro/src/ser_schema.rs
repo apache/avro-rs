@@ -38,7 +38,7 @@ const SINGLE_VALUE_INIT_BUFFER_SIZE: usize = 128;
 /// to write any data to the underlying [`std::fmt::Write`] stream.  (See the [Data Seralization and
 /// Deserialization](https://avro.apache.org/docs/1.12.0/specification/#data-serialization-and-deserialization)
 /// section of the Avro spec for more info.)
-pub struct DirectSerializeSeq<'a, 's, W: Write> {
+pub struct SchemaAwareWriteSerializeSeq<'a, 's, W: Write> {
     ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
     item_schema: &'s Schema,
     item_buffer_size: usize,
@@ -46,13 +46,13 @@ pub struct DirectSerializeSeq<'a, 's, W: Write> {
     bytes_written: usize,
 }
 
-impl<'a, 's, W: Write> DirectSerializeSeq<'a, 's, W> {
+impl<'a, 's, W: Write> SchemaAwareWriteSerializeSeq<'a, 's, W> {
     fn new(
         ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
         item_schema: &'s Schema,
         len: Option<usize>,
-    ) -> DirectSerializeSeq<'a, 's, W> {
-        DirectSerializeSeq {
+    ) -> SchemaAwareWriteSerializeSeq<'a, 's, W> {
+        SchemaAwareWriteSerializeSeq {
             ser,
             item_schema,
             item_buffer_size: SINGLE_VALUE_INIT_BUFFER_SIZE,
@@ -108,7 +108,7 @@ impl<'a, 's, W: Write> DirectSerializeSeq<'a, 's, W> {
     }
 }
 
-impl<W: Write> ser::SerializeSeq for DirectSerializeSeq<'_, '_, W> {
+impl<W: Write> ser::SerializeSeq for SchemaAwareWriteSerializeSeq<'_, '_, W> {
     type Ok = usize;
     type Error = Error;
 
@@ -124,7 +124,7 @@ impl<W: Write> ser::SerializeSeq for DirectSerializeSeq<'_, '_, W> {
     }
 }
 
-impl<W: Write> ser::SerializeTuple for DirectSerializeSeq<'_, '_, W> {
+impl<W: Write> ser::SerializeTuple for SchemaAwareWriteSerializeSeq<'_, '_, W> {
     type Ok = usize;
     type Error = Error;
 
@@ -145,7 +145,7 @@ impl<W: Write> ser::SerializeTuple for DirectSerializeSeq<'_, '_, W> {
 /// to write any data to the underlying [`std::fmt::Write`] stream.  (See the [Data Seralization and
 /// Deserialization](https://avro.apache.org/docs/1.12.0/specification/#data-serialization-and-deserialization)
 /// section of the Avro spec for more info.)
-pub struct DirectSerializeMap<'a, 's, W: Write> {
+pub struct SchemaAwareWriteSerializeMap<'a, 's, W: Write> {
     ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
     item_schema: &'s Schema,
     item_buffer_size: usize,
@@ -153,13 +153,13 @@ pub struct DirectSerializeMap<'a, 's, W: Write> {
     bytes_written: usize,
 }
 
-impl<'a, 's, W: Write> DirectSerializeMap<'a, 's, W> {
+impl<'a, 's, W: Write> SchemaAwareWriteSerializeMap<'a, 's, W> {
     fn new(
         ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
         item_schema: &'s Schema,
         len: Option<usize>,
-    ) -> DirectSerializeMap<'a, 's, W> {
-        DirectSerializeMap {
+    ) -> SchemaAwareWriteSerializeMap<'a, 's, W> {
+        SchemaAwareWriteSerializeMap {
             ser,
             item_schema,
             item_buffer_size: SINGLE_VALUE_INIT_BUFFER_SIZE,
@@ -187,7 +187,7 @@ impl<'a, 's, W: Write> DirectSerializeMap<'a, 's, W> {
     }
 }
 
-impl<W: Write> ser::SerializeMap for DirectSerializeMap<'_, '_, W> {
+impl<W: Write> ser::SerializeMap for SchemaAwareWriteSerializeMap<'_, '_, W> {
     type Ok = usize;
     type Error = Error;
 
@@ -244,7 +244,7 @@ impl<W: Write> ser::SerializeMap for DirectSerializeMap<'_, '_, W> {
 /// The struct serializer for `SchemaAwareWriteSerializer`, which can serialize Avro records.  `DirectSerializeStruct`
 /// can accept fields out of order, but doing so incurs a performance penalty, since it requires
 /// `DirectSerializeStruct` to buffer serialized values in order to write them to the stream in order.
-pub struct DirectSerializeStruct<'a, 's, W: Write> {
+pub struct SchemaAwareWriteSerializeStruct<'a, 's, W: Write> {
     ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
     record_schema: &'s RecordSchema,
     item_count: usize,
@@ -252,13 +252,13 @@ pub struct DirectSerializeStruct<'a, 's, W: Write> {
     bytes_written: usize,
 }
 
-impl<'a, 's, W: Write> DirectSerializeStruct<'a, 's, W> {
+impl<'a, 's, W: Write> SchemaAwareWriteSerializeStruct<'a, 's, W> {
     fn new(
         ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
         record_schema: &'s RecordSchema,
         len: usize,
-    ) -> DirectSerializeStruct<'a, 's, W> {
-        DirectSerializeStruct {
+    ) -> SchemaAwareWriteSerializeStruct<'a, 's, W> {
+        SchemaAwareWriteSerializeStruct {
             ser,
             record_schema,
             item_count: 0,
@@ -314,7 +314,7 @@ impl<'a, 's, W: Write> DirectSerializeStruct<'a, 's, W> {
     }
 }
 
-impl<W: Write> ser::SerializeStruct for DirectSerializeStruct<'_, '_, W> {
+impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, W> {
     type Ok = usize;
     type Error = Error;
 
@@ -386,7 +386,7 @@ impl<W: Write> ser::SerializeStruct for DirectSerializeStruct<'_, '_, W> {
     }
 }
 
-impl<W: Write> ser::SerializeStructVariant for DirectSerializeStruct<'_, '_, W> {
+impl<W: Write> ser::SerializeStructVariant for SchemaAwareWriteSerializeStruct<'_, '_, W> {
     type Ok = usize;
     type Error = Error;
 
@@ -405,17 +405,17 @@ impl<W: Write> ser::SerializeStructVariant for DirectSerializeStruct<'_, '_, W> 
 /// The tuple struct serializer for `SchemaAwareWriteSerializer`.  `DirectSerializeTupleStruct` can serialize to an Avro
 /// array, record, or big-decimal.  When serializing to a record, fields must be provided in the correct order,
 /// since no names are provided.
-pub enum DirectSerializeTupleStruct<'a, 's, W: Write> {
-    Record(DirectSerializeStruct<'a, 's, W>),
-    Array(DirectSerializeSeq<'a, 's, W>),
+pub enum SchemaAwareWriteSerializeTupleStruct<'a, 's, W: Write> {
+    Record(SchemaAwareWriteSerializeStruct<'a, 's, W>),
+    Array(SchemaAwareWriteSerializeSeq<'a, 's, W>),
 }
 
-impl<W: Write> DirectSerializeTupleStruct<'_, '_, W> {
+impl<W: Write> SchemaAwareWriteSerializeTupleStruct<'_, '_, W> {
     fn serialize_field<T>(&mut self, value: &T) -> Result<(), Error>
     where
         T: ?Sized + ser::Serialize,
     {
-        use DirectSerializeTupleStruct::*;
+        use SchemaAwareWriteSerializeTupleStruct::*;
         match self {
             Record(record_ser) => record_ser.serialize_next_field(&value),
             Array(array_ser) => array_ser.serialize_element(&value),
@@ -423,7 +423,7 @@ impl<W: Write> DirectSerializeTupleStruct<'_, '_, W> {
     }
 
     fn end(self) -> Result<usize, Error> {
-        use DirectSerializeTupleStruct::*;
+        use SchemaAwareWriteSerializeTupleStruct::*;
         match self {
             Record(record_ser) => record_ser.end(),
             Array(array_ser) => array_ser.end(),
@@ -431,7 +431,7 @@ impl<W: Write> DirectSerializeTupleStruct<'_, '_, W> {
     }
 }
 
-impl<W: Write> ser::SerializeTupleStruct for DirectSerializeTupleStruct<'_, '_, W> {
+impl<W: Write> ser::SerializeTupleStruct for SchemaAwareWriteSerializeTupleStruct<'_, '_, W> {
     type Ok = usize;
     type Error = Error;
 
@@ -447,7 +447,7 @@ impl<W: Write> ser::SerializeTupleStruct for DirectSerializeTupleStruct<'_, '_, 
     }
 }
 
-impl<W: Write> ser::SerializeTupleVariant for DirectSerializeTupleStruct<'_, '_, W> {
+impl<W: Write> ser::SerializeTupleVariant for SchemaAwareWriteSerializeTupleStruct<'_, '_, W> {
     type Ok = usize;
     type Error = Error;
 
@@ -1259,7 +1259,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         &'a mut self,
         len: Option<usize>,
         schema: &'s Schema,
-    ) -> Result<DirectSerializeSeq<'a, 's, W>, Error> {
+    ) -> Result<SchemaAwareWriteSerializeSeq<'a, 's, W>, Error> {
         let create_error = |cause: String| {
             let len_str = len
                 .map(|l| format!("{l}"))
@@ -1273,7 +1273,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         };
 
         match schema {
-            Schema::Array(array_schema) => Ok(DirectSerializeSeq::new(
+            Schema::Array(array_schema) => Ok(SchemaAwareWriteSerializeSeq::new(
                 self,
                 array_schema.items.as_ref(),
                 len,
@@ -1300,7 +1300,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         &'a mut self,
         len: usize,
         schema: &'s Schema,
-    ) -> Result<DirectSerializeSeq<'a, 's, W>, Error> {
+    ) -> Result<SchemaAwareWriteSerializeSeq<'a, 's, W>, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "tuple",
             value: format!("tuple (len={len}). Cause: {cause}"),
@@ -1308,7 +1308,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         };
 
         match schema {
-            Schema::Array(array_schema) => Ok(DirectSerializeSeq::new(
+            Schema::Array(array_schema) => Ok(SchemaAwareWriteSerializeSeq::new(
                 self,
                 array_schema.items.as_ref(),
                 Some(len),
@@ -1336,7 +1336,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         name: &'static str,
         len: usize,
         schema: &'s Schema,
-    ) -> Result<DirectSerializeTupleStruct<'a, 's, W>, Error> {
+    ) -> Result<SchemaAwareWriteSerializeTupleStruct<'a, 's, W>, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "tuple struct",
             value: format!(
@@ -1347,13 +1347,11 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         };
 
         match schema {
-            Schema::Array(sch) => Ok(DirectSerializeTupleStruct::Array(DirectSerializeSeq::new(
-                self,
-                &sch.items,
-                Some(len),
-            ))),
-            Schema::Record(sch) => Ok(DirectSerializeTupleStruct::Record(
-                DirectSerializeStruct::new(self, sch, len),
+            Schema::Array(sch) => Ok(SchemaAwareWriteSerializeTupleStruct::Array(
+                SchemaAwareWriteSerializeSeq::new(self, &sch.items, Some(len)),
+            )),
+            Schema::Record(sch) => Ok(SchemaAwareWriteSerializeTupleStruct::Record(
+                SchemaAwareWriteSerializeStruct::new(self, sch, len),
             )),
             Schema::Ref { name: ref_name } => {
                 let ref_schema = self.get_ref_schema(ref_name)?;
@@ -1400,7 +1398,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         variant: &'static str,
         len: usize,
         schema: &'s Schema,
-    ) -> Result<DirectSerializeTupleStruct<'a, 's, W>, Error> {
+    ) -> Result<SchemaAwareWriteSerializeTupleStruct<'a, 's, W>, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "tuple variant",
             value: format!(
@@ -1434,7 +1432,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         &'a mut self,
         len: Option<usize>,
         schema: &'s Schema,
-    ) -> Result<DirectSerializeMap<'a, 's, W>, Error> {
+    ) -> Result<SchemaAwareWriteSerializeMap<'a, 's, W>, Error> {
         let create_error = |cause: String| {
             let len_str = len
                 .map(|l| format!("{}", l))
@@ -1448,7 +1446,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         };
 
         match schema {
-            Schema::Map(map_schema) => Ok(DirectSerializeMap::new(
+            Schema::Map(map_schema) => Ok(SchemaAwareWriteSerializeMap::new(
                 self,
                 map_schema.types.as_ref(),
                 len,
@@ -1478,7 +1476,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         name: &'static str,
         len: usize,
         schema: &'s Schema,
-    ) -> Result<DirectSerializeStruct<'a, 's, W>, Error> {
+    ) -> Result<SchemaAwareWriteSerializeStruct<'a, 's, W>, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "struct",
             value: format!("{name}{{ ... }}. Cause: {cause}"),
@@ -1486,9 +1484,11 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         };
 
         match schema {
-            Schema::Record(record_schema) => {
-                Ok(DirectSerializeStruct::new(self, record_schema, len))
-            }
+            Schema::Record(record_schema) => Ok(SchemaAwareWriteSerializeStruct::new(
+                self,
+                record_schema,
+                len,
+            )),
             Schema::Ref { name: ref_name } => {
                 let ref_schema = self.get_ref_schema(ref_name)?;
                 self.serialize_struct_with_schema(name, len, ref_schema)
@@ -1526,7 +1526,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         variant: &'static str,
         len: usize,
         schema: &'s Schema,
-    ) -> Result<DirectSerializeStruct<'a, 's, W>, Error> {
+    ) -> Result<SchemaAwareWriteSerializeStruct<'a, 's, W>, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
             value_type: "struct variant",
             value: format!("{name}::{variant}{{ ... }} (size={len}. Cause: {cause})"),
@@ -1557,13 +1557,13 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 impl<'a, 's, W: Write> ser::Serializer for &'a mut SchemaAwareWriteSerializer<'s, W> {
     type Ok = usize;
     type Error = Error;
-    type SerializeSeq = DirectSerializeSeq<'a, 's, W>;
-    type SerializeTuple = DirectSerializeSeq<'a, 's, W>;
-    type SerializeTupleStruct = DirectSerializeTupleStruct<'a, 's, W>;
-    type SerializeTupleVariant = DirectSerializeTupleStruct<'a, 's, W>;
-    type SerializeMap = DirectSerializeMap<'a, 's, W>;
-    type SerializeStruct = DirectSerializeStruct<'a, 's, W>;
-    type SerializeStructVariant = DirectSerializeStruct<'a, 's, W>;
+    type SerializeSeq = SchemaAwareWriteSerializeSeq<'a, 's, W>;
+    type SerializeTuple = SchemaAwareWriteSerializeSeq<'a, 's, W>;
+    type SerializeTupleStruct = SchemaAwareWriteSerializeTupleStruct<'a, 's, W>;
+    type SerializeTupleVariant = SchemaAwareWriteSerializeTupleStruct<'a, 's, W>;
+    type SerializeMap = SchemaAwareWriteSerializeMap<'a, 's, W>;
+    type SerializeStruct = SchemaAwareWriteSerializeStruct<'a, 's, W>;
+    type SerializeStructVariant = SchemaAwareWriteSerializeStruct<'a, 's, W>;
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
         self.serialize_bool_with_schema(v, self.root_schema)
