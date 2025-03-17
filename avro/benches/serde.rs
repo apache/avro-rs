@@ -192,10 +192,19 @@ fn make_big_record() -> anyhow::Result<(Schema, Value)> {
 
     let big_record = {
         let mut big_record = Record::new(&big_schema).unwrap();
-        big_record.put("username", Value::Union(1, Box::new(Value::String("username".to_owned()))));
+        big_record.put(
+            "username",
+            Value::Union(1, Box::new(Value::String("username".to_owned()))),
+        );
         big_record.put("age", 10i32);
-        big_record.put("phone", Value::Union(1, Box::new(Value::String("000000000".to_owned()))));
-        big_record.put("housenum", Value::Union(1, Box::new(Value::String("0000".to_owned()))));
+        big_record.put(
+            "phone",
+            Value::Union(1, Box::new(Value::String("000000000".to_owned()))),
+        );
+        big_record.put(
+            "housenum",
+            Value::Union(1, Box::new(Value::String("0000".to_owned()))),
+        );
         big_record.put("address", address);
         big_record.into()
     };
