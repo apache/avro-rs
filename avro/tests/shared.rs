@@ -106,7 +106,7 @@ fn test_folder(folder: &str) -> Result<(), ErrorsDesc> {
     let data_path: &Path = Path::new(data_file_name.as_str());
     let mut result = Ok(());
     if !data_path.exists() {
-        log::error!("{}", format!("folder {folder} does not exist"));
+        log::error!("folder {folder} does not exist");
         return Err(ErrorsDesc::new(
             format!("folder {folder} does not exist").as_str(),
         ));
