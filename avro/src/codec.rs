@@ -17,7 +17,7 @@
 
 //! Logic for all supported compression codecs in Avro.
 use crate::{types::Value, AvroResult, Error};
-use libflate::deflate::{Decoder, Encoder};
+use miniz_oxide;
 use std::io::{Read, Write};
 use strum_macros::{EnumIter, EnumString, IntoStaticStr};
 
@@ -61,13 +61,8 @@ impl Codec {
         match self {
             Codec::Null => (),
             Codec::Deflate => {
-                let mut encoder = Encoder::new(Vec::new());
-                encoder.write_all(stream).map_err(Error::DeflateCompress)?;
-                // Deflate errors seem to just be io::Error
-                *stream = encoder
-                    .finish()
-                    .into_result()
-                    .map_err(Error::DeflateCompressFinish)?;
+                let compressed = miniz_oxide::deflate::compress_to_vec(&stream, 6);
+                *stream = compressed;
             }
             #[cfg(feature = "snappy")]
             Codec::Snappy => {
@@ -120,14 +115,8 @@ impl Codec {
     pub fn decompress(self, stream: &mut Vec<u8>) -> AvroResult<()> {
         *stream = match self {
             Codec::Null => return Ok(()),
-            Codec::Deflate => {
-                let mut decoded = Vec::new();
-                let mut decoder = Decoder::new(&stream[..]);
-                decoder
-                    .read_to_end(&mut decoded)
-                    .map_err(Error::DeflateDecompress)?;
-                decoded
-            }
+            Codec::Deflate => miniz_oxide::inflate::decompress_to_vec(&stream)
+                .map_err(Error::DeflateDecompress)?,
             #[cfg(feature = "snappy")]
             Codec::Snappy => {
                 let decompressed_size = snap::raw::decompress_len(&stream[..stream.len() - 4])
