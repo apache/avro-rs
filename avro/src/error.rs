@@ -378,7 +378,7 @@ pub enum Error {
     DeflateCompress(#[source] std::io::Error),
 
     // no longer possible after migration from libflate to miniz_oxide
-    // TODO: remove in the next semver-breaking release
+    #[deprecated(since = "0.18.0", note = "This error can no longer occur")]
     #[error("Failed to finish flate compressor: {0}")]
     DeflateCompressFinish(#[source] std::io::Error),
 
