@@ -18,6 +18,7 @@
 //! Logic for all supported compression codecs in Avro.
 use crate::{types::Value, AvroResult, Error};
 use miniz_oxide;
+#[allow(unused_imports)] // may be flagged as unused when only DEFLATE is enabled
 use std::io::{Read, Write};
 use strum_macros::{EnumIter, EnumString, IntoStaticStr};
 
