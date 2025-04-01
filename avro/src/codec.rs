@@ -116,18 +116,20 @@ impl Codec {
         *stream = match self {
             Codec::Null => return Ok(()),
             Codec::Deflate => miniz_oxide::inflate::decompress_to_vec(stream).map_err(|e| {
-                use miniz_oxide::inflate::TINFLStatus;
-                use std::io::ErrorKind;
-                let err_kind = match e.status {
-                    TINFLStatus::FailedCannotMakeProgress => ErrorKind::UnexpectedEof,
-                    TINFLStatus::BadParam => unreachable!(), // not possible for _to_vec()
-                    TINFLStatus::Adler32Mismatch => ErrorKind::InvalidData,
-                    TINFLStatus::Failed => ErrorKind::InvalidData,
-                    TINFLStatus::Done => unreachable!(), // not possible on the error path
-                    TINFLStatus::NeedsMoreInput => ErrorKind::UnexpectedEof,
-                    TINFLStatus::HasMoreOutput => unreachable!(), // not possible for _to_vec()
+                let err = {
+                    use miniz_oxide::inflate::TINFLStatus::*;
+                    use std::io::{Error,ErrorKind};
+                    match e.status {
+                        FailedCannotMakeProgress => Error::from(ErrorKind::UnexpectedEof),
+                        BadParam => Error::other("Unexpected error: miniz_oxide reported invalid output buffer size. Please report this to avro-rs developers."), // not possible for _to_vec()
+                        Adler32Mismatch => Error::from(ErrorKind::InvalidData),
+                        Failed => Error::from(ErrorKind::InvalidData),
+                        Done => Error::other("Unexpected error: miniz_oxide reported an error with a success status. Please report this to avro-rs developers."),
+                        NeedsMoreInput => Error::from(ErrorKind::UnexpectedEof),
+                        HasMoreOutput => Error::other("Unexpected error: miniz_oxide has more data than the output buffer can hold. Please report this to avro-rs developers."), // not possible for _to_vec()
+                    }
                 };
-                Error::DeflateDecompress(std::io::Error::from(err_kind))
+                Error::DeflateDecompress(err)
             })?,
             #[cfg(feature = "snappy")]
             Codec::Snappy => {
