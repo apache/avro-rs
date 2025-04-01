@@ -17,7 +17,7 @@
 
 //! Logic for all supported compression codecs in Avro.
 use crate::{types::Value, AvroResult, Error};
-use libflate::deflate::{Decoder, Encoder};
+#[allow(unused_imports)] // may be flagged as unused when only DEFLATE is enabled
 use std::io::{Read, Write};
 use strum_macros::{EnumIter, EnumString, IntoStaticStr};
 
@@ -61,13 +61,8 @@ impl Codec {
         match self {
             Codec::Null => (),
             Codec::Deflate => {
-                let mut encoder = Encoder::new(Vec::new());
-                encoder.write_all(stream).map_err(Error::DeflateCompress)?;
-                // Deflate errors seem to just be io::Error
-                *stream = encoder
-                    .finish()
-                    .into_result()
-                    .map_err(Error::DeflateCompressFinish)?;
+                let compressed = miniz_oxide::deflate::compress_to_vec(stream, 6);
+                *stream = compressed;
             }
             #[cfg(feature = "snappy")]
             Codec::Snappy => {
@@ -120,14 +115,22 @@ impl Codec {
     pub fn decompress(self, stream: &mut Vec<u8>) -> AvroResult<()> {
         *stream = match self {
             Codec::Null => return Ok(()),
-            Codec::Deflate => {
-                let mut decoded = Vec::new();
-                let mut decoder = Decoder::new(&stream[..]);
-                decoder
-                    .read_to_end(&mut decoded)
-                    .map_err(Error::DeflateDecompress)?;
-                decoded
-            }
+            Codec::Deflate => miniz_oxide::inflate::decompress_to_vec(stream).map_err(|e| {
+                let err = {
+                    use miniz_oxide::inflate::TINFLStatus::*;
+                    use std::io::{Error,ErrorKind};
+                    match e.status {
+                        FailedCannotMakeProgress => Error::from(ErrorKind::UnexpectedEof),
+                        BadParam => Error::other("Unexpected error: miniz_oxide reported invalid output buffer size. Please report this to avro-rs developers."), // not possible for _to_vec()
+                        Adler32Mismatch => Error::from(ErrorKind::InvalidData),
+                        Failed => Error::from(ErrorKind::InvalidData),
+                        Done => Error::other("Unexpected error: miniz_oxide reported an error with a success status. Please report this to avro-rs developers."),
+                        NeedsMoreInput => Error::from(ErrorKind::UnexpectedEof),
+                        HasMoreOutput => Error::other("Unexpected error: miniz_oxide has more data than the output buffer can hold. Please report this to avro-rs developers."), // not possible for _to_vec()
+                    }
+                };
+                Error::DeflateDecompress(err)
+            })?,
             #[cfg(feature = "snappy")]
             Codec::Snappy => {
                 let decompressed_size = snap::raw::decompress_len(&stream[..stream.len() - 4])
