@@ -17,7 +17,6 @@
 
 //! Logic for all supported compression codecs in Avro.
 use crate::{types::Value, AvroResult, Error};
-use miniz_oxide;
 #[allow(unused_imports)] // may be flagged as unused when only DEFLATE is enabled
 use std::io::{Read, Write};
 use strum_macros::{EnumIter, EnumString, IntoStaticStr};
@@ -62,7 +61,7 @@ impl Codec {
         match self {
             Codec::Null => (),
             Codec::Deflate => {
-                let compressed = miniz_oxide::deflate::compress_to_vec(&stream, 6);
+                let compressed = miniz_oxide::deflate::compress_to_vec(stream, 6);
                 *stream = compressed;
             }
             #[cfg(feature = "snappy")]
@@ -116,7 +115,7 @@ impl Codec {
     pub fn decompress(self, stream: &mut Vec<u8>) -> AvroResult<()> {
         *stream = match self {
             Codec::Null => return Ok(()),
-            Codec::Deflate => miniz_oxide::inflate::decompress_to_vec(&stream).map_err(|e| {
+            Codec::Deflate => miniz_oxide::inflate::decompress_to_vec(stream).map_err(|e| {
                 use miniz_oxide::inflate::TINFLStatus;
                 use std::io::ErrorKind;
                 let err_kind = match e.status {
