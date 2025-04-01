@@ -115,8 +115,20 @@ impl Codec {
     pub fn decompress(self, stream: &mut Vec<u8>) -> AvroResult<()> {
         *stream = match self {
             Codec::Null => return Ok(()),
-            Codec::Deflate => miniz_oxide::inflate::decompress_to_vec(&stream)
-                .map_err(Error::DeflateDecompress)?,
+            Codec::Deflate => miniz_oxide::inflate::decompress_to_vec(&stream).map_err(|e| {
+                use miniz_oxide::inflate::TINFLStatus;
+                use std::io::ErrorKind;
+                let err_kind = match e.status {
+                    TINFLStatus::FailedCannotMakeProgress => ErrorKind::UnexpectedEof,
+                    TINFLStatus::BadParam => unreachable!(), // not possible for _to_vec()
+                    TINFLStatus::Adler32Mismatch => ErrorKind::InvalidData,
+                    TINFLStatus::Failed => ErrorKind::InvalidData,
+                    TINFLStatus::Done => unreachable!(), // not possible on the error path
+                    TINFLStatus::NeedsMoreInput => ErrorKind::UnexpectedEof,
+                    TINFLStatus::HasMoreOutput => unreachable!(), // not possible for _to_vec()
+                };
+                Error::DeflateDecompress(std::io::Error::from(err_kind))
+            })?,
             #[cfg(feature = "snappy")]
             Codec::Snappy => {
                 let decompressed_size = snap::raw::decompress_len(&stream[..stream.len() - 4])
