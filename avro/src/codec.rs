@@ -29,6 +29,10 @@ impl DeflateSettings {
     pub fn new(compression_level: miniz_oxide::deflate::CompressionLevel) -> Self {
         DeflateSettings { compression_level }
     }
+
+    fn compression_level(&self) -> u8 {
+        self.compression_level as u8
+    }
 }
 
 impl Default for DeflateSettings {
@@ -79,7 +83,7 @@ impl Codec {
             Codec::Null => (),
             Codec::Deflate(settings) => {
                 let compressed =
-                    miniz_oxide::deflate::compress_to_vec(stream, settings.compression_level as u8);
+                    miniz_oxide::deflate::compress_to_vec(stream, settings.compression_level());
                 *stream = compressed;
             }
             #[cfg(feature = "snappy")]
