@@ -459,7 +459,7 @@ Note that the on-disk representation is identical to the underlying primitive/co
 
 ```rust
 use apache_avro::{
-    types::Record, types::Value, Codec, Days, Decimal, Duration, Millis, Months, Reader, Schema,
+    types::Record, types::Value, Codec, Days, Decimal, DeflateSettings, Duration, Millis, Months, Reader, Schema,
     Writer, Error,
 };
 use num_bigint::ToBigInt;
