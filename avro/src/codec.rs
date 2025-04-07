@@ -17,8 +17,6 @@
 
 //! Logic for all supported compression codecs in Avro.
 use crate::{types::Value, AvroResult, Error};
-#[allow(unused_imports)] // may be flagged as unused when only DEFLATE is enabled
-use std::io::{Read, Write};
 use strum_macros::{EnumIter, EnumString, IntoStaticStr};
 
 /// The compression codec used to compress blocks.
@@ -83,6 +81,7 @@ impl Codec {
             }
             #[cfg(feature = "zstandard")]
             Codec::Zstandard(settings) => {
+                use std::io::Write;
                 let mut encoder =
                     zstd::Encoder::new(Vec::new(), settings.compression_level as i32).unwrap();
                 encoder.write_all(stream).map_err(Error::ZstdCompress)?;
@@ -91,6 +90,7 @@ impl Codec {
             #[cfg(feature = "bzip")]
             Codec::Bzip2(settings) => {
                 use bzip2::read::BzEncoder;
+                use std::io::Read;
 
                 let mut encoder = BzEncoder::new(&stream[..], settings.compression());
                 let mut buffer = Vec::new();
@@ -100,6 +100,7 @@ impl Codec {
             #[cfg(feature = "xz")]
             Codec::Xz(settings) => {
                 use xz2::read::XzEncoder;
+                use std::io::Read;
 
                 let mut encoder = XzEncoder::new(&stream[..], settings.compression_level as u32);
                 let mut buffer = Vec::new();
@@ -168,6 +169,7 @@ impl Codec {
             #[cfg(feature = "bzip")]
             Codec::Bzip2(_) => {
                 use bzip2::read::BzDecoder;
+                use std::io::Read;
 
                 let mut decoder = BzDecoder::new(&stream[..]);
                 let mut decoded = Vec::new();
@@ -177,6 +179,7 @@ impl Codec {
             #[cfg(feature = "xz")]
             Codec::Xz(_) => {
                 use xz2::read::XzDecoder;
+                use std::io::Read;
 
                 let mut decoder = XzDecoder::new(&stream[..]);
                 let mut decoded: Vec<u8> = Vec::new();
