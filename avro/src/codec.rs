@@ -19,18 +19,20 @@
 use crate::{types::Value, AvroResult, Error};
 use strum_macros::{EnumIter, EnumString, IntoStaticStr};
 
+/// Settings for the `Deflate` codec.
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub struct DeflateSettings {
     compression_level: miniz_oxide::deflate::CompressionLevel,
 }
 
 impl DeflateSettings {
-    fn new(compression_level: miniz_oxide::deflate::CompressionLevel) -> Self {
+    pub fn new(compression_level: miniz_oxide::deflate::CompressionLevel) -> Self {
         DeflateSettings { compression_level }
     }
 }
 
 impl Default for DeflateSettings {
+    /// Default compression level is `miniz_oxide::deflate::CompressionLevel::DefaultCompression`.
     fn default() -> Self {
         Self::new(miniz_oxide::deflate::CompressionLevel::DefaultCompression)
     }
@@ -279,6 +281,7 @@ pub mod xz {
 mod tests {
     use super::*;
     use apache_avro_test_helper::TestResult;
+    use miniz_oxide::deflate::CompressionLevel;
     use pretty_assertions::{assert_eq, assert_ne};
 
     const INPUT: &[u8] = b"theanswertolifetheuniverseandeverythingis42theanswertolifetheuniverseandeverythingis4theanswertolifetheuniverseandeverythingis2";
@@ -296,7 +299,9 @@ mod tests {
 
     #[test]
     fn deflate_compress_and_decompress() -> TestResult {
-        compress_and_decompress(Codec::Deflate(DeflateSettings::default()))
+        compress_and_decompress(Codec::Deflate(DeflateSettings::new(
+            CompressionLevel::BestCompression,
+        )))
     }
 
     #[cfg(feature = "snappy")]
