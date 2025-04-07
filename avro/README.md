@@ -296,8 +296,7 @@ Avro supports three different compression codecs when encoding data:
 
 To specify a codec to use to compress data, just specify it while creating a `Writer`:
 ```rust
-use apache_avro::Writer;
-use apache_avro::Codec;
+use apache_avro::{Codec, DeflateSettings, Schema, Writer};
 let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default()));
 ```
 

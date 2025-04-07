@@ -311,9 +311,7 @@
 //!
 //! To specify a codec to use to compress data, just specify it while creating a `Writer`:
 //! ```
-//! # use apache_avro::Schema;
-//! use apache_avro::Writer;
-//! use apache_avro::Codec;
+//! use apache_avro::{Codec, DeflateSettings, Schema, Writer};
 //! #
 //! # let raw_schema = r#"
 //! #     {
