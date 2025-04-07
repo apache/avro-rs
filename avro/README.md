@@ -298,7 +298,7 @@ To specify a codec to use to compress data, just specify it while creating a `Wr
 ```rust
 use apache_avro::Writer;
 use apache_avro::Codec;
-let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate);
+let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default()));
 ```
 
 ## Reading data
@@ -394,7 +394,7 @@ The following is an example of how to combine everything showed so far and it is
 quick reference of the library interface:
 
 ```rust
-use apache_avro::{Codec, Reader, Schema, Writer, from_value, types::Record, Error};
+use apache_avro::{Codec, DeflateSettings, Reader, Schema, Writer, from_value, types::Record, Error};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -419,7 +419,7 @@ fn main() -> Result<(), Error> {
 
     println!("{:?}", schema);
 
-    let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate);
+    let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default()));
 
     let mut record = Record::new(writer.schema()).unwrap();
     record.put("a", 27i64);
@@ -545,7 +545,7 @@ fn main() -> Result<(), Error> {
 
     println!("{:?}", schema);
 
-    let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate);
+    let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default()));
 
     let mut record = Record::new(writer.schema()).unwrap();
     record.put("decimal_fixed", Decimal::from(9936.to_bigint().unwrap().to_signed_bytes_be()));
