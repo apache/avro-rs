@@ -311,9 +311,7 @@
 //!
 //! To specify a codec to use to compress data, just specify it while creating a `Writer`:
 //! ```
-//! # use apache_avro::Schema;
-//! use apache_avro::Writer;
-//! use apache_avro::Codec;
+//! use apache_avro::{Codec, DeflateSettings, Schema, Writer};
 //! #
 //! # let raw_schema = r#"
 //! #     {
@@ -326,7 +324,7 @@
 //! #     }
 //! # "#;
 //! # let schema = Schema::parse_str(raw_schema).unwrap();
-//! let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate);
+//! let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default()));
 //! ```
 //!
 //! # Reading data
@@ -507,7 +505,7 @@
 //! quick reference of the library interface:
 //!
 //! ```
-//! use apache_avro::{Codec, Reader, Schema, Writer, from_value, types::Record, Error};
+//! use apache_avro::{Codec, DeflateSettings, Reader, Schema, Writer, from_value, types::Record, Error};
 //! use serde::{Deserialize, Serialize};
 //!
 //! #[derive(Debug, Deserialize, Serialize)]
@@ -532,7 +530,7 @@
 //!
 //!     println!("{:?}", schema);
 //!
-//!     let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate);
+//!     let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default()));
 //!
 //!     let mut record = Record::new(writer.schema()).unwrap();
 //!     record.put("a", 27i64);
@@ -572,7 +570,7 @@
 //!
 //! ```rust
 //! use apache_avro::{
-//!     types::Record, types::Value, Codec, Days, Decimal, Duration, Millis, Months, Reader, Schema,
+//!     types::Record, types::Value, Codec, Days, Decimal, DeflateSettings, Duration, Millis, Months, Reader, Schema,
 //!     Writer, Error,
 //! };
 //! use num_bigint::ToBigInt;
@@ -658,7 +656,7 @@
 //!
 //!     println!("{:?}", schema);
 //!
-//!     let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate);
+//!     let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default()));
 //!
 //!     let mut record = Record::new(writer.schema()).unwrap();
 //!     record.put("decimal_fixed", Decimal::from(9936.to_bigint().unwrap().to_signed_bytes_be()));
@@ -893,7 +891,7 @@ pub use codec::bzip::Bzip2Settings;
 pub use codec::xz::XzSettings;
 #[cfg(feature = "zstandard")]
 pub use codec::zstandard::ZstandardSettings;
-pub use codec::Codec;
+pub use codec::{Codec, DeflateSettings};
 pub use de::from_value;
 pub use decimal::Decimal;
 pub use duration::{Days, Duration, Millis, Months};

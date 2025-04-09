@@ -709,6 +709,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use serde::{Deserialize, Serialize};
 
+    use crate::codec::DeflateSettings;
     use apache_avro_test_helper::TestResult;
 
     const AVRO_OBJECT_HEADER_LEN: usize = AVRO_OBJECT_HEADER.len();
@@ -1065,14 +1066,18 @@ mod tests {
     }
 
     fn make_writer_with_codec(schema: &Schema) -> Writer<'_, Vec<u8>> {
-        Writer::with_codec(schema, Vec::new(), Codec::Deflate)
+        Writer::with_codec(
+            schema,
+            Vec::new(),
+            Codec::Deflate(DeflateSettings::default()),
+        )
     }
 
     fn make_writer_with_builder(schema: &Schema) -> Writer<'_, Vec<u8>> {
         Writer::builder()
             .writer(Vec::new())
             .schema(schema)
-            .codec(Codec::Deflate)
+            .codec(Codec::Deflate(DeflateSettings::default()))
             .block_size(100)
             .build()
     }
@@ -1094,7 +1099,7 @@ mod tests {
         zig_i64(3, &mut data)?;
         data.extend(b"foo");
         data.extend(data.clone());
-        Codec::Deflate.compress(&mut data)?;
+        Codec::Deflate(DeflateSettings::default()).compress(&mut data)?;
 
         // starts with magic
         assert_eq!(&result[..AVRO_OBJECT_HEADER_LEN], AVRO_OBJECT_HEADER);
@@ -1142,7 +1147,7 @@ mod tests {
           ]
         }
         "#;
-        let codec = Codec::Deflate;
+        let codec = Codec::Deflate(DeflateSettings::default());
         let schema = Schema::parse_str(LOGICAL_TYPE_SCHEMA)?;
         let mut writer = Writer::builder()
             .schema(&schema)

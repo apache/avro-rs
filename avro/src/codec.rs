@@ -17,9 +17,30 @@
 
 //! Logic for all supported compression codecs in Avro.
 use crate::{types::Value, AvroResult, Error};
-#[allow(unused_imports)] // may be flagged as unused when only DEFLATE is enabled
-use std::io::{Read, Write};
 use strum_macros::{EnumIter, EnumString, IntoStaticStr};
+
+/// Settings for the `Deflate` codec.
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub struct DeflateSettings {
+    compression_level: miniz_oxide::deflate::CompressionLevel,
+}
+
+impl DeflateSettings {
+    pub fn new(compression_level: miniz_oxide::deflate::CompressionLevel) -> Self {
+        DeflateSettings { compression_level }
+    }
+
+    fn compression_level(&self) -> u8 {
+        self.compression_level as u8
+    }
+}
+
+impl Default for DeflateSettings {
+    /// Default compression level is `miniz_oxide::deflate::CompressionLevel::DefaultCompression`.
+    fn default() -> Self {
+        Self::new(miniz_oxide::deflate::CompressionLevel::DefaultCompression)
+    }
+}
 
 /// The compression codec used to compress blocks.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumIter, EnumString, IntoStaticStr)]
@@ -30,7 +51,7 @@ pub enum Codec {
     /// The `Deflate` codec writes the data block using the deflate algorithm
     /// as specified in RFC 1951, and typically implemented using the zlib library.
     /// Note that this format (unlike the "zlib format" in RFC 1950) does not have a checksum.
-    Deflate,
+    Deflate(DeflateSettings),
     #[cfg(feature = "snappy")]
     /// The `Snappy` codec uses Google's [Snappy](http://google.github.io/snappy/)
     /// compression library. Each compressed block is followed by the 4-byte, big-endian
@@ -60,8 +81,9 @@ impl Codec {
     pub fn compress(self, stream: &mut Vec<u8>) -> AvroResult<()> {
         match self {
             Codec::Null => (),
-            Codec::Deflate => {
-                let compressed = miniz_oxide::deflate::compress_to_vec(stream, 6);
+            Codec::Deflate(settings) => {
+                let compressed =
+                    miniz_oxide::deflate::compress_to_vec(stream, settings.compression_level());
                 *stream = compressed;
             }
             #[cfg(feature = "snappy")]
@@ -83,6 +105,7 @@ impl Codec {
             }
             #[cfg(feature = "zstandard")]
             Codec::Zstandard(settings) => {
+                use std::io::Write;
                 let mut encoder =
                     zstd::Encoder::new(Vec::new(), settings.compression_level as i32).unwrap();
                 encoder.write_all(stream).map_err(Error::ZstdCompress)?;
@@ -91,6 +114,7 @@ impl Codec {
             #[cfg(feature = "bzip")]
             Codec::Bzip2(settings) => {
                 use bzip2::read::BzEncoder;
+                use std::io::Read;
 
                 let mut encoder = BzEncoder::new(&stream[..], settings.compression());
                 let mut buffer = Vec::new();
@@ -99,6 +123,7 @@ impl Codec {
             }
             #[cfg(feature = "xz")]
             Codec::Xz(settings) => {
+                use std::io::Read;
                 use xz2::read::XzEncoder;
 
                 let mut encoder = XzEncoder::new(&stream[..], settings.compression_level as u32);
@@ -115,7 +140,7 @@ impl Codec {
     pub fn decompress(self, stream: &mut Vec<u8>) -> AvroResult<()> {
         *stream = match self {
             Codec::Null => return Ok(()),
-            Codec::Deflate => miniz_oxide::inflate::decompress_to_vec(stream).map_err(|e| {
+            Codec::Deflate(_settings) => miniz_oxide::inflate::decompress_to_vec(stream).map_err(|e| {
                 let err = {
                     use miniz_oxide::inflate::TINFLStatus::*;
                     use std::io::{Error,ErrorKind};
@@ -168,6 +193,7 @@ impl Codec {
             #[cfg(feature = "bzip")]
             Codec::Bzip2(_) => {
                 use bzip2::read::BzDecoder;
+                use std::io::Read;
 
                 let mut decoder = BzDecoder::new(&stream[..]);
                 let mut decoded = Vec::new();
@@ -177,6 +203,7 @@ impl Codec {
             #[cfg(feature = "xz")]
             Codec::Xz(_) => {
                 use xz2::read::XzDecoder;
+                use std::io::Read;
 
                 let mut decoder = XzDecoder::new(&stream[..]);
                 let mut decoded: Vec<u8> = Vec::new();
@@ -258,6 +285,7 @@ pub mod xz {
 mod tests {
     use super::*;
     use apache_avro_test_helper::TestResult;
+    use miniz_oxide::deflate::CompressionLevel;
     use pretty_assertions::{assert_eq, assert_ne};
 
     const INPUT: &[u8] = b"theanswertolifetheuniverseandeverythingis42theanswertolifetheuniverseandeverythingis4theanswertolifetheuniverseandeverythingis2";
@@ -275,7 +303,9 @@ mod tests {
 
     #[test]
     fn deflate_compress_and_decompress() -> TestResult {
-        compress_and_decompress(Codec::Deflate)
+        compress_and_decompress(Codec::Deflate(DeflateSettings::new(
+            CompressionLevel::BestCompression,
+        )))
     }
 
     #[cfg(feature = "snappy")]
@@ -315,7 +345,10 @@ mod tests {
     #[test]
     fn codec_to_str() {
         assert_eq!(<&str>::from(Codec::Null), "null");
-        assert_eq!(<&str>::from(Codec::Deflate), "deflate");
+        assert_eq!(
+            <&str>::from(Codec::Deflate(DeflateSettings::default())),
+            "deflate"
+        );
 
         #[cfg(feature = "snappy")]
         assert_eq!(<&str>::from(Codec::Snappy), "snappy");
@@ -341,7 +374,10 @@ mod tests {
         use std::str::FromStr;
 
         assert_eq!(Codec::from_str("null").unwrap(), Codec::Null);
-        assert_eq!(Codec::from_str("deflate").unwrap(), Codec::Deflate);
+        assert_eq!(
+            Codec::from_str("deflate").unwrap(),
+            Codec::Deflate(DeflateSettings::default())
+        );
 
         #[cfg(feature = "snappy")]
         assert_eq!(Codec::from_str("snappy").unwrap(), Codec::Snappy);
