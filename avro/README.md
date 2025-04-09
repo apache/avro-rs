@@ -296,9 +296,8 @@ Avro supports three different compression codecs when encoding data:
 
 To specify a codec to use to compress data, just specify it while creating a `Writer`:
 ```rust
-use apache_avro::Writer;
-use apache_avro::Codec;
-let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate);
+use apache_avro::{Codec, DeflateSettings, Schema, Writer};
+let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default()));
 ```
 
 ## Reading data
@@ -394,7 +393,7 @@ The following is an example of how to combine everything showed so far and it is
 quick reference of the library interface:
 
 ```rust
-use apache_avro::{Codec, Reader, Schema, Writer, from_value, types::Record, Error};
+use apache_avro::{Codec, DeflateSettings, Reader, Schema, Writer, from_value, types::Record, Error};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -419,7 +418,7 @@ fn main() -> Result<(), Error> {
 
     println!("{:?}", schema);
 
-    let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate);
+    let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default()));
 
     let mut record = Record::new(writer.schema()).unwrap();
     record.put("a", 27i64);
@@ -459,7 +458,7 @@ Note that the on-disk representation is identical to the underlying primitive/co
 
 ```rust
 use apache_avro::{
-    types::Record, types::Value, Codec, Days, Decimal, Duration, Millis, Months, Reader, Schema,
+    types::Record, types::Value, Codec, Days, Decimal, DeflateSettings, Duration, Millis, Months, Reader, Schema,
     Writer, Error,
 };
 use num_bigint::ToBigInt;
@@ -545,7 +544,7 @@ fn main() -> Result<(), Error> {
 
     println!("{:?}", schema);
 
-    let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate);
+    let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default()));
 
     let mut record = Record::new(writer.schema()).unwrap();
     record.put("decimal_fixed", Decimal::from(9936.to_bigint().unwrap().to_signed_bytes_be()));

@@ -17,9 +17,10 @@
 
 use apache_avro::{
     types::{Record, Value},
-    Codec, Reader, Schema, Writer,
+    Codec, DeflateSettings, Reader, Schema, Writer,
 };
 use apache_avro_test_helper::TestResult;
+use miniz_oxide::deflate::CompressionLevel;
 
 #[test]
 fn avro_4032_null_codec_settings() -> TestResult {
@@ -27,7 +28,9 @@ fn avro_4032_null_codec_settings() -> TestResult {
 }
 #[test]
 fn avro_4032_deflate_codec_settings() -> TestResult {
-    avro_4032_codec_settings(Codec::Deflate)
+    avro_4032_codec_settings(Codec::Deflate(DeflateSettings::new(
+        CompressionLevel::UberCompression,
+    )))
 }
 
 #[test]
