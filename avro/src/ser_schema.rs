@@ -33,10 +33,11 @@ const COLLECTION_SERIALIZER_ITEM_LIMIT: usize = 1024;
 const COLLECTION_SERIALIZER_DEFAULT_INIT_ITEM_CAPACITY: usize = 32;
 const SINGLE_VALUE_INIT_BUFFER_SIZE: usize = 128;
 
-/// The sequence serializer for `SchemaAwareWriteSerializer`.  `DirectSerializeSeq` may break large arrays up
-/// into multiple blocks to avoid having to obtain the length of the entire array before being able
-/// to write any data to the underlying [`std::fmt::Write`] stream.  (See the [Data Seralization and
-/// Deserialization](https://avro.apache.org/docs/1.12.0/specification/#data-serialization-and-deserialization)
+/// The sequence serializer for [`SchemaAwareWriteSerializer`].
+/// [`SchemaAwareWriteSerializeSeq`] may break large arrays up into multiple blocks to avoid having
+/// to obtain the length of the entire array before being able to write any data to the underlying
+/// [`std::fmt::Write`] stream.  (See the
+/// [Data Serialization and Deserialization](https://avro.apache.org/docs/1.12.0/specification/#data-serialization-and-deserialization)
 /// section of the Avro spec for more info.)
 pub struct SchemaAwareWriteSerializeSeq<'a, 's, W: Write> {
     ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
@@ -140,10 +141,11 @@ impl<W: Write> ser::SerializeTuple for SchemaAwareWriteSerializeSeq<'_, '_, W> {
     }
 }
 
-/// The map serializer for `SchemaAwareWriteSerializer`.  `DirectSerializeMap` may break large maps up
-/// into multiple blocks to avoid having to obtain the size of the entire map before being able
-/// to write any data to the underlying [`std::fmt::Write`] stream.  (See the [Data Seralization and
-/// Deserialization](https://avro.apache.org/docs/1.12.0/specification/#data-serialization-and-deserialization)
+/// The map serializer for [`SchemaAwareWriteSerializer`].
+/// [`SchemaAwareWriteSerializeMap`] may break large maps up into multiple blocks to avoid having to
+/// obtain the size of the entire map before being able to write any data to the underlying
+/// [`std::fmt::Write`] stream.  (See the
+/// [Data Serialization and Deserialization](https://avro.apache.org/docs/1.12.0/specification/#data-serialization-and-deserialization)
 /// section of the Avro spec for more info.)
 pub struct SchemaAwareWriteSerializeMap<'a, 's, W: Write> {
     ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
@@ -241,9 +243,10 @@ impl<W: Write> ser::SerializeMap for SchemaAwareWriteSerializeMap<'_, '_, W> {
     }
 }
 
-/// The struct serializer for `SchemaAwareWriteSerializer`, which can serialize Avro records.  `DirectSerializeStruct`
-/// can accept fields out of order, but doing so incurs a performance penalty, since it requires
-/// `DirectSerializeStruct` to buffer serialized values in order to write them to the stream in order.
+/// The struct serializer for [`SchemaAwareWriteSerializer`], which can serialize Avro records.
+/// [`SchemaAwareWriteSerializeStruct`] can accept fields out of order, but doing so incurs a
+/// performance penalty, since it requires [`SchemaAwareWriteSerializeStruct`] to buffer serialized
+/// values in order to write them to the stream in order.
 pub struct SchemaAwareWriteSerializeStruct<'a, 's, W: Write> {
     ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
     record_schema: &'s RecordSchema,
@@ -402,9 +405,9 @@ impl<W: Write> ser::SerializeStructVariant for SchemaAwareWriteSerializeStruct<'
     }
 }
 
-/// The tuple struct serializer for `SchemaAwareWriteSerializer`.  `DirectSerializeTupleStruct` can serialize to an Avro
-/// array, record, or big-decimal.  When serializing to a record, fields must be provided in the correct order,
-/// since no names are provided.
+/// The tuple struct serializer for [`SchemaAwareWriteSerializer`].
+/// [`SchemaAwareWriteSerializeTupleStruct`] can serialize to an Avro array, record, or big-decimal.
+/// When serializing to a record, fields must be provided in the correct order, since no names are provided.
 pub enum SchemaAwareWriteSerializeTupleStruct<'a, 's, W: Write> {
     Record(SchemaAwareWriteSerializeStruct<'a, 's, W>),
     Array(SchemaAwareWriteSerializeSeq<'a, 's, W>),
@@ -463,11 +466,11 @@ impl<W: Write> ser::SerializeTupleVariant for SchemaAwareWriteSerializeTupleStru
     }
 }
 
-/// A `serde::se::Serializer` implementation that serializes directly to a [`std::fmt::Write`] using the provided
-/// schema.  If `SchemaAwareWriteSerializer` isn't able to match the incoming data with its schema, it will return an error.
-///
-/// A `SchemaAwareWriteSerializer` instance can be re-used to serialize multiple values matching the schema to its
-/// [`std::fmt::Write`] stream.
+/// A [`serde::ser::Serializer`] implementation that serializes directly to a [`std::fmt::Write`]
+/// using the provided schema.  If [`SchemaAwareWriteSerializer`] isn't able to match the incoming
+/// data with its schema, it will return an error.
+/// A [`SchemaAwareWriteSerializer`] instance can be re-used to serialize multiple values matching
+/// the schema to its [`std::fmt::Write`] stream.
 pub struct SchemaAwareWriteSerializer<'s, W: Write> {
     writer: &'s mut W,
     root_schema: &'s Schema,
@@ -476,7 +479,7 @@ pub struct SchemaAwareWriteSerializer<'s, W: Write> {
 }
 
 impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
-    /// Create a new `SchemaAwareWriteSerializer`.
+    /// Create a new [`SchemaAwareWriteSerializer`].
     ///
     /// `writer` is the [`std::fmt::Write`] stream to be written to.
     ///
