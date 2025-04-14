@@ -62,3 +62,60 @@ least 72 hours.
 Regards,
 Martin
 ```
+
+
+
+## After a successful vote
+
+```
+git checkout -b release-0.18.0-RC1 rel/release-0.18.0-RC1
+
+cargo publish -p apache-avro-derive
+cargo publish -p apache-avro-test-helper
+cargo publish -p apache-avro
+
+git tag -s rel/release-0.18.0 -m "Apache Avro Rust SDK 0.18.0 release."
+push --tags
+```
+
+
+## Create a Github release
+
+1. Go to https://github.com/apache/avro-rs/releases/new
+2. Select `rel/release-0.18.0` as the release tag and `auto` as the previous one (or select one manually)
+3. Click `Generate release notes` to populate the body
+4. Type a `Release title`, e.g. `Apache Avro Rust SDK 0.18.0 release`
+5. Make sure `Set as the latest release` checkbox is checked
+6. Press the `Publish release` button
+
+## Announce the release
+
+1. Send en email to dev@avro.apache.org and user@avro.apache.org with the following title and body:
+1.1. Title: `[ANNOUNCE] Apache Avro Rust SDK 0.18.0 release`
+1.2. Body:
+```
+Hello!
+
+On behalf of the Apache Avro team I am happy to announce the release of Apache Avro Rust SDK version 0.18.0!
+
+It is available at Crates.io:
+- https://crates.io/crates/apache-avro
+- https://crates.io/crates/apache-avro-derive
+
+
+What's changed since vX.Y.Z:
+
+* item 1
+* item 2
+
+## New Contributors
+* contributor 1
+* contributor 2
+
+Full Changelog: https://github.com/apache/avro-rs/releases/tag/rel%2Frelease-0.18.0
+```
+
+The items could be taken from the body of the Github release ignoring the Dependabot updates:
+1. Copy the body of the Github release and paste it in a temporary file, e.g. `/tmp/v0.18.0`
+2. `cat /tmp/v0.18.0 | grep -v dependabot`
+3. Paste the output in the email body
