@@ -199,7 +199,7 @@ impl<'r, R: Read> Block<'r, R> {
             None => item,
         };
 
-        if b_original == block_bytes.len() {
+        if b_original != 0 && b_original == block_bytes.len() {
             // from_avro_datum did not consume any bytes, so return an error to avoid an infinite loop
             return Err(Error::ReadBlock);
         }

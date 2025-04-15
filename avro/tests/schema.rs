@@ -2353,3 +2353,19 @@ fn avro_rs_66_test_independent_canonical_form_missing_ref() -> TestResult {
     ));
     Ok(())
 }
+
+#[test]
+fn avro_rs_181_single_null_record() -> TestResult {
+    let mut buff = Cursor::new(Vec::new());
+    let schema = Schema::parse_str(r#""null""#)?;
+    let mut writer = Writer::new(&schema, &mut buff);
+    writer.append(serde_json::Value::Null)?;
+    writer.into_inner()?;
+    buff.set_position(0);
+
+    for val in Reader::new(buff)? {
+        assert_eq!(Value::Null, val?);
+    }
+
+    Ok(())
+}
