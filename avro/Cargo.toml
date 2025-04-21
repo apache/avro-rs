@@ -55,7 +55,7 @@ name = "single"
 [dependencies]
 apache-avro-derive = { default-features = false, version = "0.18.0", path = "../avro_derive", optional = true }
 bigdecimal = { default-features = false, version = "0.4.8", features = ["std", "serde-json"] }
-bon = { default-features = false, version = "3.6.1" }
+bon = { default-features = false, version = "3.6.3" }
 bzip2 = { version = "0.5.2", optional = true }
 crc32fast = { default-features = false, version = "1.4.2", optional = true }
 digest = { default-features = false, version = "0.10.7", features = ["core-api"] }
