@@ -18,7 +18,7 @@
 //! Logic handling writing in Avro format at user level.
 use crate::{
     encode::{encode, encode_internal, encode_to_vec},
-    rabin::Rabin,
+    headers::{HeaderBuilder, RabinFingerprintHeader},
     schema::{AvroSchema, Name, ResolvedOwnedSchema, ResolvedSchema, Schema},
     ser_schema::SchemaAwareWriteSerializer,
     types::Value,
@@ -488,20 +488,17 @@ impl GenericSingleObjectWriter {
         schema: &Schema,
         initial_buffer_cap: usize,
     ) -> AvroResult<GenericSingleObjectWriter> {
-        let fingerprint = schema.fingerprint::<Rabin>();
+        let header_builder = RabinFingerprintHeader::create_from_schema(schema);
+        Self::new_with_capacity_and_header_builder(schema, initial_buffer_cap, header_builder)
+    }
+
+    pub fn new_with_capacity_and_header_builder<H: HeaderBuilder>(
+        schema: &Schema,
+        initial_buffer_cap: usize,
+        header_builder: H,
+    ) -> AvroResult<GenericSingleObjectWriter> {
         let mut buffer = Vec::with_capacity(initial_buffer_cap);
-        let header = [
-            0xC3,
-            0x01,
-            fingerprint.bytes[0],
-            fingerprint.bytes[1],
-            fingerprint.bytes[2],
-            fingerprint.bytes[3],
-            fingerprint.bytes[4],
-            fingerprint.bytes[5],
-            fingerprint.bytes[6],
-            fingerprint.bytes[7],
-        ];
+        let header = header_builder.build_header();
         buffer.extend_from_slice(&header);
 
         Ok(GenericSingleObjectWriter {
@@ -701,6 +698,7 @@ mod tests {
     use crate::{
         decimal::Decimal,
         duration::{Days, Duration, Millis, Months},
+        rabin::Rabin,
         schema::{DecimalSchema, FixedSchema, Name},
         types::Record,
         util::zig_i64,
