@@ -598,11 +598,12 @@ pub fn read_marker(bytes: &[u8]) -> [u8; 16] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{encode::encode, rabin::Rabin, types::Record};
+    use crate::{encode::encode, headers::GlueSchemaUuidHeader, rabin::Rabin, types::Record};
     use apache_avro_test_helper::TestResult;
     use pretty_assertions::assert_eq;
     use serde::Deserialize;
     use std::io::Cursor;
+    use uuid::Uuid;
 
     const SCHEMA: &str = r#"
     {
@@ -1027,6 +1028,24 @@ mod tests {
         assert_eq!(obj, read_obj2);
         assert_eq!(val, expected_value);
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_avro_generic_reader_alternate_header() -> TestResult {
+        let schema_uuid = Uuid::parse_str("b2f1cf00-0434-013e-439a-125eb8485a5f")?;
+        let header_builder = GlueSchemaUuidHeader::create_from_uuid(schema_uuid);
+        let generic_reader = GenericSingleObjectReader::new_with_header_builder(
+            TestSingleObjectReader::get_schema(),
+            header_builder,
+        )
+        .expect("failed to build reader");
+        let data_to_read: Vec<u8> = vec![
+            3, 0, 178, 241, 207, 0, 4, 52, 1, 62, 67, 154, 18, 94, 184, 72, 90, 95,
+        ];
+        let mut to_read = &data_to_read[..];
+        let read_result = generic_reader.read_value(&mut to_read);
+        matches!(read_result, Err(crate::Error::ReadBytes(_)));
         Ok(())
     }
 

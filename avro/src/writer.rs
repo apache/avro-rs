@@ -509,13 +509,14 @@ impl GenericSingleObjectWriter {
 
     /// Write the referenced Value to the provided Write object. Returns a result with the number of bytes written including the header
     pub fn write_value_ref<W: Write>(&mut self, v: &Value, writer: &mut W) -> AvroResult<usize> {
-        if self.buffer.len() != 10 {
+        let original_length = self.buffer.len();
+        if !(10..=20).contains(&original_length) {
             Err(Error::IllegalSingleObjectWriterState)
         } else {
             write_value_ref_owned_resolved(&self.resolved, v, &mut self.buffer)?;
             writer.write_all(&self.buffer).map_err(Error::WriteBytes)?;
             let len = self.buffer.len();
-            self.buffer.truncate(10);
+            self.buffer.truncate(original_length);
             Ok(len)
         }
     }
@@ -698,6 +699,7 @@ mod tests {
     use crate::{
         decimal::Decimal,
         duration::{Days, Duration, Millis, Months},
+        headers::GlueSchemaUuidHeader,
         rabin::Rabin,
         schema::{DecimalSchema, FixedSchema, Name},
         types::Record,
@@ -706,6 +708,7 @@ mod tests {
     };
     use pretty_assertions::assert_eq;
     use serde::{Deserialize, Serialize};
+    use uuid::Uuid;
 
     use crate::codec::DeflateSettings;
     use apache_avro_test_helper::TestResult;
@@ -1379,6 +1382,33 @@ mod tests {
         .expect("encode should have failed by here as a dependency of any writing");
         assert_eq!(&buf[10..], &msg_binary[..]);
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_single_object_writer_with_header_builder() -> TestResult {
+        let mut buf: Vec<u8> = Vec::new();
+        let obj = TestSingleObjectWriter {
+            a: 300,
+            b: 34.555,
+            c: vec!["cat".into(), "dog".into()],
+        };
+        let schema_uuid = Uuid::parse_str("b2f1cf00-0434-013e-439a-125eb8485a5f")?;
+        let header_builder = GlueSchemaUuidHeader::create_from_uuid(schema_uuid);
+        let mut writer = GenericSingleObjectWriter::new_with_capacity_and_header_builder(
+            &TestSingleObjectWriter::get_schema(),
+            1024,
+            header_builder,
+        )
+        .expect("Should resolve schema");
+        let value = obj.into();
+        writer
+            .write_value_ref(&value, &mut buf)
+            .expect("Error serializing properly");
+
+        assert_eq!(buf[0], 0x03);
+        assert_eq!(buf[1], 0x00);
+        assert_eq!(buf[2..18], schema_uuid.into_bytes()[..]);
         Ok(())
     }
 
