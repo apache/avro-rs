@@ -11,7 +11,7 @@ pub struct RabinFingerprintHeader {
 }
 
 impl RabinFingerprintHeader {
-    pub fn create_from_schema(schema: &Schema) -> Self {
+    pub fn from_schema(schema: &Schema) -> Self {
         let fingerprint = schema.fingerprint::<Rabin>();
         RabinFingerprintHeader { fingerprint }
     }
@@ -39,7 +39,7 @@ pub struct GlueSchemaUuidHeader {
 }
 
 impl GlueSchemaUuidHeader {
-    pub fn create_from_uuid(schema_uuid: Uuid) -> Self {
+    pub fn from_uuid(schema_uuid: Uuid) -> Self {
         GlueSchemaUuidHeader { schema_uuid }
     }
 
@@ -91,7 +91,7 @@ mod test {
             }
             "#;
         let schema = Schema::parse_str(schema_str)?;
-        let header_builder = RabinFingerprintHeader::create_from_schema(&schema);
+        let header_builder = RabinFingerprintHeader::from_schema(&schema);
         let computed_header = header_builder.build_header();
         let expected_header: Vec<u8> = vec![195, 1, 232, 198, 194, 12, 97, 95, 44, 71];
         assert_eq!(computed_header, expected_header);
@@ -101,7 +101,7 @@ mod test {
     #[test]
     fn test_glue_schema_header() -> TestResult {
         let schema_uuid = Uuid::parse_str("b2f1cf00-0434-013e-439a-125eb8485a5f")?;
-        let header_builder = GlueSchemaUuidHeader::create_from_uuid(schema_uuid);
+        let header_builder = GlueSchemaUuidHeader::from_uuid(schema_uuid);
         let computed_header = header_builder.build_header();
         let expected_header: Vec<u8> = vec![
             3, 0, 178, 241, 207, 0, 4, 52, 1, 62, 67, 154, 18, 94, 184, 72, 90, 95,

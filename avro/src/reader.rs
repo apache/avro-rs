@@ -508,7 +508,7 @@ pub struct GenericSingleObjectReader {
 
 impl GenericSingleObjectReader {
     pub fn new(schema: Schema) -> AvroResult<GenericSingleObjectReader> {
-        let header_builder = RabinFingerprintHeader::create_from_schema(&schema);
+        let header_builder = RabinFingerprintHeader::from_schema(&schema);
         Self::new_with_header_builder(schema, header_builder)
     }
 
@@ -1032,9 +1032,9 @@ mod tests {
     }
 
     #[test]
-    fn test_avro_generic_reader_alternate_header() -> TestResult {
+    fn avro_rs_164_generic_reader_alternate_header() -> TestResult {
         let schema_uuid = Uuid::parse_str("b2f1cf00-0434-013e-439a-125eb8485a5f")?;
-        let header_builder = GlueSchemaUuidHeader::create_from_uuid(schema_uuid);
+        let header_builder = GlueSchemaUuidHeader::from_uuid(schema_uuid);
         let generic_reader = GenericSingleObjectReader::new_with_header_builder(
             TestSingleObjectReader::get_schema(),
             header_builder,

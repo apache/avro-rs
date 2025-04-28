@@ -488,7 +488,7 @@ impl GenericSingleObjectWriter {
         schema: &Schema,
         initial_buffer_cap: usize,
     ) -> AvroResult<GenericSingleObjectWriter> {
-        let header_builder = RabinFingerprintHeader::create_from_schema(schema);
+        let header_builder = RabinFingerprintHeader::from_schema(schema);
         Self::new_with_capacity_and_header_builder(schema, initial_buffer_cap, header_builder)
     }
 
@@ -1394,7 +1394,7 @@ mod tests {
             c: vec!["cat".into(), "dog".into()],
         };
         let schema_uuid = Uuid::parse_str("b2f1cf00-0434-013e-439a-125eb8485a5f")?;
-        let header_builder = GlueSchemaUuidHeader::create_from_uuid(schema_uuid);
+        let header_builder = GlueSchemaUuidHeader::from_uuid(schema_uuid);
         let mut writer = GenericSingleObjectWriter::new_with_capacity_and_header_builder(
             &TestSingleObjectWriter::get_schema(),
             1024,
