@@ -25,7 +25,7 @@ use crate::{
     AvroResult, Codec, Error,
 };
 use serde::Serialize;
-use std::{collections::HashMap, io::Write, marker::PhantomData};
+use std::{collections::HashMap, io::Write, marker::PhantomData, ops::RangeInclusive};
 
 const DEFAULT_BLOCK_SIZE: usize = 16000;
 const AVRO_OBJECT_HEADER: &[u8] = b"Obj\x01";
@@ -492,10 +492,10 @@ impl GenericSingleObjectWriter {
         Self::new_with_capacity_and_header_builder(schema, initial_buffer_cap, header_builder)
     }
 
-    pub fn new_with_capacity_and_header_builder<H: HeaderBuilder>(
+    pub fn new_with_capacity_and_header_builder<HB: HeaderBuilder>(
         schema: &Schema,
         initial_buffer_cap: usize,
-        header_builder: H,
+        header_builder: HB,
     ) -> AvroResult<GenericSingleObjectWriter> {
         let mut buffer = Vec::with_capacity(initial_buffer_cap);
         let header = header_builder.build_header();
@@ -507,10 +507,12 @@ impl GenericSingleObjectWriter {
         })
     }
 
+    const HEADER_LENGTH_RANGE: RangeInclusive<usize> = 10_usize..=20_usize;
+
     /// Write the referenced Value to the provided Write object. Returns a result with the number of bytes written including the header
     pub fn write_value_ref<W: Write>(&mut self, v: &Value, writer: &mut W) -> AvroResult<usize> {
         let original_length = self.buffer.len();
-        if !(10..=20).contains(&original_length) {
+        if !Self::HEADER_LENGTH_RANGE.contains(&original_length) {
             Err(Error::IllegalSingleObjectWriterState)
         } else {
             write_value_ref_owned_resolved(&self.resolved, v, &mut self.buffer)?;

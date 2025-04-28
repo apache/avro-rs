@@ -1,3 +1,20 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
 //! Handling of Avro magic headers
 use uuid::Uuid;
 
@@ -12,8 +29,8 @@ pub trait HeaderBuilder {
 
 /// HeaderBuilder based on the Rabin schema fingerprint
 ///
-/// This is the default, and will be used automatically by the `new` impls in
-/// `GenericSingleObjectReader` and `GenericSingleObjectWriter`.
+/// This is the default and will be used automatically by the `new` impls in
+/// [crate::reader::GenericSingleObjectReader] and [crate::writer::GenericSingleObjectWriter].
 pub struct RabinFingerprintHeader {
     fingerprint: SchemaFingerprint,
 }
@@ -28,22 +45,16 @@ impl RabinFingerprintHeader {
 
 impl HeaderBuilder for RabinFingerprintHeader {
     fn build_header(&self) -> Vec<u8> {
+        let bytes = &self.fingerprint.bytes;
         vec![
-            0xC3,
-            0x01,
-            self.fingerprint.bytes[0],
-            self.fingerprint.bytes[1],
-            self.fingerprint.bytes[2],
-            self.fingerprint.bytes[3],
-            self.fingerprint.bytes[4],
-            self.fingerprint.bytes[5],
-            self.fingerprint.bytes[6],
-            self.fingerprint.bytes[7],
+            0xC3, 0x01, bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
+            bytes[7],
         ]
     }
 }
 
-/// HeaderBuilder based on Glue schema UUID
+/// HeaderBuilder based on
+/// [Glue](https://docs.aws.amazon.com/glue/latest/dg/what-is-glue.html) schema UUID
 ///
 /// See the function docs for usage details
 pub struct GlueSchemaUuidHeader {
@@ -72,9 +83,8 @@ impl GlueSchemaUuidHeader {
         if message_payload.len() < 19 {
             return Err(crate::error::Error::HeaderMagic);
         }
-        // The only possible error is invalid length, and we just checked the length,
-        // so unwrap is safe
-        let schema_uuid = Uuid::from_slice(&message_payload[2..18]).unwrap();
+        let schema_uuid =
+            Uuid::from_slice(&message_payload[2..18]).map_err(crate::Error::UuidFromSlice)?;
         Ok(GlueSchemaUuidHeader { schema_uuid })
     }
 
@@ -141,10 +151,10 @@ mod test {
 
     #[test]
     fn test_glue_header_parse() -> TestResult {
-        let incoming_message: Vec<u8> = vec![
+        let incoming_avro_message: Vec<u8> = vec![
             3, 0, 178, 241, 207, 0, 4, 52, 1, 62, 67, 154, 18, 94, 184, 72, 90, 95, 65, 65, 65,
         ];
-        let header_builder = GlueSchemaUuidHeader::parse_from_raw_avro(&incoming_message)?;
+        let header_builder = GlueSchemaUuidHeader::parse_from_raw_avro(&incoming_avro_message)?;
         let expected_schema_uuid = Uuid::parse_str("b2f1cf00-0434-013e-439a-125eb8485a5f")?;
         assert_eq!(header_builder.schema_uuid(), expected_schema_uuid);
         Ok(())
@@ -153,9 +163,9 @@ mod test {
     #[test]
     fn test_glue_header_parse_err_on_message_too_short() -> TestResult {
         let incoming_message: Vec<u8> = vec![3, 0, 178, 241, 207, 0, 4, 52, 1];
-        let header_builder = GlueSchemaUuidHeader::parse_from_raw_avro(&incoming_message);
+        let header_builder_res = GlueSchemaUuidHeader::parse_from_raw_avro(&incoming_message);
         assert!(matches!(
-            header_builder,
+            header_builder_res,
             Err(crate::error::Error::HeaderMagic)
         ));
         Ok(())

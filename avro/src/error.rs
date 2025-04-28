@@ -513,6 +513,9 @@ pub enum Error {
 
     #[error("Invalid Avro data! Cannot read codec type from value that is not Value::Bytes.")]
     BadCodecMetadata,
+
+    #[error("Cannot convert a slice to Uuid: {0}")]
+    UuidFromSlice(#[source] uuid::Error),
 }
 
 #[derive(thiserror::Error, PartialEq)]

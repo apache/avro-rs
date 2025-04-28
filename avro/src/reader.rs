@@ -512,9 +512,9 @@ impl GenericSingleObjectReader {
         Self::new_with_header_builder(schema, header_builder)
     }
 
-    pub fn new_with_header_builder<H: HeaderBuilder>(
+    pub fn new_with_header_builder<HB: HeaderBuilder>(
         schema: Schema,
-        header_builder: H,
+        header_builder: HB,
     ) -> AvroResult<GenericSingleObjectReader> {
         let expected_header = header_builder.build_header();
         Ok(GenericSingleObjectReader {
