@@ -70,7 +70,7 @@ impl GlueSchemaUuidHeader {
     pub fn from_uuid(schema_uuid: Uuid) -> Self {
         GlueSchemaUuidHeader { schema_uuid }
     }
-    
+
     /// The minimum length of a Glue header.
     /// 2 bytes for the special prefix (3, 0) plus
     /// 16 bytes for the Uuid
