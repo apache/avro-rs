@@ -70,6 +70,11 @@ impl GlueSchemaUuidHeader {
     pub fn from_uuid(schema_uuid: Uuid) -> Self {
         GlueSchemaUuidHeader { schema_uuid }
     }
+    
+    /// The minimum length of a Glue header.
+    /// 2 bytes for the special prefix (3, 0) plus
+    /// 16 bytes for the Uuid
+    const GLUE_HEADER_LENGTH: usize = 18;
 
     /// Create an instance of the struct based on parsing the UUID out of the header of a raw
     /// message
@@ -80,7 +85,7 @@ impl GlueSchemaUuidHeader {
     /// schema for the message. You can then use the raw message, the schema, and the struct
     /// instance to read the message.
     pub fn parse_from_raw_avro(message_payload: &[u8]) -> AvroResult<Self> {
-        if message_payload.len() < 18 {
+        if message_payload.len() < Self::GLUE_HEADER_LENGTH {
             return Err(crate::error::Error::HeaderMagic);
         }
         let schema_uuid =
