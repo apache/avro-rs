@@ -871,6 +871,7 @@ mod ser_schema;
 mod util;
 mod writer;
 
+pub mod headers;
 pub mod rabin;
 pub mod schema;
 pub mod schema_compatibility;

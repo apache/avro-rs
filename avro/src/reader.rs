@@ -19,7 +19,7 @@
 use crate::{
     decode::{decode, decode_internal},
     from_value,
-    rabin::Rabin,
+    headers::{HeaderBuilder, RabinFingerprintHeader},
     schema::{
         resolve_names, resolve_names_with_schemata, AvroSchema, Names, ResolvedOwnedSchema,
         ResolvedSchema, Schema,
@@ -503,24 +503,20 @@ pub fn from_avro_datum_reader_schemata<R: Read>(
 
 pub struct GenericSingleObjectReader {
     write_schema: ResolvedOwnedSchema,
-    expected_header: [u8; 10],
+    expected_header: Vec<u8>,
 }
 
 impl GenericSingleObjectReader {
     pub fn new(schema: Schema) -> AvroResult<GenericSingleObjectReader> {
-        let fingerprint = schema.fingerprint::<Rabin>();
-        let expected_header = [
-            0xC3,
-            0x01,
-            fingerprint.bytes[0],
-            fingerprint.bytes[1],
-            fingerprint.bytes[2],
-            fingerprint.bytes[3],
-            fingerprint.bytes[4],
-            fingerprint.bytes[5],
-            fingerprint.bytes[6],
-            fingerprint.bytes[7],
-        ];
+        let header_builder = RabinFingerprintHeader::from_schema(&schema);
+        Self::new_with_header_builder(schema, header_builder)
+    }
+
+    pub fn new_with_header_builder<HB: HeaderBuilder>(
+        schema: Schema,
+        header_builder: HB,
+    ) -> AvroResult<GenericSingleObjectReader> {
+        let expected_header = header_builder.build_header();
         Ok(GenericSingleObjectReader {
             write_schema: ResolvedOwnedSchema::try_from(schema)?,
             expected_header,
@@ -528,7 +524,7 @@ impl GenericSingleObjectReader {
     }
 
     pub fn read_value<R: Read>(&self, reader: &mut R) -> AvroResult<Value> {
-        let mut header: [u8; 10] = [0; 10];
+        let mut header = vec![0; self.expected_header.len()];
         match reader.read_exact(&mut header) {
             Ok(_) => {
                 if self.expected_header == header {
@@ -540,7 +536,7 @@ impl GenericSingleObjectReader {
                     )
                 } else {
                     Err(Error::SingleObjectHeaderMismatch(
-                        self.expected_header,
+                        self.expected_header.clone(),
                         header,
                     ))
                 }
@@ -602,11 +598,12 @@ pub fn read_marker(bytes: &[u8]) -> [u8; 16] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{encode::encode, types::Record};
+    use crate::{encode::encode, headers::GlueSchemaUuidHeader, rabin::Rabin, types::Record};
     use apache_avro_test_helper::TestResult;
     use pretty_assertions::assert_eq;
     use serde::Deserialize;
     use std::io::Cursor;
+    use uuid::Uuid;
 
     const SCHEMA: &str = r#"
     {
@@ -1031,6 +1028,24 @@ mod tests {
         assert_eq!(obj, read_obj2);
         assert_eq!(val, expected_value);
 
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_164_generic_reader_alternate_header() -> TestResult {
+        let schema_uuid = Uuid::parse_str("b2f1cf00-0434-013e-439a-125eb8485a5f")?;
+        let header_builder = GlueSchemaUuidHeader::from_uuid(schema_uuid);
+        let generic_reader = GenericSingleObjectReader::new_with_header_builder(
+            TestSingleObjectReader::get_schema(),
+            header_builder,
+        )
+        .expect("failed to build reader");
+        let data_to_read: Vec<u8> = vec![
+            3, 0, 178, 241, 207, 0, 4, 52, 1, 62, 67, 154, 18, 94, 184, 72, 90, 95,
+        ];
+        let mut to_read = &data_to_read[..];
+        let read_result = generic_reader.read_value(&mut to_read);
+        matches!(read_result, Err(crate::Error::ReadBytes(_)));
         Ok(())
     }
 

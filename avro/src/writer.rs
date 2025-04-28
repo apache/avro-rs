@@ -18,14 +18,14 @@
 //! Logic handling writing in Avro format at user level.
 use crate::{
     encode::{encode, encode_internal, encode_to_vec},
-    rabin::Rabin,
+    headers::{HeaderBuilder, RabinFingerprintHeader},
     schema::{AvroSchema, Name, ResolvedOwnedSchema, ResolvedSchema, Schema},
     ser_schema::SchemaAwareWriteSerializer,
     types::Value,
     AvroResult, Codec, Error,
 };
 use serde::Serialize;
-use std::{collections::HashMap, io::Write, marker::PhantomData};
+use std::{collections::HashMap, io::Write, marker::PhantomData, ops::RangeInclusive};
 
 const DEFAULT_BLOCK_SIZE: usize = 16000;
 const AVRO_OBJECT_HEADER: &[u8] = b"Obj\x01";
@@ -488,20 +488,17 @@ impl GenericSingleObjectWriter {
         schema: &Schema,
         initial_buffer_cap: usize,
     ) -> AvroResult<GenericSingleObjectWriter> {
-        let fingerprint = schema.fingerprint::<Rabin>();
+        let header_builder = RabinFingerprintHeader::from_schema(schema);
+        Self::new_with_capacity_and_header_builder(schema, initial_buffer_cap, header_builder)
+    }
+
+    pub fn new_with_capacity_and_header_builder<HB: HeaderBuilder>(
+        schema: &Schema,
+        initial_buffer_cap: usize,
+        header_builder: HB,
+    ) -> AvroResult<GenericSingleObjectWriter> {
         let mut buffer = Vec::with_capacity(initial_buffer_cap);
-        let header = [
-            0xC3,
-            0x01,
-            fingerprint.bytes[0],
-            fingerprint.bytes[1],
-            fingerprint.bytes[2],
-            fingerprint.bytes[3],
-            fingerprint.bytes[4],
-            fingerprint.bytes[5],
-            fingerprint.bytes[6],
-            fingerprint.bytes[7],
-        ];
+        let header = header_builder.build_header();
         buffer.extend_from_slice(&header);
 
         Ok(GenericSingleObjectWriter {
@@ -510,15 +507,18 @@ impl GenericSingleObjectWriter {
         })
     }
 
+    const HEADER_LENGTH_RANGE: RangeInclusive<usize> = 10_usize..=20_usize;
+
     /// Write the referenced Value to the provided Write object. Returns a result with the number of bytes written including the header
     pub fn write_value_ref<W: Write>(&mut self, v: &Value, writer: &mut W) -> AvroResult<usize> {
-        if self.buffer.len() != 10 {
+        let original_length = self.buffer.len();
+        if !Self::HEADER_LENGTH_RANGE.contains(&original_length) {
             Err(Error::IllegalSingleObjectWriterState)
         } else {
             write_value_ref_owned_resolved(&self.resolved, v, &mut self.buffer)?;
             writer.write_all(&self.buffer).map_err(Error::WriteBytes)?;
             let len = self.buffer.len();
-            self.buffer.truncate(10);
+            self.buffer.truncate(original_length);
             Ok(len)
         }
     }
@@ -701,6 +701,8 @@ mod tests {
     use crate::{
         decimal::Decimal,
         duration::{Days, Duration, Millis, Months},
+        headers::GlueSchemaUuidHeader,
+        rabin::Rabin,
         schema::{DecimalSchema, FixedSchema, Name},
         types::Record,
         util::zig_i64,
@@ -708,6 +710,7 @@ mod tests {
     };
     use pretty_assertions::assert_eq;
     use serde::{Deserialize, Serialize};
+    use uuid::Uuid;
 
     use crate::codec::DeflateSettings;
     use apache_avro_test_helper::TestResult;
@@ -1381,6 +1384,33 @@ mod tests {
         .expect("encode should have failed by here as a dependency of any writing");
         assert_eq!(&buf[10..], &msg_binary[..]);
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_single_object_writer_with_header_builder() -> TestResult {
+        let mut buf: Vec<u8> = Vec::new();
+        let obj = TestSingleObjectWriter {
+            a: 300,
+            b: 34.555,
+            c: vec!["cat".into(), "dog".into()],
+        };
+        let schema_uuid = Uuid::parse_str("b2f1cf00-0434-013e-439a-125eb8485a5f")?;
+        let header_builder = GlueSchemaUuidHeader::from_uuid(schema_uuid);
+        let mut writer = GenericSingleObjectWriter::new_with_capacity_and_header_builder(
+            &TestSingleObjectWriter::get_schema(),
+            1024,
+            header_builder,
+        )
+        .expect("Should resolve schema");
+        let value = obj.into();
+        writer
+            .write_value_ref(&value, &mut buf)
+            .expect("Error serializing properly");
+
+        assert_eq!(buf[0], 0x03);
+        assert_eq!(buf[1], 0x00);
+        assert_eq!(buf[2..18], schema_uuid.into_bytes()[..]);
         Ok(())
     }
 
