@@ -80,7 +80,7 @@ impl GlueSchemaUuidHeader {
     /// schema for the message. You can then use the raw message, the schema, and the struct
     /// instance to read the message.
     pub fn parse_from_raw_avro(message_payload: &[u8]) -> AvroResult<Self> {
-        if message_payload.len() < 19 {
+        if message_payload.len() < 18 {
             return Err(crate::error::Error::HeaderMagic);
         }
         let schema_uuid =
