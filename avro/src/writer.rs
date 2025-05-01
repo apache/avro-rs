@@ -583,9 +583,7 @@ where
             self.header_written = true;
         }
 
-        let names: HashMap<Name, &Schema> = HashMap::new();
-        let mut serializer = SchemaAwareWriteSerializer::new(writer, &self.schema, &names, None);
-        bytes_written += data.serialize(&mut serializer)?;
+        bytes_written += write_avro_datum_ref(&self.schema, data, writer)?;
 
         Ok(bytes_written)
     }
@@ -656,6 +654,19 @@ pub fn to_avro_datum<T: Into<Value>>(schema: &Schema, value: T) -> AvroResult<Ve
     let mut buffer = Vec::new();
     write_avro_datum(schema, value, &mut buffer)?;
     Ok(buffer)
+}
+
+/// Write the referenced `Serialize` object to the provided Write object. Returns a result with
+/// the number of bytes written.
+///
+/// **NOTE** This function has a quite small niche of usage and does NOT generate headers and sync
+/// markers; use [`Writer`](struct.Writer.html) to be fully Avro-compatible if you don't know what
+/// you are doing, instead.
+pub fn write_avro_datum_ref<T: Serialize, W: Write>(schema: &Schema, data: &T, writer: &mut W) -> AvroResult<usize> {
+    let names: HashMap<Name, &Schema> = HashMap::new();
+    let mut serializer = SchemaAwareWriteSerializer::new(writer, schema, &names, None);
+    let bytes_written = data.serialize(&mut serializer)?;
+    Ok(bytes_written)
 }
 
 /// Encode a compatible value (implementing the `ToAvro` trait) into Avro format, also
