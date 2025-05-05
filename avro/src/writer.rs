@@ -656,10 +656,10 @@ pub fn to_avro_datum<T: Into<Value>>(schema: &Schema, value: T) -> AvroResult<Ve
     Ok(buffer)
 }
 
-/// Write the referenced `Serialize` object to the provided `Write` object. Returns a result with
-/// the number of bytes written.
+/// Write the referenced [Serialize]able object to the provided [Write] object.
+/// Returns a result with the number of bytes written.
 ///
-/// **NOTE** This function has a quite small niche of usage and does NOT generate headers and sync
+/// **NOTE** This function has a quite small niche of usage and does **NOT** generate headers and sync
 /// markers; use [`append_ser`](struct.Writer.html#method.append_ser) to be fully Avro-compatible
 /// if you don't know what you are doing, instead.
 pub fn write_avro_datum_ref<T: Serialize, W: Write>(
@@ -750,12 +750,6 @@ mod tests {
     }
     "#;
 
-    #[derive(Serialize)]
-    struct TestStruct {
-        a: i64,
-        b: String,
-    }
-
     const UNION_SCHEMA: &str = r#"["null", "long"]"#;
 
     #[test]
@@ -776,7 +770,13 @@ mod tests {
     }
 
     #[test]
-    fn test_write_avro_datum_ref() -> TestResult {
+    fn avro_rs_193_write_avro_datum_ref() -> TestResult {
+        #[derive(Serialize)]
+        struct TestStruct {
+            a: i64,
+            b: String,
+        }
+
         let schema = Schema::parse_str(SCHEMA)?;
         let mut writer: Vec<u8> = Vec::new();
         let data = TestStruct {
