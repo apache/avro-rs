@@ -571,7 +571,7 @@ impl<T> SpecificSingleObjectWriter<T>
 where
     T: AvroSchema + Serialize,
 {
-    /// Write the referenced `Serialize` object to the provided Write object. Returns a result with
+    /// Write the referenced `Serialize` object to the provided `Write` object. Returns a result with
     /// the number of bytes written including the header
     pub fn write_ref<W: Write>(&mut self, data: &T, writer: &mut W) -> AvroResult<usize> {
         let mut bytes_written: usize = 0;
@@ -583,9 +583,7 @@ where
             self.header_written = true;
         }
 
-        let names: HashMap<Name, &Schema> = HashMap::new();
-        let mut serializer = SchemaAwareWriteSerializer::new(writer, &self.schema, &names, None);
-        bytes_written += data.serialize(&mut serializer)?;
+        bytes_written += write_avro_datum_ref(&self.schema, data, writer)?;
 
         Ok(bytes_written)
     }
@@ -656,6 +654,23 @@ pub fn to_avro_datum<T: Into<Value>>(schema: &Schema, value: T) -> AvroResult<Ve
     let mut buffer = Vec::new();
     write_avro_datum(schema, value, &mut buffer)?;
     Ok(buffer)
+}
+
+/// Write the referenced [Serialize]able object to the provided [Write] object.
+/// Returns a result with the number of bytes written.
+///
+/// **NOTE** This function has a quite small niche of usage and does **NOT** generate headers and sync
+/// markers; use [`append_ser`](struct.Writer.html#method.append_ser) to be fully Avro-compatible
+/// if you don't know what you are doing, instead.
+pub fn write_avro_datum_ref<T: Serialize, W: Write>(
+    schema: &Schema,
+    data: &T,
+    writer: &mut W,
+) -> AvroResult<usize> {
+    let names: HashMap<Name, &Schema> = HashMap::new();
+    let mut serializer = SchemaAwareWriteSerializer::new(writer, schema, &names, None);
+    let bytes_written = data.serialize(&mut serializer)?;
+    Ok(bytes_written)
 }
 
 /// Encode a compatible value (implementing the `ToAvro` trait) into Avro format, also
@@ -734,6 +749,7 @@ mod tests {
       ]
     }
     "#;
+
     const UNION_SCHEMA: &str = r#"["null", "long"]"#;
 
     #[test]
@@ -749,6 +765,34 @@ mod tests {
         expected.extend([b'f', b'o', b'o']);
 
         assert_eq!(to_avro_datum(&schema, record)?, expected);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_193_write_avro_datum_ref() -> TestResult {
+        #[derive(Serialize)]
+        struct TestStruct {
+            a: i64,
+            b: String,
+        }
+
+        let schema = Schema::parse_str(SCHEMA)?;
+        let mut writer: Vec<u8> = Vec::new();
+        let data = TestStruct {
+            a: 27,
+            b: "foo".to_string(),
+        };
+
+        let mut expected = Vec::new();
+        zig_i64(27, &mut expected)?;
+        zig_i64(3, &mut expected)?;
+        expected.extend([b'f', b'o', b'o']);
+
+        let bytes = write_avro_datum_ref(&schema, &data, &mut writer)?;
+
+        assert_eq!(bytes, expected.len());
+        assert_eq!(writer, expected);
 
         Ok(())
     }
