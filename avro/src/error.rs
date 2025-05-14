@@ -58,7 +58,7 @@ pub enum Error {
     #[error("Value {value:?} does not match schema {schema:?}: Reason: {reason}")]
     ValidationWithReason {
         value: Value,
-        schema: Schema,
+        schema: Box<Schema>,
         reason: String,
     },
 
@@ -449,13 +449,13 @@ pub enum Error {
     SerializeValueWithSchema {
         value_type: &'static str,
         value: String,
-        schema: Schema,
+        schema: Box<Schema>,
     },
 
     #[error("Failed to serialize field '{field_name}' for record {record_schema:?}: {error}")]
     SerializeRecordFieldWithSchema {
         field_name: &'static str,
-        record_schema: Schema,
+        record_schema: Box<Schema>,
         error: Box<Error>,
     },
 

@@ -604,7 +604,7 @@ fn write_value_ref_resolved(
     match value.validate_internal(schema, resolved_schema.get_names(), &schema.namespace()) {
         Some(reason) => Err(Error::ValidationWithReason {
             value: value.clone(),
-            schema: schema.clone(),
+            schema: Box::new(schema.clone()),
             reason,
         }),
         None => encode_internal(
@@ -630,7 +630,7 @@ fn write_value_ref_owned_resolved(
     ) {
         return Err(Error::ValidationWithReason {
             value: value.clone(),
-            schema: root_schema.clone(),
+            schema: Box::new(root_schema.clone()),
             reason,
         });
     }
