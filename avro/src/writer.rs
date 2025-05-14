@@ -1553,7 +1553,7 @@ mod tests {
         let mut writer = Writer::new(&schema, Vec::new());
 
         match writer.append_ser(conf) {
-            Ok(bytes) => panic!("Expected an error, but got {} bytes written", bytes),
+            Ok(bytes) => panic!("Expected an error, but got {bytes} bytes written"),
             Err(e) => {
                 assert_eq!(
                     e.to_string(),

@@ -97,7 +97,7 @@ impl<'r, R: Read> Block<'r, R> {
                 {
                     // already processed
                 } else if key.starts_with("avro.") {
-                    warn!("Ignoring unknown metadata key: {}", key);
+                    warn!("Ignoring unknown metadata key: {key}");
                 } else {
                     self.read_user_metadata(key, value);
                 }
@@ -241,10 +241,7 @@ impl<'r, R: Read> Block<'r, R> {
                 self.user_metadata.insert(key, vec.clone());
             }
             wrong => {
-                warn!(
-                    "User metadata values must be Value::Bytes, found {:?}",
-                    wrong
-                );
+                warn!("User metadata values must be Value::Bytes, found {wrong:?}");
             }
         }
     }

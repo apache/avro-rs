@@ -205,8 +205,7 @@ impl SchemataEq for StructFieldEq {
         error!(
             "This is a bug in schema_equality.rs! The following schemata types are not checked! \
             Please report it to the Avro library maintainers! \
-            \n{:?}\n\n{:?}",
-            schema_one, schema_two
+            \n{schema_one:?}\n\n{schema_two:?}"
         );
         false
     }
@@ -234,10 +233,7 @@ static SCHEMATA_COMPARATOR_ONCE: OnceLock<Box<dyn SchemataEq>> = OnceLock::new()
 pub fn set_schemata_equality_comparator(
     comparator: Box<dyn SchemataEq>,
 ) -> Result<(), Box<dyn SchemataEq>> {
-    debug!(
-        "Setting a custom schemata equality comparator: {:?}.",
-        comparator
-    );
+    debug!("Setting a custom schemata equality comparator: {comparator:?}.");
     SCHEMATA_COMPARATOR_ONCE.set(comparator)
 }
 

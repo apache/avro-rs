@@ -963,7 +963,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
             use std::fmt::Write;
             let mut v_str = String::with_capacity(value.len());
             for b in value {
-                if write!(&mut v_str, "{:x}", b).is_err() {
+                if write!(&mut v_str, "{b:x}").is_err() {
                     v_str.push_str("??");
                 }
             }
@@ -1118,8 +1118,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
             Schema::Record(sch) => match sch.fields.len() {
                 0 => Ok(0),
                 too_many => Err(create_error(format!(
-                    "Too many fields: {}. Expected: 0",
-                    too_many
+                    "Too many fields: {too_many}. Expected: 0"
                 ))),
             },
             Schema::Null => Ok(0),
@@ -1196,8 +1195,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 self.serialize_unit_variant_with_schema(name, variant_index, variant, ref_schema)
             }
             unsupported => Err(create_error(format!(
-                "Unsupported schema: {:?}. Expected: Enum, Union or Ref",
-                unsupported
+                "Unsupported schema: {unsupported:?}. Expected: Enum, Union or Ref"
             ))),
         }
     }
@@ -1438,7 +1436,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     ) -> Result<SchemaAwareWriteSerializeMap<'a, 's, W>, Error> {
         let create_error = |cause: String| {
             let len_str = len
-                .map(|l| format!("{}", l))
+                .map(|l| format!("{l}"))
                 .unwrap_or_else(|| String::from("?"));
 
             Error::SerializeValueWithSchema {
@@ -2600,8 +2598,7 @@ mod tests {
                     assert_eq!(
                         value,
                         format!(
-                            "10000. Cause: Expected: Timestamp{}. Got: Double",
-                            capital_precision
+                            "10000. Cause: Expected: Timestamp{capital_precision}. Got: Double"
                         )
                     );
                     assert_eq!(schema, schema);

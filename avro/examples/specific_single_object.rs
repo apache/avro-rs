@@ -41,7 +41,7 @@ fn main() -> anyhow::Result<()> {
             );
         }
         Err(err) => {
-            panic!("Error during serialization: {:?}", err);
+            panic!("Error during serialization: {err:?}");
         }
     }
 
