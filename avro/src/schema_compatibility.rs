@@ -1766,7 +1766,7 @@ mod tests {
         "#,
         ];
 
-        let schemas = Schema::parse_list(&schema_strs).unwrap();
+        let schemas = Schema::parse_list(schema_strs).unwrap();
         SchemaCompatibility::can_read(&schemas[1], &schemas[1])?;
 
         Ok(())

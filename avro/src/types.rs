@@ -2969,7 +2969,7 @@ Field with name '"b"' is not a member of the map items"#,
 
         let avro_value = Value::from(value);
 
-        let schemas = Schema::parse_list(&[main_schema, referenced_schema])?;
+        let schemas = Schema::parse_list([main_schema, referenced_schema])?;
 
         let main_schema = schemas.first().unwrap();
         let schemata: Vec<_> = schemas.iter().skip(1).collect();
@@ -3011,7 +3011,7 @@ Field with name '"b"' is not a member of the map items"#,
 
         let avro_value = Value::from(value);
 
-        let schemata = Schema::parse_list(&[referenced_enum, referenced_record, main_schema])?;
+        let schemata = Schema::parse_list([referenced_enum, referenced_record, main_schema])?;
 
         let main_schema = schemata.last().unwrap();
         let other_schemata: Vec<&Schema> = schemata.iter().take(2).collect();

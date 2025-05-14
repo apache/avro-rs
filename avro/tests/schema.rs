@@ -187,7 +187,7 @@ fn test_parse_list_without_cross_deps() -> TestResult {
         "size": 16
     }"#;
     let schema_strs = [schema_str_1, schema_str_2];
-    let schemas = Schema::parse_list(&schema_strs)?;
+    let schemas = Schema::parse_list(schema_strs)?;
 
     for schema_str in &schema_strs {
         let parsed = Schema::parse_str(schema_str)?;
@@ -220,8 +220,8 @@ fn test_parse_list_with_cross_deps_basic() -> TestResult {
 
     let schema_strs_first = [schema_a_str, schema_b_str];
     let schema_strs_second = [schema_b_str, schema_a_str];
-    let schemas_first = Schema::parse_list(&schema_strs_first)?;
-    let schemas_second = Schema::parse_list(&schema_strs_second)?;
+    let schemas_first = Schema::parse_list(schema_strs_first)?;
+    let schemas_second = Schema::parse_list(schema_strs_second)?;
 
     assert_eq!(schemas_first[0], schemas_second[1]);
     assert_eq!(schemas_first[1], schemas_second[0]);
@@ -249,8 +249,8 @@ fn test_parse_list_recursive_type() -> TestResult {
     }"#;
     let schema_strs_first = [schema_str_1, schema_str_2];
     let schema_strs_second = [schema_str_2, schema_str_1];
-    let _ = Schema::parse_list(&schema_strs_first)?;
-    let _ = Schema::parse_list(&schema_strs_second)?;
+    let _ = Schema::parse_list(schema_strs_first)?;
+    let _ = Schema::parse_list(schema_strs_second)?;
     Ok(())
 }
 
@@ -274,8 +274,8 @@ fn test_parse_list_with_cross_deps_and_namespaces() -> TestResult {
         ]
     }"#;
 
-    let schemas_first = Schema::parse_list(&[schema_a_str, schema_b_str])?;
-    let schemas_second = Schema::parse_list(&[schema_b_str, schema_a_str])?;
+    let schemas_first = Schema::parse_list([schema_a_str, schema_b_str])?;
+    let schemas_second = Schema::parse_list([schema_b_str, schema_a_str])?;
 
     assert_eq!(schemas_first[0], schemas_second[1]);
     assert_eq!(schemas_first[1], schemas_second[0]);
@@ -305,8 +305,8 @@ fn test_parse_list_with_cross_deps_and_namespaces_error() -> TestResult {
 
     let schema_strs_first = [schema_str_1, schema_str_2];
     let schema_strs_second = [schema_str_2, schema_str_1];
-    let _ = Schema::parse_list(&schema_strs_first).expect_err("Test failed");
-    let _ = Schema::parse_list(&schema_strs_second).expect_err("Test failed");
+    let _ = Schema::parse_list(schema_strs_first).expect_err("Test failed");
+    let _ = Schema::parse_list(schema_strs_second).expect_err("Test failed");
 
     Ok(())
 }
@@ -453,7 +453,7 @@ fn test_parse_list_multiple_dependencies() -> TestResult {
         ]
     }"#;
 
-    let parsed = Schema::parse_list(&[schema_a_str, schema_b_str, schema_c_str])?;
+    let parsed = Schema::parse_list([schema_a_str, schema_b_str, schema_c_str])?;
     let schema_strs = vec![schema_a_str, schema_b_str, schema_c_str];
     for schema_str_perm in permutations(&schema_strs) {
         let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
@@ -493,7 +493,7 @@ fn test_parse_list_shared_dependency() -> TestResult {
         ]
     }"#;
 
-    let parsed = Schema::parse_list(&[schema_a_str, schema_b_str, schema_c_str])?;
+    let parsed = Schema::parse_list([schema_a_str, schema_b_str, schema_c_str])?;
     let schema_strs = vec![schema_a_str, schema_b_str, schema_c_str];
     for schema_str_perm in permutations(&schema_strs) {
         let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
@@ -526,7 +526,7 @@ fn test_name_collision_error() -> TestResult {
         ]
     }"#;
 
-    let _ = Schema::parse_list(&[schema_str_1, schema_str_2]).expect_err("Test failed");
+    let _ = Schema::parse_list([schema_str_1, schema_str_2]).expect_err("Test failed");
     Ok(())
 }
 
@@ -550,7 +550,7 @@ fn test_namespace_prevents_collisions() -> TestResult {
         ]
     }"#;
 
-    let parsed = Schema::parse_list(&[schema_str_1, schema_str_2])?;
+    let parsed = Schema::parse_list([schema_str_1, schema_str_2])?;
     let parsed_1 = Schema::parse_str(schema_str_1)?;
     let parsed_2 = Schema::parse_str(schema_str_2)?;
     assert_eq!(parsed, vec!(parsed_1, parsed_2));
@@ -2346,7 +2346,7 @@ fn avro_rs_66_test_independent_canonical_form_missing_ref() -> TestResult {
     }"#;
 
     let schema_strs = [record_primitive, record_usage];
-    let schemata = Schema::parse_list(&schema_strs)?;
+    let schemata = Schema::parse_list(schema_strs)?;
     assert!(matches!(
         schemata[1].independent_canonical_form(&Vec::with_capacity(0)), //NOTE - we're passing in an empty schemata
         Err(Error::SchemaResolutionError(..))
