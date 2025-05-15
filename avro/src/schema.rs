@@ -1096,11 +1096,14 @@ impl Schema {
     /// during parsing.
     ///
     /// If two of the input schemas have the same fullname, an Error will be returned.
-    pub fn parse_list(input: &[&str]) -> AvroResult<Vec<Schema>> {
-        let mut input_schemas: HashMap<Name, Value> = HashMap::with_capacity(input.len());
-        let mut input_order: Vec<Name> = Vec::with_capacity(input.len());
-        for js in input {
-            let schema: Value = serde_json::from_str(js).map_err(Error::ParseSchemaJson)?;
+    pub fn parse_list(input: impl IntoIterator<Item = impl AsRef<str>>) -> AvroResult<Vec<Schema>> {
+        let input = input.into_iter();
+        let input_len = input.size_hint().0;
+        let mut input_schemas: HashMap<Name, Value> = HashMap::with_capacity(input_len);
+        let mut input_order: Vec<Name> = Vec::with_capacity(input_len);
+        for json in input {
+            let json = json.as_ref();
+            let schema: Value = serde_json::from_str(json).map_err(Error::ParseSchemaJson)?;
             if let Value::Object(inner) = &schema {
                 let name = Name::parse(inner, &None)?;
                 let previous_value = input_schemas.insert(name.clone(), schema);
@@ -1116,7 +1119,7 @@ impl Schema {
             input_schemas,
             resolving_schemas: HashMap::default(),
             input_order,
-            parsed_schemas: HashMap::with_capacity(input.len()),
+            parsed_schemas: HashMap::with_capacity(input_len),
         };
         parser.parse_list()
     }
@@ -1135,11 +1138,14 @@ impl Schema {
     /// * `schemata` - a slice of additional schemas that is used to resolve cross-references
     pub fn parse_str_with_list(
         schema: &str,
-        schemata: &[&str],
+        schemata: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> AvroResult<(Schema, Vec<Schema>)> {
-        let mut input_schemas: HashMap<Name, Value> = HashMap::with_capacity(schemata.len());
-        let mut input_order: Vec<Name> = Vec::with_capacity(schemata.len());
+        let schemata = schemata.into_iter();
+        let schemata_len = schemata.size_hint().0;
+        let mut input_schemas: HashMap<Name, Value> = HashMap::with_capacity(schemata_len);
+        let mut input_order: Vec<Name> = Vec::with_capacity(schemata_len);
         for json in schemata {
+            let json = json.as_ref();
             let schema: Value = serde_json::from_str(json).map_err(Error::ParseSchemaJson)?;
             if let Value::Object(inner) = &schema {
                 let name = Name::parse(inner, &None)?;
@@ -1155,7 +1161,7 @@ impl Schema {
             input_schemas,
             resolving_schemas: HashMap::default(),
             input_order,
-            parsed_schemas: HashMap::with_capacity(schemata.len()),
+            parsed_schemas: HashMap::with_capacity(schemata_len),
         };
         parser.parse_input_schemas()?;
 
@@ -2782,7 +2788,7 @@ mod tests {
             ]
         }"#;
 
-        let schema_c = Schema::parse_list(&[schema_str_a, schema_str_b, schema_str_c])?
+        let schema_c = Schema::parse_list([schema_str_a, schema_str_b, schema_str_c])?
             .last()
             .unwrap()
             .clone();
@@ -2831,7 +2837,7 @@ mod tests {
         let schema_str_c = r#"["A", "B"]"#;
 
         let (schema_c, schemata) =
-            Schema::parse_str_with_list(schema_str_c, &[schema_str_a, schema_str_b])?;
+            Schema::parse_str_with_list(schema_str_c, [schema_str_a, schema_str_b])?;
 
         let schema_a_expected = Schema::Record(RecordSchema {
             name: Name::new("A")?,
@@ -2906,7 +2912,7 @@ mod tests {
 
         let schema_str_c = r#"["A", "A"]"#;
 
-        match Schema::parse_str_with_list(schema_str_c, &[schema_str_a1, schema_str_a2]) {
+        match Schema::parse_str_with_list(schema_str_c, [schema_str_a1, schema_str_a2]) {
             Ok(_) => unreachable!("Expected an error that the name is already defined"),
             Err(e) => assert_eq!(
                 e.to_string(),
@@ -2937,7 +2943,7 @@ mod tests {
 
         let schema_str_c = r#"["A", "A"]"#;
 
-        match Schema::parse_str_with_list(schema_str_c, &[schema_str_a, schema_str_b]) {
+        match Schema::parse_str_with_list(schema_str_c, [schema_str_a, schema_str_b]) {
             Ok(_) => unreachable!("Expected an error that schema_str_b is missing a name field"),
             Err(e) => assert_eq!(e.to_string(), "No `name` field"),
         }
@@ -2960,7 +2966,7 @@ mod tests {
             "fields": [ {"name": "field_one", "type": "A"} ]
         }"#;
 
-        let list = Schema::parse_list(&[schema_str_a, schema_str_b])?;
+        let list = Schema::parse_list([schema_str_a, schema_str_b])?;
 
         let schema_a = list.first().unwrap().clone();
 
@@ -3000,7 +3006,7 @@ mod tests {
             ]
         }"#;
 
-        let schema_option_a = Schema::parse_list(&[schema_str_a, schema_str_option_a])?
+        let schema_option_a = Schema::parse_list([schema_str_a, schema_str_option_a])?
             .last()
             .unwrap()
             .clone();
