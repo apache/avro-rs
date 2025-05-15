@@ -42,8 +42,8 @@ fn match_ref_schemas(
             }
         }
         _ => Err(CompatibilityError::WrongType {
-            writer_schema_type: format!("{:#?}", writers_schema),
-            reader_schema_type: format!("{:#?}", readers_schema),
+            writer_schema_type: format!("{writers_schema:#?}"),
+            reader_schema_type: format!("{readers_schema:#?}"),
         }),
     }
 }
@@ -109,8 +109,8 @@ impl Checker {
                     match readers_schema {
                         Schema::Map(r_m) => self.full_match_schemas(&w_m.types, &r_m.types),
                         _ => Err(CompatibilityError::WrongType {
-                            writer_schema_type: format!("{:#?}", writers_schema),
-                            reader_schema_type: format!("{:#?}", readers_schema),
+                            writer_schema_type: format!("{writers_schema:#?}"),
+                            reader_schema_type: format!("{readers_schema:#?}"),
                         }),
                     }
                 } else {
@@ -125,8 +125,8 @@ impl Checker {
                     match readers_schema {
                         Schema::Array(r_a) => self.full_match_schemas(&w_a.items, &r_a.items),
                         _ => Err(CompatibilityError::WrongType {
-                            writer_schema_type: format!("{:#?}", writers_schema),
-                            reader_schema_type: format!("{:#?}", readers_schema),
+                            writer_schema_type: format!("{writers_schema:#?}"),
+                            reader_schema_type: format!("{readers_schema:#?}"),
                         }),
                     }
                 } else {
@@ -318,7 +318,7 @@ impl SchemaCompatibility {
             allowed_reader_types: Vec<SchemaKind>,
             writer_type: SchemaKind,
         ) -> Result<(), CompatibilityError> {
-            if allowed_reader_types.iter().any(|&t| t == reader_type) {
+            if allowed_reader_types.contains(&reader_type) {
                 Ok(())
             } else {
                 let mut allowed_types: Vec<SchemaKind> = vec![writer_type];
@@ -374,7 +374,7 @@ impl SchemaCompatibility {
 
             match r_type {
                 SchemaKind::Record | SchemaKind::Enum => {
-                    let msg = format!("A {} type must always has a name", readers_schema);
+                    let msg = format!("A {readers_schema} type must always has a name");
                     let writers_name = writers_schema.name().expect(&msg);
                     let readers_name = readers_schema.name().expect(&msg);
 

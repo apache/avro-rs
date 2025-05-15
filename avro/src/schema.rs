@@ -1532,8 +1532,7 @@ impl Parser {
                 convert(schema)
             } else {
                 warn!(
-                    "Ignoring unknown logical type '{}' for schema of type: {:?}!",
-                    logical_type, schema
+                    "Ignoring unknown logical type '{logical_type}' for schema of type: {schema:?}!"
                 );
                 Ok(schema)
             }
@@ -1554,7 +1553,7 @@ impl Parser {
                                     inner: Box::new(inner),
                                 })),
                                 Err(err) => {
-                                    warn!("Ignoring invalid decimal logical type: {}", err);
+                                    warn!("Ignoring invalid decimal logical type: {err}");
                                     Ok(inner)
                                 }
                             }
@@ -1578,14 +1577,11 @@ impl Parser {
                             Schema::String => Ok(Schema::Uuid),
                             Schema::Fixed(FixedSchema { size: 16, .. }) => Ok(Schema::Uuid),
                             Schema::Fixed(FixedSchema { size, .. }) => {
-                                warn!("Ignoring uuid logical type for a Fixed schema because its size ({size:?}) is not 16! Schema: {:?}", schema);
+                                warn!("Ignoring uuid logical type for a Fixed schema because its size ({size:?}) is not 16! Schema: {schema:?}");
                                 Ok(schema)
                             }
                             _ => {
-                                warn!(
-                                    "Ignoring invalid uuid logical type for schema: {:?}",
-                                    schema
-                                );
+                                warn!("Ignoring invalid uuid logical type for schema: {schema:?}");
                                 Ok(schema)
                             }
                         },
@@ -5385,8 +5381,7 @@ mod tests {
         let parse_result = Schema::parse(&schema);
         assert!(
             parse_result.is_ok(),
-            "parse result must be ok, got: {:?}",
-            parse_result
+            "parse result must be ok, got: {parse_result:?}"
         );
 
         Ok(())
@@ -5633,8 +5628,7 @@ mod tests {
         let parse_result = Schema::parse(&schema);
         assert!(
             parse_result.is_ok(),
-            "parse result must be ok, got: {:?}",
-            parse_result
+            "parse result must be ok, got: {parse_result:?}"
         );
         match parse_result? {
             Schema::BigDecimal => (),
@@ -6380,7 +6374,7 @@ mod tests {
         let expected = vec![Alias::new("ns1.r1")?, Alias::new("ns2.r2")?];
         match schema.aliases() {
             Some(aliases) => assert_eq!(aliases, &expected),
-            None => panic!("Expected Some({:?}), got None", expected),
+            None => panic!("Expected Some({expected:?}), got None"),
         }
 
         let schema_str = r#"
@@ -6414,7 +6408,7 @@ mod tests {
         let expected = vec![Alias::new("ns1.en1")?, Alias::new("ns2.en2")?];
         match schema.aliases() {
             Some(aliases) => assert_eq!(aliases, &expected),
-            None => panic!("Expected Some({:?}), got None", expected),
+            None => panic!("Expected Some({expected:?}), got None"),
         }
 
         let schema_str = r#"
@@ -6445,7 +6439,7 @@ mod tests {
         let expected = vec![Alias::new("ns1.fx1")?, Alias::new("ns2.fx2")?];
         match schema.aliases() {
             Some(aliases) => assert_eq!(aliases, &expected),
-            None => panic!("Expected Some({:?}), got None", expected),
+            None => panic!("Expected Some({expected:?}), got None"),
         }
 
         let schema_str = r#"
@@ -6490,7 +6484,7 @@ mod tests {
         let expected = "Record Document";
         match schema.doc() {
             Some(doc) => assert_eq!(doc, expected),
-            None => panic!("Expected Some({:?}), got None", expected),
+            None => panic!("Expected Some({expected:?}), got None"),
         }
 
         let schema_str = r#"
@@ -6522,7 +6516,7 @@ mod tests {
         let expected = "Enum Document";
         match schema.doc() {
             Some(doc) => assert_eq!(doc, expected),
-            None => panic!("Expected Some({:?}), got None", expected),
+            None => panic!("Expected Some({expected:?}), got None"),
         }
 
         let schema_str = r#"
@@ -6551,7 +6545,7 @@ mod tests {
         let expected = "Fixed Document";
         match schema.doc() {
             Some(doc) => assert_eq!(doc, expected),
-            None => panic!("Expected Some({:?}), got None", expected),
+            None => panic!("Expected Some({expected:?}), got None"),
         }
 
         let schema_str = r#"
@@ -6858,7 +6852,7 @@ mod tests {
                 let scale = attrs
                     .get("scale")
                     .expect("The 'scale' attribute is missing");
-                assert_logged(&format!("Ignoring invalid decimal logical type: The decimal precision ({}) must be bigger or equal to the scale ({})", precision, scale));
+                assert_logged(&format!("Ignoring invalid decimal logical type: The decimal precision ({precision}) must be bigger or equal to the scale ({scale})"));
             }
             _ => unreachable!("Expected Schema::Fixed, got {:?}", schema),
         }

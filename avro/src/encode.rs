@@ -180,7 +180,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                 encode_long(*idx as i64, &mut *writer)?;
                 encode_internal(item, inner_schema, names, enclosing_namespace, &mut *writer)
             } else {
-                error!("invalid schema type for Union: {:?}", schema);
+                error!("invalid schema type for Union: {schema:?}");
                 Err(Error::EncodeValueAsSchemaError {
                     value_kind: ValueKind::Union,
                     supported_schema: vec![SchemaKind::Union],
@@ -203,7 +203,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                 }
                 writer.write(&[0u8]).map_err(Error::WriteBytes)
             } else {
-                error!("invalid schema type for Array: {:?}", schema);
+                error!("invalid schema type for Array: {schema:?}");
                 Err(Error::EncodeValueAsSchemaError {
                     value_kind: ValueKind::Array,
                     supported_schema: vec![SchemaKind::Array],
@@ -227,7 +227,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                 }
                 writer.write(&[0u8]).map_err(Error::WriteBytes)
             } else {
-                error!("invalid schema type for Map: {:?}", schema);
+                error!("invalid schema type for Map: {schema:?}");
                 Err(Error::EncodeValueAsSchemaError {
                     value_kind: ValueKind::Map,
                     supported_schema: vec![SchemaKind::Map],
@@ -302,7 +302,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                     supported_schema: vec![SchemaKind::Record, SchemaKind::Union],
                 });
             } else {
-                error!("invalid schema type for Record: {:?}", schema);
+                error!("invalid schema type for Record: {schema:?}");
                 return Err(Error::EncodeValueAsSchemaError {
                     value_kind: ValueKind::Record,
                     supported_schema: vec![SchemaKind::Record, SchemaKind::Union],

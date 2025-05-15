@@ -577,7 +577,7 @@ impl fmt::Debug for Error {
         if let Some(e) = self.source() {
             msg.extend([": ", &e.to_string()]);
         }
-        write!(f, "{}", msg)
+        write!(f, "{msg}")
     }
 }
 
@@ -587,6 +587,6 @@ impl fmt::Debug for CompatibilityError {
         if let Some(e) = self.source() {
             msg.extend([": ", &e.to_string()]);
         }
-        write!(f, "{}", msg)
+        write!(f, "{msg}")
     }
 }
