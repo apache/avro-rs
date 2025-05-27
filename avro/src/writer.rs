@@ -351,6 +351,24 @@ impl<'a, W: Write> Writer<'a, W> {
         Ok(self.writer)
     }
 
+    /// Gets a reference to the underlying writer.
+    ///
+    /// **NOTE**: There is likely data still in the buffer. To have all the data
+    /// in the writer call [`flush`](Writer::flush) first.
+    pub fn get_ref(&self) -> &W {
+        &self.writer
+    }
+
+    /// Gets a mutable reference to the underlying writer.
+    ///
+    /// It is inadvisable to directly write to the underlying writer.
+    ///
+    /// **NOTE**: There is likely data still in the buffer. To have all the data
+    /// in the writer call [`flush`](Writer::flush) first.
+    pub fn get_mut(&mut self) -> &mut W {
+        &mut self.writer
+    }
+
     /// Generate and append synchronization marker to the payload.
     fn append_marker(&mut self) -> AvroResult<usize> {
         // using .writer.write directly to avoid mutable borrow of self
