@@ -907,7 +907,7 @@ pub use util::{max_allocation_bytes, set_serde_human_readable};
 pub use uuid::Uuid;
 pub use writer::{
     to_avro_datum, to_avro_datum_schemata, write_avro_datum_ref, GenericSingleObjectWriter,
-    SpecificSingleObjectWriter, Writer,
+    SpecificSingleObjectWriter, Writer, WriterBuilder,
 };
 
 #[cfg(feature = "derive")]
