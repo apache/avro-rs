@@ -148,9 +148,9 @@ impl<'a, W: Write> Writer<'a, W> {
     ///
     /// Return the number of bytes written (it might be 0, see below).
     ///
-    /// **NOTE** This function is not guaranteed to perform any actual write, since it relies on
+    /// **NOTE**: This function is not guaranteed to perform any actual write, since it relies on
     /// internal buffering for performance reasons. If you want to be sure the value has been
-    /// written, then call [`flush`](struct.Writer.html#method.flush).
+    /// written, then call [`flush`](Writer::flush).
     pub fn append<T: Into<Value>>(&mut self, value: T) -> AvroResult<usize> {
         let n = self.maybe_write_header()?;
 
@@ -162,9 +162,9 @@ impl<'a, W: Write> Writer<'a, W> {
     ///
     /// Return the number of bytes written (it might be 0, see below).
     ///
-    /// **NOTE** This function is not guaranteed to perform any actual write, since it relies on
+    /// **NOTE**: This function is not guaranteed to perform any actual write, since it relies on
     /// internal buffering for performance reasons. If you want to be sure the value has been
-    /// written, then call [`flush`](struct.Writer.html#method.flush).
+    /// written, then call [`flush`](Writer::flush).
     pub fn append_value_ref(&mut self, value: &Value) -> AvroResult<usize> {
         let n = self.maybe_write_header()?;
 
@@ -194,9 +194,9 @@ impl<'a, W: Write> Writer<'a, W> {
     ///
     /// Return the number of bytes written.
     ///
-    /// **NOTE** This function is not guaranteed to perform any actual write, since it relies on
+    /// **NOTE**: This function is not guaranteed to perform any actual write, since it relies on
     /// internal buffering for performance reasons. If you want to be sure the value has been
-    /// written, then call [`flush`](struct.Writer.html#method.flush).
+    /// written, then call [`flush`](Writer::flush).
     pub fn append_ser<S: Serialize>(&mut self, value: S) -> AvroResult<usize> {
         let n = self.maybe_write_header()?;
 
@@ -230,8 +230,8 @@ impl<'a, W: Write> Writer<'a, W> {
     ///
     /// Return the number of bytes written.
     ///
-    /// **NOTE** This function forces the written data to be flushed (an implicit
-    /// call to [`flush`](struct.Writer.html#method.flush) is performed).
+    /// **NOTE**: This function forces the written data to be flushed (an implicit
+    /// call to [`flush`](Writer::flush) is performed).
     pub fn extend<I, T: Into<Value>>(&mut self, values: I) -> AvroResult<usize>
     where
         I: IntoIterator<Item = T>,
@@ -265,8 +265,8 @@ impl<'a, W: Write> Writer<'a, W> {
     ///
     /// Return the number of bytes written.
     ///
-    /// **NOTE** This function forces the written data to be flushed (an implicit
-    /// call to [`flush`](struct.Writer.html#method.flush) is performed).
+    /// **NOTE**: This function forces the written data to be flushed (an implicit
+    /// call to [`flush`](Writer::flush) is performed).
     pub fn extend_ser<I, T: Serialize>(&mut self, values: I) -> AvroResult<usize>
     where
         I: IntoIterator<Item = T>,
@@ -299,8 +299,8 @@ impl<'a, W: Write> Writer<'a, W> {
     ///
     /// Return the number of bytes written.
     ///
-    /// **NOTE** This function forces the written data to be flushed (an implicit
-    /// call to [`flush`](struct.Writer.html#method.flush) is performed).
+    /// **NOTE**: This function forces the written data to be flushed (an implicit
+    /// call to [`flush`](Writer::flush) is performed).
     pub fn extend_from_slice(&mut self, values: &[Value]) -> AvroResult<usize> {
         let mut num_bytes = 0;
         for value in values {
@@ -343,12 +343,30 @@ impl<'a, W: Write> Writer<'a, W> {
 
     /// Return what the `Writer` is writing to, consuming the `Writer` itself.
     ///
-    /// **NOTE** This function forces the written data to be flushed (an implicit
-    /// call to [`flush`](struct.Writer.html#method.flush) is performed).
+    /// **NOTE**: This function forces the written data to be flushed (an implicit
+    /// call to [`flush`](Writer::flush) is performed).
     pub fn into_inner(mut self) -> AvroResult<W> {
         self.maybe_write_header()?;
         self.flush()?;
         Ok(self.writer)
+    }
+
+    /// Gets a reference to the underlying writer.
+    ///
+    /// **NOTE**: There is likely data still in the buffer. To have all the data
+    /// in the writer call [`flush`](Writer::flush) first.
+    pub fn get_ref(&self) -> &W {
+        &self.writer
+    }
+
+    /// Gets a mutable reference to the underlying writer.
+    ///
+    /// It is inadvisable to directly write to the underlying writer.
+    ///
+    /// **NOTE**: There is likely data still in the buffer. To have all the data
+    /// in the writer call [`flush`](Writer::flush) first.
+    pub fn get_mut(&mut self) -> &mut W {
+        &mut self.writer
     }
 
     /// Generate and append synchronization marker to the payload.
@@ -647,8 +665,8 @@ fn write_value_ref_owned_resolved(
 /// Encode a compatible value (implementing the `ToAvro` trait) into Avro format, also
 /// performing schema validation.
 ///
-/// **NOTE** This function has a quite small niche of usage and does NOT generate headers and sync
-/// markers; use [`Writer`](struct.Writer.html) to be fully Avro-compatible if you don't know what
+/// **NOTE**: This function has a quite small niche of usage and does NOT generate headers and sync
+/// markers; use [`Writer`] to be fully Avro-compatible if you don't know what
 /// you are doing, instead.
 pub fn to_avro_datum<T: Into<Value>>(schema: &Schema, value: T) -> AvroResult<Vec<u8>> {
     let mut buffer = Vec::new();
@@ -659,8 +677,8 @@ pub fn to_avro_datum<T: Into<Value>>(schema: &Schema, value: T) -> AvroResult<Ve
 /// Write the referenced [Serialize]able object to the provided [Write] object.
 /// Returns a result with the number of bytes written.
 ///
-/// **NOTE** This function has a quite small niche of usage and does **NOT** generate headers and sync
-/// markers; use [`append_ser`](struct.Writer.html#method.append_ser) to be fully Avro-compatible
+/// **NOTE**: This function has a quite small niche of usage and does **NOT** generate headers and sync
+/// markers; use [`append_ser`](Writer::append_ser) to be fully Avro-compatible
 /// if you don't know what you are doing, instead.
 pub fn write_avro_datum_ref<T: Serialize, W: Write>(
     schema: &Schema,
