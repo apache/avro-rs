@@ -110,7 +110,7 @@ fn test_avro_3683_multiple_schemata_writer_reader() -> TestResult {
     let mut writer = Writer::with_schemata(schema_b, schemata.clone(), &mut output, Codec::Null);
     writer.append(record.clone())?;
     writer.flush()?;
-    let _ = writer.into_inner()?;
+    drop(writer); // Ensure the writer is dropped to finalize the output
 
     let reader = Reader::with_schemata(schema_b, schemata, output.as_slice())?;
     let value = reader.into_iter().next().unwrap().unwrap();
