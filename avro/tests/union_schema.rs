@@ -74,6 +74,7 @@ where
         Writer::with_schemata(schema, schemata.iter().collect(), &mut encoded, Codec::Null);
     writer.append_ser(input)?;
     writer.flush()?;
+    drop(writer); //drop the writer so that `encoded` is no more referenced mutably
 
     let mut reader = Reader::with_schemata(schema, schemata.iter().collect(), encoded.as_slice())?;
     from_value::<T>(&reader.next().expect("")?)

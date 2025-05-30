@@ -25,12 +25,18 @@ use crate::{
     AvroResult, Codec, Error,
 };
 use serde::Serialize;
-use std::{collections::HashMap, io::Write, marker::PhantomData, ops::RangeInclusive};
+use std::{
+    collections::HashMap, io::Write, marker::PhantomData, mem::ManuallyDrop, ops::RangeInclusive,
+};
 
 const DEFAULT_BLOCK_SIZE: usize = 16000;
 const AVRO_OBJECT_HEADER: &[u8] = b"Obj\x01";
 
 /// Main interface for writing Avro formatted values.
+///
+/// It is critical to call flush before `Writer<W>` is dropped. Though dropping will attempt to flush
+/// the contents of the buffer, any errors that happen in the process of dropping will be ignored.
+/// Calling flush ensures that the buffer is empty and thus dropping will not even attempt file operations.
 #[derive(bon::Builder)]
 pub struct Writer<'a, W: Write> {
     schema: &'a Schema,
@@ -348,7 +354,18 @@ impl<'a, W: Write> Writer<'a, W> {
     pub fn into_inner(mut self) -> AvroResult<W> {
         self.maybe_write_header()?;
         self.flush()?;
-        Ok(self.writer)
+
+        let mut this = ManuallyDrop::new(self);
+
+        // Extract every member that is not Copy and therefore should be dropped
+        let _resolved_schema = std::mem::take(&mut this.resolved_schema);
+        let _buffer = std::mem::take(&mut this.buffer);
+        let _user_metadata = std::mem::take(&mut this.user_metadata);
+
+        // SAFETY: double-drops are prevented by putting `this` in a ManuallyDrop that is never dropped
+        let writer = unsafe { std::ptr::read(&this.writer) };
+
+        Ok(writer)
     }
 
     /// Gets a reference to the underlying writer.
@@ -456,6 +473,14 @@ impl<'a, W: Write> Writer<'a, W> {
         } else {
             Ok(0)
         }
+    }
+}
+
+impl<'a, W: Write> Drop for Writer<'a, W> {
+    /// Drop the writer, will try to flush ignoring any errors.
+    fn drop(&mut self) {
+        let _ = self.maybe_write_header();
+        let _ = self.flush();
     }
 }
 
