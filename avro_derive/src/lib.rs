@@ -224,8 +224,8 @@ fn get_data_enum_schema_def(
         let default = preserve_optional(default_value);
         let mut symbols = Vec::new();
         for variant in &e.variants {
-            let field_attrs = VariantOptions::from_attributes(&variant.attrs[..])
-                .map_err(darling_to_syn)?;
+            let field_attrs =
+                VariantOptions::from_attributes(&variant.attrs[..]).map_err(darling_to_syn)?;
             let name = if let Some(rename) = field_attrs.rename {
                 rename
             } else {
