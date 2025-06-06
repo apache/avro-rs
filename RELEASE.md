@@ -3,7 +3,7 @@
 ## Create a Git tag and archive the sources
 ```
 # in avro-rs Git clone
-git switch main && git rebase --pull
+git switch main && git pull --rebase
 git archive HEAD -o apache-avro-rs-0.18.0-RC0.tgz
 git tag -s rel/release-0.18.0-rc0 -m "Avro-rs 0.18.0 RC0 release."
 git push origin rel/release-0.18.0-rc0
