@@ -15,7 +15,7 @@ Note: make sure your GPG key is in https://dist.apache.org/repos/dist/release/av
 ```
 # checkout the 'dev' dist SVN repo
 svn co https://dist.apache.org/repos/dist/dev/avro/ dev-avro
-cd dev-avro
+cd dev-avro/avro-rs
 cp .../apache-avro-rs-0.19.0-RC0.tgz .
 sha256sum apache-avro-rs-0.19.0-RC0.tgz > apache-avro-rs-0.19.0-RC0.tgz.sha256
 gpg --armor --output apache-avro-rs-0.19.0-RC0.tgz.asc --detach-sig apache-avro-rs-0.19.0-RC0.tgz
