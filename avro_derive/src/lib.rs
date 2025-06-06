@@ -41,6 +41,13 @@ struct FieldOptions {
 
 #[derive(darling::FromAttributes)]
 #[darling(attributes(avro))]
+struct VariantOptions {
+    #[darling(default)]
+    rename: Option<String>,
+}
+
+#[derive(darling::FromAttributes)]
+#[darling(attributes(avro))]
 struct NamedTypeOptions {
     #[darling(default)]
     namespace: Option<String>,
@@ -215,11 +222,17 @@ fn get_data_enum_schema_def(
     if e.variants.iter().all(|v| syn::Fields::Unit == v.fields) {
         let default_value = default_enum_variant(e, error_span)?;
         let default = preserve_optional(default_value);
-        let symbols: Vec<String> = e
-            .variants
-            .iter()
-            .map(|variant| variant.ident.to_string())
-            .collect();
+        let mut symbols = Vec::new();
+        for variant in &e.variants {
+            let field_attrs =
+                VariantOptions::from_attributes(&variant.attrs[..]).map_err(darling_to_syn)?;
+            let name = if let Some(rename) = field_attrs.rename {
+                rename
+            } else {
+                variant.ident.to_string()
+            };
+            symbols.push(name);
+        }
         Ok(quote! {
             apache_avro::schema::Schema::Enum(apache_avro::schema::EnumSchema {
                 name: apache_avro::schema::Name::new(#full_schema_name).expect(&format!("Unable to parse enum name for schema {}", #full_schema_name)[..]),
@@ -639,6 +652,25 @@ mod tests {
             Ok(mut input) => {
                 let schema_res = derive_avro_schema(&mut input);
                 let expected_token_stream = r#"let schema_fields = vec ! [apache_avro :: schema :: RecordField { name : "a3" . to_string () , doc : Some ("a doc" . into ()) , default : Some (serde_json :: from_str ("123") . expect (format ! ("Invalid JSON: {:?}" , "123") . as_str ())) , aliases : Some (vec ! ["a1" . into () , "a2" . into ()]) , schema : apache_avro :: schema :: Schema :: Int , order : apache_avro :: schema :: RecordFieldOrder :: Ascending , position : 0usize , custom_attributes : Default :: default () , }] ;"#;
+                let schema_token_stream = schema_res.unwrap().to_string();
+                assert!(schema_token_stream.contains(expected_token_stream));
+            }
+            Err(error) => panic!(
+                "Failed to parse as derive input when it should be able to. Error: {error:?}"
+            ),
+        };
+
+        let test_enum = quote! {
+            enum A {
+                #[avro(rename = "A3")]
+                Item1,
+            }
+        };
+
+        match syn::parse2::<DeriveInput>(test_enum) {
+            Ok(mut input) => {
+                let schema_res = derive_avro_schema(&mut input);
+                let expected_token_stream = r#"let name = apache_avro :: schema :: Name :: new ("A") . expect (& format ! ("Unable to parse schema name {}" , "A") [..]) . fully_qualified_name (enclosing_namespace) ; let enclosing_namespace = & name . namespace ; if named_schemas . contains_key (& name) { apache_avro :: schema :: Schema :: Ref { name : name . clone () } } else { named_schemas . insert (name . clone () , apache_avro :: schema :: Schema :: Ref { name : name . clone () }) ; apache_avro :: schema :: Schema :: Enum (apache_avro :: schema :: EnumSchema { name : apache_avro :: schema :: Name :: new ("A") . expect (& format ! ("Unable to parse enum name for schema {}" , "A") [..]) , aliases : None , doc : None , symbols : vec ! ["A3" . to_owned ()] , default : None , attributes : Default :: default () , })"#;
                 let schema_token_stream = schema_res.unwrap().to_string();
                 assert!(schema_token_stream.contains(expected_token_stream));
             }
