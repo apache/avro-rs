@@ -90,7 +90,7 @@ fn get_avro_bytes(schema: &Schema) -> Vec<u8> {
 }
 
 /// Creates a new datum to write
-fn create_datum(schema: &Schema, value: i32) -> Record {
+fn create_datum(schema: &Schema, value: i32) -> Record<'_> {
     let mut datum = Record::new(schema).unwrap();
     datum.put("a", value);
     datum
