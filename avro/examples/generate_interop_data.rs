@@ -27,7 +27,7 @@ use std::{
 };
 use strum::IntoEnumIterator;
 
-fn create_datum(schema: &Schema) -> Record {
+fn create_datum(schema: &Schema) -> Record<'_> {
     let mut datum = Record::new(schema).unwrap();
     datum.put("intField", 12_i32);
     datum.put("longField", 15234324_i64);
