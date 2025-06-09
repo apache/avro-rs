@@ -15,6 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+mod case;
+use case::RenameRule;
 use darling::FromAttributes;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
@@ -55,6 +57,8 @@ struct NamedTypeOptions {
     doc: Option<String>,
     #[darling(multiple)]
     alias: Vec<String>,
+    #[darling(default)]
+    rename_all: Option<String>,
 }
 
 #[proc_macro_derive(AvroSchema, attributes(avro))]
@@ -69,6 +73,9 @@ pub fn proc_macro_derive_avro_schema(input: proc_macro::TokenStream) -> proc_mac
 fn derive_avro_schema(input: &mut DeriveInput) -> Result<TokenStream, Vec<syn::Error>> {
     let named_type_options =
         NamedTypeOptions::from_attributes(&input.attrs[..]).map_err(darling_to_syn)?;
+
+    let rename_all = parse_case(named_type_options.rename_all.as_deref(), input.span())?;
+
     let full_schema_name = vec![named_type_options.namespace, Some(input.ident.to_string())]
         .into_iter()
         .flatten()
@@ -81,6 +88,7 @@ fn derive_avro_schema(input: &mut DeriveInput) -> Result<TokenStream, Vec<syn::E
                 .doc
                 .or_else(|| extract_outer_doc(&input.attrs)),
             named_type_options.alias,
+            rename_all,
             s,
             input.ident.span(),
         )?,
@@ -90,6 +98,7 @@ fn derive_avro_schema(input: &mut DeriveInput) -> Result<TokenStream, Vec<syn::E
                 .doc
                 .or_else(|| extract_outer_doc(&input.attrs)),
             named_type_options.alias,
+            rename_all,
             e,
             input.ident.span(),
         )?,
@@ -122,6 +131,7 @@ fn get_data_struct_schema_def(
     full_schema_name: &str,
     record_doc: Option<String>,
     aliases: Vec<String>,
+    rename_all: RenameRule,
     s: &syn::DataStruct,
     error_span: Span,
 ) -> Result<TokenStream, Vec<syn::Error>> {
@@ -138,8 +148,14 @@ fn get_data_struct_schema_def(
                     FieldOptions::from_attributes(&field.attrs[..]).map_err(darling_to_syn)?;
                 let doc =
                     preserve_optional(field_attrs.doc.or_else(|| extract_outer_doc(&field.attrs)));
-                if let Some(rename) = field_attrs.rename {
-                    name = rename
+                match (field_attrs.rename, rename_all) {
+                    (Some(rename), _) => {
+                        name = rename;
+                    }
+                    (None, rename_all) if !matches!(rename_all, RenameRule::None) => {
+                        name = rename_all.apply_to_field(&name);
+                    }
+                    _ => {}
                 }
                 if let Some(true) = field_attrs.skip {
                     continue;
@@ -214,6 +230,7 @@ fn get_data_enum_schema_def(
     full_schema_name: &str,
     doc: Option<String>,
     aliases: Vec<String>,
+    rename_all: RenameRule,
     e: &syn::DataEnum,
     error_span: Span,
 ) -> Result<TokenStream, Vec<syn::Error>> {
@@ -226,10 +243,12 @@ fn get_data_enum_schema_def(
         for variant in &e.variants {
             let field_attrs =
                 VariantOptions::from_attributes(&variant.attrs[..]).map_err(darling_to_syn)?;
-            let name = if let Some(rename) = field_attrs.rename {
-                rename
-            } else {
-                variant.ident.to_string()
+            let name = match (field_attrs.rename, rename_all) {
+                (Some(rename), _) => rename,
+                (None, rename_all) if !matches!(rename_all, RenameRule::None) => {
+                    rename_all.apply_to_variant(&variant.ident.to_string())
+                }
+                _ => variant.ident.to_string(),
             };
             symbols.push(name);
         }
@@ -383,6 +402,16 @@ fn darling_to_syn(e: darling::Error) -> Vec<syn::Error> {
     let msg = format!("{e}");
     let token_errors = e.write_errors();
     vec![syn::Error::new(token_errors.span(), msg)]
+}
+
+fn parse_case(case: Option<&str>, span: Span) -> Result<RenameRule, Vec<syn::Error>> {
+    match case {
+        None => Ok(RenameRule::None),
+        Some(case) => {
+            Ok(RenameRule::from_str(case)
+                .map_err(|e| vec![syn::Error::new(span, e.to_string())])?)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -671,6 +700,49 @@ mod tests {
             Ok(mut input) => {
                 let schema_res = derive_avro_schema(&mut input);
                 let expected_token_stream = r#"let name = apache_avro :: schema :: Name :: new ("A") . expect (& format ! ("Unable to parse schema name {}" , "A") [..]) . fully_qualified_name (enclosing_namespace) ; let enclosing_namespace = & name . namespace ; if named_schemas . contains_key (& name) { apache_avro :: schema :: Schema :: Ref { name : name . clone () } } else { named_schemas . insert (name . clone () , apache_avro :: schema :: Schema :: Ref { name : name . clone () }) ; apache_avro :: schema :: Schema :: Enum (apache_avro :: schema :: EnumSchema { name : apache_avro :: schema :: Name :: new ("A") . expect (& format ! ("Unable to parse enum name for schema {}" , "A") [..]) , aliases : None , doc : None , symbols : vec ! ["A3" . to_owned ()] , default : None , attributes : Default :: default () , })"#;
+                let schema_token_stream = schema_res.unwrap().to_string();
+                assert!(schema_token_stream.contains(expected_token_stream));
+            }
+            Err(error) => panic!(
+                "Failed to parse as derive input when it should be able to. Error: {error:?}"
+            ),
+        };
+    }
+
+    #[test]
+    fn test_avro_3709_record_attributes() {
+        let test_struct = quote! {
+            #[avro(rename_all="SCREAMING_SNAKE_CASE")]
+            struct A {
+                item: i32,
+                double_item: i32
+            }
+        };
+
+        match syn::parse2::<DeriveInput>(test_struct) {
+            Ok(mut input) => {
+                let schema_res = derive_avro_schema(&mut input);
+                let expected_token_stream = r#"let name = apache_avro :: schema :: Name :: new ("A") . expect (& format ! ("Unable to parse schema name {}" , "A") [..]) . fully_qualified_name (enclosing_namespace) ; let enclosing_namespace = & name . namespace ; if named_schemas . contains_key (& name) { apache_avro :: schema :: Schema :: Ref { name : name . clone () } } else { named_schemas . insert (name . clone () , apache_avro :: schema :: Schema :: Ref { name : name . clone () }) ; let schema_fields = vec ! [apache_avro :: schema :: RecordField { name : "ITEM" . to_string () , doc : None , default : None , aliases : None , schema : apache_avro :: schema :: Schema :: Int , order : apache_avro :: schema :: RecordFieldOrder :: Ascending , position : 0usize , custom_attributes : Default :: default () , } , apache_avro :: schema :: RecordField { name : "DOUBLE_ITEM" . to_string () , doc : None , default : None , aliases : None , schema : apache_avro :: schema :: Schema :: Int , order : apache_avro :: schema :: RecordFieldOrder :: Ascending , position : 1usize , custom_attributes : Default :: default () , }] ;"#;
+                let schema_token_stream = schema_res.unwrap().to_string();
+                assert!(schema_token_stream.contains(expected_token_stream));
+            }
+            Err(error) => panic!(
+                "Failed to parse as derive input when it should be able to. Error: {error:?}"
+            ),
+        };
+
+        let test_enum = quote! {
+            #[avro(rename_all="SCREAMING_SNAKE_CASE")]
+            enum B {
+                Item,
+                DoubleItem,
+            }
+        };
+
+        match syn::parse2::<DeriveInput>(test_enum) {
+            Ok(mut input) => {
+                let schema_res = derive_avro_schema(&mut input);
+                let expected_token_stream = r#"let name = apache_avro :: schema :: Name :: new ("B") . expect (& format ! ("Unable to parse schema name {}" , "B") [..]) . fully_qualified_name (enclosing_namespace) ; let enclosing_namespace = & name . namespace ; if named_schemas . contains_key (& name) { apache_avro :: schema :: Schema :: Ref { name : name . clone () } } else { named_schemas . insert (name . clone () , apache_avro :: schema :: Schema :: Ref { name : name . clone () }) ; apache_avro :: schema :: Schema :: Enum (apache_avro :: schema :: EnumSchema { name : apache_avro :: schema :: Name :: new ("B") . expect (& format ! ("Unable to parse enum name for schema {}" , "B") [..]) , aliases : None , doc : None , symbols : vec ! ["ITEM" . to_owned () , "DOUBLE_ITEM" . to_owned ()] , default : None , attributes : Default :: default () , })"#;
                 let schema_token_stream = schema_res.unwrap().to_string();
                 assert!(schema_token_stream.contains(expected_token_stream));
             }
