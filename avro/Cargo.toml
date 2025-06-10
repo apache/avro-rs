@@ -59,7 +59,7 @@ bon = { default-features = false, version = "3.6.3" }
 bzip2 = { version = "0.5.2", optional = true }
 crc32fast = { default-features = false, version = "1.4.2", optional = true }
 digest = { default-features = false, version = "0.10.7", features = ["core-api"] }
-miniz_oxide = { default-features = false, version = "0.8.8", features = ["with-alloc"] }
+miniz_oxide = { default-features = false, version = "0.8.9", features = ["with-alloc"] }
 log = { workspace = true }
 num-bigint = { default-features = false, version = "0.4.6", features = ["std", "serde"] }
 regex-lite = { default-features = false, version = "0.1.6", features = ["std", "string"] }
