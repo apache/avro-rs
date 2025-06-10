@@ -751,4 +751,28 @@ mod tests {
             ),
         };
     }
+
+    #[test]
+    fn test_avro_rs_207_rename_attr_has_priority_over_rename_all_attribute() {
+        let test_struct = quote! {
+            #[avro(rename_all="SCREAMING_SNAKE_CASE")]
+            struct A {
+                item: i32,
+                #[avro(rename="DoubleItem")]
+                double_item: i32
+            }
+        };
+
+        match syn::parse2::<DeriveInput>(test_struct) {
+            Ok(mut input) => {
+                let schema_res = derive_avro_schema(&mut input);
+                let expected_token_stream = r#"let name = apache_avro :: schema :: Name :: new ("A") . expect (& format ! ("Unable to parse schema name {}" , "A") [..]) . fully_qualified_name (enclosing_namespace) ; let enclosing_namespace = & name . namespace ; if named_schemas . contains_key (& name) { apache_avro :: schema :: Schema :: Ref { name : name . clone () } } else { named_schemas . insert (name . clone () , apache_avro :: schema :: Schema :: Ref { name : name . clone () }) ; let schema_fields = vec ! [apache_avro :: schema :: RecordField { name : "ITEM" . to_string () , doc : None , default : None , aliases : None , schema : apache_avro :: schema :: Schema :: Int , order : apache_avro :: schema :: RecordFieldOrder :: Ascending , position : 0usize , custom_attributes : Default :: default () , } , apache_avro :: schema :: RecordField { name : "DoubleItem" . to_string () , doc : None , default : None , aliases : None , schema : apache_avro :: schema :: Schema :: Int , order : apache_avro :: schema :: RecordFieldOrder :: Ascending , position : 1usize , custom_attributes : Default :: default () , }] ;"#;
+                let schema_token_stream = schema_res.unwrap().to_string();
+                assert!(schema_token_stream.contains(expected_token_stream));
+            }
+            Err(error) => panic!(
+                "Failed to parse as derive input when it should be able to. Error: {error:?}"
+            ),
+        };
+    }
 }
