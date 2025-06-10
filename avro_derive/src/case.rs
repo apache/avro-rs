@@ -17,7 +17,7 @@
 
 //! Code to convert the Rust-styled field/variant (e.g. `my_field`, `MyType`) to the
 //! case of the source (e.g. `my-field`, `MY_FIELD`).
-//! Code copied from serde https://github.com/serde-rs/serde/blob/master/serde_derive/src/internals/case.rs
+//! Code copied from serde <https://github.com/serde-rs/serde/blob/master/serde_derive/src/internals/case.rs>
 use self::RenameRule::*;
 use std::fmt::{self, Debug, Display};
 
