@@ -710,7 +710,7 @@ mod tests {
     }
 
     #[test]
-    fn test_avro_3709_record_attributes() {
+    fn test_avro_rs_207_rename_all_attribute() {
         let test_struct = quote! {
             #[avro(rename_all="SCREAMING_SNAKE_CASE")]
             struct A {
