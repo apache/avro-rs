@@ -1063,7 +1063,7 @@ impl Schema {
     ///
     /// [Parsing Canonical Form]:
     /// https://avro.apache.org/docs/current/specification/#parsing-canonical-form-for-schemas
-    pub fn independent_canonical_form(&self, schemata: &Vec<Schema>) -> Result<String, Error> {
+    pub fn independent_canonical_form(&self, schemata: &[Schema]) -> Result<String, Error> {
         let mut this = self.clone();
         this.denormalize(schemata)?;
         Ok(this.canonical_form())
@@ -1278,7 +1278,7 @@ impl Schema {
         })
     }
 
-    fn denormalize(&mut self, schemata: &Vec<Schema>) -> AvroResult<()> {
+    fn denormalize(&mut self, schemata: &[Schema]) -> AvroResult<()> {
         match self {
             Schema::Ref { name } => {
                 let replacement_schema = schemata
