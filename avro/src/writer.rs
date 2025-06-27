@@ -476,7 +476,7 @@ impl<'a, W: Write> Writer<'a, W> {
     }
 }
 
-impl<'a, W: Write> Drop for Writer<'a, W> {
+impl<W: Write> Drop for Writer<'_, W> {
     /// Drop the writer, will try to flush ignoring any errors.
     fn drop(&mut self) {
         let _ = self.maybe_write_header();

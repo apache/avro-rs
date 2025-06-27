@@ -231,11 +231,11 @@ fn make_big_record_ser() -> anyhow::Result<(Schema, BigRecord)> {
 }
 
 fn make_records(record: Value, count: usize) -> Vec<Value> {
-    std::iter::repeat(record).take(count).collect()
+    std::iter::repeat_n(record, count).collect()
 }
 
 fn make_records_ser<T: Serialize + Clone>(record: T, count: usize) -> Vec<T> {
-    std::iter::repeat(record).take(count).collect()
+    std::iter::repeat_n(record, count).collect()
 }
 
 fn write(schema: &Schema, records: &[Value]) -> AvroResult<Vec<u8>> {
