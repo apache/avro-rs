@@ -745,10 +745,6 @@ registered and used!
 
 <!-- cargo-rdme end -->
 
-## Minimal supported Rust version
-
-1.73.0
-
 ## License
 
 This project is licensed under [Apache License 2.0](https://github.com/apache/avro/blob/main/LICENSE.txt).
