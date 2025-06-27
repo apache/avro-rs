@@ -42,7 +42,7 @@ jobs:
           - 'stable'
           - 'beta'
           - 'nightly'
-          - '1.74.0'  # MSRV
+          - '1.85.0'  # MSRV
         runner:
           - name: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
