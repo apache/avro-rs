@@ -68,14 +68,14 @@ Martin
 ## After a successful vote
 
 ```
-git checkout -b release-0.19.0-RC1 rel/release-0.19.0-RC1
+git checkout -b release-0.19.0-rc0 rel/release-0.19.0-rc0
 
 cargo publish -p apache-avro-derive
 cargo publish -p apache-avro-test-helper
 cargo publish -p apache-avro
 
 git tag -s rel/release-0.19.0 -m "Apache Avro Rust SDK 0.19.0 release."
-push --tags
+git push --tags
 ```
 
 
@@ -108,11 +108,13 @@ What's changed since vX.Y.Z:
 * item 1
 * item 2
 
-## New Contributors
+
+New Contributors:
+
 * contributor 1
 * contributor 2
 
-Full Changelog: https://github.com/apache/avro-rs/releases/tag/rel%2Frelease-0.19.0
+Full Changelog: https://github.com/apache/avro-rs/compare/rel/release-0.18.0...rel/release-0.19.0
 ```
 
 The items could be taken from the body of the Github release ignoring the Dependabot updates:
