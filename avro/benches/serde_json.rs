@@ -55,9 +55,7 @@ fn bench_read_json(
     n_records: usize,
     name: &str,
 ) {
-    let records = std::iter::repeat(make_record())
-        .take(n_records)
-        .collect::<Vec<_>>();
+    let records = std::iter::repeat_n(make_record(), n_records).collect::<Vec<_>>();
     let bytes = write_json(&records);
     c.bench_function(name, |b| b.iter(|| read_json(&bytes)));
 }
