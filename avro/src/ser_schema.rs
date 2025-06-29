@@ -692,7 +692,9 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error(format!("Cannot find a matching Int-like, Long-like or Bytes schema in {union_schema:?}")))
+                Err(create_error(format!(
+                    "Cannot find a matching Int-like, Long-like or Bytes schema in {union_schema:?}"
+                )))
             }
             expected => Err(create_error(format!("Expected: {expected}. Got: Int"))),
         }
@@ -982,14 +984,21 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 if value.len() == fixed_schema.size {
                     self.writer.write(value).map_err(Error::WriteBytes)
                 } else {
-                    Err(create_error(format!("Fixed schema size ({}) does not match the value length ({})", fixed_schema.size, value.len())))
+                    Err(create_error(format!(
+                        "Fixed schema size ({}) does not match the value length ({})",
+                        fixed_schema.size,
+                        value.len()
+                    )))
                 }
             }
             Schema::Duration => {
                 if value.len() == 12 {
                     self.writer.write(value).map_err(Error::WriteBytes)
                 } else {
-                    Err(create_error(format!("Duration length must be 12! Got ({})", value.len())))
+                    Err(create_error(format!(
+                        "Duration length must be 12! Got ({})",
+                        value.len()
+                    )))
                 }
             }
             Schema::Decimal(decimal_schema) => match decimal_schema.inner.as_ref() {
@@ -1011,7 +1020,9 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                         n: value.len(),
                     }),
                 },
-                unsupported => Err(create_error(format!("Decimal schema's inner should be Bytes or Fixed schema. Got: {unsupported}"))),
+                unsupported => Err(create_error(format!(
+                    "Decimal schema's inner should be Bytes or Fixed schema. Got: {unsupported}"
+                ))),
             },
             Schema::Ref { name } => {
                 let ref_schema = self.get_ref_schema(name)?;
@@ -1034,9 +1045,13 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                         _ => { /* skip */ }
                     }
                 }
-                Err(create_error(format!("Cannot find a matching String, Bytes, Uuid, BigDecimal, Fixed, Duration, Decimal or Ref schema in {union_schema:?}")))
+                Err(create_error(format!(
+                    "Cannot find a matching String, Bytes, Uuid, BigDecimal, Fixed, Duration, Decimal or Ref schema in {union_schema:?}"
+                )))
             }
-            unsupported => Err(create_error(format!("Expected String, Bytes, Uuid, BigDecimal, Fixed, Duration, Decimal, Ref or Union schema. Got: {unsupported}"))),
+            unsupported => Err(create_error(format!(
+                "Expected String, Bytes, Uuid, BigDecimal, Fixed, Duration, Decimal, Ref or Union schema. Got: {unsupported}"
+            ))),
         }
     }
 
@@ -1748,7 +1763,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut SchemaAwareWriteSerializer<'s
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{decimal::Decimal, schema::ResolvedSchema, Days, Duration, Millis, Months};
+    use crate::{Days, Duration, Millis, Months, decimal::Decimal, schema::ResolvedSchema};
     use apache_avro_test_helper::TestResult;
     use bigdecimal::BigDecimal;
     use num_bigint::{BigInt, Sign};
@@ -2556,7 +2571,9 @@ mod tests {
 
         assert_eq!(
             buffer.as_slice(),
-            &[200, 1, 208, 15, 160, 156, 1, 208, 15, 160, 156, 1, 160, 156, 1]
+            &[
+                200, 1, 208, 15, 160, 156, 1, 208, 15, 160, 156, 1, 160, 156, 1
+            ]
         );
 
         Ok(())
@@ -2608,7 +2625,9 @@ mod tests {
 
             assert_eq!(
                 buffer.as_slice(),
-                &[200, 1, 208, 15, 160, 156, 1, 208, 15, 160, 156, 1, 160, 156, 1]
+                &[
+                    200, 1, 208, 15, 160, 156, 1, 208, 15, 160, 156, 1, 160, 156, 1
+                ]
             );
         }
 

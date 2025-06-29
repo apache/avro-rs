@@ -16,9 +16,9 @@
 // under the License.
 
 use apache_avro::{
+    Codec, Writer,
     schema::Schema,
     types::{Record, Value},
-    Codec, Writer,
 };
 use std::{
     collections::HashMap,

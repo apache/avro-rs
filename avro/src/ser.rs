@@ -17,11 +17,11 @@
 
 //! Logic for serde-compatible serialization.
 use crate::{
+    Error,
     bytes::{BytesType, SER_BYTES_TYPE},
     types::Value,
-    Error,
 };
-use serde::{ser, Serialize};
+use serde::{Serialize, ser};
 use std::{collections::HashMap, iter::once};
 
 #[derive(Clone, Default)]

@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::{schema::Namespace, AvroResult, Error};
+use crate::{AvroResult, Error, schema::Namespace};
 use log::debug;
 use regex_lite::Regex;
 use std::sync::OnceLock;

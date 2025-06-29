@@ -16,9 +16,8 @@
 // under the License.
 
 use apache_avro::{
-    read_marker,
+    AvroResult, Reader, Schema, Writer, read_marker,
     types::{Record, Value},
-    AvroResult, Reader, Schema, Writer,
 };
 use apache_avro_test_helper::TestResult;
 

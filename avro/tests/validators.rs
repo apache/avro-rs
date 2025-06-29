@@ -16,13 +16,13 @@
 // under the License.
 
 use apache_avro::{
+    AvroResult,
     schema::Namespace,
     validator::{
-        set_enum_symbol_name_validator, set_record_field_name_validator, set_schema_name_validator,
-        set_schema_namespace_validator, EnumSymbolNameValidator, RecordFieldNameValidator,
-        SchemaNameValidator, SchemaNamespaceValidator,
+        EnumSymbolNameValidator, RecordFieldNameValidator, SchemaNameValidator,
+        SchemaNamespaceValidator, set_enum_symbol_name_validator, set_record_field_name_validator,
+        set_schema_name_validator, set_schema_namespace_validator,
     },
-    AvroResult,
 };
 use apache_avro_test_helper::TestResult;
 

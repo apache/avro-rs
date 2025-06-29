@@ -17,7 +17,7 @@
 
 use crate::{AvroResult, Error};
 use num_bigint::{BigInt, Sign};
-use serde::{de::SeqAccess, Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer, de::SeqAccess};
 
 #[derive(Debug, Clone, Eq)]
 pub struct Decimal {

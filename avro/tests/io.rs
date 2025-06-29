@@ -16,7 +16,7 @@
 // under the License.
 
 //! Port of https://github.com/apache/avro/blob/release-1.9.1/lang/py/test/test_io.py
-use apache_avro::{from_avro_datum, to_avro_datum, types::Value, Error, Schema};
+use apache_avro::{Error, Schema, from_avro_datum, to_avro_datum, types::Value};
 use apache_avro_test_helper::TestResult;
 use pretty_assertions::assert_eq;
 use std::{io::Cursor, sync::OnceLock};

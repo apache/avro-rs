@@ -16,11 +16,11 @@
 // under the License.
 
 use crate::{
+    Schema,
     schema::{
         ArraySchema, DecimalSchema, EnumSchema, FixedSchema, MapSchema, RecordField, RecordSchema,
         UnionSchema,
     },
-    Schema,
 };
 use log::{debug, error};
 use std::{fmt::Debug, sync::OnceLock};

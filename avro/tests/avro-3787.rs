@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{from_avro_datum, to_avro_datum, to_value, types, Schema};
+use apache_avro::{Schema, from_avro_datum, to_avro_datum, to_value, types};
 use apache_avro_test_helper::TestResult;
 
 #[test]

@@ -16,10 +16,10 @@
 // under the License.
 
 use crate::{
+    AvroResult, Error,
     decode::{decode_len, decode_long},
     encode::{encode_bytes, encode_long},
     types::Value,
-    AvroResult, Error,
 };
 pub use bigdecimal::BigDecimal;
 use num_bigint::BigInt;
@@ -70,7 +70,7 @@ pub(crate) fn deserialize_big_decimal(bytes: &Vec<u8>) -> AvroResult<BigDecimal>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{types::Record, Codec, Reader, Schema, Writer};
+    use crate::{Codec, Reader, Schema, Writer, types::Record};
     use apache_avro_test_helper::TestResult;
     use bigdecimal::{One, Zero};
     use pretty_assertions::assert_eq;
@@ -173,7 +173,7 @@ mod tests {
         }?;
 
         let x1res: &BigDecimal = match big_decimal_value {
-            Value::BigDecimal(ref s) => Ok(s),
+            Value::BigDecimal(s) => Ok(s),
             other => Err(format!("Expected Value::BigDecimal, got: {other:?}")),
         }?;
         assert_eq!(&val, x1res);

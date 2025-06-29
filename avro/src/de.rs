@@ -16,15 +16,16 @@
 // under the License.
 
 //! Logic for serde-compatible deserialization.
-use crate::{bytes::DE_BYTES_BORROWED, types::Value, Error};
+use crate::{Error, bytes::DE_BYTES_BORROWED, types::Value};
 use serde::{
+    Deserialize,
     de::{self, DeserializeSeed, Deserializer as _, Visitor},
-    forward_to_deserialize_any, Deserialize,
+    forward_to_deserialize_any,
 };
 use std::{
     collections::{
-        hash_map::{Keys, Values},
         HashMap,
+        hash_map::{Keys, Values},
     },
     slice::Iter,
 };
@@ -355,13 +356,13 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
                     self.input
                 ))),
             },
-            Value::Record(ref fields) => visitor.visit_map(RecordDeserializer::new(fields)),
-            Value::Array(ref fields) => visitor.visit_seq(SeqDeserializer::new(fields)),
-            Value::String(ref s) => visitor.visit_borrowed_str(s),
+            Value::Record(fields) => visitor.visit_map(RecordDeserializer::new(fields)),
+            Value::Array(fields) => visitor.visit_seq(SeqDeserializer::new(fields)),
+            Value::String(s) => visitor.visit_borrowed_str(s),
             Value::Uuid(uuid) => visitor.visit_str(&uuid.to_string()),
-            Value::Map(ref items) => visitor.visit_map(MapDeserializer::new(items)),
-            Value::Bytes(ref bytes) | Value::Fixed(_, ref bytes) => visitor.visit_bytes(bytes),
-            Value::Decimal(ref d) => visitor.visit_bytes(&d.to_vec()?),
+            Value::Map(items) => visitor.visit_map(MapDeserializer::new(items)),
+            Value::Bytes(bytes) | Value::Fixed(_, bytes) => visitor.visit_bytes(bytes),
+            Value::Decimal(d) => visitor.visit_bytes(&d.to_vec()?),
             Value::Enum(_, s) => visitor.visit_borrowed_str(s),
             value => Err(de::Error::custom(format!(
                 "incorrect value of type: {:?}",

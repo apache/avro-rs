@@ -17,8 +17,8 @@
 
 //! Implementation of the Rabin fingerprint algorithm
 use digest::{
-    consts::U8, core_api::OutputSizeUser, generic_array::GenericArray, FixedOutput,
-    FixedOutputReset, HashMarker, Output, Reset, Update,
+    FixedOutput, FixedOutputReset, HashMarker, Output, Reset, Update, consts::U8,
+    core_api::OutputSizeUser, generic_array::GenericArray,
 };
 use std::sync::OnceLock;
 

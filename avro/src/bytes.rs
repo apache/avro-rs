@@ -288,7 +288,7 @@ pub mod serde_avro_slice_opt {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{from_value, to_value, types::Value, Schema};
+    use crate::{Schema, from_value, to_value, types::Value};
     use serde::{Deserialize, Serialize};
 
     #[test]

@@ -66,7 +66,9 @@ pub enum Error {
     MemoryAllocation { desired: usize, maximum: usize },
 
     /// Describe a specific error happening with decimal representation
-    #[error("Number of bytes requested for decimal sign extension {requested} is less than the number of bytes needed to decode {needed}")]
+    #[error(
+        "Number of bytes requested for decimal sign extension {requested} is less than the number of bytes needed to decode {needed}"
+    )]
     SignExtend { requested: usize, needed: usize },
 
     #[error("Failed to read boolean bytes: {0}")]
@@ -350,7 +352,9 @@ pub enum Error {
     #[error("Invalid namespace {0}. It must match the regex '{1}'")]
     InvalidNamespace(String, &'static str),
 
-    #[error("Invalid schema: There is no type called '{0}', if you meant to define a non-primitive schema, it should be defined inside `type` attribute. Please review the specification")]
+    #[error(
+        "Invalid schema: There is no type called '{0}', if you meant to define a non-primitive schema, it should be defined inside `type` attribute. Please review the specification"
+    )]
     InvalidSchemaRecord(String),
 
     #[error("Duplicate enum symbol {0}")]
@@ -503,9 +507,7 @@ pub enum Error {
         value_kind: ValueKind,
         supported_schema: Vec<SchemaKind>,
     },
-    #[error(
-        "Internal buffer not drained properly. Re-initialize the single object writer struct!"
-    )]
+    #[error("Internal buffer not drained properly. Re-initialize the single object writer struct!")]
     IllegalSingleObjectWriterState,
 
     #[error("Codec '{0}' is not supported/enabled")]
@@ -520,7 +522,9 @@ pub enum Error {
 
 #[derive(thiserror::Error, PartialEq)]
 pub enum CompatibilityError {
-    #[error("Incompatible schema types! Writer schema is '{writer_schema_type}', but reader schema is '{reader_schema_type}'")]
+    #[error(
+        "Incompatible schema types! Writer schema is '{writer_schema_type}', but reader schema is '{reader_schema_type}'"
+    )]
     WrongType {
         writer_schema_type: String,
         reader_schema_type: String,
@@ -532,7 +536,9 @@ pub enum CompatibilityError {
         expected_type: Vec<SchemaKind>,
     },
 
-    #[error("Incompatible schemata! Field '{0}' in reader schema does not match the type in the writer schema")]
+    #[error(
+        "Incompatible schemata! Field '{0}' in reader schema does not match the type in the writer schema"
+    )]
     FieldTypeMismatch(String, #[source] Box<CompatibilityError>),
 
     #[error("Incompatible schemata! Field '{0}' in reader schema must have a default value")]
@@ -547,7 +553,9 @@ pub enum CompatibilityError {
     #[error("Incompatible schemata! Name and size don't match for fixed")]
     FixedMismatch,
 
-    #[error("Incompatible schemata! The name must be the same for both schemas. Writer's name {writer_name} and reader's name {reader_name}")]
+    #[error(
+        "Incompatible schemata! The name must be the same for both schemas. Writer's name {writer_name} and reader's name {reader_name}"
+    )]
     NameMismatch {
         writer_name: String,
         reader_name: String,

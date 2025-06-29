@@ -17,6 +17,7 @@
 
 //! Logic for parsing and interacting with schemas in Avro format.
 use crate::{
+    AvroResult,
     error::Error,
     schema_equality, types,
     util::MapHelper,
@@ -24,13 +25,12 @@ use crate::{
         validate_enum_symbol_name, validate_namespace, validate_record_field_name,
         validate_schema_name,
     },
-    AvroResult,
 };
 use digest::Digest;
 use log::{debug, error, warn};
 use serde::{
-    ser::{SerializeMap, SerializeSeq},
     Deserialize, Serialize, Serializer,
+    ser::{SerializeMap, SerializeSeq},
 };
 use serde_json::{Map, Value};
 use std::{
@@ -1406,10 +1406,12 @@ impl Parser {
         enclosing_namespace: &Namespace,
     ) -> AvroResult<Schema> {
         fn get_schema_ref(parsed: &Schema) -> Schema {
-            match &parsed {
-                Schema::Record(RecordSchema { ref name, .. })
-                | Schema::Enum(EnumSchema { ref name, .. })
-                | Schema::Fixed(FixedSchema { ref name, .. }) => Schema::Ref { name: name.clone() },
+            match parsed {
+                &Schema::Record(RecordSchema { ref name, .. })
+                | &Schema::Enum(EnumSchema { ref name, .. })
+                | &Schema::Fixed(FixedSchema { ref name, .. }) => {
+                    Schema::Ref { name: name.clone() }
+                }
                 _ => parsed.clone(),
             }
         }
@@ -1577,7 +1579,9 @@ impl Parser {
                             Schema::String => Ok(Schema::Uuid),
                             Schema::Fixed(FixedSchema { size: 16, .. }) => Ok(Schema::Uuid),
                             Schema::Fixed(FixedSchema { size, .. }) => {
-                                warn!("Ignoring uuid logical type for a Fixed schema because its size ({size:?}) is not 16! Schema: {schema:?}");
+                                warn!(
+                                    "Ignoring uuid logical type for a Fixed schema because its size ({size:?}) is not 16! Schema: {schema:?}"
+                                );
                                 Ok(schema)
                             }
                             _ => {
@@ -1709,7 +1713,7 @@ impl Parser {
 
         let namespace = &name.namespace;
 
-        if let Some(ref aliases) = aliases {
+        if let Some(aliases) = aliases {
             aliases.iter().for_each(|alias| {
                 let alias_fullname = alias.fully_qualified_name(namespace);
                 self.resolving_schemas
@@ -1732,7 +1736,7 @@ impl Parser {
 
         let namespace = &fully_qualified_name.namespace;
 
-        if let Some(ref aliases) = aliases {
+        if let Some(aliases) = aliases {
             aliases.iter().for_each(|alias| {
                 let alias_fullname = alias.fully_qualified_name(namespace);
                 self.resolving_schemas.remove(&alias_fullname);
@@ -1748,7 +1752,7 @@ impl Parser {
         enclosing_namespace: &Namespace,
     ) -> Option<&Schema> {
         match complex.get("type") {
-            Some(Value::String(ref typ)) => {
+            Some(Value::String(typ)) => {
                 let name = Name::new(typ.as_str())
                     .unwrap()
                     .fully_qualified_name(enclosing_namespace);
@@ -1997,7 +2001,7 @@ impl Parser {
         }
 
         let doc = complex.get("doc").and_then(|v| match &v {
-            Value::String(ref docstr) => Some(docstr.clone()),
+            &Value::String(docstr) => Some(docstr.clone()),
             _ => None,
         });
 
@@ -2009,7 +2013,7 @@ impl Parser {
         }?;
 
         let default = complex.get("default").and_then(|v| match &v {
-            Value::String(ref default) => Some(default.clone()),
+            &Value::String(default) => Some(default.clone()),
             _ => None,
         });
 
@@ -2050,7 +2054,7 @@ fn fix_aliases_namespace(aliases: Option<Vec<String>>, namespace: &Namespace) ->
             .map(|alias| {
                 if alias.find('.').is_none() {
                     match namespace {
-                        Some(ref ns) => format!("{ns}.{alias}"),
+                        Some(ns) => format!("{ns}.{alias}"),
                         None => alias.clone(),
                     }
                 } else {
@@ -2127,10 +2131,10 @@ impl Serialize for Schema {
                     map.serialize_entry("namespace", n)?;
                 }
                 map.serialize_entry("name", &name.name)?;
-                if let Some(ref docstr) = doc {
+                if let Some(docstr) = doc {
                     map.serialize_entry("doc", docstr)?;
                 }
-                if let Some(ref aliases) = aliases {
+                if let Some(aliases) = aliases {
                     map.serialize_entry("aliases", aliases)?;
                 }
                 map.serialize_entry("fields", fields)?;
@@ -2154,7 +2158,7 @@ impl Serialize for Schema {
                 map.serialize_entry("name", &name.name)?;
                 map.serialize_entry("symbols", symbols)?;
 
-                if let Some(ref aliases) = aliases {
+                if let Some(aliases) = aliases {
                     map.serialize_entry("aliases", aliases)?;
                 }
                 for attr in attributes {
@@ -2507,7 +2511,7 @@ pub mod derive {
     /// ```
     pub trait AvroSchemaComponent {
         fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace)
-            -> Schema;
+        -> Schema;
     }
 
     impl<T> AvroSchema for T
@@ -2639,10 +2643,10 @@ pub mod derive {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{rabin::Rabin, SpecificSingleObjectWriter};
+    use crate::{SpecificSingleObjectWriter, rabin::Rabin};
     use apache_avro_test_helper::{
-        logger::{assert_logged, assert_not_logged},
         TestResult,
+        logger::{assert_logged, assert_not_logged},
     };
     use serde_json::json;
     use serial_test::serial;
@@ -2792,17 +2796,19 @@ mod tests {
         let schema_c_expected = Schema::Record(
             RecordSchema::builder()
                 .name(Name::new("C")?)
-                .fields(vec![RecordField::builder()
-                    .name("field_one".to_string())
-                    .schema(Schema::Union(UnionSchema::new(vec![
-                        Schema::Ref {
-                            name: Name::new("A")?,
-                        },
-                        Schema::Ref {
-                            name: Name::new("B")?,
-                        },
-                    ])?))
-                    .build()])
+                .fields(vec![
+                    RecordField::builder()
+                        .name("field_one".to_string())
+                        .schema(Schema::Union(UnionSchema::new(vec![
+                            Schema::Ref {
+                                name: Name::new("A")?,
+                            },
+                            Schema::Ref {
+                                name: Name::new("B")?,
+                            },
+                        ])?))
+                        .build(),
+                ])
                 .lookup(BTreeMap::from_iter(vec![("field_one".to_string(), 0)]))
                 .build(),
         );
@@ -6852,7 +6858,9 @@ mod tests {
                 let scale = attrs
                     .get("scale")
                     .expect("The 'scale' attribute is missing");
-                assert_logged(&format!("Ignoring invalid decimal logical type: The decimal precision ({precision}) must be bigger or equal to the scale ({scale})"));
+                assert_logged(&format!(
+                    "Ignoring invalid decimal logical type: The decimal precision ({precision}) must be bigger or equal to the scale ({scale})"
+                ));
             }
             _ => unreachable!("Expected Schema::Fixed, got {:?}", schema),
         }
@@ -6868,7 +6876,9 @@ mod tests {
         )?;
         match schema {
             Schema::Decimal(_) => {
-                assert_not_logged("Ignoring invalid decimal logical type: The decimal precision (2) must be bigger or equal to the scale (3)");
+                assert_not_logged(
+                    "Ignoring invalid decimal logical type: The decimal precision (2) must be bigger or equal to the scale (3)",
+                );
             }
             _ => unreachable!("Expected Schema::Decimal, got {:?}", schema),
         }

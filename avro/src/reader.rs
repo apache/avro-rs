@@ -17,15 +17,16 @@
 
 //! Logic handling reading from Avro format at user level.
 use crate::{
+    AvroResult, Codec, Error,
     decode::{decode, decode_internal},
     from_value,
     headers::{HeaderBuilder, RabinFingerprintHeader},
     schema::{
-        resolve_names, resolve_names_with_schemata, AvroSchema, Names, ResolvedOwnedSchema,
-        ResolvedSchema, Schema,
+        AvroSchema, Names, ResolvedOwnedSchema, ResolvedSchema, Schema, resolve_names,
+        resolve_names_with_schemata,
     },
     types::Value,
-    util, AvroResult, Codec, Error,
+    util,
 };
 use log::warn;
 use serde::de::DeserializeOwned;
@@ -86,24 +87,27 @@ impl<'r, R: Read> Block<'r, R> {
         }
 
         let meta_schema = Schema::map(Schema::Bytes);
-        if let Value::Map(metadata) = decode(&meta_schema, &mut self.reader)? {
-            self.read_writer_schema(&metadata)?;
-            self.codec = read_codec(&metadata)?;
+        match decode(&meta_schema, &mut self.reader)? {
+            Value::Map(metadata) => {
+                self.read_writer_schema(&metadata)?;
+                self.codec = read_codec(&metadata)?;
 
-            for (key, value) in metadata {
-                if key == "avro.schema"
-                    || key == "avro.codec"
-                    || key == "avro.codec.compression_level"
-                {
-                    // already processed
-                } else if key.starts_with("avro.") {
-                    warn!("Ignoring unknown metadata key: {key}");
-                } else {
-                    self.read_user_metadata(key, value);
+                for (key, value) in metadata {
+                    if key == "avro.schema"
+                        || key == "avro.codec"
+                        || key == "avro.codec.compression_level"
+                    {
+                        // already processed
+                    } else if key.starts_with("avro.") {
+                        warn!("Ignoring unknown metadata key: {key}");
+                    } else {
+                        self.read_user_metadata(key, value);
+                    }
                 }
             }
-        } else {
-            return Err(Error::GetHeaderMetadata);
+            _ => {
+                return Err(Error::GetHeaderMetadata);
+            }
         }
 
         self.reader

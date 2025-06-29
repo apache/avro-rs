@@ -16,6 +16,7 @@
 // under the License.
 
 use crate::{
+    AvroResult,
     bigdecimal::serialize_big_decimal,
     error::Error,
     schema::{
@@ -24,7 +25,6 @@ use crate::{
     },
     types::{Value, ValueKind},
     util::{zig_i32, zig_i64},
-    AvroResult,
 };
 use log::error;
 use std::{borrow::Borrow, collections::HashMap, io::Write};
@@ -63,7 +63,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
     enclosing_namespace: &Namespace,
     writer: &mut W,
 ) -> AvroResult<usize> {
-    if let Schema::Ref { ref name } = schema {
+    if let Schema::Ref { name } = schema {
         let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
         let resolved = names
             .get(&fully_qualified_name)
