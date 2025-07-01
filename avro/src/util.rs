@@ -15,13 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::{schema::Documentation, AvroResult, Error};
+use crate::{AvroResult, Error, schema::Documentation};
 use serde_json::{Map, Value};
 use std::{
     io::{Read, Write},
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
         Once,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
 };
 

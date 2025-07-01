@@ -17,6 +17,7 @@
 
 //! Logic handling the intermediate representation of Avro values.
 use crate::{
+    AvroResult, Error,
     bigdecimal::{deserialize_big_decimal, serialize_big_decimal},
     decimal::Decimal,
     duration::Duration,
@@ -24,7 +25,6 @@ use crate::{
         DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, Precision, RecordField,
         RecordSchema, ResolvedSchema, Scale, Schema, SchemaKind, UnionSchema,
     },
-    AvroResult, Error,
 };
 use bigdecimal::BigDecimal;
 use log::{debug, error};
@@ -1184,8 +1184,8 @@ mod tests {
         schema::RecordFieldOrder,
     };
     use apache_avro_test_helper::{
-        logger::{assert_logged, assert_not_logged},
         TestResult,
+        logger::{assert_logged, assert_not_logged},
     };
     use num_bigint::BigInt;
     use pretty_assertions::assert_eq;
@@ -1274,23 +1274,21 @@ mod tests {
             ),
             (
                 Value::Union(3, Box::new(Value::Int(42))),
-                Schema::Union(
-                    UnionSchema::new(vec![
-                        Schema::Null,
-                        Schema::Double,
-                        Schema::String,
-                        Schema::Int,
-                    ])
-                    ?,
-                ),
+                Schema::Union(UnionSchema::new(vec![
+                    Schema::Null,
+                    Schema::Double,
+                    Schema::String,
+                    Schema::Int,
+                ])?),
                 true,
                 "",
             ),
             (
                 Value::Union(1, Box::new(Value::Long(42i64))),
-                Schema::Union(
-                    UnionSchema::new(vec![Schema::Null, Schema::TimestampMillis])?,
-                ),
+                Schema::Union(UnionSchema::new(vec![
+                    Schema::Null,
+                    Schema::TimestampMillis,
+                ])?),
                 true,
                 "",
             ),
@@ -1312,7 +1310,12 @@ mod tests {
                 false,
                 "Invalid value: Array([Boolean(true)]) for schema: Array(ArraySchema { items: Long, attributes: {} }). Reason: Unsupported value-schema combination! Value: Boolean(true), schema: Long",
             ),
-            (Value::Record(vec![]), Schema::Null, false, "Invalid value: Record([]) for schema: Null. Reason: Unsupported value-schema combination! Value: Record([]), schema: Null"),
+            (
+                Value::Record(vec![]),
+                Schema::Null,
+                false,
+                "Invalid value: Record([]) for schema: Null. Reason: Unsupported value-schema combination! Value: Record([]), schema: Null",
+            ),
             (
                 Value::Fixed(12, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
                 Schema::Duration,
@@ -1564,11 +1567,13 @@ mod tests {
             attributes: Default::default(),
         });
 
-        assert!(Value::Record(vec![
-            ("a".to_string(), Value::Long(42i64)),
-            ("b".to_string(), Value::String("foo".to_string())),
-        ])
-        .validate(&schema));
+        assert!(
+            Value::Record(vec![
+                ("a".to_string(), Value::Long(42i64)),
+                ("b".to_string(), Value::String("foo".to_string())),
+            ])
+            .validate(&schema)
+        );
 
         let value = Value::Record(vec![
             ("b".to_string(), Value::String("foo".to_string())),
@@ -1617,22 +1622,26 @@ mod tests {
             r#"Invalid value: Record([("a", Long(42)), ("b", String("foo")), ("c", Null), ("d", Null)]) for schema: Record(RecordSchema { name: Name { name: "some_record", namespace: None }, aliases: None, doc: None, fields: [RecordField { name: "a", doc: None, aliases: None, default: None, schema: Long, order: Ascending, position: 0, custom_attributes: {} }, RecordField { name: "b", doc: None, aliases: None, default: None, schema: String, order: Ascending, position: 1, custom_attributes: {} }, RecordField { name: "c", doc: None, aliases: None, default: Some(Null), schema: Union(UnionSchema { schemas: [Null, Int], variant_index: {Null: 0, Int: 1} }), order: Ascending, position: 2, custom_attributes: {} }], lookup: {"a": 0, "b": 1, "c": 2}, attributes: {} }). Reason: The value's records length (4) is greater than the schema's (3 fields)"#,
         );
 
-        assert!(Value::Map(
-            vec![
-                ("a".to_string(), Value::Long(42i64)),
-                ("b".to_string(), Value::String("foo".to_string())),
-            ]
-            .into_iter()
-            .collect()
-        )
-        .validate(&schema));
-
-        assert!(!Value::Map(
-            vec![("d".to_string(), Value::Long(123_i64)),]
+        assert!(
+            Value::Map(
+                vec![
+                    ("a".to_string(), Value::Long(42i64)),
+                    ("b".to_string(), Value::String("foo".to_string())),
+                ]
                 .into_iter()
                 .collect()
-        )
-        .validate(&schema));
+            )
+            .validate(&schema)
+        );
+
+        assert!(
+            !Value::Map(
+                vec![("d".to_string(), Value::Long(123_i64)),]
+                    .into_iter()
+                    .collect()
+            )
+            .validate(&schema)
+        );
         assert_logged(
             r#"Invalid value: Map({"d": Long(123)}) for schema: Record(RecordSchema { name: Name { name: "some_record", namespace: None }, aliases: None, doc: None, fields: [RecordField { name: "a", doc: None, aliases: None, default: None, schema: Long, order: Ascending, position: 0, custom_attributes: {} }, RecordField { name: "b", doc: None, aliases: None, default: None, schema: String, order: Ascending, position: 1, custom_attributes: {} }, RecordField { name: "c", doc: None, aliases: None, default: Some(Null), schema: Union(UnionSchema { schemas: [Null, Int], variant_index: {Null: 0, Int: 1} }), order: Ascending, position: 2, custom_attributes: {} }], lookup: {"a": 0, "b": 1, "c": 2}, attributes: {} }). Reason: Field with name '"a"' is not a member of the map items
 Field with name '"b"' is not a member of the map items"#,
@@ -1640,27 +1649,31 @@ Field with name '"b"' is not a member of the map items"#,
 
         let union_schema = Schema::Union(UnionSchema::new(vec![Schema::Null, schema])?);
 
-        assert!(Value::Union(
-            1,
-            Box::new(Value::Record(vec![
-                ("a".to_string(), Value::Long(42i64)),
-                ("b".to_string(), Value::String("foo".to_string())),
-            ]))
-        )
-        .validate(&union_schema));
-
-        assert!(Value::Union(
-            1,
-            Box::new(Value::Map(
-                vec![
+        assert!(
+            Value::Union(
+                1,
+                Box::new(Value::Record(vec![
                     ("a".to_string(), Value::Long(42i64)),
                     ("b".to_string(), Value::String("foo".to_string())),
-                ]
-                .into_iter()
-                .collect()
-            ))
-        )
-        .validate(&union_schema));
+                ]))
+            )
+            .validate(&union_schema)
+        );
+
+        assert!(
+            Value::Union(
+                1,
+                Box::new(Value::Map(
+                    vec![
+                        ("a".to_string(), Value::Long(42i64)),
+                        ("b".to_string(), Value::String("foo".to_string())),
+                    ]
+                    .into_iter()
+                    .collect()
+                ))
+            )
+            .validate(&union_schema)
+        );
 
         Ok(())
     }
@@ -1720,45 +1733,51 @@ Field with name '"b"' is not a member of the map items"#,
     #[test]
     fn resolve_decimal_invalid_scale() {
         let value = Value::Decimal(Decimal::from(vec![1, 2]));
-        assert!(value
-            .resolve(&Schema::Decimal(DecimalSchema {
-                precision: 2,
-                scale: 3,
-                inner: Box::new(Schema::Bytes),
-            }))
-            .is_err());
+        assert!(
+            value
+                .resolve(&Schema::Decimal(DecimalSchema {
+                    precision: 2,
+                    scale: 3,
+                    inner: Box::new(Schema::Bytes),
+                }))
+                .is_err()
+        );
     }
 
     #[test]
     fn resolve_decimal_invalid_precision_for_length() {
         let value = Value::Decimal(Decimal::from((1u8..=8u8).rev().collect::<Vec<_>>()));
-        assert!(value
-            .resolve(&Schema::Decimal(DecimalSchema {
-                precision: 1,
-                scale: 0,
-                inner: Box::new(Schema::Bytes),
-            }))
-            .is_ok());
+        assert!(
+            value
+                .resolve(&Schema::Decimal(DecimalSchema {
+                    precision: 1,
+                    scale: 0,
+                    inner: Box::new(Schema::Bytes),
+                }))
+                .is_ok()
+        );
     }
 
     #[test]
     fn resolve_decimal_fixed() {
         let value = Value::Decimal(Decimal::from(vec![1, 2, 3, 4, 5]));
-        assert!(value
-            .clone()
-            .resolve(&Schema::Decimal(DecimalSchema {
-                precision: 10,
-                scale: 1,
-                inner: Box::new(Schema::Fixed(FixedSchema {
-                    name: Name::new("decimal").unwrap(),
-                    aliases: None,
-                    size: 20,
-                    doc: None,
-                    default: None,
-                    attributes: Default::default(),
+        assert!(
+            value
+                .clone()
+                .resolve(&Schema::Decimal(DecimalSchema {
+                    precision: 10,
+                    scale: 1,
+                    inner: Box::new(Schema::Fixed(FixedSchema {
+                        name: Name::new("decimal").unwrap(),
+                        aliases: None,
+                        size: 20,
+                        doc: None,
+                        default: None,
+                        attributes: Default::default(),
+                    }))
                 }))
-            }))
-            .is_ok());
+                .is_ok()
+        );
         assert!(value.resolve(&Schema::String).is_err());
     }
 
@@ -2066,7 +2085,10 @@ Field with name '"b"' is not a member of the map items"#,
         );
         assert_eq!(
             JsonValue::try_from(Value::Duration(
-                [1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8, 10u8, 11u8, 12u8].into()
+                [
+                    1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8, 10u8, 11u8, 12u8
+                ]
+                .into()
             ))?,
             JsonValue::Array(vec![
                 JsonValue::Number(1.into()),
@@ -3075,28 +3097,32 @@ Field with name '"b"' is not a member of the map items"#,
         );
 
         let value = Value::Bytes(vec![97, 99]);
-        assert!(value
-            .resolve(&Schema::Fixed(FixedSchema {
-                name: "test".into(),
-                aliases: None,
-                doc: None,
-                size: 3,
-                default: None,
-                attributes: Default::default()
-            }))
-            .is_err(),);
+        assert!(
+            value
+                .resolve(&Schema::Fixed(FixedSchema {
+                    name: "test".into(),
+                    aliases: None,
+                    doc: None,
+                    size: 3,
+                    default: None,
+                    attributes: Default::default()
+                }))
+                .is_err(),
+        );
 
         let value = Value::Bytes(vec![97, 98, 99, 100]);
-        assert!(value
-            .resolve(&Schema::Fixed(FixedSchema {
-                name: "test".into(),
-                aliases: None,
-                doc: None,
-                size: 3,
-                default: None,
-                attributes: Default::default()
-            }))
-            .is_err(),);
+        assert!(
+            value
+                .resolve(&Schema::Fixed(FixedSchema {
+                    name: "test".into(),
+                    aliases: None,
+                    doc: None,
+                    size: 3,
+                    default: None,
+                    attributes: Default::default()
+                }))
+                .is_err(),
+        );
 
         Ok(())
     }
@@ -3184,34 +3210,138 @@ Field with name '"b"' is not a member of the map items"#,
 
     #[test]
     fn avro_4029_resolve_from_unsupported_err() -> TestResult {
-        let data: Vec<(&str, Value, &str)> = vec!(
-            (r#"{ "name": "NAME", "type": "int" }"#, Value::Float(123_f32), "Expected Value::Int, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "fixed", "size": 3 }"#, Value::Float(123_f32), "String expected for fixed, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "bytes" }"#, Value::Float(123_f32), "Expected Value::Bytes, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "string", "logicalType": "uuid" }"#, Value::String("abc-1234".into()), "Failed to convert &str to UUID: invalid group count: expected 5, found 2"),
-            (r#"{ "name": "NAME", "type": "string", "logicalType": "uuid" }"#, Value::Float(123_f32), "Expected Value::Uuid, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "bytes", "logicalType": "big-decimal" }"#, Value::Float(123_f32), "Expected Value::BigDecimal, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "fixed", "size": 12, "logicalType": "duration" }"#, Value::Float(123_f32), "Expected Value::Duration or Value::Fixed(12), got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "bytes", "logicalType": "decimal", "precision": 4, "scale": 3 }"#, Value::Float(123_f32), "Expected Value::Decimal, Value::Bytes or Value::Fixed, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "bytes" }"#, Value::Array(vec!(Value::Long(256_i64))), "Unable to convert to u8, got Int(256)"),
-            (r#"{ "name": "NAME", "type": "int", "logicalType": "date" }"#, Value::Float(123_f32), "Expected Value::Date or Value::Int, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "int", "logicalType": "time-millis" }"#, Value::Float(123_f32), "Expected Value::TimeMillis or Value::Int, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "long", "logicalType": "time-micros" }"#, Value::Float(123_f32), "Expected Value::TimeMicros, Value::Long or Value::Int, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "long", "logicalType": "timestamp-millis" }"#, Value::Float(123_f32), "Expected Value::TimestampMillis, Value::Long or Value::Int, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "long", "logicalType": "timestamp-micros" }"#, Value::Float(123_f32), "Expected Value::TimestampMicros, Value::Long or Value::Int, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "long", "logicalType": "timestamp-nanos" }"#, Value::Float(123_f32), "Expected Value::TimestampNanos, Value::Long or Value::Int, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "long", "logicalType": "local-timestamp-millis" }"#, Value::Float(123_f32), "Expected Value::LocalTimestampMillis, Value::Long or Value::Int, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "long", "logicalType": "local-timestamp-micros" }"#, Value::Float(123_f32), "Expected Value::LocalTimestampMicros, Value::Long or Value::Int, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "long", "logicalType": "local-timestamp-nanos" }"#, Value::Float(123_f32), "Expected Value::LocalTimestampNanos, Value::Long or Value::Int, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "null" }"#, Value::Float(123_f32), "Expected Value::Null, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "boolean" }"#, Value::Float(123_f32), "Expected Value::Boolean, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "int" }"#, Value::Float(123_f32), "Expected Value::Int, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "long" }"#, Value::Float(123_f32), "Expected Value::Long or Value::Int, got: Float(123.0)"),
-            (r#"{ "name": "NAME", "type": "float" }"#, Value::Boolean(false), r#"Expected Value::Float, Value::Double, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: Boolean(false)"#),
-            (r#"{ "name": "NAME", "type": "double" }"#, Value::Boolean(false), r#"Expected Value::Double, Value::Float, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: Boolean(false)"#),
-            (r#"{ "name": "NAME", "type": "string" }"#, Value::Boolean(false), "Expected Value::String, Value::Bytes or Value::Fixed, got: Boolean(false)"),
-            (r#"{ "name": "NAME", "type": "enum", "symbols": ["one", "two"] }"#, Value::Boolean(false), "Expected Value::Enum, got: Boolean(false)"),
-        );
+        let data: Vec<(&str, Value, &str)> = vec![
+            (
+                r#"{ "name": "NAME", "type": "int" }"#,
+                Value::Float(123_f32),
+                "Expected Value::Int, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "fixed", "size": 3 }"#,
+                Value::Float(123_f32),
+                "String expected for fixed, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "bytes" }"#,
+                Value::Float(123_f32),
+                "Expected Value::Bytes, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "string", "logicalType": "uuid" }"#,
+                Value::String("abc-1234".into()),
+                "Failed to convert &str to UUID: invalid group count: expected 5, found 2",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "string", "logicalType": "uuid" }"#,
+                Value::Float(123_f32),
+                "Expected Value::Uuid, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "bytes", "logicalType": "big-decimal" }"#,
+                Value::Float(123_f32),
+                "Expected Value::BigDecimal, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "fixed", "size": 12, "logicalType": "duration" }"#,
+                Value::Float(123_f32),
+                "Expected Value::Duration or Value::Fixed(12), got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "bytes", "logicalType": "decimal", "precision": 4, "scale": 3 }"#,
+                Value::Float(123_f32),
+                "Expected Value::Decimal, Value::Bytes or Value::Fixed, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "bytes" }"#,
+                Value::Array(vec![Value::Long(256_i64)]),
+                "Unable to convert to u8, got Int(256)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "int", "logicalType": "date" }"#,
+                Value::Float(123_f32),
+                "Expected Value::Date or Value::Int, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "int", "logicalType": "time-millis" }"#,
+                Value::Float(123_f32),
+                "Expected Value::TimeMillis or Value::Int, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "long", "logicalType": "time-micros" }"#,
+                Value::Float(123_f32),
+                "Expected Value::TimeMicros, Value::Long or Value::Int, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "long", "logicalType": "timestamp-millis" }"#,
+                Value::Float(123_f32),
+                "Expected Value::TimestampMillis, Value::Long or Value::Int, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "long", "logicalType": "timestamp-micros" }"#,
+                Value::Float(123_f32),
+                "Expected Value::TimestampMicros, Value::Long or Value::Int, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "long", "logicalType": "timestamp-nanos" }"#,
+                Value::Float(123_f32),
+                "Expected Value::TimestampNanos, Value::Long or Value::Int, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "long", "logicalType": "local-timestamp-millis" }"#,
+                Value::Float(123_f32),
+                "Expected Value::LocalTimestampMillis, Value::Long or Value::Int, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "long", "logicalType": "local-timestamp-micros" }"#,
+                Value::Float(123_f32),
+                "Expected Value::LocalTimestampMicros, Value::Long or Value::Int, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "long", "logicalType": "local-timestamp-nanos" }"#,
+                Value::Float(123_f32),
+                "Expected Value::LocalTimestampNanos, Value::Long or Value::Int, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "null" }"#,
+                Value::Float(123_f32),
+                "Expected Value::Null, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "boolean" }"#,
+                Value::Float(123_f32),
+                "Expected Value::Boolean, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "int" }"#,
+                Value::Float(123_f32),
+                "Expected Value::Int, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "long" }"#,
+                Value::Float(123_f32),
+                "Expected Value::Long or Value::Int, got: Float(123.0)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "float" }"#,
+                Value::Boolean(false),
+                r#"Expected Value::Float, Value::Double, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: Boolean(false)"#,
+            ),
+            (
+                r#"{ "name": "NAME", "type": "double" }"#,
+                Value::Boolean(false),
+                r#"Expected Value::Double, Value::Float, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: Boolean(false)"#,
+            ),
+            (
+                r#"{ "name": "NAME", "type": "string" }"#,
+                Value::Boolean(false),
+                "Expected Value::String, Value::Bytes or Value::Fixed, got: Boolean(false)",
+            ),
+            (
+                r#"{ "name": "NAME", "type": "enum", "symbols": ["one", "two"] }"#,
+                Value::Boolean(false),
+                "Expected Value::Enum, got: Boolean(false)",
+            ),
+        ];
 
         for (schema_str, value, expected_error) in data {
             let schema = Schema::parse_str(schema_str)?;

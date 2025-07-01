@@ -21,15 +21,15 @@ use std::{
 };
 
 use apache_avro::{
-    from_avro_datum, from_value,
+    Codec, Error, Reader, Schema, Writer, from_avro_datum, from_value,
     schema::{EnumSchema, FixedSchema, Name, RecordField, RecordSchema},
     to_avro_datum, to_value,
     types::{Record, Value},
-    Codec, Error, Reader, Schema, Writer,
 };
 use apache_avro_test_helper::{
-    data::{examples, valid_examples, DOC_EXAMPLES},
-    init, TestResult,
+    TestResult,
+    data::{DOC_EXAMPLES, examples, valid_examples},
+    init,
 };
 
 #[test]
@@ -366,11 +366,11 @@ fn test_parse_reused_record_schema_by_fullname() -> TestResult {
             assert_eq!(fields.len(), 3, "The number of the fields is not correct!");
 
             let RecordField {
-                ref name,
+                name,
                 doc: _,
                 default: _,
                 aliases: _,
-                ref schema,
+                schema,
                 order: _,
                 position: _,
                 custom_attributes: _,
@@ -379,7 +379,7 @@ fn test_parse_reused_record_schema_by_fullname() -> TestResult {
             assert_eq!(name, "min_temp");
 
             match schema {
-                Schema::Ref { ref name } => {
+                Schema::Ref { name } => {
                     assert_eq!(name.fullname(None), "prefix.Temp", "Name does not match!");
                 }
                 unexpected => unreachable!("Unexpected schema type: {:?}", unexpected),

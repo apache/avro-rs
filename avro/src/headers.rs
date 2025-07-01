@@ -18,7 +18,7 @@
 //! Handling of Avro magic headers
 use uuid::Uuid;
 
-use crate::{rabin::Rabin, schema::SchemaFingerprint, AvroResult, Schema};
+use crate::{AvroResult, Schema, rabin::Rabin, schema::SchemaFingerprint};
 
 /// This trait represents that an object is able to construct an Avro message header. It is
 /// implemented for some known header types already. If you need a header type that is not already

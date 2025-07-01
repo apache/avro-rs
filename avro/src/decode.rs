@@ -16,6 +16,7 @@
 // under the License.
 
 use crate::{
+    AvroResult, Error,
     bigdecimal::deserialize_big_decimal,
     decimal::Decimal,
     duration::Duration,
@@ -26,7 +27,6 @@ use crate::{
     },
     types::Value,
     util::{safe_len, zag_i32, zag_i64},
-    AvroResult, Error,
 };
 use std::{
     borrow::Borrow,
@@ -357,6 +357,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
 #[allow(clippy::expect_fun_call)]
 mod tests {
     use crate::{
+        Decimal,
         decode::decode,
         encode::{encode, tests::success},
         schema::{DecimalSchema, FixedSchema, Schema},
@@ -364,7 +365,6 @@ mod tests {
             Value,
             Value::{Array, Int, Map},
         },
-        Decimal,
     };
     use apache_avro_test_helper::TestResult;
     use pretty_assertions::assert_eq;

@@ -22,8 +22,8 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 
 use syn::{
-    parse_macro_input, spanned::Spanned, AttrStyle, Attribute, DeriveInput, Ident, Meta, Type,
-    TypePath,
+    AttrStyle, Attribute, DeriveInput, Ident, Meta, Type, TypePath, parse_macro_input,
+    spanned::Spanned,
 };
 
 #[derive(darling::FromAttributes)]
@@ -106,7 +106,7 @@ fn derive_avro_schema(input: &mut DeriveInput) -> Result<TokenStream, Vec<syn::E
             return Err(vec![syn::Error::new(
                 input.ident.span(),
                 "AvroSchema derive only works for structs and simple enums ",
-            )])
+            )]);
         }
     };
     let ident = &input.ident;
@@ -198,13 +198,13 @@ fn get_data_struct_schema_def(
             return Err(vec![syn::Error::new(
                 error_span,
                 "AvroSchema derive does not work for tuple structs",
-            )])
+            )]);
         }
         syn::Fields::Unit => {
             return Err(vec![syn::Error::new(
                 error_span,
                 "AvroSchema derive does not work for unit structs",
-            )])
+            )]);
         }
     }
     let record_doc = preserve_optional(record_doc);
@@ -287,13 +287,13 @@ fn type_to_schema_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>> {
                 return Err(vec![syn::Error::new_spanned(
                     ty,
                     "AvroSchema: Cannot guarantee successful deserialization of this type",
-                )])
+                )]);
             }
             "u64" => {
                 return Err(vec![syn::Error::new_spanned(
-                ty,
-                "Cannot guarantee successful serialization of this type due to overflow concerns",
-            )])
+                    ty,
+                    "Cannot guarantee successful serialization of this type due to overflow concerns",
+                )]);
             } // Can't guarantee serialization type
             _ => {
                 // Fails when the type does not implement AvroSchemaComponent directly
@@ -376,11 +376,7 @@ fn extract_outer_doc(attributes: &[Attribute]) -> Option<String> {
         })
         .collect::<Vec<String>>()
         .join("\n");
-    if doc.is_empty() {
-        None
-    } else {
-        Some(doc)
-    }
+    if doc.is_empty() { None } else { Some(doc) }
 }
 
 fn preserve_optional(op: Option<impl quote::ToTokens>) -> TokenStream {
@@ -633,10 +629,12 @@ mod tests {
             Ok(mut input) => {
                 let schema_token_stream = derive_avro_schema(&mut input);
                 assert!(&schema_token_stream.is_ok());
-                assert!(schema_token_stream
-                    .unwrap()
-                    .to_string()
-                    .contains("namespace.testing"))
+                assert!(
+                    schema_token_stream
+                        .unwrap()
+                        .to_string()
+                        .contains("namespace.testing")
+                )
             }
             Err(error) => panic!(
                 "Failed to parse as derive input when it should be able to. Error: {error:?}"

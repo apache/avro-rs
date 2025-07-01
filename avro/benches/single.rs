@@ -20,7 +20,7 @@ use apache_avro::{
     to_avro_datum,
     types::{Record, Value},
 };
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 
 const RAW_SMALL_SCHEMA: &str = r#"
 {

@@ -15,8 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{from_value, AvroResult, Codec, Reader, Schema, Writer};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use apache_avro::{AvroResult, Codec, Reader, Schema, Writer, from_value};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 static SCHEMA_A_STR: &str = r#"{
         "name": "A",
