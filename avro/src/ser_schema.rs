@@ -382,6 +382,11 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
         }
     }
 
+    fn skip_field(&mut self, _key: &'static str) -> Result<(), Self::Error> {
+        self.item_count += 1;
+        Ok(())
+    }
+
     fn end(self) -> Result<Self::Ok, Self::Error> {
         self.end()
     }
