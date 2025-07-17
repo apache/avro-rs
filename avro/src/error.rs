@@ -16,7 +16,7 @@
 // under the License.
 
 use crate::{
-    schema::{Name, Schema, SchemaKind},
+    schema::{Name, Schema, SchemaKind, UnionSchema},
     types::{Value, ValueKind},
 };
 use std::{error::Error as _, fmt};
@@ -223,8 +223,8 @@ pub enum Error {
     #[error("Key {0} not found in decimal metadata JSON")]
     GetDecimalMetadataFromJson(&'static str),
 
-    #[error("Could not find matching type in union")]
-    FindUnionVariant,
+    #[error("Could not find matching type in {schema:?} for {value:?}")]
+    FindUnionVariant { schema: UnionSchema, value: Value },
 
     #[error("Union type should not be empty")]
     EmptyUnion,

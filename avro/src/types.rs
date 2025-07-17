@@ -1045,7 +1045,10 @@ impl Value {
         };
         let (i, inner) = schema
             .find_schema_with_known_schemata(&v, Some(names), enclosing_namespace)
-            .ok_or(Error::FindUnionVariant)?;
+            .ok_or(Error::FindUnionVariant {
+                schema: schema.clone(),
+                value: v.clone(),
+            })?;
 
         Ok(Value::Union(
             i as u32,
