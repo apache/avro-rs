@@ -653,9 +653,9 @@ fn write_value_ref_resolved(
 ) -> AvroResult<usize> {
     match value.validate_internal(schema, resolved_schema.get_names(), &schema.namespace()) {
         Some(reason) => Err(Error::ValidationWithReason {
-            value: value.clone(),
+            value: Box::new(value.clone()),
             schema: Box::new(schema.clone()),
-            reason,
+            reason: Box::new(reason),
         }),
         None => encode_internal(
             value,
@@ -679,9 +679,9 @@ fn write_value_ref_owned_resolved(
         &root_schema.namespace(),
     ) {
         return Err(Error::ValidationWithReason {
-            value: value.clone(),
+            value: Box::new(value.clone()),
             schema: Box::new(root_schema.clone()),
-            reason,
+            reason: Box::new(reason),
         });
     }
     encode_internal(

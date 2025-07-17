@@ -67,7 +67,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
         let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
         let resolved = names
             .get(&fully_qualified_name)
-            .ok_or(Error::SchemaResolutionError(fully_qualified_name))?;
+            .ok_or(Error::SchemaResolutionError(Box::new(fully_qualified_name)))?;
         return encode_internal(value, resolved.borrow(), names, enclosing_namespace, writer);
     }
 
@@ -269,8 +269,8 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                         )?;
                     } else {
                         return Err(Error::NoEntryInLookupTable(
-                            name.clone(),
-                            format!("{lookup:?}"),
+                            Box::new(name.clone()),
+                            Box::new(format!("{lookup:?}")),
                         ));
                     }
                 }

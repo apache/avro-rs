@@ -88,8 +88,8 @@ impl GlueSchemaUuidHeader {
         if message_payload.len() < Self::GLUE_HEADER_LENGTH {
             return Err(crate::error::Error::HeaderMagic);
         }
-        let schema_uuid =
-            Uuid::from_slice(&message_payload[2..18]).map_err(crate::Error::UuidFromSlice)?;
+        let schema_uuid = Uuid::from_slice(&message_payload[2..18])
+            .map_err(|e| crate::Error::UuidFromSlice(Box::new(e)))?;
         Ok(GlueSchemaUuidHeader { schema_uuid })
     }
 

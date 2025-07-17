@@ -30,13 +30,13 @@ pub enum Error {
     BoolValue(u8),
 
     #[error("Not a fixed value, required for decimal with fixed schema: {0:?}")]
-    FixedValue(Value),
+    FixedValue(Box<Value>),
 
     #[error("Not a bytes value, required for decimal with bytes schema: {0:?}")]
-    BytesValue(Value),
+    BytesValue(Box<Value>),
 
     #[error("Not a string value, required for uuid: {0:?}")]
-    GetUuidFromStringValue(Value),
+    GetUuidFromStringValue(Box<Value>),
 
     #[error("Two schemas with the same fullname were given: {0:?}")]
     NameCollision(String),
@@ -45,7 +45,7 @@ pub enum Error {
     ResolveDecimalSchema(SchemaKind),
 
     #[error("Invalid utf-8 string")]
-    ConvertToUtf8(#[source] std::string::FromUtf8Error),
+    ConvertToUtf8(#[source] Box<std::string::FromUtf8Error>),
 
     #[error("Invalid utf-8 string")]
     ConvertToUtf8Error(#[source] std::str::Utf8Error),
@@ -57,9 +57,9 @@ pub enum Error {
     /// Describes errors happened while validating Avro data.
     #[error("Value {value:?} does not match schema {schema:?}: Reason: {reason}")]
     ValidationWithReason {
-        value: Value,
+        value: Box<Value>,
         schema: Box<Schema>,
-        reason: String,
+        reason: Box<String>,
     },
 
     #[error("Unable to allocate {desired} bytes (maximum allowed: {maximum})")]
@@ -93,13 +93,13 @@ pub enum Error {
     ReadFixed(#[source] std::io::Error, usize),
 
     #[error("Failed to convert &str to UUID: {0}")]
-    ConvertStrToUuid(#[source] uuid::Error),
+    ConvertStrToUuid(#[source] Box<uuid::Error>),
 
     #[error("Failed to convert Fixed bytes to UUID. It must be exactly 16 bytes, got {0}")]
     ConvertFixedToUuid(usize),
 
     #[error("Failed to convert Fixed bytes to UUID: {0}")]
-    ConvertSliceToUuid(#[source] uuid::Error),
+    ConvertSliceToUuid(#[source] Box<uuid::Error>),
 
     #[error("Map key is not a string; key type is {0:?}")]
     MapKeyType(ValueKind),
@@ -125,25 +125,25 @@ pub enum Error {
     GetScaleWithFixedSize { size: usize, precision: usize },
 
     #[error("Expected Value::Uuid, got: {0:?}")]
-    GetUuid(Value),
+    GetUuid(Box<Value>),
 
     #[error("Expected Value::BigDecimal, got: {0:?}")]
-    GetBigDecimal(Value),
+    GetBigDecimal(Box<Value>),
 
     #[error("Fixed bytes of size 12 expected, got Fixed of size {0}")]
     GetDecimalFixedBytes(usize),
 
     #[error("Expected Value::Duration or Value::Fixed(12), got: {0:?}")]
-    ResolveDuration(Value),
+    ResolveDuration(Box<Value>),
 
     #[error("Expected Value::Decimal, Value::Bytes or Value::Fixed, got: {0:?}")]
-    ResolveDecimal(Value),
+    ResolveDecimal(Box<Value>),
 
     #[error("Missing field in record: {0:?}")]
     GetField(String),
 
     #[error("Unable to convert to u8, got {0:?}")]
-    GetU8(Value),
+    GetU8(Box<Value>),
 
     #[error("Precision {precision} too small to hold decimal values with {num_bytes} bytes")]
     ComparePrecisionAndSize { precision: usize, num_bytes: usize },
@@ -152,69 +152,69 @@ pub enum Error {
     ConvertLengthToI32(#[source] std::num::TryFromIntError, usize),
 
     #[error("Expected Value::Date or Value::Int, got: {0:?}")]
-    GetDate(Value),
+    GetDate(Box<Value>),
 
     #[error("Expected Value::TimeMillis or Value::Int, got: {0:?}")]
-    GetTimeMillis(Value),
+    GetTimeMillis(Box<Value>),
 
     #[error("Expected Value::TimeMicros, Value::Long or Value::Int, got: {0:?}")]
-    GetTimeMicros(Value),
+    GetTimeMicros(Box<Value>),
 
     #[error("Expected Value::TimestampMillis, Value::Long or Value::Int, got: {0:?}")]
-    GetTimestampMillis(Value),
+    GetTimestampMillis(Box<Value>),
 
     #[error("Expected Value::TimestampMicros, Value::Long or Value::Int, got: {0:?}")]
-    GetTimestampMicros(Value),
+    GetTimestampMicros(Box<Value>),
 
     #[error("Expected Value::TimestampNanos, Value::Long or Value::Int, got: {0:?}")]
-    GetTimestampNanos(Value),
+    GetTimestampNanos(Box<Value>),
 
     #[error("Expected Value::LocalTimestampMillis, Value::Long or Value::Int, got: {0:?}")]
-    GetLocalTimestampMillis(Value),
+    GetLocalTimestampMillis(Box<Value>),
 
     #[error("Expected Value::LocalTimestampMicros, Value::Long or Value::Int, got: {0:?}")]
-    GetLocalTimestampMicros(Value),
+    GetLocalTimestampMicros(Box<Value>),
 
     #[error("Expected Value::LocalTimestampNanos, Value::Long or Value::Int, got: {0:?}")]
-    GetLocalTimestampNanos(Value),
+    GetLocalTimestampNanos(Box<Value>),
 
     #[error("Expected Value::Null, got: {0:?}")]
-    GetNull(Value),
+    GetNull(Box<Value>),
 
     #[error("Expected Value::Boolean, got: {0:?}")]
-    GetBoolean(Value),
+    GetBoolean(Box<Value>),
 
     #[error("Expected Value::Int, got: {0:?}")]
-    GetInt(Value),
+    GetInt(Box<Value>),
 
     #[error("Expected Value::Long or Value::Int, got: {0:?}")]
-    GetLong(Value),
+    GetLong(Box<Value>),
 
     #[error(r#"Expected Value::Double, Value::Float, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: {0:?}"#)]
-    GetDouble(Value),
+    GetDouble(Box<Value>),
 
     #[error(r#"Expected Value::Float, Value::Double, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: {0:?}"#)]
-    GetFloat(Value),
+    GetFloat(Box<Value>),
 
     #[error("Expected Value::Bytes, got: {0:?}")]
-    GetBytes(Value),
+    GetBytes(Box<Value>),
 
     #[error("Expected Value::String, Value::Bytes or Value::Fixed, got: {0:?}")]
-    GetString(Value),
+    GetString(Box<Value>),
 
     #[error("Expected Value::Enum, got: {0:?}")]
-    GetEnum(Value),
+    GetEnum(Box<Value>),
 
     #[error("Fixed size mismatch, expected: {size}, got: {n}")]
     CompareFixedSizes { size: usize, n: usize },
 
     #[error("String expected for fixed, got: {0:?}")]
-    GetStringForFixed(Value),
+    GetStringForFixed(Box<Value>),
 
     #[error("Enum default {symbol:?} is not among allowed symbols {symbols:?}")]
     GetEnumDefault {
-        symbol: String,
-        symbols: Vec<String>,
+        symbol: Box<String>,
+        symbols: Box<Vec<String>>,
     },
 
     #[error("Enum value index {index} is out of bounds {nsymbols}")]
@@ -224,21 +224,30 @@ pub enum Error {
     GetDecimalMetadataFromJson(&'static str),
 
     #[error("Could not find matching type in {schema:?} for {value:?}")]
-    FindUnionVariant { schema: UnionSchema, value: Value },
+    FindUnionVariant {
+        schema: Box<UnionSchema>,
+        value: Box<Value>,
+    },
 
     #[error("Union type should not be empty")]
     EmptyUnion,
 
     #[error("Array({expected:?}) expected, got {other:?}")]
-    GetArray { expected: SchemaKind, other: Value },
+    GetArray {
+        expected: SchemaKind,
+        other: Box<Value>,
+    },
 
     #[error("Map({expected:?}) expected, got {other:?}")]
-    GetMap { expected: SchemaKind, other: Value },
+    GetMap {
+        expected: SchemaKind,
+        other: Box<Value>,
+    },
 
     #[error("Record with fields {expected:?} expected, got {other:?}")]
     GetRecord {
-        expected: Vec<(String, SchemaKind)>,
-        other: Value,
+        expected: Box<Vec<(String, SchemaKind)>>,
+        other: Box<Value>,
     },
 
     #[error("No `name` field")]
@@ -257,7 +266,7 @@ pub enum Error {
     GetDefaultUnion(SchemaKind, ValueKind),
 
     #[error("`default`'s value type of field {0:?} in {1:?} must be {2:?}")]
-    GetDefaultRecordField(String, String, String),
+    GetDefaultRecordField(Box<String>, Box<String>, Box<String>),
 
     #[error("JSON value {0} claims to be u64 but cannot be converted")]
     GetU64FromJson(serde_json::Number),
@@ -294,8 +303,8 @@ pub enum Error {
 
     #[error("invalid JSON for {key:?}: {value:?}")]
     GetDecimalMetadataValueFromJson {
-        key: String,
-        value: serde_json::Value,
+        key: &'static str,
+        value: Box<serde_json::Value>,
     },
 
     #[error("The decimal precision ({precision}) must be bigger or equal to the scale ({scale})")]
@@ -313,17 +322,18 @@ pub enum Error {
     #[error("Unreadable big decimal scale")]
     BigDecimalScale,
 
+    // TODO: This seems unused?
     #[error("Unexpected `type` {0} variant for `logicalType`")]
-    GetLogicalTypeVariant(serde_json::Value),
+    GetLogicalTypeVariant(Box<serde_json::Value>),
 
     #[error("No `type` field found for `logicalType`")]
     GetLogicalTypeField,
 
     #[error("logicalType must be a string, but is {0:?}")]
-    GetLogicalTypeFieldType(serde_json::Value),
+    GetLogicalTypeFieldType(Box<serde_json::Value>),
 
     #[error("Unknown complex type: {0}")]
-    GetComplexType(serde_json::Value),
+    GetComplexType(Box<serde_json::Value>),
 
     #[error("No `type` in complex type")]
     GetComplexTypeField,
@@ -347,10 +357,10 @@ pub enum Error {
     FieldNameDuplicate(String),
 
     #[error("Invalid schema name {0}. It must match the regex '{1}'")]
-    InvalidSchemaName(String, &'static str),
+    InvalidSchemaName(Box<String>, &'static str),
 
     #[error("Invalid namespace {0}. It must match the regex '{1}'")]
-    InvalidNamespace(String, &'static str),
+    InvalidNamespace(Box<String>, &'static str),
 
     #[error(
         "Invalid schema: There is no type called '{0}', if you meant to define a non-primitive schema, it should be defined inside `type` attribute. Please review the specification"
@@ -361,7 +371,7 @@ pub enum Error {
     EnumSymbolDuplicate(String),
 
     #[error("Default value for enum must be a string! Got: {0}")]
-    EnumDefaultWrongType(serde_json::Value),
+    EnumDefaultWrongType(Box<serde_json::Value>),
 
     #[error("No `items` in array")]
     GetArrayItemsField,
@@ -370,7 +380,7 @@ pub enum Error {
     GetMapValuesField,
 
     #[error("Fixed schema `size` value must be a positive integer: {0}")]
-    GetFixedSizeFieldPositive(serde_json::Value),
+    GetFixedSizeFieldPositive(Box<serde_json::Value>),
 
     #[error("Fixed schema has no `size`")]
     GetFixedSizeField,
@@ -414,7 +424,7 @@ pub enum Error {
     HeaderMagic,
 
     #[error("Message Header mismatch. Expected: {0:?}. Actual: {1:?}")]
-    SingleObjectHeaderMismatch(Vec<u8>, Vec<u8>),
+    SingleObjectHeaderMismatch(Box<Vec<u8>>, Box<Vec<u8>>),
 
     #[error("Failed to get JSON from avro.schema key in map")]
     GetAvroSchemaFromMap,
@@ -451,14 +461,14 @@ pub enum Error {
 
     #[error("Failed to serialize value of type {value_type} using schema {schema:?}: {value}")]
     SerializeValueWithSchema {
-        value_type: &'static str,
-        value: String,
+        value_type: Box<&'static str>,
+        value: Box<String>,
         schema: Box<Schema>,
     },
 
     #[error("Failed to serialize field '{field_name}' for record {record_schema:?}: {error}")]
     SerializeRecordFieldWithSchema {
-        field_name: &'static str,
+        field_name: Box<&'static str>,
         record_schema: Box<Schema>,
         error: Box<Error>,
     },
@@ -484,7 +494,7 @@ pub enum Error {
 
     /// Error while resolving Schema::Ref
     #[error("Unresolved schema reference: {0}")]
-    SchemaResolutionError(Name),
+    SchemaResolutionError(Box<Name>),
 
     #[error("The file metadata is already flushed.")]
     FileHeaderAlreadyWritten,
@@ -494,13 +504,13 @@ pub enum Error {
 
     /// Error when two named schema have the same fully qualified name
     #[error("Two named schema defined for same fullname: {0}.")]
-    AmbiguousSchemaDefinition(Name),
+    AmbiguousSchemaDefinition(Box<Name>),
 
     #[error("Signed decimal bytes length {0} not equal to fixed schema size {1}.")]
     EncodeDecimalAsFixedError(usize, usize),
 
     #[error("There is no entry for '{0}' in the lookup table: {1}.")]
-    NoEntryInLookupTable(String, String),
+    NoEntryInLookupTable(Box<String>, Box<String>),
 
     #[error("Can only encode value type {value_kind:?} as one of {supported_schema:?}")]
     EncodeValueAsSchemaError {
@@ -517,7 +527,7 @@ pub enum Error {
     BadCodecMetadata,
 
     #[error("Cannot convert a slice to Uuid: {0}")]
-    UuidFromSlice(#[source] uuid::Error),
+    UuidFromSlice(#[source] Box<uuid::Error>),
 }
 
 #[derive(thiserror::Error, PartialEq)]

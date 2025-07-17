@@ -679,7 +679,7 @@ impl Value {
                     self.resolve_internal(resolved.borrow(), names, &name.namespace, field_default)
                 } else {
                     error!("Failed to resolve schema {name:?}");
-                    Err(Error::SchemaResolutionError(name.clone()))
+                    Err(Error::SchemaResolutionError(Box::new(name.clone())))
                 }
             }
             Schema::Null => self.resolve_null(),
@@ -729,10 +729,10 @@ impl Value {
     fn resolve_uuid(self) -> Result<Self, Error> {
         Ok(match self {
             uuid @ Value::Uuid(_) => uuid,
-            Value::String(ref string) => {
-                Value::Uuid(Uuid::from_str(string).map_err(Error::ConvertStrToUuid)?)
-            }
-            other => return Err(Error::GetUuid(other)),
+            Value::String(ref string) => Value::Uuid(
+                Uuid::from_str(string).map_err(|e| Error::ConvertStrToUuid(Box::new(e)))?,
+            ),
+            other => return Err(Error::GetUuid(Box::new(other))),
         })
     }
 
@@ -740,7 +740,7 @@ impl Value {
         Ok(match self {
             bg @ Value::BigDecimal(_) => bg,
             Value::Bytes(b) => Value::BigDecimal(deserialize_big_decimal(&b).unwrap()),
-            other => return Err(Error::GetBigDecimal(other)),
+            other => return Err(Error::GetBigDecimal(Box::new(other))),
         })
     }
 
@@ -756,7 +756,7 @@ impl Value {
                     bytes[8], bytes[9], bytes[10], bytes[11],
                 ]))
             }
-            other => return Err(Error::ResolveDuration(other)),
+            other => return Err(Error::ResolveDuration(Box::new(other))),
         })
     }
 
@@ -802,21 +802,21 @@ impl Value {
                     Ok(Value::Decimal(Decimal::from(bytes)))
                 }
             }
-            other => Err(Error::ResolveDecimal(other)),
+            other => Err(Error::ResolveDecimal(Box::new(other))),
         }
     }
 
     fn resolve_date(self) -> Result<Self, Error> {
         match self {
             Value::Date(d) | Value::Int(d) => Ok(Value::Date(d)),
-            other => Err(Error::GetDate(other)),
+            other => Err(Error::GetDate(Box::new(other))),
         }
     }
 
     fn resolve_time_millis(self) -> Result<Self, Error> {
         match self {
             Value::TimeMillis(t) | Value::Int(t) => Ok(Value::TimeMillis(t)),
-            other => Err(Error::GetTimeMillis(other)),
+            other => Err(Error::GetTimeMillis(Box::new(other))),
         }
     }
 
@@ -824,7 +824,7 @@ impl Value {
         match self {
             Value::TimeMicros(t) | Value::Long(t) => Ok(Value::TimeMicros(t)),
             Value::Int(t) => Ok(Value::TimeMicros(i64::from(t))),
-            other => Err(Error::GetTimeMicros(other)),
+            other => Err(Error::GetTimeMicros(Box::new(other))),
         }
     }
 
@@ -832,7 +832,7 @@ impl Value {
         match self {
             Value::TimestampMillis(ts) | Value::Long(ts) => Ok(Value::TimestampMillis(ts)),
             Value::Int(ts) => Ok(Value::TimestampMillis(i64::from(ts))),
-            other => Err(Error::GetTimestampMillis(other)),
+            other => Err(Error::GetTimestampMillis(Box::new(other))),
         }
     }
 
@@ -840,7 +840,7 @@ impl Value {
         match self {
             Value::TimestampMicros(ts) | Value::Long(ts) => Ok(Value::TimestampMicros(ts)),
             Value::Int(ts) => Ok(Value::TimestampMicros(i64::from(ts))),
-            other => Err(Error::GetTimestampMicros(other)),
+            other => Err(Error::GetTimestampMicros(Box::new(other))),
         }
     }
 
@@ -848,7 +848,7 @@ impl Value {
         match self {
             Value::TimestampNanos(ts) | Value::Long(ts) => Ok(Value::TimestampNanos(ts)),
             Value::Int(ts) => Ok(Value::TimestampNanos(i64::from(ts))),
-            other => Err(Error::GetTimestampNanos(other)),
+            other => Err(Error::GetTimestampNanos(Box::new(other))),
         }
     }
 
@@ -858,7 +858,7 @@ impl Value {
                 Ok(Value::LocalTimestampMillis(ts))
             }
             Value::Int(ts) => Ok(Value::LocalTimestampMillis(i64::from(ts))),
-            other => Err(Error::GetLocalTimestampMillis(other)),
+            other => Err(Error::GetLocalTimestampMillis(Box::new(other))),
         }
     }
 
@@ -868,7 +868,7 @@ impl Value {
                 Ok(Value::LocalTimestampMicros(ts))
             }
             Value::Int(ts) => Ok(Value::LocalTimestampMicros(i64::from(ts))),
-            other => Err(Error::GetLocalTimestampMicros(other)),
+            other => Err(Error::GetLocalTimestampMicros(Box::new(other))),
         }
     }
 
@@ -876,21 +876,21 @@ impl Value {
         match self {
             Value::LocalTimestampNanos(ts) | Value::Long(ts) => Ok(Value::LocalTimestampNanos(ts)),
             Value::Int(ts) => Ok(Value::LocalTimestampNanos(i64::from(ts))),
-            other => Err(Error::GetLocalTimestampNanos(other)),
+            other => Err(Error::GetLocalTimestampNanos(Box::new(other))),
         }
     }
 
     fn resolve_null(self) -> Result<Self, Error> {
         match self {
             Value::Null => Ok(Value::Null),
-            other => Err(Error::GetNull(other)),
+            other => Err(Error::GetNull(Box::new(other))),
         }
     }
 
     fn resolve_boolean(self) -> Result<Self, Error> {
         match self {
             Value::Boolean(b) => Ok(Value::Boolean(b)),
-            other => Err(Error::GetBoolean(other)),
+            other => Err(Error::GetBoolean(Box::new(other))),
         }
     }
 
@@ -898,7 +898,7 @@ impl Value {
         match self {
             Value::Int(n) => Ok(Value::Int(n)),
             Value::Long(n) => Ok(Value::Int(n as i32)),
-            other => Err(Error::GetInt(other)),
+            other => Err(Error::GetInt(Box::new(other))),
         }
     }
 
@@ -906,7 +906,7 @@ impl Value {
         match self {
             Value::Int(n) => Ok(Value::Long(i64::from(n))),
             Value::Long(n) => Ok(Value::Long(n)),
-            other => Err(Error::GetLong(other)),
+            other => Err(Error::GetLong(Box::new(other))),
         }
     }
 
@@ -918,9 +918,9 @@ impl Value {
             Value::Double(x) => Ok(Value::Float(x as f32)),
             Value::String(ref x) => match Self::parse_special_float(x) {
                 Some(f) => Ok(Value::Float(f)),
-                None => Err(Error::GetFloat(self)),
+                None => Err(Error::GetFloat(Box::new(self))),
             },
-            other => Err(Error::GetFloat(other)),
+            other => Err(Error::GetFloat(Box::new(other))),
         }
     }
 
@@ -932,9 +932,9 @@ impl Value {
             Value::Double(x) => Ok(Value::Double(x)),
             Value::String(ref x) => match Self::parse_special_float(x) {
                 Some(f) => Ok(Value::Double(f64::from(f))),
-                None => Err(Error::GetDouble(self)),
+                None => Err(Error::GetDouble(Box::new(self))),
             },
-            other => Err(Error::GetDouble(other)),
+            other => Err(Error::GetDouble(Box::new(other))),
         }
     }
 
@@ -959,7 +959,7 @@ impl Value {
                     .map(Value::try_u8)
                     .collect::<Result<Vec<_>, _>>()?,
             )),
-            other => Err(Error::GetBytes(other)),
+            other => Err(Error::GetBytes(Box::new(other))),
         }
     }
 
@@ -967,9 +967,9 @@ impl Value {
         match self {
             Value::String(s) => Ok(Value::String(s)),
             Value::Bytes(bytes) | Value::Fixed(_, bytes) => Ok(Value::String(
-                String::from_utf8(bytes).map_err(Error::ConvertToUtf8)?,
+                String::from_utf8(bytes).map_err(|e| Error::ConvertToUtf8(Box::new(e)))?,
             )),
-            other => Err(Error::GetString(other)),
+            other => Err(Error::GetString(Box::new(other))),
         }
     }
 
@@ -990,7 +990,7 @@ impl Value {
                     Err(Error::CompareFixedSizes { size, n: s.len() })
                 }
             }
-            other => Err(Error::GetStringForFixed(other)),
+            other => Err(Error::GetStringForFixed(Box::new(other))),
         }
     }
 
@@ -1010,14 +1010,14 @@ impl Value {
                             Ok(Value::Enum(index as u32, default.clone()))
                         } else {
                             Err(Error::GetEnumDefault {
-                                symbol,
-                                symbols: symbols.into(),
+                                symbol: Box::new(symbol),
+                                symbols: Box::new(Vec::from(symbols)),
                             })
                         }
                     }
                     _ => Err(Error::GetEnumDefault {
-                        symbol,
-                        symbols: symbols.into(),
+                        symbol: Box::new(symbol),
+                        symbols: Box::new(Vec::from(symbols)),
                     }),
                 }
             }
@@ -1026,7 +1026,7 @@ impl Value {
         match self {
             Value::Enum(_raw_index, s) => validate_symbol(s, symbols),
             Value::String(s) => validate_symbol(s, symbols),
-            other => Err(Error::GetEnum(other)),
+            other => Err(Error::GetEnum(Box::new(other))),
         }
     }
 
@@ -1046,8 +1046,8 @@ impl Value {
         let (i, inner) = schema
             .find_schema_with_known_schemata(&v, Some(names), enclosing_namespace)
             .ok_or(Error::FindUnionVariant {
-                schema: schema.clone(),
-                value: v.clone(),
+                schema: Box::new(schema.clone()),
+                value: Box::new(v.clone()),
             })?;
 
         Ok(Value::Union(
@@ -1071,7 +1071,7 @@ impl Value {
             )),
             other => Err(Error::GetArray {
                 expected: schema.into(),
-                other,
+                other: Box::new(other),
             }),
         }
     }
@@ -1095,7 +1095,7 @@ impl Value {
             )),
             other => Err(Error::GetMap {
                 expected: schema.into(),
-                other,
+                other: Box::new(other),
             }),
         }
     }
@@ -1110,11 +1110,13 @@ impl Value {
             Value::Map(items) => Ok(items),
             Value::Record(fields) => Ok(fields.into_iter().collect::<HashMap<_, _>>()),
             other => Err(Error::GetRecord {
-                expected: fields
-                    .iter()
-                    .map(|field| (field.name.clone(), field.schema.clone().into()))
-                    .collect(),
-                other,
+                expected: Box::new(
+                    fields
+                        .iter()
+                        .map(|field| (field.name.clone(), field.schema.clone().into()))
+                        .collect(),
+                ),
+                other: Box::new(other),
             }),
         }?;
 
@@ -1175,7 +1177,7 @@ impl Value {
             }
         }
 
-        Err(Error::GetU8(int))
+        Err(Error::GetU8(Box::new(int)))
     }
 }
 
