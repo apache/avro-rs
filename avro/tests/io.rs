@@ -16,7 +16,7 @@
 // under the License.
 
 //! Port of https://github.com/apache/avro/blob/release-1.9.1/lang/py/test/test_io.py
-use apache_avro::{Error, Schema, from_avro_datum, to_avro_datum, types::Value};
+use apache_avro::{Error, Schema, error::Details, from_avro_datum, to_avro_datum, types::Value};
 use apache_avro_test_helper::TestResult;
 use pretty_assertions::assert_eq;
 use std::{io::Cursor, sync::OnceLock};
@@ -467,10 +467,10 @@ fn test_type_exception() -> Result<(), String> {
         ("E".to_string(), Value::Int(5)),
         ("F".to_string(), Value::String(String::from("Bad"))),
     ]);
-    let encoded = to_avro_datum(&writer_schema, datum_to_write);
+    let encoded = to_avro_datum(&writer_schema, datum_to_write).map_err(Error::into_details);
     match encoded {
         Ok(_) => Err(String::from("Expected ValidationError, got Ok")),
-        Err(Error::Validation) => Ok(()),
+        Err(Details::Validation) => Ok(()),
         Err(ref e) => Err(format!("Expected ValidationError, got {e:?}")),
     }
 }

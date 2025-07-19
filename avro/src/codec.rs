@@ -174,7 +174,7 @@ impl Codec {
                 let actual = hasher.finalize();
 
                 if expected != actual {
-                    return Err(Error::SnappyCrc32 { expected, actual });
+                    return Err(Error::SnappyCrc32(expected, actual));
                 }
                 decoded
             }

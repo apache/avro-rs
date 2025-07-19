@@ -270,7 +270,7 @@ impl Name {
         let (name, namespace_from_name) = complex
             .name()
             .map(|name| Name::get_name_and_namespace(name.as_str()).unwrap())
-            .ok_or(Error::GetNameField)?;
+            .ok_or_else(Error::GetNameField)?;
         // FIXME Reading name from the type is wrong ! The name there is just a metadata (AVRO-3430)
         let type_name = match complex.get("type") {
             Some(Value::Object(complex_type)) => complex_type.name().or(None),
@@ -605,7 +605,7 @@ pub(crate) fn resolve_names(
             names
                 .get(&fully_qualified_name)
                 .map(|_| ())
-                .ok_or(Error::SchemaResolutionError(fully_qualified_name))
+                .ok_or_else(|| Error::SchemaResolutionError(fully_qualified_name))
         }
         _ => Ok(()),
     }
@@ -668,7 +668,7 @@ impl RecordField {
         parser: &mut Parser,
         enclosing_record: &Name,
     ) -> AvroResult<Self> {
-        let name = field.name().ok_or(Error::GetNameFieldFromRecord)?;
+        let name = field.name().ok_or_else(Error::GetNameFieldFromRecord)?;
 
         validate_record_field_name(&name)?;
 
@@ -742,7 +742,7 @@ impl RecordField {
                                 SchemaKind::from(first_schema),
                                 types::ValueKind::from(avro_value),
                             )),
-                            None => Err(Error::EmptyUnion),
+                            None => Err(Error::EmptyUnion()),
                         };
                     }
                 }
@@ -911,11 +911,11 @@ impl UnionSchema {
         let mut vindex = BTreeMap::new();
         for (i, schema) in schemas.iter().enumerate() {
             if let Schema::Union(_) = schema {
-                return Err(Error::GetNestedUnion);
+                return Err(Error::GetNestedUnion());
             }
             let kind = SchemaKind::from(schema);
             if !kind.is_named() && vindex.insert(kind, i).is_some() {
-                return Err(Error::GetUnionDuplicate);
+                return Err(Error::GetUnionDuplicate());
             }
         }
         Ok(UnionSchema {
@@ -1112,7 +1112,7 @@ impl Schema {
                 }
                 input_order.push(name);
             } else {
-                return Err(Error::GetNameField);
+                return Err(Error::GetNameField());
             }
         }
         let mut parser = Parser {
@@ -1154,7 +1154,7 @@ impl Schema {
                 }
                 input_order.push(name);
             } else {
-                return Err(Error::GetNameField);
+                return Err(Error::GetNameField());
             }
         }
         let mut parser = Parser {
@@ -1366,7 +1366,7 @@ impl Parser {
                 self.parse_complex(data, enclosing_namespace, RecordSchemaParseLocation::Root)
             }
             Value::Array(ref data) => self.parse_union(data, enclosing_namespace),
-            _ => Err(Error::ParseSchemaFromValidJson),
+            _ => Err(Error::ParseSchemaFromValidJson()),
         }
     }
 
@@ -1466,21 +1466,21 @@ impl Parser {
                         Err(Error::GetDecimalMetadataFromJson(key))
                     }
                 }
-                Some(value) => Err(Error::GetDecimalMetadataValueFromJson {
-                    key: key.into(),
-                    value: value.clone(),
-                }),
+                Some(value) => Err(Error::GetDecimalMetadataValueFromJson(
+                    key.into(),
+                    value.clone(),
+                )),
             }
         }
         let precision = get_decimal_integer(complex, "precision")?;
         let scale = get_decimal_integer(complex, "scale")?;
 
         if precision < 1 {
-            return Err(Error::DecimalPrecisionMuBePositive { precision });
+            return Err(Error::DecimalPrecisionMuBePositive(precision));
         }
 
         if precision < scale {
-            Err(Error::DecimalPrecisionLessThanScale { precision, scale })
+            Err(Error::DecimalPrecisionLessThanScale(precision, scale))
         } else {
             Ok((precision, scale))
         }
@@ -1510,7 +1510,7 @@ impl Parser {
                     }
                     _ => parser.parse(value, enclosing_namespace),
                 },
-                None => Err(Error::GetLogicalTypeField),
+                None => Err(Error::GetLogicalTypeField()),
             }
         }
 
@@ -1702,7 +1702,7 @@ impl Parser {
             }
             Some(Value::Array(variants)) => self.parse_union(variants, enclosing_namespace),
             Some(unknown) => Err(Error::GetComplexType(unknown.clone())),
-            None => Err(Error::GetComplexTypeField),
+            None => Err(Error::GetComplexTypeField()),
         }
     }
 
@@ -1790,7 +1790,7 @@ impl Parser {
 
         let fields: Vec<RecordField> = fields_opt
             .and_then(|fields| fields.as_array())
-            .ok_or(Error::GetRecordFieldsJson)
+            .ok_or_else(Error::GetRecordFieldsJson)
             .and_then(|fields| {
                 fields
                     .iter()
@@ -1863,13 +1863,13 @@ impl Parser {
 
         let symbols: Vec<String> = symbols_opt
             .and_then(|v| v.as_array())
-            .ok_or(Error::GetEnumSymbolsField)
+            .ok_or_else(Error::GetEnumSymbolsField)
             .and_then(|symbols| {
                 symbols
                     .iter()
                     .map(|symbol| symbol.as_str().map(|s| s.to_string()))
                     .collect::<Option<_>>()
-                    .ok_or(Error::GetEnumSymbols)
+                    .ok_or_else(Error::GetEnumSymbols)
             })?;
 
         let mut existing_symbols: HashSet<&String> = HashSet::with_capacity(symbols.len());
@@ -1898,10 +1898,7 @@ impl Parser {
                 .resolve_enum(&symbols, &Some(value.to_string()), &None)
                 .is_ok();
             if !resolved {
-                return Err(Error::GetEnumDefault {
-                    symbol: value.to_string(),
-                    symbols,
-                });
+                return Err(Error::GetEnumDefault(value.to_string(), symbols));
             }
         }
 
@@ -1928,7 +1925,7 @@ impl Parser {
     ) -> AvroResult<Schema> {
         complex
             .get("items")
-            .ok_or(Error::GetArrayItemsField)
+            .ok_or_else(Error::GetArrayItemsField)
             .and_then(|items| self.parse(items, enclosing_namespace))
             .map(|items| {
                 Schema::array_with_attributes(
@@ -1947,7 +1944,7 @@ impl Parser {
     ) -> AvroResult<Schema> {
         complex
             .get("values")
-            .ok_or(Error::GetMapValuesField)
+            .ok_or_else(Error::GetMapValuesField)
             .and_then(|items| self.parse(items, enclosing_namespace))
             .map(|items| {
                 Schema::map_with_attributes(
@@ -2009,7 +2006,7 @@ impl Parser {
             Some(size) => size
                 .as_u64()
                 .ok_or_else(|| Error::GetFixedSizeFieldPositive(size.clone())),
-            None => Err(Error::GetFixedSizeField),
+            None => Err(Error::GetFixedSizeField()),
         }?;
 
         let default = complex.get("default").and_then(|v| match &v {
@@ -2643,7 +2640,7 @@ pub mod derive {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{SpecificSingleObjectWriter, rabin::Rabin};
+    use crate::{SpecificSingleObjectWriter, error::Details, rabin::Rabin};
     use apache_avro_test_helper::{
         TestResult,
         logger::{assert_logged, assert_not_logged},
@@ -3944,8 +3941,8 @@ mod tests {
     #[test]
     /// Whitespace is not allowed in the name.
     fn test_name_with_whitespace_value() {
-        match Name::new(" ") {
-            Err(Error::InvalidSchemaName(_, _)) => {}
+        match Name::new(" ").map_err(Error::into_details) {
+            Err(Details::InvalidSchemaName(_, _)) => {}
             _ => panic!("Expected an Error::InvalidSchemaName!"),
         }
     }
@@ -3953,8 +3950,8 @@ mod tests {
     #[test]
     /// The name must be non-empty.
     fn test_name_with_no_name_part() {
-        match Name::new("space.") {
-            Err(Error::InvalidSchemaName(_, _)) => {}
+        match Name::new("space.").map_err(Error::into_details) {
+            Err(Details::InvalidSchemaName(_, _)) => {}
             _ => panic!("Expected an Error::InvalidSchemaName!"),
         }
     }
@@ -5670,8 +5667,8 @@ mod tests {
         }
         "#;
 
-        match Schema::parse_str(schema_str) {
-            Err(Error::FieldName(x)) if x == "f1.x" => Ok(()),
+        match Schema::parse_str(schema_str).map_err(Error::into_details) {
+            Err(Details::FieldName(x)) if x == "f1.x" => Ok(()),
             other => Err(format!("Expected Error::FieldName, got {other:?}").into()),
         }
     }
@@ -5702,8 +5699,8 @@ mod tests {
         }
         "#;
 
-        match Schema::parse_str(schema_str) {
-            Err(Error::FieldNameDuplicate(_)) => (),
+        match Schema::parse_str(schema_str).map_err(Error::into_details) {
+            Err(Details::FieldNameDuplicate(_)) => (),
             other => {
                 return Err(format!("Expected Error::FieldNameDuplicate, got {other:?}").into());
             }
@@ -5985,8 +5982,8 @@ mod tests {
         }
         "#;
 
-        match Schema::parse_str(schema_str) {
-            Err(Error::InvalidNamespace(_, _)) => (),
+        match Schema::parse_str(schema_str).map_err(Error::into_details) {
+            Err(Details::InvalidNamespace(_, _)) => (),
             other => return Err(format!("Expected Error::InvalidNamespace, got {other:?}").into()),
         };
 
@@ -6000,8 +5997,8 @@ mod tests {
         }
         "#;
 
-        match Schema::parse_str(schema_str) {
-            Err(Error::InvalidNamespace(_, _)) => (),
+        match Schema::parse_str(schema_str).map_err(Error::into_details) {
+            Err(Details::InvalidNamespace(_, _)) => (),
             other => return Err(format!("Expected Error::InvalidNamespace, got {other:?}").into()),
         };
 
@@ -6015,8 +6012,8 @@ mod tests {
         }
         "#;
 
-        match Schema::parse_str(schema_str) {
-            Err(Error::InvalidNamespace(_, _)) => (),
+        match Schema::parse_str(schema_str).map_err(Error::into_details) {
+            Err(Details::InvalidNamespace(_, _)) => (),
             other => return Err(format!("Expected Error::InvalidNamespace, got {other:?}").into()),
         };
 
@@ -6030,8 +6027,8 @@ mod tests {
         }
         "#;
 
-        match Schema::parse_str(schema_str) {
-            Err(Error::InvalidNamespace(_, _)) => (),
+        match Schema::parse_str(schema_str).map_err(Error::into_details) {
+            Err(Details::InvalidNamespace(_, _)) => (),
             other => return Err(format!("Expected Error::InvalidNamespace, got {other:?}").into()),
         };
 
@@ -6045,8 +6042,8 @@ mod tests {
         }
         "#;
 
-        match Schema::parse_str(schema_str) {
-            Err(Error::InvalidNamespace(_, _)) => (),
+        match Schema::parse_str(schema_str).map_err(Error::into_details) {
+            Err(Details::InvalidNamespace(_, _)) => (),
             other => return Err(format!("Expected Error::InvalidNamespace, got {other:?}").into()),
         };
 
@@ -6345,10 +6342,10 @@ mod tests {
             "default": "d"
         }
         "#;
-        let expected = Error::GetEnumDefault {
-            symbol: "d".to_string(),
-            symbols: vec!["a".to_string(), "b".to_string(), "c".to_string()],
-        }
+        let expected = Error::GetEnumDefault(
+            "d".to_string(),
+            vec!["a".to_string(), "b".to_string(), "c".to_string()],
+        )
         .to_string();
         let result = Schema::parse_str(schema_str);
         assert!(result.is_err());

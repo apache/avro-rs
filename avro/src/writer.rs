@@ -421,7 +421,7 @@ impl<'a, W: Write> Writer<'a, W> {
                 .insert(key, Value::Bytes(value.as_ref().to_vec()));
             Ok(())
         } else {
-            Err(Error::FileHeaderAlreadyWritten)
+            Err(Error::FileHeaderAlreadyWritten())
         }
     }
 
@@ -503,7 +503,7 @@ fn write_avro_datum<T: Into<Value>, W: Write>(
 ) -> Result<(), Error> {
     let avro = value.into();
     if !avro.validate(schema) {
-        return Err(Error::Validation);
+        return Err(Error::Validation());
     }
     encode(&avro, schema, writer)?;
     Ok(())
@@ -520,7 +520,7 @@ fn write_avro_datum_schemata<T: Into<Value>>(
     let names = rs.get_names();
     let enclosing_namespace = schema.namespace();
     if let Some(_err) = avro.validate_internal(schema, names, &enclosing_namespace) {
-        return Err(Error::Validation);
+        return Err(Error::Validation());
     }
     encode_internal(&avro, schema, names, &enclosing_namespace, buffer)
 }
@@ -563,7 +563,7 @@ impl GenericSingleObjectWriter {
     pub fn write_value_ref<W: Write>(&mut self, v: &Value, writer: &mut W) -> AvroResult<usize> {
         let original_length = self.buffer.len();
         if !Self::HEADER_LENGTH_RANGE.contains(&original_length) {
-            Err(Error::IllegalSingleObjectWriterState)
+            Err(Error::IllegalSingleObjectWriterState())
         } else {
             write_value_ref_owned_resolved(&self.resolved, v, &mut self.buffer)?;
             writer.write_all(&self.buffer).map_err(Error::WriteBytes)?;
@@ -652,11 +652,11 @@ fn write_value_ref_resolved(
     buffer: &mut Vec<u8>,
 ) -> AvroResult<usize> {
     match value.validate_internal(schema, resolved_schema.get_names(), &schema.namespace()) {
-        Some(reason) => Err(Error::ValidationWithReason {
-            value: value.clone(),
-            schema: Box::new(schema.clone()),
+        Some(reason) => Err(Error::ValidationWithReason(
+            value.clone(),
+            schema.clone(),
             reason,
-        }),
+        )),
         None => encode_internal(
             value,
             schema,
@@ -678,11 +678,11 @@ fn write_value_ref_owned_resolved(
         resolved_schema.get_names(),
         &root_schema.namespace(),
     ) {
-        return Err(Error::ValidationWithReason {
-            value: value.clone(),
-            schema: Box::new(root_schema.clone()),
+        return Err(Error::ValidationWithReason(
+            value.clone(),
+            root_schema.clone(),
             reason,
-        });
+        ));
     }
     encode_internal(
         value,
@@ -777,7 +777,7 @@ mod tests {
     use serde::{Deserialize, Serialize};
     use uuid::Uuid;
 
-    use crate::codec::DeflateSettings;
+    use crate::{codec::DeflateSettings, error::Details};
     use apache_avro_test_helper::TestResult;
 
     const AVRO_OBJECT_HEADER_LEN: usize = AVRO_OBJECT_HEADER.len();
@@ -1362,8 +1362,11 @@ mod tests {
         record.put("b", "foo");
         writer.append(record.clone())?;
 
-        match writer.add_user_metadata("stringKey".to_string(), String::from("value2")) {
-            Err(e @ Error::FileHeaderAlreadyWritten) => {
+        match writer
+            .add_user_metadata("stringKey".to_string(), String::from("value2"))
+            .map_err(Error::into_details)
+        {
+            Err(e @ Details::FileHeaderAlreadyWritten) => {
                 assert_eq!(e.to_string(), "The file metadata is already flushed.")
             }
             Err(e) => panic!("Unexpected error occurred while writing user metadata: {e:?}"),
@@ -1379,8 +1382,11 @@ mod tests {
         let mut writer = Writer::new(&schema, Vec::new());
 
         let key = "avro.stringKey".to_string();
-        match writer.add_user_metadata(key.clone(), "value") {
-            Err(ref e @ Error::InvalidMetadataKey(_)) => {
+        match writer
+            .add_user_metadata(key.clone(), "value")
+            .map_err(Error::into_details)
+        {
+            Err(ref e @ Details::InvalidMetadataKey(_)) => {
                 assert_eq!(
                     e.to_string(),
                     format!(

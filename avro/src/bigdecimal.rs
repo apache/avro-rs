@@ -50,7 +50,7 @@ pub(crate) fn deserialize_big_decimal(bytes: &Vec<u8>) -> AvroResult<BigDecimal>
     let mut bytes: &[u8] = bytes.as_slice();
     let mut big_decimal_buffer = match decode_len(&mut bytes) {
         Ok(size) => vec![0u8; size],
-        Err(err) => return Err(Error::BigDecimalLen(Box::new(err))),
+        Err(err) => return Err(Error::BigDecimalLen(err)),
     };
 
     bytes
@@ -63,7 +63,7 @@ pub(crate) fn deserialize_big_decimal(bytes: &Vec<u8>) -> AvroResult<BigDecimal>
             let decimal = BigDecimal::new(big_int, scale_value);
             Ok(decimal)
         }
-        _ => Err(Error::BigDecimalScale),
+        _ => Err(Error::BigDecimalScale()),
     }
 }
 

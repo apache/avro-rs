@@ -67,7 +67,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
         let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
         let resolved = names
             .get(&fully_qualified_name)
-            .ok_or(Error::SchemaResolutionError(fully_qualified_name))?;
+            .ok_or_else(|| Error::SchemaResolutionError(fully_qualified_name))?;
         return encode_internal(value, resolved.borrow(), names, enclosing_namespace, writer);
     }
 
@@ -75,10 +75,10 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
         Value::Null => {
             if let Schema::Union(union) = schema {
                 match union.schemas.iter().position(|sch| *sch == Schema::Null) {
-                    None => Err(Error::EncodeValueAsSchemaError {
-                        value_kind: ValueKind::Null,
-                        supported_schema: vec![SchemaKind::Null, SchemaKind::Union],
-                    }),
+                    None => Err(Error::EncodeValueAsSchemaError(
+                        ValueKind::Null,
+                        vec![SchemaKind::Null, SchemaKind::Union],
+                    )),
                     Some(p) => encode_long(p as i64, writer),
                 }
             } else {
@@ -113,10 +113,10 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                     *inner.clone(),
                 ))),
             },
-            _ => Err(Error::EncodeValueAsSchemaError {
-                value_kind: ValueKind::Decimal,
-                supported_schema: vec![SchemaKind::Decimal],
-            }),
+            _ => Err(Error::EncodeValueAsSchemaError(
+                ValueKind::Decimal,
+                vec![SchemaKind::Decimal],
+            )),
         },
         &Value::Duration(duration) => {
             let slice: [u8; 12] = duration.into();
@@ -137,10 +137,10 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                 let bytes = uuid.as_bytes();
                 encode_bytes(bytes, writer)
             }
-            _ => Err(Error::EncodeValueAsSchemaError {
-                value_kind: ValueKind::Uuid,
-                supported_schema: vec![SchemaKind::Uuid, SchemaKind::Fixed],
-            }),
+            _ => Err(Error::EncodeValueAsSchemaError(
+                ValueKind::Uuid,
+                vec![SchemaKind::Uuid, SchemaKind::Fixed],
+            )),
         },
         Value::BigDecimal(bg) => {
             let buf: Vec<u8> = serialize_big_decimal(bg)?;
@@ -149,10 +149,10 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
         Value::Bytes(bytes) => match *schema {
             Schema::Bytes => encode_bytes(bytes, writer),
             Schema::Fixed { .. } => writer.write(bytes.as_slice()).map_err(Error::WriteBytes),
-            _ => Err(Error::EncodeValueAsSchemaError {
-                value_kind: ValueKind::Bytes,
-                supported_schema: vec![SchemaKind::Bytes, SchemaKind::Fixed],
-            }),
+            _ => Err(Error::EncodeValueAsSchemaError(
+                ValueKind::Bytes,
+                vec![SchemaKind::Bytes, SchemaKind::Fixed],
+            )),
         },
         Value::String(s) => match *schema {
             Schema::String | Schema::Uuid => encode_bytes(s, writer),
@@ -164,10 +164,10 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                     Err(Error::GetEnumSymbol(s.clone()))
                 }
             }
-            _ => Err(Error::EncodeValueAsSchemaError {
-                value_kind: ValueKind::String,
-                supported_schema: vec![SchemaKind::String, SchemaKind::Enum],
-            }),
+            _ => Err(Error::EncodeValueAsSchemaError(
+                ValueKind::String,
+                vec![SchemaKind::String, SchemaKind::Enum],
+            )),
         },
         Value::Fixed(_, bytes) => writer.write(bytes.as_slice()).map_err(Error::WriteBytes),
         Value::Enum(i, _) => encode_int(*i as i32, writer),
@@ -181,10 +181,10 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                 encode_internal(item, inner_schema, names, enclosing_namespace, &mut *writer)
             } else {
                 error!("invalid schema type for Union: {schema:?}");
-                Err(Error::EncodeValueAsSchemaError {
-                    value_kind: ValueKind::Union,
-                    supported_schema: vec![SchemaKind::Union],
-                })
+                Err(Error::EncodeValueAsSchemaError(
+                    ValueKind::Union,
+                    vec![SchemaKind::Union],
+                ))
             }
         }
         Value::Array(items) => {
@@ -204,10 +204,10 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                 writer.write(&[0u8]).map_err(Error::WriteBytes)
             } else {
                 error!("invalid schema type for Array: {schema:?}");
-                Err(Error::EncodeValueAsSchemaError {
-                    value_kind: ValueKind::Array,
-                    supported_schema: vec![SchemaKind::Array],
-                })
+                Err(Error::EncodeValueAsSchemaError(
+                    ValueKind::Array,
+                    vec![SchemaKind::Array],
+                ))
             }
         }
         Value::Map(items) => {
@@ -228,10 +228,10 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                 writer.write(&[0u8]).map_err(Error::WriteBytes)
             } else {
                 error!("invalid schema type for Map: {schema:?}");
-                Err(Error::EncodeValueAsSchemaError {
-                    value_kind: ValueKind::Map,
-                    supported_schema: vec![SchemaKind::Map],
-                })
+                Err(Error::EncodeValueAsSchemaError(
+                    ValueKind::Map,
+                    vec![SchemaKind::Map],
+                ))
             }
         }
         Value::Record(value_fields) => {
@@ -297,16 +297,16 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                         }
                     }
                 }
-                return Err(Error::EncodeValueAsSchemaError {
-                    value_kind: ValueKind::Record,
-                    supported_schema: vec![SchemaKind::Record, SchemaKind::Union],
-                });
+                return Err(Error::EncodeValueAsSchemaError(
+                    ValueKind::Record,
+                    vec![SchemaKind::Record, SchemaKind::Union],
+                ));
             } else {
                 error!("invalid schema type for Record: {schema:?}");
-                return Err(Error::EncodeValueAsSchemaError {
-                    value_kind: ValueKind::Record,
-                    supported_schema: vec![SchemaKind::Record, SchemaKind::Union],
-                });
+                return Err(Error::EncodeValueAsSchemaError(
+                    ValueKind::Record,
+                    vec![SchemaKind::Record, SchemaKind::Union],
+                ));
             }
         }
     }
@@ -322,6 +322,7 @@ pub fn encode_to_vec(value: &Value, schema: &Schema) -> AvroResult<Vec<u8>> {
 #[allow(clippy::expect_fun_call)]
 pub(crate) mod tests {
     use super::*;
+    use crate::error::Details;
     use apache_avro_test_helper::TestResult;
     use pretty_assertions::assert_eq;
     use uuid::Uuid;
@@ -924,8 +925,8 @@ pub(crate) mod tests {
         let value = Value::Uuid(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")?);
 
         let mut buffer = Vec::new();
-        match encode(&value, &schema, &mut buffer) {
-            Err(Error::ConvertFixedToUuid(actual)) => {
+        match encode(&value, &schema, &mut buffer).map_err(Error::into_details) {
+            Err(Details::ConvertFixedToUuid(actual)) => {
                 assert_eq!(actual, 15);
             }
             _ => panic!("Expected Error::ConvertFixedToUuid"),

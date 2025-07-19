@@ -326,7 +326,7 @@ impl TryFrom<Value> for JsonValue {
                 .ok_or_else(|| Error::ConvertF64ToJson(f.into())),
             Value::Double(d) => Number::from_f64(d)
                 .map(Self::Number)
-                .ok_or(Error::ConvertF64ToJson(d)),
+                .ok_or_else(|| Error::ConvertF64ToJson(d)),
             Value::Bytes(bytes) => Ok(Self::Array(bytes.into_iter().map(|b| b.into()).collect())),
             Value::String(s) => Ok(Self::String(s)),
             Value::Fixed(_size, items) => {
@@ -767,12 +767,12 @@ impl Value {
         inner: &Schema,
     ) -> Result<Self, Error> {
         if scale > precision {
-            return Err(Error::GetScaleAndPrecision { scale, precision });
+            return Err(Error::GetScaleAndPrecision(scale, precision));
         }
         match inner {
             &Schema::Fixed(FixedSchema { size, .. }) => {
                 if max_prec_for_len(size)? < precision {
-                    return Err(Error::GetScaleWithFixedSize { size, precision });
+                    return Err(Error::GetScaleWithFixedSize(size, precision));
                 }
             }
             Schema::Bytes => (),
@@ -782,10 +782,7 @@ impl Value {
             Value::Decimal(num) => {
                 let num_bytes = num.len();
                 if max_prec_for_len(num_bytes)? < precision {
-                    Err(Error::ComparePrecisionAndSize {
-                        precision,
-                        num_bytes,
-                    })
+                    Err(Error::ComparePrecisionAndSize(precision, num_bytes))
                 } else {
                     Ok(Value::Decimal(num))
                 }
@@ -793,10 +790,7 @@ impl Value {
             }
             Value::Fixed(_, bytes) | Value::Bytes(bytes) => {
                 if max_prec_for_len(bytes.len())? < precision {
-                    Err(Error::ComparePrecisionAndSize {
-                        precision,
-                        num_bytes: bytes.len(),
-                    })
+                    Err(Error::ComparePrecisionAndSize(precision, bytes.len()))
                 } else {
                     // precision and scale match, can we assume the underlying type can hold the data?
                     Ok(Value::Decimal(Decimal::from(bytes)))
@@ -979,7 +973,7 @@ impl Value {
                 if n == size {
                     Ok(Value::Fixed(n, bytes))
                 } else {
-                    Err(Error::CompareFixedSizes { size, n })
+                    Err(Error::CompareFixedSizes(size, n))
                 }
             }
             Value::String(s) => Ok(Value::Fixed(s.len(), s.into_bytes())),
@@ -987,7 +981,7 @@ impl Value {
                 if s.len() == size {
                     Ok(Value::Fixed(size, s))
                 } else {
-                    Err(Error::CompareFixedSizes { size, n: s.len() })
+                    Err(Error::CompareFixedSizes(size, s.len()))
                 }
             }
             other => Err(Error::GetStringForFixed(other)),
@@ -1009,16 +1003,10 @@ impl Value {
                         if let Some(index) = symbols.iter().position(|item| item == default) {
                             Ok(Value::Enum(index as u32, default.clone()))
                         } else {
-                            Err(Error::GetEnumDefault {
-                                symbol,
-                                symbols: symbols.into(),
-                            })
+                            Err(Error::GetEnumDefault(symbol, symbols.into()))
                         }
                     }
-                    _ => Err(Error::GetEnumDefault {
-                        symbol,
-                        symbols: symbols.into(),
-                    }),
+                    _ => Err(Error::GetEnumDefault(symbol, symbols.into())),
                 }
             }
         };
@@ -1045,10 +1033,7 @@ impl Value {
         };
         let (i, inner) = schema
             .find_schema_with_known_schemata(&v, Some(names), enclosing_namespace)
-            .ok_or(Error::FindUnionVariant {
-                schema: schema.clone(),
-                value: v.clone(),
-            })?;
+            .ok_or_else(|| Error::FindUnionVariant(schema.clone(), v.clone()))?;
 
         Ok(Value::Union(
             i as u32,
@@ -1069,10 +1054,7 @@ impl Value {
                     .map(|item| item.resolve_internal(schema, names, enclosing_namespace, &None))
                     .collect::<Result<_, _>>()?,
             )),
-            other => Err(Error::GetArray {
-                expected: schema.into(),
-                other,
-            }),
+            other => Err(Error::GetArray(schema.into(), other)),
         }
     }
 
@@ -1093,10 +1075,7 @@ impl Value {
                     })
                     .collect::<Result<_, _>>()?,
             )),
-            other => Err(Error::GetMap {
-                expected: schema.into(),
-                other,
-            }),
+            other => Err(Error::GetMap(schema.into(), other)),
         }
     }
 
@@ -1109,13 +1088,13 @@ impl Value {
         let mut items = match self {
             Value::Map(items) => Ok(items),
             Value::Record(fields) => Ok(fields.into_iter().collect::<HashMap<_, _>>()),
-            other => Err(Error::GetRecord {
-                expected: fields
+            other => Err(Error::GetRecord(
+                fields
                     .iter()
                     .map(|field| (field.name.clone(), field.schema.clone().into()))
                     .collect(),
                 other,
-            }),
+            )),
         }?;
 
         let new_fields = fields
@@ -1184,6 +1163,7 @@ mod tests {
     use super::*;
     use crate::{
         duration::{Days, Millis, Months},
+        error::Details,
         schema::RecordFieldOrder,
     };
     use apache_avro_test_helper::{
@@ -3179,8 +3159,8 @@ Field with name '"b"' is not a member of the map items"#,
     fn avro_4024_resolve_double_from_unknown_string_err() -> TestResult {
         let schema = Schema::parse_str(r#"{"type": "double"}"#)?;
         let value = Value::String("unknown".to_owned());
-        match value.resolve(&schema) {
-            Err(err @ Error::GetDouble(_)) => {
+        match value.resolve(&schema).map_err(Error::into_details) {
+            Err(err @ Details::GetDouble(_)) => {
                 assert_eq!(
                     format!("{err:?}"),
                     r#"Expected Value::Double, Value::Float, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: String("unknown")"#
@@ -3197,8 +3177,8 @@ Field with name '"b"' is not a member of the map items"#,
     fn avro_4024_resolve_float_from_unknown_string_err() -> TestResult {
         let schema = Schema::parse_str(r#"{"type": "float"}"#)?;
         let value = Value::String("unknown".to_owned());
-        match value.resolve(&schema) {
-            Err(err @ Error::GetFloat(_)) => {
+        match value.resolve(&schema).map_err(Error::into_details) {
+            Err(err @ Details::GetFloat(_)) => {
                 assert_eq!(
                     format!("{err:?}"),
                     r#"Expected Value::Float, Value::Double, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: String("unknown")"#

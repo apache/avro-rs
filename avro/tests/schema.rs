@@ -21,7 +21,9 @@ use std::{
 };
 
 use apache_avro::{
-    Codec, Error, Reader, Schema, Writer, from_avro_datum, from_value,
+    Codec, Error, Reader, Schema, Writer,
+    error::Details,
+    from_avro_datum, from_value,
     schema::{EnumSchema, FixedSchema, Name, RecordField, RecordSchema},
     to_avro_datum, to_value,
     types::{Record, Value},
@@ -145,9 +147,11 @@ fn test_3799_raise_io_error_from_parse_read() -> Result<(), String> {
     // 0xDF is invalid for UTF-8.
     let mut invalid_data = Cursor::new([0xDF]);
 
-    let error = Schema::parse_reader(&mut invalid_data).unwrap_err();
+    let error = Schema::parse_reader(&mut invalid_data)
+        .unwrap_err()
+        .into_details();
 
-    if let Error::ReadSchemaFromReader(e) = error {
+    if let Details::ReadSchemaFromReader(e) = error {
         assert!(
             e.to_string().contains("stream did not contain valid UTF-8"),
             "{e}"
@@ -742,9 +746,9 @@ fn test_other_attributes() {
 fn test_root_error_is_not_swallowed_on_parse_error() -> Result<(), String> {
     init();
     let raw_schema = r#"/not/a/real/file"#;
-    let error = Schema::parse_str(raw_schema).unwrap_err();
+    let error = Schema::parse_str(raw_schema).unwrap_err().into_details();
 
-    if let Error::ParseSchemaJson(e) = error {
+    if let Details::ParseSchemaJson(e) = error {
         assert!(
             e.to_string().contains("expected value at line 1 column 1"),
             "{}",
@@ -2348,8 +2352,10 @@ fn avro_rs_66_test_independent_canonical_form_missing_ref() -> TestResult {
     let schema_strs = [record_primitive, record_usage];
     let schemata = Schema::parse_list(schema_strs)?;
     assert!(matches!(
-        schemata[1].independent_canonical_form(&Vec::with_capacity(0)), //NOTE - we're passing in an empty schemata
-        Err(Error::SchemaResolutionError(..))
+        schemata[1]
+            .independent_canonical_form(&Vec::with_capacity(0))
+            .map_err(Error::into_details), //NOTE - we're passing in an empty schemata
+        Err(Details::SchemaResolutionError(..))
     ));
     Ok(())
 }

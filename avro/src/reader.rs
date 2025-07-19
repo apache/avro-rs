@@ -19,6 +19,7 @@
 use crate::{
     AvroResult, Codec, Error,
     decode::{decode, decode_internal},
+    error::Details,
     from_value,
     headers::{HeaderBuilder, RabinFingerprintHeader},
     schema::{
@@ -83,7 +84,7 @@ impl<'r, R: Read> Block<'r, R> {
             .map_err(Error::ReadHeader)?;
 
         if buf != [b'O', b'b', b'j', 1u8] {
-            return Err(Error::HeaderMagic);
+            return Err(Error::HeaderMagic());
         }
 
         let meta_schema = Schema::map(Schema::Bytes);
@@ -106,7 +107,7 @@ impl<'r, R: Read> Block<'r, R> {
                 }
             }
             _ => {
-                return Err(Error::GetHeaderMetadata);
+                return Err(Error::GetHeaderMetadata());
             }
         }
 
@@ -139,7 +140,7 @@ impl<'r, R: Read> Block<'r, R> {
     /// the block. The objects are stored in an internal buffer to the `Reader`.
     fn read_block_next(&mut self) -> AvroResult<()> {
         assert!(self.is_empty(), "Expected self to be empty!");
-        match util::read_long(&mut self.reader) {
+        match util::read_long(&mut self.reader).map_err(Error::into_details) {
             Ok(block_len) => {
                 self.message_count = block_len as usize;
                 let block_bytes = util::read_long(&mut self.reader)?;
@@ -150,7 +151,7 @@ impl<'r, R: Read> Block<'r, R> {
                     .map_err(Error::ReadBlockMarker)?;
 
                 if marker != self.marker {
-                    return Err(Error::GetBlockMarker);
+                    return Err(Error::GetBlockMarker());
                 }
 
                 // NOTE (JAB): This doesn't fit this Reader pattern very well.
@@ -161,7 +162,7 @@ impl<'r, R: Read> Block<'r, R> {
                 // into the buffer. But this is fine, for now.
                 self.codec.decompress(&mut self.buf)
             }
-            Err(Error::ReadVariableIntegerBytes(io_err)) => {
+            Err(Details::ReadVariableIntegerBytes(io_err)) => {
                 if let ErrorKind::UnexpectedEof = io_err.kind() {
                     // to not return any error in case we only finished to read cleanly from the stream
                     Ok(())
@@ -169,7 +170,7 @@ impl<'r, R: Read> Block<'r, R> {
                     Err(Error::ReadVariableIntegerBytes(io_err))
                 }
             }
-            Err(e) => Err(e),
+            Err(e) => Err(Error::new(e)),
         }
     }
 
@@ -205,7 +206,7 @@ impl<'r, R: Read> Block<'r, R> {
 
         if b_original != 0 && b_original == block_bytes.len() {
             // from_avro_datum did not consume any bytes, so return an error to avoid an infinite loop
-            return Err(Error::ReadBlock);
+            return Err(Error::ReadBlock());
         }
         self.buf_idx += b_original - block_bytes.len();
         self.message_count -= 1;
@@ -222,7 +223,7 @@ impl<'r, R: Read> Block<'r, R> {
                     None
                 }
             })
-            .ok_or(Error::GetAvroSchemaFromMap)?;
+            .ok_or_else(Error::GetAvroSchemaFromMap)?;
         if !self.schemata.is_empty() {
             let rs = ResolvedSchema::try_from(self.schemata.clone())?;
             let names: Names = rs
@@ -261,7 +262,7 @@ fn read_codec(metadata: &HashMap<String, Value>) -> AvroResult<Codec> {
                     Err(utf8_error) => Err(Error::ConvertToUtf8Error(utf8_error)),
                 }
             } else {
-                Err(Error::BadCodecMetadata)
+                Err(Error::BadCodecMetadata())
             }
         })
         .map(|codec_res| match codec_res {
@@ -1045,8 +1046,10 @@ mod tests {
             3, 0, 178, 241, 207, 0, 4, 52, 1, 62, 67, 154, 18, 94, 184, 72, 90, 95,
         ];
         let mut to_read = &data_to_read[..];
-        let read_result = generic_reader.read_value(&mut to_read);
-        matches!(read_result, Err(crate::Error::ReadBytes(_)));
+        let read_result = generic_reader
+            .read_value(&mut to_read)
+            .map_err(Error::into_details);
+        matches!(read_result, Err(Details::ReadBytes(_)));
         Ok(())
     }
 
