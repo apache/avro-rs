@@ -126,7 +126,7 @@ fn decode_variable<R: Read>(reader: &mut R) -> AvroResult<u64> {
     loop {
         if j > 9 {
             // if j * 7 > 64
-            return Err(Error::IntegerOverflow);
+            return Err(Error::IntegerOverflow());
         }
         reader
             .read_exact(&mut buf[..])
@@ -162,10 +162,7 @@ pub fn safe_len(len: usize) -> AvroResult<usize> {
     if len <= max_bytes {
         Ok(len)
     } else {
-        Err(Error::MemoryAllocation {
-            desired: len,
-            maximum: max_bytes,
-        })
+        Err(Error::MemoryAllocation(len, max_bytes))
     }
 }
 

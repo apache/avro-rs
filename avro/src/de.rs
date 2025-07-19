@@ -622,10 +622,7 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
                         inner.as_ref(),
                     ))
                 } else {
-                    Err(Error::GetUnionVariant {
-                        index: idx as i64,
-                        num_variants: variants.len(),
-                    })
+                    Err(Error::GetUnionVariant(idx as i64, variants.len()))
                 }
             }
             // This has to be a unit Enum
