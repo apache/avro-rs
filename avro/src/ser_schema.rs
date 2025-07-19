@@ -340,7 +340,7 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
         if next_field_matches {
             self.serialize_next_field(&value).map_err(|e| {
                 Error::SerializeRecordFieldWithSchema {
-                    field_name: key,
+                    field_name: Box::new(key),
                     record_schema: Box::new(Schema::Record(self.record_schema.clone())),
                     error: Box::new(e),
                 }
@@ -367,7 +367,7 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
                         );
                         value.serialize(&mut value_ser).map_err(|e| {
                             Error::SerializeRecordFieldWithSchema {
-                                field_name: key,
+                                field_name: Box::new(key),
                                 record_schema: Box::new(Schema::Record(self.record_schema.clone())),
                                 error: Box::new(e),
                             }
@@ -513,7 +513,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
         let ref_schema = self.names.get(full_name.as_ref()).copied();
 
-        ref_schema.ok_or_else(|| Error::SchemaResolutionError(full_name.as_ref().clone()))
+        ref_schema.ok_or_else(|| Error::SchemaResolutionError(Box::new(full_name.as_ref().clone())))
     }
 
     fn write_bytes(&mut self, bytes: &[u8]) -> Result<usize, Error> {
@@ -527,8 +527,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
     fn serialize_bool_with_schema(&mut self, value: bool, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "bool",
-            value: format!("{value}. Cause: {cause}"),
+            value_type: Box::new("bool"),
+            value: Box::new(format!("{value}. Cause: {cause}")),
             schema: Box::new(schema.clone()),
         };
 
@@ -558,8 +558,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
     fn serialize_i32_with_schema(&mut self, value: i32, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "int (i8 | i16 | i32)",
-            value: format!("{value}. Cause: {cause}"),
+            value_type: Box::new("int (i8 | i16 | i32)"),
+            value: Box::new(format!("{value}. Cause: {cause}")),
             schema: Box::new(schema.clone()),
         };
 
@@ -603,8 +603,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
     fn serialize_i64_with_schema(&mut self, value: i64, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "i64",
-            value: format!("{value}. Cause: {cause}"),
+            value_type: Box::new("i64"),
+            value: Box::new(format!("{value}. Cause: {cause}")),
             schema: Box::new(schema.clone()),
         };
 
@@ -653,8 +653,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
     fn serialize_u8_with_schema(&mut self, value: u8, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "u8",
-            value: format!("{value}. Cause: {cause}"),
+            value_type: Box::new("u8"),
+            value: Box::new(format!("{value}. Cause: {cause}")),
             schema: Box::new(schema.clone()),
         };
 
@@ -702,8 +702,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
     fn serialize_u32_with_schema(&mut self, value: u32, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "unsigned int (u16 | u32)",
-            value: format!("{value}. Cause: {cause}"),
+            value_type: Box::new("unsigned int (u16 | u32)"),
+            value: Box::new(format!("{value}. Cause: {cause}")),
             schema: Box::new(schema.clone()),
         };
 
@@ -751,8 +751,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
     fn serialize_u64_with_schema(&mut self, value: u64, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "u64",
-            value: format!("{value}. Cause: {cause}"),
+            value_type: Box::new("u64"),
+            value: Box::new(format!("{value}. Cause: {cause}")),
             schema: Box::new(schema.clone()),
         };
 
@@ -805,8 +805,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
     fn serialize_f32_with_schema(&mut self, value: f32, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "f32",
-            value: format!("{value}. Cause: {cause}"),
+            value_type: Box::new("f32"),
+            value: Box::new(format!("{value}. Cause: {cause}")),
             schema: Box::new(schema.clone()),
         };
 
@@ -840,8 +840,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
     fn serialize_f64_with_schema(&mut self, value: f64, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "f64",
-            value: format!("{value}. Cause: {cause}"),
+            value_type: Box::new("f64"),
+            value: Box::new(format!("{value}. Cause: {cause}")),
             schema: Box::new(schema.clone()),
         };
 
@@ -875,8 +875,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
     fn serialize_char_with_schema(&mut self, value: char, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "char",
-            value: format!("{value}. Cause: {cause}"),
+            value_type: Box::new("char"),
+            value: Box::new(format!("{value}. Cause: {cause}")),
             schema: Box::new(schema.clone()),
         };
 
@@ -902,8 +902,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
     fn serialize_str_with_schema(&mut self, value: &str, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "string",
-            value: format!("{value}. Cause: {cause}"),
+            value_type: Box::new("string"),
+            value: Box::new(format!("{value}. Cause: {cause}")),
             schema: Box::new(schema.clone()),
         };
 
@@ -970,8 +970,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 }
             }
             Error::SerializeValueWithSchema {
-                value_type: "bytes",
-                value: format!("{v_str}. Cause: {cause}"),
+                value_type: Box::new("bytes"),
+                value: Box::new(format!("{v_str}. Cause: {cause}")),
                 schema: Box::new(schema.clone()),
             }
         };
@@ -1057,8 +1057,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
     fn serialize_none_with_schema(&mut self, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "none",
-            value: format!("None. Cause: {cause}"),
+            value_type: Box::new("none"),
+            value: Box::new(format!("None. Cause: {cause}")),
             schema: Box::new(schema.clone()),
         };
 
@@ -1087,8 +1087,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         T: ?Sized + ser::Serialize,
     {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "some",
-            value: format!("Some(?). Cause: {cause}"),
+            value_type: Box::new("some"),
+            value: Box::new(format!("Some(?). Cause: {cause}")),
             schema: Box::new(schema.clone()),
         };
 
@@ -1124,8 +1124,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         schema: &Schema,
     ) -> Result<usize, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "unit struct",
-            value: format!("{name}. Cause: {cause}"),
+            value_type: Box::new("unit struct"),
+            value: Box::new(format!("{name}. Cause: {cause}")),
             schema: Box::new(schema.clone()),
         };
 
@@ -1173,8 +1173,10 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         schema: &Schema,
     ) -> Result<usize, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "unit variant",
-            value: format!("{name}::{variant} (index={variant_index}). Cause: {cause}"),
+            value_type: Box::new("unit variant"),
+            value: Box::new(format!(
+                "{name}::{variant} (index={variant_index}). Cause: {cause}"
+            )),
             schema: Box::new(schema.clone()),
         };
 
@@ -1246,8 +1248,10 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         T: ?Sized + ser::Serialize,
     {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "newtype variant",
-            value: format!("{name}::{variant}(?) (index={variant_index}). Cause: {cause}"),
+            value_type: Box::new("newtype variant"),
+            value: Box::new(format!(
+                "{name}::{variant}(?) (index={variant_index}). Cause: {cause}"
+            )),
             schema: Box::new(schema.clone()),
         };
 
@@ -1282,8 +1286,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 .unwrap_or_else(|| String::from("?"));
 
             Error::SerializeValueWithSchema {
-                value_type: "sequence",
-                value: format!("sequence (len={len_str}). Cause: {cause}"),
+                value_type: Box::new("sequence"),
+                value: Box::new(format!("sequence (len={len_str}). Cause: {cause}")),
                 schema: Box::new(schema.clone()),
             }
         };
@@ -1318,8 +1322,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         schema: &'s Schema,
     ) -> Result<SchemaAwareWriteSerializeSeq<'a, 's, W>, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "tuple",
-            value: format!("tuple (len={len}). Cause: {cause}"),
+            value_type: Box::new("tuple"),
+            value: Box::new(format!("tuple (len={len}). Cause: {cause}")),
             schema: Box::new(schema.clone()),
         };
 
@@ -1354,11 +1358,11 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         schema: &'s Schema,
     ) -> Result<SchemaAwareWriteSerializeTupleStruct<'a, 's, W>, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "tuple struct",
-            value: format!(
+            value_type: Box::new("tuple struct"),
+            value: Box::new(format!(
                 "{name}({}). Cause: {cause}",
                 vec!["?"; len].as_slice().join(",")
-            ),
+            )),
             schema: Box::new(schema.clone()),
         };
 
@@ -1416,11 +1420,11 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         schema: &'s Schema,
     ) -> Result<SchemaAwareWriteSerializeTupleStruct<'a, 's, W>, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "tuple variant",
-            value: format!(
+            value_type: Box::new("tuple variant"),
+            value: Box::new(format!(
                 "{name}::{variant}({}) (index={variant_index}). Cause: {cause}",
                 vec!["?"; len].as_slice().join(",")
-            ),
+            )),
             schema: Box::new(schema.clone()),
         };
 
@@ -1455,8 +1459,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 .unwrap_or_else(|| String::from("?"));
 
             Error::SerializeValueWithSchema {
-                value_type: "map",
-                value: format!("map (size={len_str}). Cause: {cause}"),
+                value_type: Box::new("map"),
+                value: Box::new(format!("map (size={len_str}). Cause: {cause}")),
                 schema: Box::new(schema.clone()),
             }
         };
@@ -1494,8 +1498,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         schema: &'s Schema,
     ) -> Result<SchemaAwareWriteSerializeStruct<'a, 's, W>, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "struct",
-            value: format!("{name}{{ ... }}. Cause: {cause}"),
+            value_type: Box::new("struct"),
+            value: Box::new(format!("{name}{{ ... }}. Cause: {cause}")),
             schema: Box::new(schema.clone()),
         };
 
@@ -1544,8 +1548,10 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         schema: &'s Schema,
     ) -> Result<SchemaAwareWriteSerializeStruct<'a, 's, W>, Error> {
         let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "struct variant",
-            value: format!("{name}::{variant}{{ ... }} (size={len}. Cause: {cause})"),
+            value_type: Box::new("struct variant"),
+            value: Box::new(format!(
+                "{name}::{variant}{{ ... }} (size={len}. Cause: {cause})"
+            )),
             schema: Box::new(schema.clone()),
         };
 
@@ -2023,8 +2029,8 @@ mod tests {
                 value,
                 schema,
             }) => {
-                assert_eq!(value_type, "none"); // serialize_unit() delegates to serialize_none()
-                assert_eq!(value, "None. Cause: Expected: Record. Got: Null");
+                assert_eq!(*value_type, "none"); // serialize_unit() delegates to serialize_none()
+                assert_eq!(value.as_str(), "None. Cause: Expected: Record. Got: Null");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2067,8 +2073,8 @@ mod tests {
                 value,
                 schema,
             }) => {
-                assert_eq!(value_type, "none");
-                assert_eq!(value, "None. Cause: Expected: Enum. Got: Null");
+                assert_eq!(*value_type, "none");
+                assert_eq!(value.as_str(), "None. Cause: Expected: Enum. Got: Null");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2101,8 +2107,8 @@ mod tests {
                 value,
                 schema,
             }) => {
-                assert_eq!(value_type, "f32");
-                assert_eq!(value, "1. Cause: Expected: Long. Got: Float");
+                assert_eq!(*value_type, "f32");
+                assert_eq!(value.as_str(), "1. Cause: Expected: Long. Got: Float");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2140,8 +2146,8 @@ mod tests {
                 value,
                 schema,
             }) => {
-                assert_eq!(value_type, "string");
-                assert_eq!(value, "value1. Cause: Expected: Long. Got: String");
+                assert_eq!(*value_type, "string");
+                assert_eq!(value.as_str(), "value1. Cause: Expected: Long. Got: String");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2187,9 +2193,9 @@ mod tests {
                 value,
                 schema,
             }) => {
-                assert_eq!(value_type, "string");
+                assert_eq!(*value_type, "string");
                 assert_eq!(
-                    value,
+                    value.as_str(),
                     "invalid. Cause: Expected one of the union variants [Null, Long]. Got: String"
                 );
                 assert_eq!(schema, schema);
@@ -2231,9 +2237,9 @@ mod tests {
                 value,
                 schema,
             }) => {
-                assert_eq!(value_type, "f64");
+                assert_eq!(*value_type, "f64");
                 assert_eq!(
-                    value,
+                    value.as_str(),
                     "1. Cause: Cannot find a Double schema in [Null, Long, String]"
                 );
                 assert_eq!(schema, schema);
@@ -2272,9 +2278,9 @@ mod tests {
                 value,
                 schema,
             }) => {
-                assert_eq!(value_type, "bytes");
+                assert_eq!(*value_type, "bytes");
                 assert_eq!(
-                    value,
+                    value.as_str(),
                     "7b. Cause: Fixed schema size (8) does not match the value length (1)"
                 ); // Bytes represents its values as hexadecimals: '7b' is 123
                 assert_eq!(schema, schema);
@@ -2289,8 +2295,11 @@ mod tests {
                 value,
                 schema,
             }) => {
-                assert_eq!(value_type, "tuple"); // TODO: why is this 'tuple' ?!
-                assert_eq!(value, "tuple (len=8). Cause: Expected: Fixed. Got: Array");
+                assert_eq!(*value_type, "tuple"); // TODO: why is this 'tuple' ?!
+                assert_eq!(
+                    value.as_str(),
+                    "tuple (len=8). Cause: Expected: Fixed. Got: Array"
+                );
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2304,7 +2313,10 @@ mod tests {
                 schema,
             }) => {
                 assert_eq!(*value_type, "tuple"); // TODO: why is this 'tuple' ?!
-                assert_eq!(value, "tuple (len=8). Cause: Expected: Fixed. Got: Array");
+                assert_eq!(
+                    value.as_str(),
+                    "tuple (len=8). Cause: Expected: Fixed. Got: Array"
+                );
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2339,8 +2351,8 @@ mod tests {
                 value,
                 schema,
             }) => {
-                assert_eq!(value_type, "none");
-                assert_eq!(value, "None. Cause: Expected: Decimal. Got: Null");
+                assert_eq!(*value_type, "none");
+                assert_eq!(value.as_str(), "None. Cause: Expected: Decimal. Got: Null");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2377,8 +2389,8 @@ mod tests {
                 value,
                 schema,
             }) => {
-                assert_eq!(value_type, "none");
-                assert_eq!(value, "None. Cause: Expected: Decimal. Got: Null");
+                assert_eq!(*value_type, "none");
+                assert_eq!(value.as_str(), "None. Cause: Expected: Decimal. Got: Null");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2437,8 +2449,8 @@ mod tests {
                 value,
                 schema,
             }) => {
-                assert_eq!(value_type, "u8");
-                assert_eq!(value, "1. Cause: Expected: Uuid. Got: Int");
+                assert_eq!(*value_type, "u8");
+                assert_eq!(value.as_str(), "1. Cause: Expected: Uuid. Got: Int");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2481,8 +2493,8 @@ mod tests {
                 value,
                 schema,
             }) => {
-                assert_eq!(value_type, "f32");
-                assert_eq!(value, "10000. Cause: Expected: Date. Got: Float");
+                assert_eq!(*value_type, "f32");
+                assert_eq!(value.as_str(), "10000. Cause: Expected: Date. Got: Float");
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2521,8 +2533,11 @@ mod tests {
                 value,
                 schema,
             }) => {
-                assert_eq!(value_type, "f32");
-                assert_eq!(value, "10000. Cause: Expected: TimeMillis. Got: Float");
+                assert_eq!(*value_type, "f32");
+                assert_eq!(
+                    value.as_str(),
+                    "10000. Cause: Expected: TimeMillis. Got: Float"
+                );
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2562,8 +2577,11 @@ mod tests {
                 value,
                 schema,
             }) => {
-                assert_eq!(value_type, "f32");
-                assert_eq!(value, "10000. Cause: Expected: TimeMicros. Got: Float");
+                assert_eq!(*value_type, "f32");
+                assert_eq!(
+                    value.as_str(),
+                    "10000. Cause: Expected: TimeMicros. Got: Float"
+                );
                 assert_eq!(schema, schema);
             }
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
@@ -2611,9 +2629,9 @@ mod tests {
                     if let Some(c) = capital_precision.chars().next() {
                         capital_precision.replace_range(..1, &c.to_uppercase().to_string());
                     }
-                    assert_eq!(value_type, "f64");
+                    assert_eq!(*value_type, "f64");
                     assert_eq!(
-                        value,
+                        value.as_str(),
                         format!(
                             "10000. Cause: Expected: Timestamp{capital_precision}. Got: Double"
                         )
@@ -2659,9 +2677,9 @@ mod tests {
                 value,
                 schema,
             }) => {
-                assert_eq!(value_type, "tuple"); // TODO: why is this 'tuple' ?!
+                assert_eq!(*value_type, "tuple"); // TODO: why is this 'tuple' ?!
                 assert_eq!(
-                    value,
+                    value.as_str(),
                     "tuple (len=12). Cause: Expected: Duration. Got: Array"
                 );
                 assert_eq!(schema, schema);

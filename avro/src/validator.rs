@@ -47,9 +47,9 @@ pub trait SchemaNameValidator: Send + Sync {
 impl SchemaNameValidator for SpecificationValidator {
     fn validate(&self, schema_name: &str) -> AvroResult<(String, Namespace)> {
         let regex = SchemaNameValidator::regex(self);
-        let caps = regex
-            .captures(schema_name)
-            .ok_or_else(|| Error::InvalidSchemaName(schema_name.to_string(), regex.as_str()))?;
+        let caps = regex.captures(schema_name).ok_or_else(|| {
+            Error::InvalidSchemaName(Box::new(schema_name.to_string()), regex.as_str())
+        })?;
         Ok((
             caps["name"].to_string(),
             caps.name("namespace").map(|s| s.as_str().to_string()),
@@ -102,7 +102,10 @@ impl SchemaNamespaceValidator for SpecificationValidator {
     fn validate(&self, ns: &str) -> AvroResult<()> {
         let regex = SchemaNamespaceValidator::regex(self);
         if !regex.is_match(ns) {
-            Err(Error::InvalidNamespace(ns.to_string(), regex.as_str()))
+            Err(Error::InvalidNamespace(
+                Box::new(ns.to_string()),
+                regex.as_str(),
+            ))
         } else {
             Ok(())
         }
@@ -261,7 +264,7 @@ mod tests {
         assert!(name.is_err());
         let validator = SpecificationValidator;
         let expected = Error::InvalidSchemaName(
-            full_name.to_string(),
+            Box::new(full_name.to_string()),
             SchemaNameValidator::regex(&validator).as_str(),
         )
         .to_string();
@@ -272,7 +275,7 @@ mod tests {
         let name = Name::new(full_name);
         assert!(name.is_err());
         let expected = Error::InvalidSchemaName(
-            full_name.to_string(),
+            Box::new(full_name.to_string()),
             SchemaNameValidator::regex(&validator).as_str(),
         )
         .to_string();

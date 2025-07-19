@@ -537,8 +537,8 @@ impl GenericSingleObjectReader {
                     )
                 } else {
                     Err(Error::SingleObjectHeaderMismatch(
-                        self.expected_header.clone(),
-                        header,
+                        Box::new(self.expected_header.clone()),
+                        Box::new(header),
                     ))
                 }
             }

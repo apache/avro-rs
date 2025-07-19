@@ -106,19 +106,19 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
             Schema::Fixed { .. } => {
                 match decode_internal(inner, names, enclosing_namespace, reader)? {
                     Value::Fixed(_, bytes) => Ok(Value::Decimal(Decimal::from(bytes))),
-                    value => Err(Error::FixedValue(value)),
+                    value => Err(Error::FixedValue(Box::new(value))),
                 }
             }
             Schema::Bytes => match decode_internal(inner, names, enclosing_namespace, reader)? {
                 Value::Bytes(bytes) => Ok(Value::Decimal(Decimal::from(bytes))),
-                value => Err(Error::BytesValue(value)),
+                value => Err(Error::BytesValue(Box::new(value))),
             },
             schema => Err(Error::ResolveDecimalSchema(schema.into())),
         },
         Schema::BigDecimal => {
             match decode_internal(&Schema::Bytes, names, enclosing_namespace, reader)? {
                 Value::Bytes(bytes) => deserialize_big_decimal(&bytes).map(Value::BigDecimal),
-                value => Err(Error::BytesValue(value)),
+                value => Err(Error::BytesValue(Box::new(value))),
             }
         }
         Schema::Uuid => {
@@ -137,8 +137,10 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                 enclosing_namespace,
                 reader,
             )? {
-                Value::String(ref s) => Uuid::from_str(s).map_err(Error::ConvertStrToUuid),
-                value => Err(Error::GetUuidFromStringValue(value)),
+                Value::String(ref s) => {
+                    Uuid::from_str(s).map_err(|e| Error::ConvertStrToUuid(Box::new(e)))
+                }
+                value => Err(Error::GetUuidFromStringValue(Box::new(value))),
             };
 
             let uuid: Uuid = if len == 16 {
@@ -162,7 +164,8 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                             if *size != 16 {
                                 return Err(Error::ConvertFixedToUuid(*size));
                             }
-                            Uuid::from_slice(bytes).map_err(Error::ConvertSliceToUuid)?
+                            Uuid::from_slice(bytes)
+                                .map_err(|e| Error::ConvertSliceToUuid(Box::new(e)))?
                         }
                         _ => decode_from_string(&mut reader.as_slice())?,
                     }
@@ -213,7 +216,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
             let mut buf = vec![0u8; len];
             match reader.read_exact(&mut buf) {
                 Ok(_) => Ok(Value::String(
-                    String::from_utf8(buf).map_err(Error::ConvertToUtf8)?,
+                    String::from_utf8(buf).map_err(|e| Error::ConvertToUtf8(Box::new(e)))?,
                 )),
                 Err(io_err) => {
                     if let ErrorKind::UnexpectedEof = io_err.kind() {
@@ -347,7 +350,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                     reader,
                 )
             } else {
-                Err(Error::SchemaResolutionError(fully_qualified_name))
+                Err(Error::SchemaResolutionError(Box::new(fully_qualified_name)))
             }
         }
     }

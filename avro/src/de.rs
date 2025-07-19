@@ -277,7 +277,7 @@ impl<'de> de::VariantAccess<'de> for UnionDeserializer<'de> {
     fn unit_variant(self) -> Result<(), Self::Error> {
         match self.value {
             Value::Null => Ok(()),
-            _ => Err(Error::GetNull(self.value.clone())),
+            _ => Err(Error::GetNull(Box::new(self.value.clone()))),
         }
     }
 
