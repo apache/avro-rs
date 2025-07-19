@@ -21,6 +21,7 @@ use crate::{
     decimal::Decimal,
     duration::Duration,
     encode::encode_long,
+    error::Details,
     schema::{
         DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, RecordSchema, ResolvedSchema,
         Schema,
@@ -63,7 +64,7 @@ fn decode_seq_len<R: Read>(reader: &mut R) -> AvroResult<usize> {
             std::cmp::Ordering::Equal => return Ok(0),
             std::cmp::Ordering::Less => {
                 let _size = zag_i64(reader)?;
-                raw_len.checked_neg().ok_or(Error::IntegerOverflow)?
+                raw_len.checked_neg().ok_or_else(Error::IntegerOverflow)?
             }
             std::cmp::Ordering::Greater => raw_len,
         })
@@ -277,26 +278,23 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
 
             Ok(Value::Map(items))
         }
-        Schema::Union(ref inner) => match zag_i64(reader) {
+        Schema::Union(ref inner) => match zag_i64(reader).map_err(Error::into_details) {
             Ok(index) => {
                 let variants = inner.variants();
                 let variant = variants
                     .get(usize::try_from(index).map_err(|e| Error::ConvertI64ToUsize(e, index))?)
-                    .ok_or(Error::GetUnionVariant {
-                        index,
-                        num_variants: variants.len(),
-                    })?;
+                    .ok_or_else(|| Error::GetUnionVariant(index, variants.len()))?;
                 let value = decode_internal(variant, names, enclosing_namespace, reader)?;
                 Ok(Value::Union(index as u32, Box::new(value)))
             }
-            Err(Error::ReadVariableIntegerBytes(io_err)) => {
+            Err(Details::ReadVariableIntegerBytes(io_err)) => {
                 if let ErrorKind::UnexpectedEof = io_err.kind() {
                     Ok(Value::Union(0, Box::new(Value::Null)))
                 } else {
                     Err(Error::ReadVariableIntegerBytes(io_err))
                 }
             }
-            Err(io_err) => Err(io_err),
+            Err(io_err) => Err(Error::new(io_err)),
         },
         Schema::Record(RecordSchema {
             ref name,
@@ -328,13 +326,10 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                     let symbol = symbols[index].clone();
                     Value::Enum(raw_index as u32, symbol)
                 } else {
-                    return Err(Error::GetEnumValue {
-                        index,
-                        nsymbols: symbols.len(),
-                    });
+                    return Err(Error::GetEnumValue(index, symbols.len()));
                 }
             } else {
-                return Err(Error::GetEnumUnknownIndexValue);
+                return Err(Error::GetEnumUnknownIndexValue());
             })
         }
         Schema::Ref { ref name } => {

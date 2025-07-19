@@ -896,7 +896,7 @@ pub use codec::{Codec, DeflateSettings};
 pub use de::from_value;
 pub use decimal::Decimal;
 pub use duration::{Days, Duration, Millis, Months};
-pub use error::Error;
+pub use error::{Details, Error};
 pub use reader::{
     GenericSingleObjectReader, Reader, SpecificSingleObjectReader, from_avro_datum,
     from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
