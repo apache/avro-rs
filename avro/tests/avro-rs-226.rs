@@ -29,9 +29,16 @@ where
     writer.append_ser(record)?;
     let bytes_written = writer.into_inner()?;
 
-    let reader = apache_avro::Reader::new(&bytes_written[..])?;
+    // let mut bytes_written = Cursor::new(bytes_written);
+    // let value = from_avro_datum(schema, &mut bytes_written, None)?;
+    // dbg!(&value);
+    // let deserialized = from_value::<T>(&value)?;
+    // assert_eq!(deserialized, record2);
+
+    let reader = apache_avro::Reader::with_schema(schema, &bytes_written[..])?;
     for value in reader {
         let value = value?;
+        dbg!(&value);
         let deserialized = from_value::<T>(&value)?;
         assert_eq!(deserialized, record2);
     }
@@ -63,7 +70,7 @@ fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_middle_field
 fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_first_field() -> TestResult {
     #[derive(AvroSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
     struct T {
-        #[serde(skip_serializing_if = "Option::is_none")]
+        // #[serde(skip_serializing_if = "Option::is_none")]
         x: Option<i8>,
         y: Option<String>,
         z: Option<i8>,

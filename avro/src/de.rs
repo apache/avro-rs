@@ -16,16 +16,16 @@
 // under the License.
 
 //! Logic for serde-compatible deserialization.
-use crate::{Error, bytes::DE_BYTES_BORROWED, error::Details, types::Value};
+use crate::{bytes::DE_BYTES_BORROWED, error::Details, types::Value, AvroResult, Error};
 use serde::{
-    Deserialize,
     de::{self, DeserializeSeed, Deserializer as _, Visitor},
     forward_to_deserialize_any,
+    Deserialize,
 };
 use std::{
     collections::{
-        HashMap,
         hash_map::{Keys, Values},
+        HashMap,
     },
     slice::Iter,
 };
@@ -756,7 +756,7 @@ impl<'de> de::Deserializer<'de> for StringDeserializer {
 ///
 /// This conversion can fail if the structure of the `Value` does not match the
 /// structure expected by `D`.
-pub fn from_value<'de, D: Deserialize<'de>>(value: &'de Value) -> Result<D, Error> {
+pub fn from_value<'de, D: Deserialize<'de>>(value: &'de Value) -> AvroResult<D> {
     let de = Deserializer::new(value);
     D::deserialize(&de)
 }

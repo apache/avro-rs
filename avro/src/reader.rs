@@ -16,6 +16,8 @@
 // under the License.
 
 //! Logic handling reading from Avro format at user level.
+use crate::de_schema::SchemaAwareReadDeserializer;
+use crate::schema::NamesRef;
 use crate::{
     AvroResult, Codec, Error,
     decode::{decode, decode_internal},
@@ -595,6 +597,15 @@ pub fn read_marker(bytes: &[u8]) -> [u8; 16] {
     let mut marker = [0_u8; 16];
     marker.clone_from_slice(&bytes[(bytes.len() - 16)..]);
     marker
+}
+
+pub fn read_avro_datum_ref<'de, D: DeserializeOwned, R: Read>(
+    schema: &Schema,
+    reader: &mut R,
+) -> AvroResult<D> {
+    let names: NamesRef = NamesRef::default();
+    let deserializer = SchemaAwareReadDeserializer::new(reader, schema, &names, None);
+    D::deserialize(deserializer)
 }
 
 #[cfg(test)]

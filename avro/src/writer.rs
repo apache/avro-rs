@@ -728,8 +728,7 @@ pub fn write_avro_datum_ref<T: Serialize, W: Write>(
 ) -> AvroResult<usize> {
     let names: HashMap<Name, &Schema> = HashMap::new();
     let mut serializer = SchemaAwareWriteSerializer::new(writer, schema, &names, None);
-    let bytes_written = data.serialize(&mut serializer)?;
-    Ok(bytes_written)
+    data.serialize(&mut serializer)
 }
 
 /// Encode a compatible value (implementing the `ToAvro` trait) into Avro format, also
