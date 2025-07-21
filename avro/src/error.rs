@@ -1204,6 +1204,7 @@ pub enum Details {
     #[error("Union index {index} out of bounds: {num_variants}")]
     GetUnionVariant { index: i64, num_variants: usize },
 
+    #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
     #[error("Enum symbol index out of bounds: {num_variants}")]
     EnumSymbolIndex { index: usize, num_variants: usize },
 
@@ -1365,6 +1366,7 @@ pub enum Details {
     #[error("Cannot convert u64 to usize: {1}")]
     ConvertU64ToUsize(#[source] std::num::TryFromIntError, u64),
 
+    #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
     #[error("Cannot convert u32 to usize: {1}")]
     ConvertU32ToUsize(#[source] std::num::TryFromIntError, u32),
 
@@ -1401,6 +1403,7 @@ pub enum Details {
     #[error("The decimal precision ({precision}) must be a positive number")]
     DecimalPrecisionMuBePositive { precision: usize },
 
+    #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
     #[error("Unreadable big decimal sign")]
     BigDecimalSign,
 
@@ -1410,6 +1413,7 @@ pub enum Details {
     #[error("Unreadable big decimal scale")]
     BigDecimalScale,
 
+    #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
     #[error("Unexpected `type` {0} variant for `logicalType`")]
     GetLogicalTypeVariant(serde_json::Value),
 
@@ -1475,6 +1479,7 @@ pub enum Details {
     #[error("Fixed schema's default value length ({0}) does not match its size ({1})")]
     FixedDefaultLenSizeMismatch(usize, u64),
 
+    #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
     #[error("Failed to compress with flate: {0}")]
     DeflateCompress(#[source] std::io::Error),
 
