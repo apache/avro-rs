@@ -936,16 +936,6 @@ impl UnionSchema {
 
     /// Optionally returns a reference to the schema matched by this value, as well as its position
     /// within this union.
-    #[deprecated(
-        since = "0.15.0",
-        note = "Please use `find_schema_with_known_schemata` instead"
-    )]
-    pub fn find_schema(&self, value: &types::Value) -> Option<(usize, &Schema)> {
-        self.find_schema_with_known_schemata::<Schema>(value, None, &None)
-    }
-
-    /// Optionally returns a reference to the schema matched by this value, as well as its position
-    /// within this union.
     ///
     /// Extra arguments:
     /// - `known_schemata` - mapping between `Name` and `Schema` - if passed, additional external schemas would be used to resolve references.
