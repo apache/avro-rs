@@ -1,7 +1,9 @@
 use crate::error::Details;
-use crate::schema::{NamesRef, Namespace};
-use crate::util::{zag_i32, zag_i64};
-use crate::{Error, Schema};
+use crate::{
+    schema::{NamesRef, Namespace}, util::{zag_i32, zag_i64},
+    Error,
+    Schema,
+};
 use serde::de::Visitor;
 use std::io::Read;
 
@@ -81,32 +83,32 @@ impl<'de, R: Read> serde::de::Deserializer<'de> for SchemaAwareReadDeserializer<
         this.deserialize_i64_with_schema(visitor, schema)
     }
 
-    fn deserialize_u8<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        todo!()
+        self.deserialize_i32(visitor)
     }
 
-    fn deserialize_u16<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        todo!()
+        self.deserialize_i32(visitor)
     }
 
-    fn deserialize_u32<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        todo!()
+        self.deserialize_i64(visitor)
     }
 
-    fn deserialize_u64<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        todo!()
+        self.deserialize_i64(visitor)
     }
 
     fn deserialize_f32<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
@@ -332,8 +334,8 @@ impl<R: Read> SchemaAwareReadDeserializer<'_, R> {
 
         match schema {
             Schema::Int | Schema::TimeMillis | Schema::Date => {
-                let i = zag_i32(&mut self.reader)?;
-                visitor.visit_i32(i)
+                let int = zag_i32(&mut self.reader)?;
+                visitor.visit_i32(int)
             }
             Schema::Union(union_schema) => {
                 for variant_schema in union_schema.schemas.iter() {
@@ -362,11 +364,14 @@ impl<R: Read> SchemaAwareReadDeserializer<'_, R> {
     where
         V: Visitor<'de>,
     {
-        let create_error = |cause: &str| Error::SerializeValueWithSchema {
-            // TODO: DeserializeValueWithSchema
-            value_type: "i64",
-            value: format!("Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: &str| {
+            Details::SerializeValueWithSchema {
+                // TODO: DeserializeValueWithSchema
+                value_type: "i64",
+                value: format!("Cause: {cause}"),
+                schema: schema.clone(),
+            }
+            .into()
         };
 
         match schema {
@@ -421,9 +426,11 @@ impl<R: Read> SchemaAwareReadDeserializer<'_, R> {
 mod tests {
     use super::*;
     use crate::error::Details;
-    use crate::reader::read_avro_datum_ref;
-    use crate::schema::{Schema, UnionSchema};
-    use crate::util::{zig_i32, zig_i64};
+    use crate::{
+        reader::read_avro_datum_ref,
+        schema::{Schema, UnionSchema},
+        util::{zig_i32, zig_i64},
+    };
     use apache_avro_test_helper::TestResult;
     use std::io::Cursor;
 
@@ -571,9 +578,23 @@ mod tests {
 
     #[test]
     fn avro_rs_226_deserialize_int64_int_schema() -> TestResult {
-        let schema = Schema::Int;
+        let schema = Schema::TimeMillis;
 
-        for value in [123_i64, -1024_i64] {
+        for value in [i32::MAX, -i32::MAX] {
+            let mut writer = vec![];
+            zig_i64(value as i64, &mut writer)?;
+            let mut reader = Cursor::new(&writer);
+            let read: i64 = read_avro_datum_ref(&schema, &mut reader)?;
+            assert_eq!(read, value as i64);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_226_deserialize_int64_long_schema() -> TestResult {
+        let schema = Schema::TimestampMicros;
+
+        for value in [i64::MAX, -i64::MAX] {
             let mut writer = vec![];
             zig_i64(value, &mut writer)?;
             let mut reader = Cursor::new(&writer);
@@ -642,6 +663,48 @@ mod tests {
             _ => panic!("Expected an error for invalid union schema"),
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_226_deserialize_u8_int_schema() -> TestResult {
+        let schema = Schema::TimeMillis;
+
+        for value in [u8::MAX, 0] {
+            let mut writer = vec![];
+            zig_i32(value as i32, &mut writer)?;
+            let mut reader = Cursor::new(&writer);
+            let read: u8 = read_avro_datum_ref(&schema, &mut reader)?;
+            assert_eq!(read, value);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_226_deserialize_u16_int_schema() -> TestResult {
+        let schema = Schema::TimeMillis;
+
+        for value in [u16::MAX, 0] {
+            let mut writer = vec![];
+            zig_i32(value as i32, &mut writer)?;
+            let mut reader = Cursor::new(&writer);
+            let read: u16 = read_avro_datum_ref(&schema, &mut reader)?;
+            assert_eq!(read, value);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_226_deserialize_u32_long_schema() -> TestResult {
+        let schema = Schema::TimeMicros;
+
+        for value in [u32::MAX, 0] {
+            let mut writer = vec![];
+            zig_i64(value as i64, &mut writer)?;
+            let mut reader = Cursor::new(&writer);
+            let read: u32 = read_avro_datum_ref(&schema, &mut reader)?;
+            assert_eq!(read, value);
+        }
         Ok(())
     }
 }

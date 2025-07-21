@@ -16,13 +16,12 @@
 // under the License.
 
 //! Logic handling reading from Avro format at user level.
-use crate::de_schema::SchemaAwareReadDeserializer;
-use crate::schema::NamesRef;
+use crate::error::Details;
 use crate::{
-    decode::{decode, decode_internal}, error::Details, from_value,
+    de_schema::SchemaAwareReadDeserializer, decode::{decode, decode_internal}, from_value,
     headers::{HeaderBuilder, RabinFingerprintHeader},
     schema::{
-        resolve_names, resolve_names_with_schemata, AvroSchema, Names, ResolvedOwnedSchema, ResolvedSchema,
+        resolve_names, resolve_names_with_schemata, AvroSchema, Names, NamesRef, ResolvedOwnedSchema, ResolvedSchema,
         Schema,
     },
     types::Value,
