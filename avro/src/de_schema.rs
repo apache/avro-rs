@@ -1,5 +1,6 @@
 use crate::error::Details;
 use crate::schema::{NamesRef, Namespace};
+use crate::util::zag_i32;
 use crate::{Error, Schema};
 use serde::de::Visitor;
 use std::io::Read;
@@ -7,22 +8,22 @@ use std::io::Read;
 pub struct SchemaAwareReadDeserializer<'s, R: Read> {
     reader: &'s mut R,
     root_schema: &'s Schema,
-    names: &'s NamesRef<'s>,
-    enclosing_namespace: Namespace,
+    _names: &'s NamesRef<'s>,
+    _enclosing_namespace: Namespace,
 }
 
 impl<'s, R: Read> SchemaAwareReadDeserializer<'s, R> {
     pub(crate) fn new(
         reader: &'s mut R,
         root_schema: &'s Schema,
-        names: &'s NamesRef<'s>,
-        enclosing_namespace: Namespace,
+        _names: &'s NamesRef<'s>,
+        _enclosing_namespace: Namespace,
     ) -> Self {
         Self {
             reader,
             root_schema,
-            names,
-            enclosing_namespace,
+            _names,
+            _enclosing_namespace,
         }
     }
 }
@@ -47,25 +48,27 @@ impl<'de, R: Read> serde::de::Deserializer<'de> for SchemaAwareReadDeserializer<
         (&mut this).deserialize_bool_with_schema(visitor, schema)
     }
 
-    fn deserialize_i8<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        todo!()
+        self.deserialize_i32(visitor)
     }
 
-    fn deserialize_i16<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        todo!()
+        self.deserialize_i32(visitor)
     }
 
-    fn deserialize_i32<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        todo!()
+        let schema = self.root_schema;
+        let mut this = self;
+        (&mut this).deserialize_i32_with_schema(visitor, schema)
     }
 
     fn deserialize_i64<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
@@ -298,11 +301,50 @@ impl<'s, R: Read> SchemaAwareReadDeserializer<'s, R> {
                     }
                 }
                 Err(create_error(&format!(
-                    "The union schema must have a boolean variant: {schema:?}"
+                    "The union schema must have a Boolean variant: {schema:?}"
                 )))
             }
             unexpected => Err(create_error(&format!(
                 "Expected a boolean schema, found: {unexpected:?}"
+            ))),
+        }
+    }
+
+    fn deserialize_i32_with_schema<'de, V>(
+        &mut self,
+        visitor: V,
+        schema: &Schema,
+    ) -> Result<V::Value, Error>
+    where
+        V: Visitor<'de>,
+    {
+        let create_error = |cause: &str| Error::SerializeValueWithSchema {
+            // TODO: DeserializeValueWithSchema
+            value_type: "i32",
+            value: format!("Cause: {cause}"),
+            schema: Box::new(schema.clone()),
+        };
+
+        match schema {
+            Schema::Int => {
+                let i = zag_i32(&mut self.reader)?;
+                visitor.visit_i32(i)
+            }
+            Schema::Union(union_schema) => {
+                for (_, variant_schema) in union_schema.schemas.iter().enumerate() {
+                    match variant_schema {
+                        Schema::Int => {
+                            return self.deserialize_i32_with_schema(visitor, variant_schema);
+                        }
+                        _ => { /* skip */ }
+                    }
+                }
+                Err(create_error(&format!(
+                    "The union schema must have an Int variant: {schema:?}"
+                )))
+            }
+            unexpected => Err(create_error(&format!(
+                "Expected an Int schema, found: {unexpected:?}"
             ))),
         }
     }
@@ -314,7 +356,9 @@ mod tests {
     use crate::error::Details;
     use crate::reader::read_avro_datum_ref;
     use crate::schema::{Schema, UnionSchema};
+    use crate::util::zig_i32;
     use apache_avro_test_helper::TestResult;
+    use std::io::Cursor;
 
     #[test]
     fn avro_rs_226_deserialize_bool_boolean_schema() -> TestResult {
@@ -373,7 +417,83 @@ mod tests {
                 schema,
             })) => {
                 assert_eq!(value_type, "bool");
-                assert!(value.contains("The union schema must have a boolean variant"));
+                assert!(value.contains("The union schema must have a Boolean variant"));
+                assert_eq!(schema.to_string(), schema.to_string());
+            }
+            _ => panic!("Expected an error for invalid union schema"),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_226_deserialize_int32_int_schema() -> TestResult {
+        let schema = Schema::Int;
+
+        for value in [123_i32, -1024_i32] {
+            let mut writer = vec![];
+            zig_i32(value, &mut writer)?;
+            let mut reader = Cursor::new(&writer);
+            let read: i32 = read_avro_datum_ref(&schema, &mut reader)?;
+            assert_eq!(read, value);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_226_deserialize_int32_union_int_schema() -> TestResult {
+        let schema = Schema::Union(UnionSchema::new(vec![Schema::Null, Schema::Boolean])?);
+
+        for (byte, expected) in [(0, false), (1, true)] {
+            let mut reader: &[u8] = &[byte];
+            let read: bool = read_avro_datum_ref(&schema, &mut reader)?;
+            assert_eq!(read, expected);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_226_deserialize_i32_invalid_schema() -> TestResult {
+        let schema = Schema::Long; // Using a non-boolean schema
+
+        let mut reader: &[u8] = &[0, 1, 2];
+        match read_avro_datum_ref::<i32, &[u8]>(&schema, &mut reader) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "i32");
+                assert!(
+                    value.contains("Cause: Expected an Int schema"),
+                    "Got: {}",
+                    value
+                );
+                assert_eq!(schema.to_string(), schema.to_string());
+            }
+            _ => panic!("Expected an error for invalid schema"),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_226_deserialize_i32_union_invalid_schema() -> TestResult {
+        let schema = Schema::Union(UnionSchema::new(vec![Schema::Null, Schema::Long])?);
+
+        let mut reader: &[u8] = &[1, 2, 3];
+        match read_avro_datum_ref::<i32, &[u8]>(&schema, &mut reader) {
+            Err(Error::SerializeValueWithSchema {
+                value_type,
+                value,
+                schema,
+            }) => {
+                assert_eq!(value_type, "i32");
+                assert!(
+                    value.contains("The union schema must have an Int variant"),
+                    "Got: {}",
+                    value
+                );
                 assert_eq!(schema.to_string(), schema.to_string());
             }
             _ => panic!("Expected an error for invalid union schema"),
