@@ -19,17 +19,17 @@
 use crate::de_schema::SchemaAwareReadDeserializer;
 use crate::schema::NamesRef;
 use crate::{
-    AvroResult, Codec, Error,
-    decode::{decode, decode_internal},
-    error::Details,
-    from_value,
+    decode::{decode, decode_internal}, error::Details, from_value,
     headers::{HeaderBuilder, RabinFingerprintHeader},
     schema::{
-        AvroSchema, Names, ResolvedOwnedSchema, ResolvedSchema, Schema, resolve_names,
-        resolve_names_with_schemata,
+        resolve_names, resolve_names_with_schemata, AvroSchema, Names, ResolvedOwnedSchema, ResolvedSchema,
+        Schema,
     },
     types::Value,
     util,
+    AvroResult,
+    Codec,
+    Error,
 };
 use log::warn;
 use serde::de::DeserializeOwned;
@@ -599,7 +599,7 @@ pub fn read_marker(bytes: &[u8]) -> [u8; 16] {
     marker
 }
 
-pub fn read_avro_datum_ref<'de, D: DeserializeOwned, R: Read>(
+pub fn read_avro_datum_ref<D: DeserializeOwned, R: Read>(
     schema: &Schema,
     reader: &mut R,
 ) -> AvroResult<D> {

@@ -45,7 +45,7 @@ impl<'de, R: Read> serde::de::Deserializer<'de> for SchemaAwareReadDeserializer<
     {
         let schema = self.root_schema;
         let mut this = self;
-        (&mut this).deserialize_bool_with_schema(visitor, schema)
+        this.deserialize_bool_with_schema(visitor, schema)
     }
 
     fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -68,7 +68,7 @@ impl<'de, R: Read> serde::de::Deserializer<'de> for SchemaAwareReadDeserializer<
     {
         let schema = self.root_schema;
         let mut this = self;
-        (&mut this).deserialize_i32_with_schema(visitor, schema)
+        this.deserialize_i32_with_schema(visitor, schema)
     }
 
     fn deserialize_i64<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
@@ -292,7 +292,7 @@ impl<'s, R: Read> SchemaAwareReadDeserializer<'s, R> {
                 visitor.visit_bool(value)
             }
             Schema::Union(union_schema) => {
-                for (_, variant_schema) in union_schema.schemas.iter().enumerate() {
+                for variant_schema in union_schema.schemas.iter() {
                     match variant_schema {
                         Schema::Boolean => {
                             return self.deserialize_bool_with_schema(visitor, variant_schema);
@@ -318,11 +318,13 @@ impl<'s, R: Read> SchemaAwareReadDeserializer<'s, R> {
     where
         V: Visitor<'de>,
     {
-        let create_error = |cause: &str| Error::SerializeValueWithSchema {
-            // TODO: DeserializeValueWithSchema
-            value_type: "i32",
-            value: format!("Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: &str| {
+            Error::new(Details::SerializeValueWithSchema {
+                // TODO: DeserializeValueWithSchema
+                value_type: "i32",
+                value: format!("Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -331,7 +333,7 @@ impl<'s, R: Read> SchemaAwareReadDeserializer<'s, R> {
                 visitor.visit_i32(i)
             }
             Schema::Union(union_schema) => {
-                for (_, variant_schema) in union_schema.schemas.iter().enumerate() {
+                for variant_schema in union_schema.schemas.iter() {
                     match variant_schema {
                         Schema::Int => {
                             return self.deserialize_i32_with_schema(visitor, variant_schema);
@@ -390,7 +392,7 @@ mod tests {
 
         let mut reader: &[u8] = &[0, 1, 2];
         match read_avro_datum_ref::<bool, &[u8]>(&schema, &mut reader) {
-            Err(Error(Details::SerializeValueWithSchema {
+            Err(Error::new(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -411,7 +413,7 @@ mod tests {
 
         let mut reader: &[u8] = &[1, 2, 3];
         match read_avro_datum_ref::<bool, &[u8]>(&schema, &mut reader) {
-            Err(Error(Details::SerializeValueWithSchema {
+            Err(Error::new(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -458,7 +460,7 @@ mod tests {
 
         let mut reader: &[u8] = &[0, 1, 2];
         match read_avro_datum_ref::<i32, &[u8]>(&schema, &mut reader) {
-            Err(Error::SerializeValueWithSchema {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -466,8 +468,7 @@ mod tests {
                 assert_eq!(value_type, "i32");
                 assert!(
                     value.contains("Cause: Expected an Int schema"),
-                    "Got: {}",
-                    value
+                    "Got: {value}",
                 );
                 assert_eq!(schema.to_string(), schema.to_string());
             }
@@ -483,7 +484,7 @@ mod tests {
 
         let mut reader: &[u8] = &[1, 2, 3];
         match read_avro_datum_ref::<i32, &[u8]>(&schema, &mut reader) {
-            Err(Error::SerializeValueWithSchema {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -491,8 +492,7 @@ mod tests {
                 assert_eq!(value_type, "i32");
                 assert!(
                     value.contains("The union schema must have an Int variant"),
-                    "Got: {}",
-                    value
+                    "Got: {value}",
                 );
                 assert_eq!(schema.to_string(), schema.to_string());
             }
