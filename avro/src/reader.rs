@@ -81,10 +81,10 @@ impl<'r, R: Read> Block<'r, R> {
         let mut buf = [0u8; 4];
         self.reader
             .read_exact(&mut buf)
-            .map_err(Error::ReadHeader)?;
+            .map_err(Details::ReadHeader)?;
 
         if buf != [b'O', b'b', b'j', 1u8] {
-            return Err(Error::HeaderMagic());
+            return Err(Details::HeaderMagic.into());
         }
 
         let meta_schema = Schema::map(Schema::Bytes);
@@ -107,13 +107,13 @@ impl<'r, R: Read> Block<'r, R> {
                 }
             }
             _ => {
-                return Err(Error::GetHeaderMetadata());
+                return Err(Details::GetHeaderMetadata.into());
             }
         }
 
         self.reader
             .read_exact(&mut self.marker)
-            .map_err(Error::ReadMarker)
+            .map_err(|e| Details::ReadMarker(e).into())
     }
 
     fn fill_buf(&mut self, n: usize) -> AvroResult<()> {
@@ -131,7 +131,7 @@ impl<'r, R: Read> Block<'r, R> {
         self.buf.resize(util::safe_len(n)?, 0);
         self.reader
             .read_exact(&mut self.buf)
-            .map_err(Error::ReadIntoBuf)?;
+            .map_err(Details::ReadIntoBuf)?;
         self.buf_idx = 0;
         Ok(())
     }
@@ -148,10 +148,10 @@ impl<'r, R: Read> Block<'r, R> {
                 let mut marker = [0u8; 16];
                 self.reader
                     .read_exact(&mut marker)
-                    .map_err(Error::ReadBlockMarker)?;
+                    .map_err(Details::ReadBlockMarker)?;
 
                 if marker != self.marker {
-                    return Err(Error::GetBlockMarker());
+                    return Err(Details::GetBlockMarker.into());
                 }
 
                 // NOTE (JAB): This doesn't fit this Reader pattern very well.
@@ -167,7 +167,7 @@ impl<'r, R: Read> Block<'r, R> {
                     // to not return any error in case we only finished to read cleanly from the stream
                     Ok(())
                 } else {
-                    Err(Error::ReadVariableIntegerBytes(io_err))
+                    Err(Details::ReadVariableIntegerBytes(io_err).into())
                 }
             }
             Err(e) => Err(Error::new(e)),
@@ -206,7 +206,7 @@ impl<'r, R: Read> Block<'r, R> {
 
         if b_original != 0 && b_original == block_bytes.len() {
             // from_avro_datum did not consume any bytes, so return an error to avoid an infinite loop
-            return Err(Error::ReadBlock());
+            return Err(Details::ReadBlock.into());
         }
         self.buf_idx += b_original - block_bytes.len();
         self.message_count -= 1;
@@ -223,7 +223,7 @@ impl<'r, R: Read> Block<'r, R> {
                     None
                 }
             })
-            .ok_or_else(Error::GetAvroSchemaFromMap)?;
+            .ok_or(Details::GetAvroSchemaFromMap)?;
         if !self.schemata.is_empty() {
             let rs = ResolvedSchema::try_from(self.schemata.clone())?;
             let names: Names = rs
@@ -259,10 +259,10 @@ fn read_codec(metadata: &HashMap<String, Value>) -> AvroResult<Codec> {
             if let Value::Bytes(ref bytes) = *codec {
                 match std::str::from_utf8(bytes.as_ref()) {
                     Ok(utf8) => Ok(utf8),
-                    Err(utf8_error) => Err(Error::ConvertToUtf8Error(utf8_error)),
+                    Err(utf8_error) => Err(Details::ConvertToUtf8Error(utf8_error).into()),
                 }
             } else {
-                Err(Error::BadCodecMetadata())
+                Err(Details::BadCodecMetadata.into())
             }
         })
         .map(|codec_res| match codec_res {
@@ -303,7 +303,7 @@ fn read_codec(metadata: &HashMap<String, Value>) -> AvroResult<Codec> {
                     }
                     _ => Ok(codec),
                 },
-                Err(_) => Err(Error::CodecNotSupported(codec.to_owned())),
+                Err(_) => Err(Details::CodecNotSupported(codec.to_owned()).into()),
             },
             Err(err) => Err(err),
         });
@@ -537,13 +537,13 @@ impl GenericSingleObjectReader {
                         reader,
                     )
                 } else {
-                    Err(Error::SingleObjectHeaderMismatch(
-                        self.expected_header.clone(),
-                        header,
-                    ))
+                    Err(
+                        Details::SingleObjectHeaderMismatch(self.expected_header.clone(), header)
+                            .into(),
+                    )
                 }
             }
-            Err(io_error) => Err(Error::ReadHeader(io_error)),
+            Err(io_error) => Err(Details::ReadHeader(io_error).into()),
         }
     }
 }

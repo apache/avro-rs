@@ -18,7 +18,7 @@
 //! Logic for parsing and interacting with schemas in Avro format.
 use crate::{
     AvroResult,
-    error::Error,
+    error::{Details, Error},
     schema_equality, types,
     util::MapHelper,
     validator::{
@@ -270,7 +270,7 @@ impl Name {
         let (name, namespace_from_name) = complex
             .name()
             .map(|name| Name::get_name_and_namespace(name.as_str()).unwrap())
-            .ok_or_else(Error::GetNameField)?;
+            .ok_or(Details::GetNameField)?;
         // FIXME Reading name from the type is wrong ! The name there is just a metadata (AVRO-3430)
         let type_name = match complex.get("type") {
             Some(Value::Object(complex_type)) => complex_type.name().or(None),
@@ -494,7 +494,7 @@ impl<'s> ResolvedSchema<'s> {
                         .insert(fully_qualified_name.clone(), schema)
                         .is_some()
                     {
-                        return Err(Error::AmbiguousSchemaDefinition(fully_qualified_name));
+                        return Err(Details::AmbiguousSchemaDefinition(fully_qualified_name).into());
                     }
                 }
                 Schema::Record(RecordSchema { name, fields, .. }) => {
@@ -504,7 +504,7 @@ impl<'s> ResolvedSchema<'s> {
                         .insert(fully_qualified_name.clone(), schema)
                         .is_some()
                     {
-                        return Err(Error::AmbiguousSchemaDefinition(fully_qualified_name));
+                        return Err(Details::AmbiguousSchemaDefinition(fully_qualified_name).into());
                     } else {
                         let record_namespace = fully_qualified_name.namespace;
                         for field in fields {
@@ -521,7 +521,7 @@ impl<'s> ResolvedSchema<'s> {
                             .map(|names| names.contains_key(&fully_qualified_name))
                             .unwrap_or(false);
                         if !is_resolved_with_known_schemas {
-                            return Err(Error::SchemaResolutionError(fully_qualified_name));
+                            return Err(Details::SchemaResolutionError(fully_qualified_name).into());
                         }
                     }
                 }
@@ -580,7 +580,7 @@ pub(crate) fn resolve_names(
                 .insert(fully_qualified_name.clone(), schema.clone())
                 .is_some()
             {
-                Err(Error::AmbiguousSchemaDefinition(fully_qualified_name))
+                Err(Details::AmbiguousSchemaDefinition(fully_qualified_name).into())
             } else {
                 Ok(())
             }
@@ -591,7 +591,7 @@ pub(crate) fn resolve_names(
                 .insert(fully_qualified_name.clone(), schema.clone())
                 .is_some()
             {
-                Err(Error::AmbiguousSchemaDefinition(fully_qualified_name))
+                Err(Details::AmbiguousSchemaDefinition(fully_qualified_name).into())
             } else {
                 let record_namespace = fully_qualified_name.namespace;
                 for field in fields {
@@ -605,7 +605,7 @@ pub(crate) fn resolve_names(
             names
                 .get(&fully_qualified_name)
                 .map(|_| ())
-                .ok_or_else(|| Error::SchemaResolutionError(fully_qualified_name))
+                .ok_or_else(|| Details::SchemaResolutionError(fully_qualified_name).into())
         }
         _ => Ok(()),
     }
@@ -668,7 +668,7 @@ impl RecordField {
         parser: &mut Parser,
         enclosing_record: &Name,
     ) -> AvroResult<Self> {
-        let name = field.name().ok_or_else(Error::GetNameFieldFromRecord)?;
+        let name = field.name().ok_or(Details::GetNameFieldFromRecord)?;
 
         validate_record_field_name(&name)?;
 
@@ -738,11 +738,12 @@ impl RecordField {
                     if !resolved {
                         let schema: Option<&Schema> = schemas.first();
                         return match schema {
-                            Some(first_schema) => Err(Error::GetDefaultUnion(
+                            Some(first_schema) => Err(Details::GetDefaultUnion(
                                 SchemaKind::from(first_schema),
                                 types::ValueKind::from(avro_value),
-                            )),
-                            None => Err(Error::EmptyUnion()),
+                            )
+                            .into()),
+                            None => Err(Details::EmptyUnion.into()),
                         };
                     }
                 }
@@ -752,11 +753,12 @@ impl RecordField {
                         .is_ok();
 
                     if !resolved {
-                        return Err(Error::GetDefaultRecordField(
+                        return Err(Details::GetDefaultRecordField(
                             field_name.to_string(),
                             record_name.to_string(),
                             field_schema.canonical_form(),
-                        ));
+                        )
+                        .into());
                     }
                 }
             };
@@ -911,11 +913,11 @@ impl UnionSchema {
         let mut vindex = BTreeMap::new();
         for (i, schema) in schemas.iter().enumerate() {
             if let Schema::Union(_) = schema {
-                return Err(Error::GetNestedUnion());
+                return Err(Details::GetNestedUnion.into());
             }
             let kind = SchemaKind::from(schema);
             if !kind.is_named() && vindex.insert(kind, i).is_some() {
-                return Err(Error::GetUnionDuplicate());
+                return Err(Details::GetUnionDuplicate.into());
             }
         }
         Ok(UnionSchema {
@@ -1009,17 +1011,17 @@ fn parse_json_integer_for_decimal(value: &serde_json::Number) -> Result<DecimalM
     Ok(if value.is_u64() {
         let num = value
             .as_u64()
-            .ok_or_else(|| Error::GetU64FromJson(value.clone()))?;
+            .ok_or_else(|| Details::GetU64FromJson(value.clone()))?;
         num.try_into()
-            .map_err(|e| Error::ConvertU64ToUsize(e, num))?
+            .map_err(|e| Details::ConvertU64ToUsize(e, num))?
     } else if value.is_i64() {
         let num = value
             .as_i64()
-            .ok_or_else(|| Error::GetI64FromJson(value.clone()))?;
+            .ok_or_else(|| Details::GetI64FromJson(value.clone()))?;
         num.try_into()
-            .map_err(|e| Error::ConvertI64ToUsize(e, num))?
+            .map_err(|e| Details::ConvertI64ToUsize(e, num))?
     } else {
-        return Err(Error::GetPrecisionOrScaleFromJson(value.clone()));
+        return Err(Details::GetPrecisionOrScaleFromJson(value.clone()).into());
     })
 }
 
@@ -1103,16 +1105,16 @@ impl Schema {
         let mut input_order: Vec<Name> = Vec::with_capacity(input_len);
         for json in input {
             let json = json.as_ref();
-            let schema: Value = serde_json::from_str(json).map_err(Error::ParseSchemaJson)?;
+            let schema: Value = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
             if let Value::Object(inner) = &schema {
                 let name = Name::parse(inner, &None)?;
                 let previous_value = input_schemas.insert(name.clone(), schema);
                 if previous_value.is_some() {
-                    return Err(Error::NameCollision(name.fullname(None)));
+                    return Err(Details::NameCollision(name.fullname(None)).into());
                 }
                 input_order.push(name);
             } else {
-                return Err(Error::GetNameField());
+                return Err(Details::GetNameField.into());
             }
         }
         let mut parser = Parser {
@@ -1146,15 +1148,15 @@ impl Schema {
         let mut input_order: Vec<Name> = Vec::with_capacity(schemata_len);
         for json in schemata {
             let json = json.as_ref();
-            let schema: Value = serde_json::from_str(json).map_err(Error::ParseSchemaJson)?;
+            let schema: Value = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
             if let Value::Object(inner) = &schema {
                 let name = Name::parse(inner, &None)?;
                 if let Some(_previous) = input_schemas.insert(name.clone(), schema) {
-                    return Err(Error::NameCollision(name.fullname(None)));
+                    return Err(Details::NameCollision(name.fullname(None)).into());
                 }
                 input_order.push(name);
             } else {
-                return Err(Error::GetNameField());
+                return Err(Details::GetNameField.into());
             }
         }
         let mut parser = Parser {
@@ -1165,7 +1167,7 @@ impl Schema {
         };
         parser.parse_input_schemas()?;
 
-        let value = serde_json::from_str(schema).map_err(Error::ParseSchemaJson)?;
+        let value = serde_json::from_str(schema).map_err(Details::ParseSchemaJson)?;
         let schema = parser.parse(&value, &None)?;
         let schemata = parser.parse_list()?;
         Ok((schema, schemata))
@@ -1176,7 +1178,7 @@ impl Schema {
         let mut buf = String::new();
         match reader.read_to_string(&mut buf) {
             Ok(_) => Self::parse_str(&buf),
-            Err(e) => Err(Error::ReadSchemaFromReader(e)),
+            Err(e) => Err(Details::ReadSchemaFromReader(e).into()),
         }
     }
 
@@ -1289,7 +1291,7 @@ impl Schema {
                     denorm.denormalize(schemata)?;
                     *self = denorm;
                 } else {
-                    return Err(Error::SchemaResolutionError(name.clone()));
+                    return Err(Details::SchemaResolutionError(name.clone()).into());
                 }
             }
             Schema::Record(record_schema) => {
@@ -1317,7 +1319,7 @@ impl Schema {
 impl Parser {
     /// Create a `Schema` from a string representing a JSON Avro schema.
     fn parse_str(&mut self, input: &str) -> Result<Schema, Error> {
-        let value = serde_json::from_str(input).map_err(Error::ParseSchemaJson)?;
+        let value = serde_json::from_str(input).map_err(Details::ParseSchemaJson)?;
         self.parse(&value, &None)
     }
 
@@ -1366,7 +1368,7 @@ impl Parser {
                 self.parse_complex(data, enclosing_namespace, RecordSchemaParseLocation::Root)
             }
             Value::Array(ref data) => self.parse_union(data, enclosing_namespace),
-            _ => Err(Error::ParseSchemaFromValidJson()),
+            _ => Err(Details::ParseSchemaFromValidJson.into()),
         }
     }
 
@@ -1431,7 +1433,7 @@ impl Parser {
         // For good error reporting we add this check
         match name.name.as_str() {
             "record" | "enum" | "fixed" => {
-                return Err(Error::InvalidSchemaRecord(name.to_string()));
+                return Err(Details::InvalidSchemaRecord(name.to_string()).into());
             }
             _ => (),
         }
@@ -1440,7 +1442,7 @@ impl Parser {
             .input_schemas
             .remove(&fully_qualified_name)
             // TODO make a better descriptive error message here that conveys that a named schema cannot be found
-            .ok_or_else(|| Error::ParsePrimitive(fully_qualified_name.fullname(None)))?;
+            .ok_or_else(|| Details::ParsePrimitive(fully_qualified_name.fullname(None)))?;
 
         // parsing a full schema from inside another schema. Other full schema will not inherit namespace
         let parsed = self.parse(&value, &None)?;
@@ -1463,24 +1465,25 @@ impl Parser {
                     if key == "scale" {
                         Ok(0)
                     } else {
-                        Err(Error::GetDecimalMetadataFromJson(key))
+                        Err(Details::GetDecimalMetadataFromJson(key).into())
                     }
                 }
-                Some(value) => Err(Error::GetDecimalMetadataValueFromJson(
-                    key.into(),
-                    value.clone(),
-                )),
+                Some(value) => Err(Details::GetDecimalMetadataValueFromJson {
+                    key: key.into(),
+                    value: value.clone(),
+                }
+                .into()),
             }
         }
         let precision = get_decimal_integer(complex, "precision")?;
         let scale = get_decimal_integer(complex, "scale")?;
 
         if precision < 1 {
-            return Err(Error::DecimalPrecisionMuBePositive(precision));
+            return Err(Details::DecimalPrecisionMuBePositive { precision }.into());
         }
 
         if precision < scale {
-            Err(Error::DecimalPrecisionLessThanScale(precision, scale))
+            Err(Details::DecimalPrecisionLessThanScale { precision, scale }.into())
         } else {
             Ok((precision, scale))
         }
@@ -1510,7 +1513,7 @@ impl Parser {
                     }
                     _ => parser.parse(value, enclosing_namespace),
                 },
-                None => Err(Error::GetLogicalTypeField()),
+                None => Err(Details::GetLogicalTypeField.into()),
             }
         }
 
@@ -1678,7 +1681,7 @@ impl Parser {
             // The spec says to ignore invalid logical types and just pass through the
             // underlying type. It is unclear whether that applies to this case or not, where the
             // `logicalType` is not a string.
-            Some(value) => return Err(Error::GetLogicalTypeFieldType(value.clone())),
+            Some(value) => return Err(Details::GetLogicalTypeFieldType(value.clone()).into()),
             _ => {}
         }
         match complex.get("type") {
@@ -1701,8 +1704,8 @@ impl Parser {
                 self.parse_complex(data, enclosing_namespace, RecordSchemaParseLocation::Root)
             }
             Some(Value::Array(variants)) => self.parse_union(variants, enclosing_namespace),
-            Some(unknown) => Err(Error::GetComplexType(unknown.clone())),
-            None => Err(Error::GetComplexTypeField()),
+            Some(unknown) => Err(Details::GetComplexType(unknown.clone()).into()),
+            None => Err(Details::GetComplexTypeField.into()),
         }
     }
 
@@ -1790,7 +1793,7 @@ impl Parser {
 
         let fields: Vec<RecordField> = fields_opt
             .and_then(|fields| fields.as_array())
-            .ok_or_else(Error::GetRecordFieldsJson)
+            .ok_or_else(|| Error::new(Details::GetRecordFieldsJson))
             .and_then(|fields| {
                 fields
                     .iter()
@@ -1804,7 +1807,7 @@ impl Parser {
 
         for field in &fields {
             if let Some(_old) = lookup.insert(field.name.clone(), field.position) {
-                return Err(Error::FieldNameDuplicate(field.name.clone()));
+                return Err(Details::FieldNameDuplicate(field.name.clone()).into());
             }
 
             if let Some(ref field_aliases) = field.aliases {
@@ -1863,13 +1866,13 @@ impl Parser {
 
         let symbols: Vec<String> = symbols_opt
             .and_then(|v| v.as_array())
-            .ok_or_else(Error::GetEnumSymbolsField)
+            .ok_or(Details::GetEnumSymbolsField)
             .and_then(|symbols| {
                 symbols
                     .iter()
                     .map(|symbol| symbol.as_str().map(|s| s.to_string()))
                     .collect::<Option<_>>()
-                    .ok_or_else(Error::GetEnumSymbols)
+                    .ok_or(Details::GetEnumSymbols)
             })?;
 
         let mut existing_symbols: HashSet<&String> = HashSet::with_capacity(symbols.len());
@@ -1878,7 +1881,7 @@ impl Parser {
 
             // Ensure there are no duplicate symbols
             if existing_symbols.contains(&symbol) {
-                return Err(Error::EnumSymbolDuplicate(symbol.to_string()));
+                return Err(Details::EnumSymbolDuplicate(symbol.to_string()).into());
             }
 
             existing_symbols.insert(symbol);
@@ -1889,7 +1892,7 @@ impl Parser {
             if let Value::String(ref s) = *value {
                 default = Some(s.clone());
             } else {
-                return Err(Error::EnumDefaultWrongType(value.clone()));
+                return Err(Details::EnumDefaultWrongType(value.clone()).into());
             }
         }
 
@@ -1898,7 +1901,11 @@ impl Parser {
                 .resolve_enum(&symbols, &Some(value.to_string()), &None)
                 .is_ok();
             if !resolved {
-                return Err(Error::GetEnumDefault(value.to_string(), symbols));
+                return Err(Details::GetEnumDefault {
+                    symbol: value.to_string(),
+                    symbols,
+                }
+                .into());
             }
         }
 
@@ -1925,7 +1932,7 @@ impl Parser {
     ) -> AvroResult<Schema> {
         complex
             .get("items")
-            .ok_or_else(Error::GetArrayItemsField)
+            .ok_or_else(|| Details::GetArrayItemsField.into())
             .and_then(|items| self.parse(items, enclosing_namespace))
             .map(|items| {
                 Schema::array_with_attributes(
@@ -1944,7 +1951,7 @@ impl Parser {
     ) -> AvroResult<Schema> {
         complex
             .get("values")
-            .ok_or_else(Error::GetMapValuesField)
+            .ok_or_else(|| Details::GetMapValuesField.into())
             .and_then(|items| self.parse(items, enclosing_namespace))
             .map(|items| {
                 Schema::map_with_attributes(
@@ -2005,8 +2012,8 @@ impl Parser {
         let size = match size_opt {
             Some(size) => size
                 .as_u64()
-                .ok_or_else(|| Error::GetFixedSizeFieldPositive(size.clone())),
-            None => Err(Error::GetFixedSizeField()),
+                .ok_or_else(|| Details::GetFixedSizeFieldPositive(size.clone())),
+            None => Err(Details::GetFixedSizeField),
         }?;
 
         let default = complex.get("default").and_then(|v| match &v {
@@ -2017,7 +2024,7 @@ impl Parser {
         if default.is_some() {
             let len = default.clone().unwrap().len();
             if len != size as usize {
-                return Err(Error::FixedDefaultLenSizeMismatch(len, size));
+                return Err(Details::FixedDefaultLenSizeMismatch(len, size).into());
             }
         }
 
@@ -2776,7 +2783,7 @@ mod tests {
             ]
         }"#;
 
-        // we get Error::GetNameField if we put ["A", "B"] directly here.
+        // we get Details::GetNameField if we put ["A", "B"] directly here.
         let schema_str_c = r#"{
             "name": "C",
             "type": "record",
@@ -2996,7 +3003,7 @@ mod tests {
             ]
         }"#;
 
-        // we get Error::GetNameField if we put ["null", "B"] directly here.
+        // we get Details::GetNameField if we put ["null", "B"] directly here.
         let schema_str_option_a = r#"{
             "name": "OptionA",
             "type": "record",
@@ -3943,7 +3950,7 @@ mod tests {
     fn test_name_with_whitespace_value() {
         match Name::new(" ").map_err(Error::into_details) {
             Err(Details::InvalidSchemaName(_, _)) => {}
-            _ => panic!("Expected an Error::InvalidSchemaName!"),
+            _ => panic!("Expected an Details::InvalidSchemaName!"),
         }
     }
 
@@ -3952,7 +3959,7 @@ mod tests {
     fn test_name_with_no_name_part() {
         match Name::new("space.").map_err(Error::into_details) {
             Err(Details::InvalidSchemaName(_, _)) => {}
-            _ => panic!("Expected an Error::InvalidSchemaName!"),
+            _ => panic!("Expected an Details::InvalidSchemaName!"),
         }
     }
 
@@ -5669,7 +5676,7 @@ mod tests {
 
         match Schema::parse_str(schema_str).map_err(Error::into_details) {
             Err(Details::FieldName(x)) if x == "f1.x" => Ok(()),
-            other => Err(format!("Expected Error::FieldName, got {other:?}").into()),
+            other => Err(format!("Expected Details::FieldName, got {other:?}").into()),
         }
     }
 
@@ -5702,7 +5709,7 @@ mod tests {
         match Schema::parse_str(schema_str).map_err(Error::into_details) {
             Err(Details::FieldNameDuplicate(_)) => (),
             other => {
-                return Err(format!("Expected Error::FieldNameDuplicate, got {other:?}").into());
+                return Err(format!("Expected Details::FieldNameDuplicate, got {other:?}").into());
             }
         };
 
@@ -5984,7 +5991,9 @@ mod tests {
 
         match Schema::parse_str(schema_str).map_err(Error::into_details) {
             Err(Details::InvalidNamespace(_, _)) => (),
-            other => return Err(format!("Expected Error::InvalidNamespace, got {other:?}").into()),
+            other => {
+                return Err(format!("Expected Details::InvalidNamespace, got {other:?}").into());
+            }
         };
 
         // Invalid namespace #2 (invalid character in a name portion)
@@ -5999,7 +6008,9 @@ mod tests {
 
         match Schema::parse_str(schema_str).map_err(Error::into_details) {
             Err(Details::InvalidNamespace(_, _)) => (),
-            other => return Err(format!("Expected Error::InvalidNamespace, got {other:?}").into()),
+            other => {
+                return Err(format!("Expected Details::InvalidNamespace, got {other:?}").into());
+            }
         };
 
         // Invalid namespace #3 (a name portion starts with a digit)
@@ -6014,7 +6025,9 @@ mod tests {
 
         match Schema::parse_str(schema_str).map_err(Error::into_details) {
             Err(Details::InvalidNamespace(_, _)) => (),
-            other => return Err(format!("Expected Error::InvalidNamespace, got {other:?}").into()),
+            other => {
+                return Err(format!("Expected Details::InvalidNamespace, got {other:?}").into());
+            }
         };
 
         // Invalid namespace #4 (a name portion is missing - two dots in a row)
@@ -6029,7 +6042,9 @@ mod tests {
 
         match Schema::parse_str(schema_str).map_err(Error::into_details) {
             Err(Details::InvalidNamespace(_, _)) => (),
-            other => return Err(format!("Expected Error::InvalidNamespace, got {other:?}").into()),
+            other => {
+                return Err(format!("Expected Details::InvalidNamespace, got {other:?}").into());
+            }
         };
 
         // Invalid namespace #5 (a name portion is missing - ends with a dot)
@@ -6044,7 +6059,9 @@ mod tests {
 
         match Schema::parse_str(schema_str).map_err(Error::into_details) {
             Err(Details::InvalidNamespace(_, _)) => (),
-            other => return Err(format!("Expected Error::InvalidNamespace, got {other:?}").into()),
+            other => {
+                return Err(format!("Expected Details::InvalidNamespace, got {other:?}").into());
+            }
         };
 
         Ok(())
@@ -6066,7 +6083,7 @@ mod tests {
             ]
         }
         "#;
-        let expected = Error::GetDefaultRecordField(
+        let expected = Details::GetDefaultRecordField(
             "f1".to_string(),
             "ns.record1".to_string(),
             r#""int""#.to_string(),
@@ -6108,7 +6125,7 @@ mod tests {
             ]
         }
         "#;
-        let expected = Error::GetDefaultRecordField(
+        let expected = Details::GetDefaultRecordField(
             "f1".to_string(),
             "ns.record1".to_string(),
             r#"{"name":"ns.record2","type":"record","fields":[{"name":"f1_1","type":"int"}]}"#
@@ -6146,7 +6163,7 @@ mod tests {
             ]
         }
         "#;
-        let expected = Error::GetDefaultRecordField(
+        let expected = Details::GetDefaultRecordField(
             "f1".to_string(),
             "ns.record1".to_string(),
             r#"{"name":"ns.enum1","type":"enum","symbols":["a","b","c"]}"#.to_string(),
@@ -6183,7 +6200,7 @@ mod tests {
             ]
         }
         "#;
-        let expected = Error::GetDefaultRecordField(
+        let expected = Details::GetDefaultRecordField(
             "f1".to_string(),
             "ns.record1".to_string(),
             r#"{"name":"ns.fixed1","type":"fixed","size":3}"#.to_string(),
@@ -6217,7 +6234,7 @@ mod tests {
             ]
         }
         "#;
-        let expected = Error::GetDefaultRecordField(
+        let expected = Details::GetDefaultRecordField(
             "f1".to_string(),
             "ns.record1".to_string(),
             r#"{"type":"array","items":"int"}"#.to_string(),
@@ -6251,7 +6268,7 @@ mod tests {
             ]
         }
         "#;
-        let expected = Error::GetDefaultRecordField(
+        let expected = Details::GetDefaultRecordField(
             "f1".to_string(),
             "ns.record1".to_string(),
             r#"{"type":"map","values":"string"}"#.to_string(),
@@ -6296,7 +6313,7 @@ mod tests {
             ]
         }
         "#;
-        let expected = Error::GetDefaultRecordField(
+        let expected = Details::GetDefaultRecordField(
             "f2".to_string(),
             "ns.record1".to_string(),
             r#""ns.record2""#.to_string(),
@@ -6324,7 +6341,7 @@ mod tests {
             "default": 100
         }
         "#;
-        let expected = Error::EnumDefaultWrongType(100.into()).to_string();
+        let expected = Details::EnumDefaultWrongType(100.into()).to_string();
         let result = Schema::parse_str(schema_str);
         assert!(result.is_err());
         let err = result
@@ -6342,10 +6359,10 @@ mod tests {
             "default": "d"
         }
         "#;
-        let expected = Error::GetEnumDefault(
-            "d".to_string(),
-            vec!["a".to_string(), "b".to_string(), "c".to_string()],
-        )
+        let expected = Details::GetEnumDefault {
+            symbol: "d".to_string(),
+            symbols: vec!["a".to_string(), "b".to_string(), "c".to_string()],
+        }
         .to_string();
         let result = Schema::parse_str(schema_str);
         assert!(result.is_err());

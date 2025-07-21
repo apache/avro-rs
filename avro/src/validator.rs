@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::{AvroResult, Error, schema::Namespace};
+use crate::{AvroResult, error::Details, schema::Namespace};
 use log::debug;
 use regex_lite::Regex;
 use std::sync::OnceLock;
@@ -40,7 +40,7 @@ pub trait SchemaNameValidator: Send + Sync {
     }
 
     /// Validates the schema name and returns the name and the optional namespace,
-    /// or [Error::InvalidSchemaName] if it is invalid.
+    /// or [Details::InvalidSchemaName] if it is invalid.
     fn validate(&self, schema_name: &str) -> AvroResult<(String, Namespace)>;
 }
 
@@ -49,7 +49,7 @@ impl SchemaNameValidator for SpecificationValidator {
         let regex = SchemaNameValidator::regex(self);
         let caps = regex
             .captures(schema_name)
-            .ok_or_else(|| Error::InvalidSchemaName(schema_name.to_string(), regex.as_str()))?;
+            .ok_or_else(|| Details::InvalidSchemaName(schema_name.to_string(), regex.as_str()))?;
         Ok((
             caps["name"].to_string(),
             caps.name("namespace").map(|s| s.as_str().to_string()),
@@ -94,7 +94,7 @@ pub trait SchemaNamespaceValidator: Send + Sync {
         })
     }
 
-    /// Validates the schema namespace or [Error::InvalidNamespace] if it is invalid.
+    /// Validates the schema namespace or [Details::InvalidNamespace] if it is invalid.
     fn validate(&self, namespace: &str) -> AvroResult<()>;
 }
 
@@ -102,7 +102,7 @@ impl SchemaNamespaceValidator for SpecificationValidator {
     fn validate(&self, ns: &str) -> AvroResult<()> {
         let regex = SchemaNamespaceValidator::regex(self);
         if !regex.is_match(ns) {
-            Err(Error::InvalidNamespace(ns.to_string(), regex.as_str()))
+            Err(Details::InvalidNamespace(ns.to_string(), regex.as_str()).into())
         } else {
             Ok(())
         }
@@ -145,7 +145,7 @@ pub trait EnumSymbolNameValidator: Send + Sync {
     }
 
     /// Validates the symbols of an Enum schema name and returns nothing (unit),
-    /// or [Error::EnumSymbolName] if it is invalid.
+    /// or [Details::EnumSymbolName] if it is invalid.
     fn validate(&self, name: &str) -> AvroResult<()>;
 }
 
@@ -153,7 +153,7 @@ impl EnumSymbolNameValidator for SpecificationValidator {
     fn validate(&self, symbol: &str) -> AvroResult<()> {
         let regex = EnumSymbolNameValidator::regex(self);
         if !regex.is_match(symbol) {
-            return Err(Error::EnumSymbolName(symbol.to_string()));
+            return Err(Details::EnumSymbolName(symbol.to_string()).into());
         }
 
         Ok(())
@@ -196,7 +196,7 @@ pub trait RecordFieldNameValidator: Send + Sync {
     }
 
     /// Validates the record field's names and returns nothing (unit),
-    /// or [Error::FieldName] if it is invalid.
+    /// or [Details::FieldName] if it is invalid.
     fn validate(&self, name: &str) -> AvroResult<()>;
 }
 
@@ -204,7 +204,7 @@ impl RecordFieldNameValidator for SpecificationValidator {
     fn validate(&self, field_name: &str) -> AvroResult<()> {
         let regex = RecordFieldNameValidator::regex(self);
         if !regex.is_match(field_name) {
-            return Err(Error::FieldName(field_name.to_string()));
+            return Err(Details::FieldName(field_name.to_string()).into());
         }
 
         Ok(())
@@ -260,7 +260,7 @@ mod tests {
         let name = Name::new(full_name);
         assert!(name.is_err());
         let validator = SpecificationValidator;
-        let expected = Error::InvalidSchemaName(
+        let expected = Details::InvalidSchemaName(
             full_name.to_string(),
             SchemaNameValidator::regex(&validator).as_str(),
         )
@@ -271,7 +271,7 @@ mod tests {
         let full_name = "ns..record1";
         let name = Name::new(full_name);
         assert!(name.is_err());
-        let expected = Error::InvalidSchemaName(
+        let expected = Details::InvalidSchemaName(
             full_name.to_string(),
             SchemaNameValidator::regex(&validator).as_str(),
         )

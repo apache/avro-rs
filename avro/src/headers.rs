@@ -86,10 +86,10 @@ impl GlueSchemaUuidHeader {
     /// instance to read the message.
     pub fn parse_from_raw_avro(message_payload: &[u8]) -> AvroResult<Self> {
         if message_payload.len() < Self::GLUE_HEADER_LENGTH {
-            return Err(crate::error::Error::HeaderMagic());
+            return Err(crate::error::Details::HeaderMagic.into());
         }
-        let schema_uuid =
-            Uuid::from_slice(&message_payload[2..18]).map_err(crate::Error::UuidFromSlice)?;
+        let schema_uuid = Uuid::from_slice(&message_payload[2..18])
+            .map_err(crate::error::Details::UuidFromSlice)?;
         Ok(GlueSchemaUuidHeader { schema_uuid })
     }
 

@@ -16,7 +16,7 @@
 // under the License.
 
 //! Logic for all supported compression codecs in Avro.
-use crate::{AvroResult, Error, types::Value};
+use crate::{AvroResult, Error, error::Details, types::Value};
 use strum_macros::{EnumIter, EnumString, IntoStaticStr};
 
 /// Settings for the `Deflate` codec.
@@ -91,7 +91,7 @@ impl Codec {
                 let mut encoded: Vec<u8> = vec![0; snap::raw::max_compress_len(stream.len())];
                 let compressed_size = snap::raw::Encoder::new()
                     .compress(&stream[..], &mut encoded[..])
-                    .map_err(Error::SnappyCompress)?;
+                    .map_err(Details::SnappyCompress)?;
 
                 let mut hasher = crc32fast::Hasher::new();
                 hasher.update(&stream[..]);
@@ -108,7 +108,7 @@ impl Codec {
                 use std::io::Write;
                 let mut encoder =
                     zstd::Encoder::new(Vec::new(), settings.compression_level as i32).unwrap();
-                encoder.write_all(stream).map_err(Error::ZstdCompress)?;
+                encoder.write_all(stream).map_err(Details::ZstdCompress)?;
                 *stream = encoder.finish().unwrap();
             }
             #[cfg(feature = "bzip")]
@@ -154,16 +154,16 @@ impl Codec {
                         HasMoreOutput => Error::other("Unexpected error: miniz_oxide has more data than the output buffer can hold. Please report this to avro-rs developers."), // not possible for _to_vec()
                     }
                 };
-                Error::DeflateDecompress(err)
+                Error::new(Details::DeflateDecompress(err))
             })?,
             #[cfg(feature = "snappy")]
             Codec::Snappy => {
                 let decompressed_size = snap::raw::decompress_len(&stream[..stream.len() - 4])
-                    .map_err(Error::GetSnappyDecompressLen)?;
+                    .map_err(Details::GetSnappyDecompressLen)?;
                 let mut decoded = vec![0; decompressed_size];
                 snap::raw::Decoder::new()
                     .decompress(&stream[..stream.len() - 4], &mut decoded[..])
-                    .map_err(Error::SnappyDecompress)?;
+                    .map_err(Details::SnappyDecompress)?;
 
                 let mut last_four: [u8; 4] = [0; 4];
                 last_four.copy_from_slice(&stream[(stream.len() - 4)..]);
@@ -174,7 +174,7 @@ impl Codec {
                 let actual = hasher.finalize();
 
                 if expected != actual {
-                    return Err(Error::SnappyCrc32(expected, actual));
+                    return Err(Details::SnappyCrc32{expected, actual}.into());
                 }
                 decoded
             }
@@ -187,7 +187,7 @@ impl Codec {
                 let buffer_size = zstd_safe::DCtx::in_size();
                 let buffer = BufReader::with_capacity(buffer_size, &stream[..]);
                 let mut decoder = zstd::Decoder::new(buffer).unwrap();
-                std::io::copy(&mut decoder, &mut decoded).map_err(Error::ZstdDecompress)?;
+                std::io::copy(&mut decoder, &mut decoded).map_err(Details::ZstdDecompress)?;
                 decoded
             }
             #[cfg(feature = "bzip")]
