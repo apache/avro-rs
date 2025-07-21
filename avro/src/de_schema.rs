@@ -13,6 +13,7 @@ pub struct SchemaAwareReadDeserializer<'s, R: Read> {
 }
 
 impl<'s, R: Read> SchemaAwareReadDeserializer<'s, R> {
+    #[allow(dead_code)] // TODO: remove! It is actually used in reader.rs
     pub(crate) fn new(
         reader: &'s mut R,
         root_schema: &'s Schema,
@@ -263,7 +264,7 @@ impl<'de, R: Read> serde::de::Deserializer<'de> for SchemaAwareReadDeserializer<
     }
 }
 
-impl<'s, R: Read> SchemaAwareReadDeserializer<'s, R> {
+impl<R: Read> SchemaAwareReadDeserializer<'_, R> {
     fn deserialize_bool_with_schema<'de, V>(
         &mut self,
         visitor: V,

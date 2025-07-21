@@ -599,6 +599,7 @@ pub fn read_marker(bytes: &[u8]) -> [u8; 16] {
     marker
 }
 
+#[allow(dead_code)] // TODO: remove! It is used in de_schema.rs tests
 pub fn read_avro_datum_ref<D: DeserializeOwned, R: Read>(
     schema: &Schema,
     reader: &mut R,
