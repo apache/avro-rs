@@ -126,24 +126,6 @@ pub enum Value {
     Uuid(Uuid),
 }
 
-/// Any structure implementing the [ToAvro](trait.ToAvro.html) trait will be usable
-/// from a [Writer](../writer/struct.Writer.html).
-#[deprecated(
-    since = "0.11.0",
-    note = "Please use Value::from, Into::into or value.into() instead"
-)]
-pub trait ToAvro {
-    /// Transforms this value into an Avro-compatible [Value](enum.Value.html).
-    fn avro(self) -> Value;
-}
-
-#[allow(deprecated)]
-impl<T: Into<Value>> ToAvro for T {
-    fn avro(self) -> Value {
-        self.into()
-    }
-}
-
 macro_rules! to_value(
     ($type:ty, $variant_constructor:expr) => (
         impl From<$type> for Value {
