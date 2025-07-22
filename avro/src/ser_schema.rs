@@ -21,7 +21,7 @@
 use crate::{
     bigdecimal::big_decimal_as_bytes,
     encode::{encode_int, encode_long},
-    error::Error,
+    error::{Details, Error},
     schema::{Name, NamesRef, Namespace, RecordSchema, Schema},
 };
 use bigdecimal::BigDecimal;
@@ -73,7 +73,7 @@ impl<'a, 's, W: Write> SchemaAwareWriteSerializeSeq<'a, 's, W> {
                     .ser
                     .writer
                     .write(item.as_slice())
-                    .map_err(Error::WriteBytes)?;
+                    .map_err(Details::WriteBytes)?;
             }
         }
 
@@ -103,7 +103,7 @@ impl<'a, 's, W: Write> SchemaAwareWriteSerializeSeq<'a, 's, W> {
 
     fn end(mut self) -> Result<usize, Error> {
         self.write_buffered_items()?;
-        self.bytes_written += self.ser.writer.write(&[0u8]).map_err(Error::WriteBytes)?;
+        self.bytes_written += self.ser.writer.write(&[0u8]).map_err(Details::WriteBytes)?;
 
         Ok(self.bytes_written)
     }
@@ -181,7 +181,7 @@ impl<'a, 's, W: Write> SchemaAwareWriteSerializeMap<'a, 's, W> {
                     .ser
                     .writer
                     .write(item.as_slice())
-                    .map_err(Error::WriteBytes)?;
+                    .map_err(Details::WriteBytes)?;
             }
         }
 
@@ -237,7 +237,7 @@ impl<W: Write> ser::SerializeMap for SchemaAwareWriteSerializeMap<'_, '_, W> {
 
     fn end(mut self) -> Result<Self::Ok, Self::Error> {
         self.write_buffered_items()?;
-        self.bytes_written += self.ser.writer.write(&[0u8]).map_err(Error::WriteBytes)?;
+        self.bytes_written += self.ser.writer.write(&[0u8]).map_err(Details::WriteBytes)?;
 
         Ok(self.bytes_written)
     }
@@ -299,7 +299,7 @@ impl<'a, 's, W: Write> SchemaAwareWriteSerializeStruct<'a, 's, W> {
                 .ser
                 .writer
                 .write(buffer.as_slice())
-                .map_err(Error::WriteBytes)?;
+                .map_err(Details::WriteBytes)?;
             self.item_count += 1;
         }
 
@@ -308,9 +308,7 @@ impl<'a, 's, W: Write> SchemaAwareWriteSerializeStruct<'a, 's, W> {
 
     fn end(self) -> Result<usize, Error> {
         if self.item_count != self.record_schema.fields.len() {
-            Err(Error::GetField(
-                self.record_schema.fields[self.item_count].name.clone(),
-            ))
+            Err(Details::GetField(self.record_schema.fields[self.item_count].name.clone()).into())
         } else {
             Ok(self.bytes_written)
         }
@@ -326,7 +324,7 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
         T: ?Sized + ser::Serialize,
     {
         if self.item_count >= self.record_schema.fields.len() {
-            return Err(Error::FieldName(String::from(key)));
+            return Err(Details::FieldName(String::from(key)).into());
         }
 
         let next_field = &self.record_schema.fields[self.item_count];
@@ -339,9 +337,9 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
 
         if next_field_matches {
             self.serialize_next_field(&value).map_err(|e| {
-                Error::SerializeRecordFieldWithSchema {
+                Details::SerializeRecordFieldWithSchema {
                     field_name: key,
-                    record_schema: Box::new(Schema::Record(self.record_schema.clone())),
+                    record_schema: Schema::Record(self.record_schema.clone()),
                     error: Box::new(e),
                 }
             })?;
@@ -366,9 +364,9 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
                             self.ser.enclosing_namespace.clone(),
                         );
                         value.serialize(&mut value_ser).map_err(|e| {
-                            Error::SerializeRecordFieldWithSchema {
+                            Details::SerializeRecordFieldWithSchema {
                                 field_name: key,
-                                record_schema: Box::new(Schema::Record(self.record_schema.clone())),
+                                record_schema: Schema::Record(self.record_schema.clone()),
                                 error: Box::new(e),
                             }
                         })?;
@@ -380,7 +378,7 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
                 }
             }
 
-            Err(Error::FieldName(String::from(key)))
+            Err(Details::FieldName(String::from(key)).into())
         }
     }
 
@@ -513,30 +511,32 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
         let ref_schema = self.names.get(full_name.as_ref()).copied();
 
-        ref_schema.ok_or_else(|| Error::SchemaResolutionError(full_name.as_ref().clone()))
+        ref_schema.ok_or_else(|| Details::SchemaResolutionError(full_name.as_ref().clone()).into())
     }
 
     fn write_bytes(&mut self, bytes: &[u8]) -> Result<usize, Error> {
         let mut bytes_written: usize = 0;
 
         bytes_written += encode_long(bytes.len() as i64, &mut self.writer)?;
-        bytes_written += self.writer.write(bytes).map_err(Error::WriteBytes)?;
+        bytes_written += self.writer.write(bytes).map_err(Details::WriteBytes)?;
 
         Ok(bytes_written)
     }
 
     fn serialize_bool_with_schema(&mut self, value: bool, schema: &Schema) -> Result<usize, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "bool",
-            value: format!("{value}. Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "bool",
+                value: format!("{value}. Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
             Schema::Boolean => self
                 .writer
                 .write(&[u8::from(value)])
-                .map_err(Error::WriteBytes),
+                .map_err(|e| Details::WriteBytes(e).into()),
             Schema::Union(union_schema) => {
                 for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
                     match variant_schema {
@@ -557,10 +557,12 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     }
 
     fn serialize_i32_with_schema(&mut self, value: i32, schema: &Schema) -> Result<usize, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "int (i8 | i16 | i32)",
-            value: format!("{value}. Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "int (i8 | i16 | i32)",
+                value: format!("{value}. Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -602,10 +604,12 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     }
 
     fn serialize_i64_with_schema(&mut self, value: i64, schema: &Schema) -> Result<usize, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "i64",
-            value: format!("{value}. Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "i64",
+                value: format!("{value}. Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -652,10 +656,12 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     }
 
     fn serialize_u8_with_schema(&mut self, value: u8, schema: &Schema) -> Result<usize, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "u8",
-            value: format!("{value}. Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "u8",
+                value: format!("{value}. Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -701,10 +707,12 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     }
 
     fn serialize_u32_with_schema(&mut self, value: u32, schema: &Schema) -> Result<usize, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "unsigned int (u16 | u32)",
-            value: format!("{value}. Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "unsigned int (u16 | u32)",
+                value: format!("{value}. Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -750,10 +758,12 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     }
 
     fn serialize_u64_with_schema(&mut self, value: u64, schema: &Schema) -> Result<usize, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "u64",
-            value: format!("{value}. Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "u64",
+                value: format!("{value}. Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -804,21 +814,23 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     }
 
     fn serialize_f32_with_schema(&mut self, value: f32, schema: &Schema) -> Result<usize, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "f32",
-            value: format!("{value}. Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "f32",
+                value: format!("{value}. Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
             Schema::Float => self
                 .writer
                 .write(&value.to_le_bytes())
-                .map_err(Error::WriteBytes),
+                .map_err(|e| Details::WriteBytes(e).into()),
             Schema::Double => self
                 .writer
                 .write(&(value as f64).to_le_bytes())
-                .map_err(Error::WriteBytes),
+                .map_err(|e| Details::WriteBytes(e).into()),
             Schema::Union(union_schema) => {
                 for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
                     match variant_schema {
@@ -839,21 +851,23 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     }
 
     fn serialize_f64_with_schema(&mut self, value: f64, schema: &Schema) -> Result<usize, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "f64",
-            value: format!("{value}. Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "f64",
+                value: format!("{value}. Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
             Schema::Float => self
                 .writer
                 .write(&(value as f32).to_le_bytes())
-                .map_err(Error::WriteBytes),
+                .map_err(|e| Details::WriteBytes(e).into()),
             Schema::Double => self
                 .writer
                 .write(&value.to_le_bytes())
-                .map_err(Error::WriteBytes),
+                .map_err(|e| Details::WriteBytes(e).into()),
             Schema::Union(union_schema) => {
                 for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
                     match variant_schema {
@@ -874,10 +888,12 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     }
 
     fn serialize_char_with_schema(&mut self, value: char, schema: &Schema) -> Result<usize, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "char",
-            value: format!("{value}. Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "char",
+                value: format!("{value}. Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -901,10 +917,12 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     }
 
     fn serialize_str_with_schema(&mut self, value: &str, schema: &Schema) -> Result<usize, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "string",
-            value: format!("{value}. Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "string",
+                value: format!("{value}. Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -920,7 +938,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 if value.len() == fixed_schema.size {
                     self.writer
                         .write(value.as_bytes())
-                        .map_err(Error::WriteBytes)
+                        .map_err(|e| Details::WriteBytes(e).into())
                 } else {
                     Err(create_error(format!(
                         "Fixed schema size ({}) does not match the value length ({})",
@@ -969,11 +987,11 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     v_str.push_str("??");
                 }
             }
-            Error::SerializeValueWithSchema {
+            Error::new(Details::SerializeValueWithSchema {
                 value_type: "bytes",
                 value: format!("{v_str}. Cause: {cause}"),
-                schema: Box::new(schema.clone()),
-            }
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -982,7 +1000,9 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
             }
             Schema::Fixed(fixed_schema) => {
                 if value.len() == fixed_schema.size {
-                    self.writer.write(value).map_err(Error::WriteBytes)
+                    self.writer
+                        .write(value)
+                        .map_err(|e| Details::WriteBytes(e).into())
                 } else {
                     Err(create_error(format!(
                         "Fixed schema size ({}) does not match the value length ({})",
@@ -993,7 +1013,9 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
             }
             Schema::Duration => {
                 if value.len() == 12 {
-                    self.writer.write(value).map_err(Error::WriteBytes)
+                    self.writer
+                        .write(value)
+                        .map_err(|e| Details::WriteBytes(e).into())
                 } else {
                     Err(create_error(format!(
                         "Duration length must be 12! Got ({})",
@@ -1012,13 +1034,16 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                         let padding = vec![pad_val; pad];
                         self.writer
                             .write(padding.as_slice())
-                            .map_err(Error::WriteBytes)?;
-                        self.writer.write(value).map_err(Error::WriteBytes)
+                            .map_err(Details::WriteBytes)?;
+                        self.writer
+                            .write(value)
+                            .map_err(|e| Details::WriteBytes(e).into())
                     }
-                    None => Err(Error::CompareFixedSizes {
+                    None => Err(Details::CompareFixedSizes {
                         size: fixed_schema.size,
                         n: value.len(),
-                    }),
+                    }
+                    .into()),
                 },
                 unsupported => Err(create_error(format!(
                     "Decimal schema's inner should be Bytes or Fixed schema. Got: {unsupported}"
@@ -1056,10 +1081,12 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     }
 
     fn serialize_none_with_schema(&mut self, schema: &Schema) -> Result<usize, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "none",
-            value: format!("None. Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "none",
+                value: format!("None. Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -1086,10 +1113,12 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     where
         T: ?Sized + ser::Serialize,
     {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "some",
-            value: format!("Some(?). Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "some",
+                value: format!("Some(?). Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -1123,10 +1152,12 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         name: &'static str,
         schema: &Schema,
     ) -> Result<usize, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "unit struct",
-            value: format!("{name}. Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "unit struct",
+                value: format!("{name}. Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -1172,10 +1203,12 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         variant: &'static str,
         schema: &Schema,
     ) -> Result<usize, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "unit variant",
-            value: format!("{name}::{variant} (index={variant_index}). Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "unit variant",
+                value: format!("{name}::{variant} (index={variant_index}). Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -1245,10 +1278,12 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     where
         T: ?Sized + ser::Serialize,
     {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "newtype variant",
-            value: format!("{name}::{variant}(?) (index={variant_index}). Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "newtype variant",
+                value: format!("{name}::{variant}(?) (index={variant_index}). Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -1281,11 +1316,11 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 .map(|l| format!("{l}"))
                 .unwrap_or_else(|| String::from("?"));
 
-            Error::SerializeValueWithSchema {
+            Error::new(Details::SerializeValueWithSchema {
                 value_type: "sequence",
                 value: format!("sequence (len={len_str}). Cause: {cause}"),
-                schema: Box::new(schema.clone()),
-            }
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -1317,10 +1352,12 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         len: usize,
         schema: &'s Schema,
     ) -> Result<SchemaAwareWriteSerializeSeq<'a, 's, W>, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "tuple",
-            value: format!("tuple (len={len}). Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "tuple",
+                value: format!("tuple (len={len}). Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -1353,13 +1390,15 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         len: usize,
         schema: &'s Schema,
     ) -> Result<SchemaAwareWriteSerializeTupleStruct<'a, 's, W>, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "tuple struct",
-            value: format!(
-                "{name}({}). Cause: {cause}",
-                vec!["?"; len].as_slice().join(",")
-            ),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "tuple struct",
+                value: format!(
+                    "{name}({}). Cause: {cause}",
+                    vec!["?"; len].as_slice().join(",")
+                ),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -1415,13 +1454,15 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         len: usize,
         schema: &'s Schema,
     ) -> Result<SchemaAwareWriteSerializeTupleStruct<'a, 's, W>, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "tuple variant",
-            value: format!(
-                "{name}::{variant}({}) (index={variant_index}). Cause: {cause}",
-                vec!["?"; len].as_slice().join(",")
-            ),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "tuple variant",
+                value: format!(
+                    "{name}::{variant}({}) (index={variant_index}). Cause: {cause}",
+                    vec!["?"; len].as_slice().join(",")
+                ),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -1454,11 +1495,11 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 .map(|l| format!("{l}"))
                 .unwrap_or_else(|| String::from("?"));
 
-            Error::SerializeValueWithSchema {
+            Error::new(Details::SerializeValueWithSchema {
                 value_type: "map",
                 value: format!("map (size={len_str}). Cause: {cause}"),
-                schema: Box::new(schema.clone()),
-            }
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -1493,10 +1534,12 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         len: usize,
         schema: &'s Schema,
     ) -> Result<SchemaAwareWriteSerializeStruct<'a, 's, W>, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "struct",
-            value: format!("{name}{{ ... }}. Cause: {cause}"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "struct",
+                value: format!("{name}{{ ... }}. Cause: {cause}"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -1543,10 +1586,12 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         len: usize,
         schema: &'s Schema,
     ) -> Result<SchemaAwareWriteSerializeStruct<'a, 's, W>, Error> {
-        let create_error = |cause: String| Error::SerializeValueWithSchema {
-            value_type: "struct variant",
-            value: format!("{name}::{variant}{{ ... }} (size={len}. Cause: {cause})"),
-            schema: Box::new(schema.clone()),
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "struct variant",
+                value: format!("{name}::{variant}{{ ... }} (size={len}. Cause: {cause})"),
+                schema: schema.clone(),
+            })
         };
 
         match schema {
@@ -1763,7 +1808,9 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut SchemaAwareWriteSerializer<'s
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Days, Duration, Millis, Months, decimal::Decimal, schema::ResolvedSchema};
+    use crate::{
+        Days, Duration, Millis, Months, decimal::Decimal, error::Details, schema::ResolvedSchema,
+    };
     use apache_avro_test_helper::TestResult;
     use bigdecimal::BigDecimal;
     use num_bigint::{BigInt, Sign};
@@ -2012,13 +2059,16 @@ mod tests {
         let record = NonEmptyRecord {
             foo: "bar".to_string(),
         };
-        match record.serialize(&mut serializer) {
-            Err(Error::FieldName(field_name)) if field_name == "foo" => (),
+        match record
+            .serialize(&mut serializer)
+            .map_err(Error::into_details)
+        {
+            Err(Details::FieldName(field_name)) if field_name == "foo" => (),
             unexpected => panic!("Expected an error. Got: {unexpected:?}"),
         }
 
-        match ().serialize(&mut serializer) {
-            Err(Error::SerializeValueWithSchema {
+        match ().serialize(&mut serializer).map_err(Error::into_details) {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -2061,8 +2111,11 @@ mod tests {
         Suit::Hearts.serialize(&mut serializer)?;
         Suit::Diamonds.serialize(&mut serializer)?;
         Suit::Clubs.serialize(&mut serializer)?;
-        match None::<()>.serialize(&mut serializer) {
-            Err(Error::SerializeValueWithSchema {
+        match None::<()>
+            .serialize(&mut serializer)
+            .map_err(Error::into_details)
+        {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -2095,8 +2148,11 @@ mod tests {
         let arr: Vec<i64> = vec![10, 5, 400];
         arr.serialize(&mut serializer)?;
 
-        match vec![1_f32].serialize(&mut serializer) {
-            Err(Error::SerializeValueWithSchema {
+        match vec![1_f32]
+            .serialize(&mut serializer)
+            .map_err(Error::into_details)
+        {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -2134,8 +2190,8 @@ mod tests {
 
         let mut map: BTreeMap<String, &str> = BTreeMap::new();
         map.insert(String::from("item1"), "value1");
-        match map.serialize(&mut serializer) {
-            Err(Error::SerializeValueWithSchema {
+        match map.serialize(&mut serializer).map_err(Error::into_details) {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -2181,8 +2237,11 @@ mod tests {
         NullableLong::Long(400).serialize(&mut serializer)?;
         NullableLong::Null.serialize(&mut serializer)?;
 
-        match "invalid".serialize(&mut serializer) {
-            Err(Error::SerializeValueWithSchema {
+        match "invalid"
+            .serialize(&mut serializer)
+            .map_err(Error::into_details)
+        {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -2225,8 +2284,11 @@ mod tests {
         LongOrString::Long(400).serialize(&mut serializer)?;
         LongOrString::Str(String::from("test")).serialize(&mut serializer)?;
 
-        match 1_f64.serialize(&mut serializer) {
-            Err(Error::SerializeValueWithSchema {
+        match 1_f64
+            .serialize(&mut serializer)
+            .map_err(Error::into_details)
+        {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -2266,8 +2328,11 @@ mod tests {
         Bytes::new(&[10, 124, 31, 97, 14, 201, 3, 88]).serialize(&mut serializer)?;
 
         // non-8 size
-        match Bytes::new(&[123]).serialize(&mut serializer) {
-            Err(Error::SerializeValueWithSchema {
+        match Bytes::new(&[123])
+            .serialize(&mut serializer)
+            .map_err(Error::into_details)
+        {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -2283,8 +2348,11 @@ mod tests {
         }
 
         // array
-        match [1; 8].serialize(&mut serializer) {
-            Err(Error::SerializeValueWithSchema {
+        match [1; 8]
+            .serialize(&mut serializer)
+            .map_err(Error::into_details)
+        {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -2297,8 +2365,11 @@ mod tests {
         }
 
         // slice
-        match &[1, 2, 3, 4, 5, 6, 7, 8].serialize(&mut serializer) {
-            Err(Error::SerializeValueWithSchema {
+        match &[1, 2, 3, 4, 5, 6, 7, 8]
+            .serialize(&mut serializer)
+            .map_err(Error::into_details)
+        {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -2333,8 +2404,8 @@ mod tests {
         let val = Decimal::from(&[251, 155]);
         val.serialize(&mut serializer)?;
 
-        match ().serialize(&mut serializer) {
-            Err(Error::SerializeValueWithSchema {
+        match ().serialize(&mut serializer).map_err(Error::into_details) {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -2371,8 +2442,8 @@ mod tests {
         let val = Decimal::from(&[0, 0, 0, 0, 0, 0, 251, 155]);
         val.serialize(&mut serializer)?;
 
-        match ().serialize(&mut serializer) {
-            Err(Error::SerializeValueWithSchema {
+        match ().serialize(&mut serializer).map_err(Error::into_details) {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -2431,8 +2502,8 @@ mod tests {
             .parse::<Uuid>()?
             .serialize(&mut serializer)?;
 
-        match 1_u8.serialize(&mut serializer) {
-            Err(Error::SerializeValueWithSchema {
+        match 1_u8.serialize(&mut serializer).map_err(Error::into_details) {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -2475,8 +2546,11 @@ mod tests {
         1000_i16.serialize(&mut serializer)?;
         10000_i32.serialize(&mut serializer)?;
 
-        match 10000_f32.serialize(&mut serializer) {
-            Err(Error::SerializeValueWithSchema {
+        match 10000_f32
+            .serialize(&mut serializer)
+            .map_err(Error::into_details)
+        {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -2515,8 +2589,11 @@ mod tests {
         1000_i16.serialize(&mut serializer)?;
         10000_i32.serialize(&mut serializer)?;
 
-        match 10000_f32.serialize(&mut serializer) {
-            Err(Error::SerializeValueWithSchema {
+        match 10000_f32
+            .serialize(&mut serializer)
+            .map_err(Error::into_details)
+        {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -2556,8 +2633,11 @@ mod tests {
         10000_i32.serialize(&mut serializer)?;
         10000_i64.serialize(&mut serializer)?;
 
-        match 10000_f32.serialize(&mut serializer) {
-            Err(Error::SerializeValueWithSchema {
+        match 10000_f32
+            .serialize(&mut serializer)
+            .map_err(Error::into_details)
+        {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -2601,8 +2681,11 @@ mod tests {
             10000_i32.serialize(&mut serializer)?;
             10000_i64.serialize(&mut serializer)?;
 
-            match 10000_f64.serialize(&mut serializer) {
-                Err(Error::SerializeValueWithSchema {
+            match 10000_f64
+                .serialize(&mut serializer)
+                .map_err(Error::into_details)
+            {
+                Err(Details::SerializeValueWithSchema {
                     value_type,
                     value,
                     schema,
@@ -2653,8 +2736,11 @@ mod tests {
             ByteArray::new(Duration::new(Months::new(3), Days::new(2), Millis::new(1200)).into());
         duration_bytes.serialize(&mut serializer)?;
 
-        match [1; 12].serialize(&mut serializer) {
-            Err(Error::SerializeValueWithSchema {
+        match [1; 12]
+            .serialize(&mut serializer)
+            .map_err(Error::into_details)
+        {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,

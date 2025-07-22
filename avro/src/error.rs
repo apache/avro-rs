@@ -21,8 +21,55 @@ use crate::{
 };
 use std::{error::Error as _, fmt};
 
+/// Errors encounterd by Avro.
+///
+/// To inspect the details of the error use [`details`](Self::details) or [`into_details`](Self::into_details)
+/// to get a [`Details`] which contains more precise error information.
+///
+/// See [`Details`] for all possible errors.
+#[derive(thiserror::Error, Debug)]
+#[repr(transparent)]
+#[error(transparent)]
+pub struct Error {
+    details: Box<Details>,
+}
+
+impl Error {
+    pub fn new(details: Details) -> Self {
+        Self {
+            details: Box::new(details),
+        }
+    }
+
+    pub fn details(&self) -> &Details {
+        &self.details
+    }
+
+    pub fn into_details(self) -> Details {
+        *self.details
+    }
+}
+
+impl From<Details> for Error {
+    fn from(details: Details) -> Self {
+        Self::new(details)
+    }
+}
+
+impl serde::ser::Error for Error {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
+        Self::new(<Details as serde::ser::Error>::custom(msg))
+    }
+}
+
+impl serde::de::Error for Error {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
+        Self::new(<Details as serde::de::Error>::custom(msg))
+    }
+}
+
 #[derive(thiserror::Error)]
-pub enum Error {
+pub enum Details {
     #[error("Bad Snappy CRC32; expected {expected:x} but got {actual:x}")]
     SnappyCrc32 { expected: u32, actual: u32 },
 
@@ -58,7 +105,7 @@ pub enum Error {
     #[error("Value {value:?} does not match schema {schema:?}: Reason: {reason}")]
     ValidationWithReason {
         value: Value,
-        schema: Box<Schema>,
+        schema: Schema,
         reason: String,
     },
 
@@ -107,6 +154,7 @@ pub enum Error {
     #[error("Union index {index} out of bounds: {num_variants}")]
     GetUnionVariant { index: i64, num_variants: usize },
 
+    #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
     #[error("Enum symbol index out of bounds: {num_variants}")]
     EnumSymbolIndex { index: usize, num_variants: usize },
 
@@ -268,6 +316,7 @@ pub enum Error {
     #[error("Cannot convert u64 to usize: {1}")]
     ConvertU64ToUsize(#[source] std::num::TryFromIntError, u64),
 
+    #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
     #[error("Cannot convert u32 to usize: {1}")]
     ConvertU32ToUsize(#[source] std::num::TryFromIntError, u32),
 
@@ -304,6 +353,7 @@ pub enum Error {
     #[error("The decimal precision ({precision}) must be a positive number")]
     DecimalPrecisionMuBePositive { precision: usize },
 
+    #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
     #[error("Unreadable big decimal sign")]
     BigDecimalSign,
 
@@ -313,6 +363,7 @@ pub enum Error {
     #[error("Unreadable big decimal scale")]
     BigDecimalScale,
 
+    #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
     #[error("Unexpected `type` {0} variant for `logicalType`")]
     GetLogicalTypeVariant(serde_json::Value),
 
@@ -378,6 +429,7 @@ pub enum Error {
     #[error("Fixed schema's default value length ({0}) does not match its size ({1})")]
     FixedDefaultLenSizeMismatch(usize, u64),
 
+    #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
     #[error("Failed to compress with flate: {0}")]
     DeflateCompress(#[source] std::io::Error),
 
@@ -453,13 +505,13 @@ pub enum Error {
     SerializeValueWithSchema {
         value_type: &'static str,
         value: String,
-        schema: Box<Schema>,
+        schema: Schema,
     },
 
     #[error("Failed to serialize field '{field_name}' for record {record_schema:?}: {error}")]
     SerializeRecordFieldWithSchema {
         field_name: &'static str,
-        record_schema: Box<Schema>,
+        record_schema: Schema,
         error: Box<Error>,
     },
 
@@ -567,19 +619,19 @@ pub enum CompatibilityError {
     Inconclusive(String),
 }
 
-impl serde::ser::Error for Error {
+impl serde::ser::Error for Details {
     fn custom<T: fmt::Display>(msg: T) -> Self {
-        Error::SerializeValue(msg.to_string())
+        Details::SerializeValue(msg.to_string())
     }
 }
 
-impl serde::de::Error for Error {
+impl serde::de::Error for Details {
     fn custom<T: fmt::Display>(msg: T) -> Self {
-        Error::DeserializeValue(msg.to_string())
+        Details::DeserializeValue(msg.to_string())
     }
 }
 
-impl fmt::Debug for Error {
+impl fmt::Debug for Details {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut msg = self.to_string();
         if let Some(e) = self.source() {

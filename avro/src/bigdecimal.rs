@@ -16,9 +16,10 @@
 // under the License.
 
 use crate::{
-    AvroResult, Error,
+    AvroResult,
     decode::{decode_len, decode_long},
     encode::{encode_bytes, encode_long},
+    error::Details,
     types::Value,
 };
 pub use bigdecimal::BigDecimal;
@@ -50,12 +51,12 @@ pub(crate) fn deserialize_big_decimal(bytes: &Vec<u8>) -> AvroResult<BigDecimal>
     let mut bytes: &[u8] = bytes.as_slice();
     let mut big_decimal_buffer = match decode_len(&mut bytes) {
         Ok(size) => vec![0u8; size],
-        Err(err) => return Err(Error::BigDecimalLen(Box::new(err))),
+        Err(err) => return Err(Details::BigDecimalLen(Box::new(err)).into()),
     };
 
     bytes
         .read_exact(&mut big_decimal_buffer[..])
-        .map_err(Error::ReadDouble)?;
+        .map_err(Details::ReadDouble)?;
 
     match decode_long(&mut bytes) {
         Ok(Value::Long(scale_value)) => {
@@ -63,14 +64,14 @@ pub(crate) fn deserialize_big_decimal(bytes: &Vec<u8>) -> AvroResult<BigDecimal>
             let decimal = BigDecimal::new(big_int, scale_value);
             Ok(decimal)
         }
-        _ => Err(Error::BigDecimalScale),
+        _ => Err(Details::BigDecimalScale.into()),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Codec, Reader, Schema, Writer, types::Record};
+    use crate::{Codec, Reader, Schema, Writer, error::Error, types::Record};
     use apache_avro_test_helper::TestResult;
     use bigdecimal::{One, Zero};
     use pretty_assertions::assert_eq;

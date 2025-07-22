@@ -21,6 +21,7 @@ use crate::{
     decimal::Decimal,
     duration::Duration,
     encode::encode_long,
+    error::Details,
     schema::{
         DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, RecordSchema, ResolvedSchema,
         Schema,
@@ -49,7 +50,7 @@ fn decode_int<R: Read>(reader: &mut R) -> AvroResult<Value> {
 #[inline]
 pub(crate) fn decode_len<R: Read>(reader: &mut R) -> AvroResult<usize> {
     let len = zag_i64(reader)?;
-    safe_len(usize::try_from(len).map_err(|e| Error::ConvertI64ToUsize(e, len))?)
+    safe_len(usize::try_from(len).map_err(|e| Details::ConvertI64ToUsize(e, len))?)
 }
 
 /// Decode the length of a sequence.
@@ -63,11 +64,11 @@ fn decode_seq_len<R: Read>(reader: &mut R) -> AvroResult<usize> {
             std::cmp::Ordering::Equal => return Ok(0),
             std::cmp::Ordering::Less => {
                 let _size = zag_i64(reader)?;
-                raw_len.checked_neg().ok_or(Error::IntegerOverflow)?
+                raw_len.checked_neg().ok_or(Details::IntegerOverflow)?
             }
             std::cmp::Ordering::Greater => raw_len,
         })
-        .map_err(|e| Error::ConvertI64ToUsize(e, raw_len))?,
+        .map_err(|e| Details::ConvertI64ToUsize(e, raw_len))?,
     )
 }
 
@@ -91,13 +92,13 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                 Ok(_) => match buf[0] {
                     0u8 => Ok(Value::Boolean(false)),
                     1u8 => Ok(Value::Boolean(true)),
-                    _ => Err(Error::BoolValue(buf[0])),
+                    _ => Err(Details::BoolValue(buf[0]).into()),
                 },
                 Err(io_err) => {
                     if let ErrorKind::UnexpectedEof = io_err.kind() {
                         Ok(Value::Null)
                     } else {
-                        Err(Error::ReadBoolean(io_err))
+                        Err(Details::ReadBoolean(io_err).into())
                     }
                 }
             }
@@ -106,25 +107,27 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
             Schema::Fixed { .. } => {
                 match decode_internal(inner, names, enclosing_namespace, reader)? {
                     Value::Fixed(_, bytes) => Ok(Value::Decimal(Decimal::from(bytes))),
-                    value => Err(Error::FixedValue(value)),
+                    value => Err(Details::FixedValue(value).into()),
                 }
             }
             Schema::Bytes => match decode_internal(inner, names, enclosing_namespace, reader)? {
                 Value::Bytes(bytes) => Ok(Value::Decimal(Decimal::from(bytes))),
-                value => Err(Error::BytesValue(value)),
+                value => Err(Details::BytesValue(value).into()),
             },
-            schema => Err(Error::ResolveDecimalSchema(schema.into())),
+            schema => Err(Details::ResolveDecimalSchema(schema.into()).into()),
         },
         Schema::BigDecimal => {
             match decode_internal(&Schema::Bytes, names, enclosing_namespace, reader)? {
                 Value::Bytes(bytes) => deserialize_big_decimal(&bytes).map(Value::BigDecimal),
-                value => Err(Error::BytesValue(value)),
+                value => Err(Details::BytesValue(value).into()),
             }
         }
         Schema::Uuid => {
             let len = decode_len(reader)?;
             let mut bytes = vec![0u8; len];
-            reader.read_exact(&mut bytes).map_err(Error::ReadIntoBuf)?;
+            reader
+                .read_exact(&mut bytes)
+                .map_err(Details::ReadIntoBuf)?;
 
             // use a Vec to be able re-read the bytes more than once if needed
             let mut reader = Vec::with_capacity(len + 1);
@@ -137,8 +140,10 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                 enclosing_namespace,
                 reader,
             )? {
-                Value::String(ref s) => Uuid::from_str(s).map_err(Error::ConvertStrToUuid),
-                value => Err(Error::GetUuidFromStringValue(value)),
+                Value::String(ref s) => {
+                    Uuid::from_str(s).map_err(|e| Details::ConvertStrToUuid(e).into())
+                }
+                value => Err(Error::new(Details::GetUuidFromStringValue(value))),
             };
 
             let uuid: Uuid = if len == 16 {
@@ -160,9 +165,9 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                     match fixed_result? {
                         Value::Fixed(ref size, ref bytes) => {
                             if *size != 16 {
-                                return Err(Error::ConvertFixedToUuid(*size));
+                                return Err(Details::ConvertFixedToUuid(*size).into());
                             }
-                            Uuid::from_slice(bytes).map_err(Error::ConvertSliceToUuid)?
+                            Uuid::from_slice(bytes).map_err(Details::ConvertSliceToUuid)?
                         }
                         _ => decode_from_string(&mut reader.as_slice())?,
                     }
@@ -189,23 +194,27 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
         Schema::LocalTimestampNanos => zag_i64(reader).map(Value::LocalTimestampNanos),
         Schema::Duration => {
             let mut buf = [0u8; 12];
-            reader.read_exact(&mut buf).map_err(Error::ReadDuration)?;
+            reader.read_exact(&mut buf).map_err(Details::ReadDuration)?;
             Ok(Value::Duration(Duration::from(buf)))
         }
         Schema::Float => {
             let mut buf = [0u8; std::mem::size_of::<f32>()];
-            reader.read_exact(&mut buf[..]).map_err(Error::ReadFloat)?;
+            reader
+                .read_exact(&mut buf[..])
+                .map_err(Details::ReadFloat)?;
             Ok(Value::Float(f32::from_le_bytes(buf)))
         }
         Schema::Double => {
             let mut buf = [0u8; std::mem::size_of::<f64>()];
-            reader.read_exact(&mut buf[..]).map_err(Error::ReadDouble)?;
+            reader
+                .read_exact(&mut buf[..])
+                .map_err(Details::ReadDouble)?;
             Ok(Value::Double(f64::from_le_bytes(buf)))
         }
         Schema::Bytes => {
             let len = decode_len(reader)?;
             let mut buf = vec![0u8; len];
-            reader.read_exact(&mut buf).map_err(Error::ReadBytes)?;
+            reader.read_exact(&mut buf).map_err(Details::ReadBytes)?;
             Ok(Value::Bytes(buf))
         }
         Schema::String => {
@@ -213,13 +222,13 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
             let mut buf = vec![0u8; len];
             match reader.read_exact(&mut buf) {
                 Ok(_) => Ok(Value::String(
-                    String::from_utf8(buf).map_err(Error::ConvertToUtf8)?,
+                    String::from_utf8(buf).map_err(Details::ConvertToUtf8)?,
                 )),
                 Err(io_err) => {
                     if let ErrorKind::UnexpectedEof = io_err.kind() {
                         Ok(Value::Null)
                     } else {
-                        Err(Error::ReadString(io_err))
+                        Err(Details::ReadString(io_err).into())
                     }
                 }
             }
@@ -228,7 +237,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
             let mut buf = vec![0u8; size];
             reader
                 .read_exact(&mut buf)
-                .map_err(|e| Error::ReadFixed(e, size))?;
+                .map_err(|e| Details::ReadFixed(e, size))?;
             Ok(Value::Fixed(size, buf))
         }
         Schema::Array(ref inner) => {
@@ -270,33 +279,33 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                                 decode_internal(&inner.types, names, enclosing_namespace, reader)?;
                             items.insert(key, value);
                         }
-                        value => return Err(Error::MapKeyType(value.into())),
+                        value => return Err(Details::MapKeyType(value.into()).into()),
                     }
                 }
             }
 
             Ok(Value::Map(items))
         }
-        Schema::Union(ref inner) => match zag_i64(reader) {
+        Schema::Union(ref inner) => match zag_i64(reader).map_err(Error::into_details) {
             Ok(index) => {
                 let variants = inner.variants();
                 let variant = variants
-                    .get(usize::try_from(index).map_err(|e| Error::ConvertI64ToUsize(e, index))?)
-                    .ok_or(Error::GetUnionVariant {
+                    .get(usize::try_from(index).map_err(|e| Details::ConvertI64ToUsize(e, index))?)
+                    .ok_or(Details::GetUnionVariant {
                         index,
                         num_variants: variants.len(),
                     })?;
                 let value = decode_internal(variant, names, enclosing_namespace, reader)?;
                 Ok(Value::Union(index as u32, Box::new(value)))
             }
-            Err(Error::ReadVariableIntegerBytes(io_err)) => {
+            Err(Details::ReadVariableIntegerBytes(io_err)) => {
                 if let ErrorKind::UnexpectedEof = io_err.kind() {
                     Ok(Value::Union(0, Box::new(Value::Null)))
                 } else {
-                    Err(Error::ReadVariableIntegerBytes(io_err))
+                    Err(Details::ReadVariableIntegerBytes(io_err).into())
                 }
             }
-            Err(io_err) => Err(io_err),
+            Err(io_err) => Err(Error::new(io_err)),
         },
         Schema::Record(RecordSchema {
             ref name,
@@ -323,18 +332,19 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
         Schema::Enum(EnumSchema { ref symbols, .. }) => {
             Ok(if let Value::Int(raw_index) = decode_int(reader)? {
                 let index = usize::try_from(raw_index)
-                    .map_err(|e| Error::ConvertI32ToUsize(e, raw_index))?;
+                    .map_err(|e| Details::ConvertI32ToUsize(e, raw_index))?;
                 if (0..symbols.len()).contains(&index) {
                     let symbol = symbols[index].clone();
                     Value::Enum(raw_index as u32, symbol)
                 } else {
-                    return Err(Error::GetEnumValue {
+                    return Err(Details::GetEnumValue {
                         index,
                         nsymbols: symbols.len(),
-                    });
+                    }
+                    .into());
                 }
             } else {
-                return Err(Error::GetEnumUnknownIndexValue);
+                return Err(Details::GetEnumUnknownIndexValue.into());
             })
         }
         Schema::Ref { ref name } => {
@@ -347,7 +357,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                     reader,
                 )
             } else {
-                Err(Error::SchemaResolutionError(fully_qualified_name))
+                Err(Details::SchemaResolutionError(fully_qualified_name).into())
             }
         }
     }

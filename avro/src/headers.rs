@@ -86,10 +86,10 @@ impl GlueSchemaUuidHeader {
     /// instance to read the message.
     pub fn parse_from_raw_avro(message_payload: &[u8]) -> AvroResult<Self> {
         if message_payload.len() < Self::GLUE_HEADER_LENGTH {
-            return Err(crate::error::Error::HeaderMagic);
+            return Err(crate::error::Details::HeaderMagic.into());
         }
-        let schema_uuid =
-            Uuid::from_slice(&message_payload[2..18]).map_err(crate::Error::UuidFromSlice)?;
+        let schema_uuid = Uuid::from_slice(&message_payload[2..18])
+            .map_err(crate::error::Details::UuidFromSlice)?;
         Ok(GlueSchemaUuidHeader { schema_uuid })
     }
 
@@ -113,6 +113,7 @@ impl HeaderBuilder for GlueSchemaUuidHeader {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::{Error, error::Details};
     use apache_avro_test_helper::TestResult;
 
     #[test]
@@ -168,11 +169,9 @@ mod test {
     #[test]
     fn test_glue_header_parse_err_on_message_too_short() -> TestResult {
         let incoming_message: Vec<u8> = vec![3, 0, 178, 241, 207, 0, 4, 52, 1];
-        let header_builder_res = GlueSchemaUuidHeader::parse_from_raw_avro(&incoming_message);
-        assert!(matches!(
-            header_builder_res,
-            Err(crate::error::Error::HeaderMagic)
-        ));
+        let header_builder_res = GlueSchemaUuidHeader::parse_from_raw_avro(&incoming_message)
+            .map_err(Error::into_details);
+        assert!(matches!(header_builder_res, Err(Details::HeaderMagic)));
         Ok(())
     }
 }

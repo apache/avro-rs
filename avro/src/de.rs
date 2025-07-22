@@ -16,7 +16,7 @@
 // under the License.
 
 //! Logic for serde-compatible deserialization.
-use crate::{Error, bytes::DE_BYTES_BORROWED, types::Value};
+use crate::{Error, bytes::DE_BYTES_BORROWED, error::Details, types::Value};
 use serde::{
     Deserialize,
     de::{self, DeserializeSeed, Deserializer as _, Visitor},
@@ -277,7 +277,7 @@ impl<'de> de::VariantAccess<'de> for UnionDeserializer<'de> {
     fn unit_variant(self) -> Result<(), Self::Error> {
         match self.value {
             Value::Null => Ok(()),
-            _ => Err(Error::GetNull(self.value.clone())),
+            _ => Err(Details::GetNull(self.value.clone()).into()),
         }
     }
 
@@ -622,10 +622,11 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
                         inner.as_ref(),
                     ))
                 } else {
-                    Err(Error::GetUnionVariant {
+                    Err(Details::GetUnionVariant {
                         index: idx as i64,
                         num_variants: variants.len(),
-                    })
+                    }
+                    .into())
                 }
             }
             // This has to be a unit Enum

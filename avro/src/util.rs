@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::{AvroResult, Error, schema::Documentation};
+use crate::{AvroResult, error::Details, schema::Documentation};
 use serde_json::{Map, Value};
 use std::{
     io::{Read, Write},
@@ -89,7 +89,7 @@ pub fn zig_i64<W: Write>(n: i64, writer: W) -> AvroResult<usize> {
 
 pub fn zag_i32<R: Read>(reader: &mut R) -> AvroResult<i32> {
     let i = zag_i64(reader)?;
-    i32::try_from(i).map_err(|e| Error::ZagI32(e, i))
+    i32::try_from(i).map_err(|e| Details::ZagI32(e, i).into())
 }
 
 pub fn zag_i64<R: Read>(reader: &mut R) -> AvroResult<i64> {
@@ -115,7 +115,9 @@ fn encode_variable<W: Write>(mut z: u64, mut writer: W) -> AvroResult<usize> {
             z >>= 7;
         }
     }
-    writer.write(&buffer[..i]).map_err(Error::WriteBytes)
+    writer
+        .write(&buffer[..i])
+        .map_err(|e| Details::WriteBytes(e).into())
 }
 
 fn decode_variable<R: Read>(reader: &mut R) -> AvroResult<u64> {
@@ -126,11 +128,11 @@ fn decode_variable<R: Read>(reader: &mut R) -> AvroResult<u64> {
     loop {
         if j > 9 {
             // if j * 7 > 64
-            return Err(Error::IntegerOverflow);
+            return Err(Details::IntegerOverflow.into());
         }
         reader
             .read_exact(&mut buf[..])
-            .map_err(Error::ReadVariableIntegerBytes)?;
+            .map_err(Details::ReadVariableIntegerBytes)?;
         i |= (u64::from(buf[0] & 0x7F)) << (j * 7);
         if (buf[0] >> 7) == 0 {
             break;
@@ -162,10 +164,11 @@ pub fn safe_len(len: usize) -> AvroResult<usize> {
     if len <= max_bytes {
         Ok(len)
     } else {
-        Err(Error::MemoryAllocation {
+        Err(Details::MemoryAllocation {
             desired: len,
             maximum: max_bytes,
-        })
+        }
+        .into())
     }
 }
 

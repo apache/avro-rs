@@ -864,13 +864,13 @@ mod decimal;
 mod decode;
 mod duration;
 mod encode;
-mod error;
 mod reader;
 mod ser;
 mod ser_schema;
 mod util;
 mod writer;
 
+pub mod error;
 pub mod headers;
 pub mod rabin;
 pub mod schema;

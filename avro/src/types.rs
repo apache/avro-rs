@@ -21,6 +21,7 @@ use crate::{
     bigdecimal::{deserialize_big_decimal, serialize_big_decimal},
     decimal::Decimal,
     duration::Duration,
+    error::Details,
     schema::{
         DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, Precision, RecordField,
         RecordSchema, ResolvedSchema, Scale, Schema, SchemaKind, UnionSchema,
@@ -40,7 +41,7 @@ use uuid::Uuid;
 
 /// Compute the maximum decimal value precision of a byte array of length `len` could hold.
 fn max_prec_for_len(len: usize) -> Result<usize, Error> {
-    let len = i32::try_from(len).map_err(|e| Error::ConvertLengthToI32(e, len))?;
+    let len = i32::try_from(len).map_err(|e| Details::ConvertLengthToI32(e, len))?;
     Ok((2.0_f64.powi(8 * len - 1) - 1.0).log10().floor() as usize)
 }
 
@@ -305,10 +306,10 @@ impl TryFrom<Value> for JsonValue {
             Value::Long(l) => Ok(Self::Number(l.into())),
             Value::Float(f) => Number::from_f64(f.into())
                 .map(Self::Number)
-                .ok_or_else(|| Error::ConvertF64ToJson(f.into())),
+                .ok_or_else(|| Details::ConvertF64ToJson(f.into()).into()),
             Value::Double(d) => Number::from_f64(d)
                 .map(Self::Number)
-                .ok_or(Error::ConvertF64ToJson(d)),
+                .ok_or_else(|| Details::ConvertF64ToJson(d).into()),
             Value::Bytes(bytes) => Ok(Self::Array(bytes.into_iter().map(|b| b.into()).collect())),
             Value::String(s) => Ok(Self::String(s)),
             Value::Fixed(_size, items) => {
@@ -661,7 +662,7 @@ impl Value {
                     self.resolve_internal(resolved.borrow(), names, &name.namespace, field_default)
                 } else {
                     error!("Failed to resolve schema {name:?}");
-                    Err(Error::SchemaResolutionError(name.clone()))
+                    Err(Details::SchemaResolutionError(name.clone()).into())
                 }
             }
             Schema::Null => self.resolve_null(),
@@ -712,9 +713,9 @@ impl Value {
         Ok(match self {
             uuid @ Value::Uuid(_) => uuid,
             Value::String(ref string) => {
-                Value::Uuid(Uuid::from_str(string).map_err(Error::ConvertStrToUuid)?)
+                Value::Uuid(Uuid::from_str(string).map_err(Details::ConvertStrToUuid)?)
             }
-            other => return Err(Error::GetUuid(other)),
+            other => return Err(Details::GetUuid(other).into()),
         })
     }
 
@@ -722,7 +723,7 @@ impl Value {
         Ok(match self {
             bg @ Value::BigDecimal(_) => bg,
             Value::Bytes(b) => Value::BigDecimal(deserialize_big_decimal(&b).unwrap()),
-            other => return Err(Error::GetBigDecimal(other)),
+            other => return Err(Details::GetBigDecimal(other).into()),
         })
     }
 
@@ -731,14 +732,14 @@ impl Value {
             duration @ Value::Duration { .. } => duration,
             Value::Fixed(size, bytes) => {
                 if size != 12 {
-                    return Err(Error::GetDecimalFixedBytes(size));
+                    return Err(Details::GetDecimalFixedBytes(size).into());
                 }
                 Value::Duration(Duration::from([
                     bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
                     bytes[8], bytes[9], bytes[10], bytes[11],
                 ]))
             }
-            other => return Err(Error::ResolveDuration(other)),
+            other => return Err(Details::ResolveDuration(other).into()),
         })
     }
 
@@ -749,25 +750,26 @@ impl Value {
         inner: &Schema,
     ) -> Result<Self, Error> {
         if scale > precision {
-            return Err(Error::GetScaleAndPrecision { scale, precision });
+            return Err(Details::GetScaleAndPrecision { scale, precision }.into());
         }
         match inner {
             &Schema::Fixed(FixedSchema { size, .. }) => {
                 if max_prec_for_len(size)? < precision {
-                    return Err(Error::GetScaleWithFixedSize { size, precision });
+                    return Err(Details::GetScaleWithFixedSize { size, precision }.into());
                 }
             }
             Schema::Bytes => (),
-            _ => return Err(Error::ResolveDecimalSchema(inner.into())),
+            _ => return Err(Details::ResolveDecimalSchema(inner.into()).into()),
         };
         match self {
             Value::Decimal(num) => {
                 let num_bytes = num.len();
                 if max_prec_for_len(num_bytes)? < precision {
-                    Err(Error::ComparePrecisionAndSize {
+                    Err(Details::ComparePrecisionAndSize {
                         precision,
                         num_bytes,
-                    })
+                    }
+                    .into())
                 } else {
                     Ok(Value::Decimal(num))
                 }
@@ -775,30 +777,31 @@ impl Value {
             }
             Value::Fixed(_, bytes) | Value::Bytes(bytes) => {
                 if max_prec_for_len(bytes.len())? < precision {
-                    Err(Error::ComparePrecisionAndSize {
+                    Err(Details::ComparePrecisionAndSize {
                         precision,
                         num_bytes: bytes.len(),
-                    })
+                    }
+                    .into())
                 } else {
                     // precision and scale match, can we assume the underlying type can hold the data?
                     Ok(Value::Decimal(Decimal::from(bytes)))
                 }
             }
-            other => Err(Error::ResolveDecimal(other)),
+            other => Err(Details::ResolveDecimal(other).into()),
         }
     }
 
     fn resolve_date(self) -> Result<Self, Error> {
         match self {
             Value::Date(d) | Value::Int(d) => Ok(Value::Date(d)),
-            other => Err(Error::GetDate(other)),
+            other => Err(Details::GetDate(other).into()),
         }
     }
 
     fn resolve_time_millis(self) -> Result<Self, Error> {
         match self {
             Value::TimeMillis(t) | Value::Int(t) => Ok(Value::TimeMillis(t)),
-            other => Err(Error::GetTimeMillis(other)),
+            other => Err(Details::GetTimeMillis(other).into()),
         }
     }
 
@@ -806,7 +809,7 @@ impl Value {
         match self {
             Value::TimeMicros(t) | Value::Long(t) => Ok(Value::TimeMicros(t)),
             Value::Int(t) => Ok(Value::TimeMicros(i64::from(t))),
-            other => Err(Error::GetTimeMicros(other)),
+            other => Err(Details::GetTimeMicros(other).into()),
         }
     }
 
@@ -814,7 +817,7 @@ impl Value {
         match self {
             Value::TimestampMillis(ts) | Value::Long(ts) => Ok(Value::TimestampMillis(ts)),
             Value::Int(ts) => Ok(Value::TimestampMillis(i64::from(ts))),
-            other => Err(Error::GetTimestampMillis(other)),
+            other => Err(Details::GetTimestampMillis(other).into()),
         }
     }
 
@@ -822,7 +825,7 @@ impl Value {
         match self {
             Value::TimestampMicros(ts) | Value::Long(ts) => Ok(Value::TimestampMicros(ts)),
             Value::Int(ts) => Ok(Value::TimestampMicros(i64::from(ts))),
-            other => Err(Error::GetTimestampMicros(other)),
+            other => Err(Details::GetTimestampMicros(other).into()),
         }
     }
 
@@ -830,7 +833,7 @@ impl Value {
         match self {
             Value::TimestampNanos(ts) | Value::Long(ts) => Ok(Value::TimestampNanos(ts)),
             Value::Int(ts) => Ok(Value::TimestampNanos(i64::from(ts))),
-            other => Err(Error::GetTimestampNanos(other)),
+            other => Err(Details::GetTimestampNanos(other).into()),
         }
     }
 
@@ -840,7 +843,7 @@ impl Value {
                 Ok(Value::LocalTimestampMillis(ts))
             }
             Value::Int(ts) => Ok(Value::LocalTimestampMillis(i64::from(ts))),
-            other => Err(Error::GetLocalTimestampMillis(other)),
+            other => Err(Details::GetLocalTimestampMillis(other).into()),
         }
     }
 
@@ -850,7 +853,7 @@ impl Value {
                 Ok(Value::LocalTimestampMicros(ts))
             }
             Value::Int(ts) => Ok(Value::LocalTimestampMicros(i64::from(ts))),
-            other => Err(Error::GetLocalTimestampMicros(other)),
+            other => Err(Details::GetLocalTimestampMicros(other).into()),
         }
     }
 
@@ -858,21 +861,21 @@ impl Value {
         match self {
             Value::LocalTimestampNanos(ts) | Value::Long(ts) => Ok(Value::LocalTimestampNanos(ts)),
             Value::Int(ts) => Ok(Value::LocalTimestampNanos(i64::from(ts))),
-            other => Err(Error::GetLocalTimestampNanos(other)),
+            other => Err(Details::GetLocalTimestampNanos(other).into()),
         }
     }
 
     fn resolve_null(self) -> Result<Self, Error> {
         match self {
             Value::Null => Ok(Value::Null),
-            other => Err(Error::GetNull(other)),
+            other => Err(Details::GetNull(other).into()),
         }
     }
 
     fn resolve_boolean(self) -> Result<Self, Error> {
         match self {
             Value::Boolean(b) => Ok(Value::Boolean(b)),
-            other => Err(Error::GetBoolean(other)),
+            other => Err(Details::GetBoolean(other).into()),
         }
     }
 
@@ -880,7 +883,7 @@ impl Value {
         match self {
             Value::Int(n) => Ok(Value::Int(n)),
             Value::Long(n) => Ok(Value::Int(n as i32)),
-            other => Err(Error::GetInt(other)),
+            other => Err(Details::GetInt(other).into()),
         }
     }
 
@@ -888,7 +891,7 @@ impl Value {
         match self {
             Value::Int(n) => Ok(Value::Long(i64::from(n))),
             Value::Long(n) => Ok(Value::Long(n)),
-            other => Err(Error::GetLong(other)),
+            other => Err(Details::GetLong(other).into()),
         }
     }
 
@@ -900,9 +903,9 @@ impl Value {
             Value::Double(x) => Ok(Value::Float(x as f32)),
             Value::String(ref x) => match Self::parse_special_float(x) {
                 Some(f) => Ok(Value::Float(f)),
-                None => Err(Error::GetFloat(self)),
+                None => Err(Details::GetFloat(self).into()),
             },
-            other => Err(Error::GetFloat(other)),
+            other => Err(Details::GetFloat(other).into()),
         }
     }
 
@@ -914,9 +917,9 @@ impl Value {
             Value::Double(x) => Ok(Value::Double(x)),
             Value::String(ref x) => match Self::parse_special_float(x) {
                 Some(f) => Ok(Value::Double(f64::from(f))),
-                None => Err(Error::GetDouble(self)),
+                None => Err(Details::GetDouble(self).into()),
             },
-            other => Err(Error::GetDouble(other)),
+            other => Err(Details::GetDouble(other).into()),
         }
     }
 
@@ -941,7 +944,7 @@ impl Value {
                     .map(Value::try_u8)
                     .collect::<Result<Vec<_>, _>>()?,
             )),
-            other => Err(Error::GetBytes(other)),
+            other => Err(Details::GetBytes(other).into()),
         }
     }
 
@@ -949,9 +952,9 @@ impl Value {
         match self {
             Value::String(s) => Ok(Value::String(s)),
             Value::Bytes(bytes) | Value::Fixed(_, bytes) => Ok(Value::String(
-                String::from_utf8(bytes).map_err(Error::ConvertToUtf8)?,
+                String::from_utf8(bytes).map_err(Details::ConvertToUtf8)?,
             )),
-            other => Err(Error::GetString(other)),
+            other => Err(Details::GetString(other).into()),
         }
     }
 
@@ -961,7 +964,7 @@ impl Value {
                 if n == size {
                     Ok(Value::Fixed(n, bytes))
                 } else {
-                    Err(Error::CompareFixedSizes { size, n })
+                    Err(Details::CompareFixedSizes { size, n }.into())
                 }
             }
             Value::String(s) => Ok(Value::Fixed(s.len(), s.into_bytes())),
@@ -969,10 +972,10 @@ impl Value {
                 if s.len() == size {
                     Ok(Value::Fixed(size, s))
                 } else {
-                    Err(Error::CompareFixedSizes { size, n: s.len() })
+                    Err(Details::CompareFixedSizes { size, n: s.len() }.into())
                 }
             }
-            other => Err(Error::GetStringForFixed(other)),
+            other => Err(Details::GetStringForFixed(other).into()),
         }
     }
 
@@ -991,16 +994,18 @@ impl Value {
                         if let Some(index) = symbols.iter().position(|item| item == default) {
                             Ok(Value::Enum(index as u32, default.clone()))
                         } else {
-                            Err(Error::GetEnumDefault {
+                            Err(Details::GetEnumDefault {
                                 symbol,
                                 symbols: symbols.into(),
-                            })
+                            }
+                            .into())
                         }
                     }
-                    _ => Err(Error::GetEnumDefault {
+                    _ => Err(Details::GetEnumDefault {
                         symbol,
                         symbols: symbols.into(),
-                    }),
+                    }
+                    .into()),
                 }
             }
         };
@@ -1008,7 +1013,7 @@ impl Value {
         match self {
             Value::Enum(_raw_index, s) => validate_symbol(s, symbols),
             Value::String(s) => validate_symbol(s, symbols),
-            other => Err(Error::GetEnum(other)),
+            other => Err(Details::GetEnum(other).into()),
         }
     }
 
@@ -1027,7 +1032,7 @@ impl Value {
         };
         let (i, inner) = schema
             .find_schema_with_known_schemata(&v, Some(names), enclosing_namespace)
-            .ok_or(Error::FindUnionVariant {
+            .ok_or_else(|| Details::FindUnionVariant {
                 schema: schema.clone(),
                 value: v.clone(),
             })?;
@@ -1051,10 +1056,11 @@ impl Value {
                     .map(|item| item.resolve_internal(schema, names, enclosing_namespace, &None))
                     .collect::<Result<_, _>>()?,
             )),
-            other => Err(Error::GetArray {
+            other => Err(Details::GetArray {
                 expected: schema.into(),
                 other,
-            }),
+            }
+            .into()),
         }
     }
 
@@ -1075,10 +1081,11 @@ impl Value {
                     })
                     .collect::<Result<_, _>>()?,
             )),
-            other => Err(Error::GetMap {
+            other => Err(Details::GetMap {
                 expected: schema.into(),
                 other,
-            }),
+            }
+            .into()),
         }
     }
 
@@ -1091,13 +1098,13 @@ impl Value {
         let mut items = match self {
             Value::Map(items) => Ok(items),
             Value::Record(fields) => Ok(fields.into_iter().collect::<HashMap<_, _>>()),
-            other => Err(Error::GetRecord {
+            other => Err(Error::new(Details::GetRecord {
                 expected: fields
                     .iter()
                     .map(|field| (field.name.clone(), field.schema.clone().into()))
                     .collect(),
                 other,
-            }),
+            })),
         }?;
 
         let new_fields = fields
@@ -1136,7 +1143,7 @@ impl Value {
                             _ => Value::from(value.clone()),
                         },
                         None => {
-                            return Err(Error::GetField(field.name.clone()));
+                            return Err(Details::GetField(field.name.clone()).into());
                         }
                     },
                 };
@@ -1157,7 +1164,7 @@ impl Value {
             }
         }
 
-        Err(Error::GetU8(int))
+        Err(Details::GetU8(int).into())
     }
 }
 
@@ -1166,6 +1173,7 @@ mod tests {
     use super::*;
     use crate::{
         duration::{Days, Millis, Months},
+        error::Details,
         schema::RecordFieldOrder,
     };
     use apache_avro_test_helper::{
@@ -3161,15 +3169,15 @@ Field with name '"b"' is not a member of the map items"#,
     fn avro_4024_resolve_double_from_unknown_string_err() -> TestResult {
         let schema = Schema::parse_str(r#"{"type": "double"}"#)?;
         let value = Value::String("unknown".to_owned());
-        match value.resolve(&schema) {
-            Err(err @ Error::GetDouble(_)) => {
+        match value.resolve(&schema).map_err(Error::into_details) {
+            Err(err @ Details::GetDouble(_)) => {
                 assert_eq!(
                     format!("{err:?}"),
                     r#"Expected Value::Double, Value::Float, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: String("unknown")"#
                 );
             }
             other => {
-                panic!("Expected Error::GetDouble, got {other:?}");
+                panic!("Expected Details::GetDouble, got {other:?}");
             }
         }
         Ok(())
@@ -3179,15 +3187,15 @@ Field with name '"b"' is not a member of the map items"#,
     fn avro_4024_resolve_float_from_unknown_string_err() -> TestResult {
         let schema = Schema::parse_str(r#"{"type": "float"}"#)?;
         let value = Value::String("unknown".to_owned());
-        match value.resolve(&schema) {
-            Err(err @ Error::GetFloat(_)) => {
+        match value.resolve(&schema).map_err(Error::into_details) {
+            Err(err @ Details::GetFloat(_)) => {
                 assert_eq!(
                     format!("{err:?}"),
                     r#"Expected Value::Float, Value::Double, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: String("unknown")"#
                 );
             }
             other => {
-                panic!("Expected Error::GetFloat, got {other:?}");
+                panic!("Expected Details::GetFloat, got {other:?}");
             }
         }
         Ok(())
