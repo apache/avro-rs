@@ -8,14 +8,14 @@ use serde::{de, forward_to_deserialize_any};
 use std::io::Read;
 use std::slice::Iter;
 
-pub struct SchemaAwareReadDeserializer<'s, R: Read> {
-    reader: &'s mut R,
-    root_schema: &'s Schema,
+pub struct SchemaAwareReadDeserializer<'a, R: Read> {
+    reader: &'a mut R,
+    root_schema: &'a Schema,
 }
 
-impl<'s, R: Read> SchemaAwareReadDeserializer<'s, R> {
+impl<'a, R: Read> SchemaAwareReadDeserializer<'a, R> {
     #[allow(dead_code)] // TODO: remove! It is actually used in reader.rs
-    pub(crate) fn new(reader: &'s mut R, root_schema: &'s Schema) -> Self {
+    pub(crate) fn new(reader: &'a mut R, root_schema: &'a Schema) -> Self {
         Self {
             reader,
             root_schema,
@@ -23,7 +23,7 @@ impl<'s, R: Read> SchemaAwareReadDeserializer<'s, R> {
     }
 }
 
-impl<'de, R: Read> serde::de::Deserializer<'de> for SchemaAwareReadDeserializer<'de, R> {
+impl<'de: 'a, 'a, R: Read> serde::de::Deserializer<'de> for SchemaAwareReadDeserializer<'a, R> {
     type Error = Error;
 
     fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
@@ -230,8 +230,6 @@ impl<'de, R: Read> serde::de::Deserializer<'de> for SchemaAwareReadDeserializer<
     where
         V: Visitor<'de>,
     {
-        // dbg!(name, fields, self.root_schema);
-        // todo!("Implement deserialization for struct");
         let schema = self.root_schema;
         let mut this = self;
         this.deserialize_struct_with_schema(name, fields, visitor, schema)
@@ -264,7 +262,7 @@ impl<'de, R: Read> serde::de::Deserializer<'de> for SchemaAwareReadDeserializer<
     }
 }
 
-impl<'de, R: Read> SchemaAwareReadDeserializer<'de, R> {
+impl<'de: 'a, 'a, R: Read> SchemaAwareReadDeserializer<'a, R> {
     fn deserialize_bool_with_schema<V>(
         &mut self,
         visitor: V,
@@ -415,11 +413,11 @@ impl<'de, R: Read> SchemaAwareReadDeserializer<'de, R> {
     }
 
     fn deserialize_struct_with_schema<V>(
-        &'de mut self,
+        &mut self,
         name: &'static str,
         fields: &'static [&'static str],
         visitor: V,
-        schema: &'de Schema,
+        schema: &'a Schema,
     ) -> Result<V::Value, Error>
     where
         V: Visitor<'de>,
@@ -434,9 +432,14 @@ impl<'de, R: Read> SchemaAwareReadDeserializer<'de, R> {
         };
 
         match schema {
-            Schema::Record(record_schema) => visitor.visit_map(
-                RecordSchemaAwareReadDeserializer::new(self, name, fields.iter(), record_schema),
-            ),
+            Schema::Record(record_schema) => {
+                visitor.visit_map(RecordSchemaAwareReadDeserializerStruct::new(
+                    self,
+                    name,
+                    fields.iter(),
+                    record_schema,
+                ))
+            }
             Schema::Union(union_schema) => {
                 for variant_schema in union_schema.schemas.iter() {
                     match variant_schema {
@@ -467,30 +470,34 @@ impl<'de, R: Read> SchemaAwareReadDeserializer<'de, R> {
     }
 }
 
-struct RecordSchemaAwareReadDeserializer<'s, R: Read> {
-    deser: &'s mut SchemaAwareReadDeserializer<'s, R>,
+struct RecordSchemaAwareReadDeserializerStruct<'a, R: Read> {
+    deser: &'a mut SchemaAwareReadDeserializer<'a, R>,
     schema_name: &'static str,
-    fields: Iter<'s, &'static str>,
-    record_schema: &'s crate::schema::RecordSchema,
+    fields: Iter<'a, &'static str>,
+    current_field: Option<&'static str>,
+    record_schema: &'a crate::schema::RecordSchema,
 }
 
-impl<'s, R: Read> RecordSchemaAwareReadDeserializer<'s, R> {
+impl<'a, R: Read> RecordSchemaAwareReadDeserializerStruct<'a, R> {
     fn new(
-        deser: &'s mut SchemaAwareReadDeserializer<'s, R>,
+        deser: &'a mut SchemaAwareReadDeserializer<'a, R>,
         schema_name: &'static str,
-        fields: Iter<'s, &'static str>,
-        record_schema: &'s crate::schema::RecordSchema,
+        fields: Iter<'a, &'static str>,
+        record_schema: &'a crate::schema::RecordSchema,
     ) -> Self {
         Self {
             deser,
             schema_name,
             fields,
+            current_field: None,
             record_schema,
         }
     }
 }
 
-impl<'de, R: Read> de::MapAccess<'de> for RecordSchemaAwareReadDeserializer<'de, R> {
+impl<'de: 'a, 'a, R: Read> de::MapAccess<'de>
+    for RecordSchemaAwareReadDeserializerStruct<'a, R>
+{
     type Error = Error;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
@@ -498,9 +505,12 @@ impl<'de, R: Read> de::MapAccess<'de> for RecordSchemaAwareReadDeserializer<'de,
         K: de::DeserializeSeed<'de>,
     {
         match self.fields.next() {
-            Some(&field_name) => seed
-                .deserialize(StringDeserializer { input: field_name })
-                .map(Some),
+            Some(&field_name) => {
+                self.current_field = Some(field_name);
+                seed
+                    .deserialize(StringDeserializer { input: field_name })
+                    .map(Some)
+            },
             None => Ok(None),
         }
     }
@@ -509,20 +519,16 @@ impl<'de, R: Read> de::MapAccess<'de> for RecordSchemaAwareReadDeserializer<'de,
     where
         V: de::DeserializeSeed<'de>,
     {
-        match self.fields.next() {
-            Some(&field_name) => {
-                let field_idx = self.record_schema.lookup.get(field_name).ok_or_else(|| {
+        match self.current_field.take() {
+            Some(field_name) => {
+                let schema = self.record_schema;
+                let record_field = schema.lookup.get(field_name)
+                    .and_then(|idx| schema.fields.get(*idx))
+                    .ok_or_else(|| {
                     return Error::new(Details::DeserializeValueWithSchema {
-                        value_type: "field",
+                        value_type: "struct",
                         value: format!("Field '{field_name}' not found in record schema"),
-                        schema: Schema::Record(self.record_schema.clone()),
-                    });
-                })?;
-                let record_field = self.record_schema.fields.get(*field_idx).ok_or_else(|| {
-                    return Error::new(Details::DeserializeValueWithSchema {
-                        value_type: "field",
-                        value: format!("Field index {field_idx} out of bounds"),
-                        schema: Schema::Record(self.record_schema.clone()),
+                        schema: Schema::Record(schema.clone()),
                     });
                 })?;
                 let field_schema = &record_field.schema;
@@ -535,6 +541,75 @@ impl<'de, R: Read> de::MapAccess<'de> for RecordSchemaAwareReadDeserializer<'de,
         }
     }
 }
+
+// struct RecordSchemaAwareReadDeserializer<'s, R: Read> {
+//     deser: &'s mut SchemaAwareReadDeserializer<'s, R>,
+//     schema_name: &'static str,
+//     fields: Iter<'s, &'static str>,
+//     record_schema: &'s crate::schema::RecordSchema,
+// }
+//
+// impl<'s, R: Read> RecordSchemaAwareReadDeserializer<'s, R> {
+//     fn new(
+//         deser: &'s mut SchemaAwareReadDeserializer<'s, R>,
+//         schema_name: &'static str,
+//         fields: Iter<'s, &'static str>,
+//         record_schema: &'s crate::schema::RecordSchema,
+//     ) -> Self {
+//         Self {
+//             deser,
+//             schema_name,
+//             fields,
+//             record_schema,
+//         }
+//     }
+// }
+
+// impl<'de, R: Read> de::MapAccess<'de> for RecordSchemaAwareReadDeserializer<'de, R> {
+//     type Error = Error;
+//
+//     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
+//     where
+//         K: de::DeserializeSeed<'de>,
+//     {
+//         match self.fields.next() {
+//             Some(&field_name) => seed
+//                 .deserialize(StringDeserializer { input: field_name })
+//                 .map(Some),
+//             None => Ok(None),
+//         }
+//     }
+//
+//     fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, Self::Error>
+//     where
+//         V: de::DeserializeSeed<'de>,
+//     {
+//         match self.fields.next() {
+//             Some(&field_name) => {
+//                 let field_idx = self.record_schema.lookup.get(field_name).ok_or_else(|| {
+//                     return Error::new(Details::DeserializeValueWithSchema {
+//                         value_type: "field",
+//                         value: format!("Field '{field_name}' not found in record schema"),
+//                         schema: Schema::Record(self.record_schema.clone()),
+//                     });
+//                 })?;
+//                 let record_field = self.record_schema.fields.get(*field_idx).ok_or_else(|| {
+//                     return Error::new(Details::DeserializeValueWithSchema {
+//                         value_type: "field",
+//                         value: format!("Field index {field_idx} out of bounds"),
+//                         schema: Schema::Record(self.record_schema.clone()),
+//                     });
+//                 })?;
+//                 let field_schema = &record_field.schema;
+//                 seed.deserialize(SchemaAwareReadDeserializer::new(
+//                     self.deser.reader,
+//                     field_schema,
+//                 ))
+//             }
+//             None => Err(de::Error::custom("should not happen - too many values")),
+//         }
+//     }
+// }
 
 #[derive(Clone)]
 struct StringDeserializer<'de> {
