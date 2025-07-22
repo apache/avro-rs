@@ -899,16 +899,16 @@ pub use decimal::Decimal;
 pub use duration::{Days, Duration, Millis, Months};
 pub use error::Error;
 pub use reader::{
-    from_avro_datum, from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
-    GenericSingleObjectReader, Reader, SpecificSingleObjectReader,
+    GenericSingleObjectReader, Reader, SpecificSingleObjectReader, from_avro_datum,
+    from_avro_datum_reader_schemata, from_avro_datum_schemata, read_avro_datum_ref, read_marker,
 };
 pub use schema::{AvroSchema, Schema};
 pub use ser::to_value;
 pub use util::{max_allocation_bytes, set_serde_human_readable};
 pub use uuid::Uuid;
 pub use writer::{
-    to_avro_datum, to_avro_datum_schemata, write_avro_datum_ref, GenericSingleObjectWriter, SpecificSingleObjectWriter,
-    Writer, WriterBuilder,
+    GenericSingleObjectWriter, SpecificSingleObjectWriter, Writer, WriterBuilder, to_avro_datum,
+    to_avro_datum_schemata, write_avro_datum_ref,
 };
 
 #[cfg(feature = "derive")]
@@ -920,8 +920,8 @@ pub type AvroResult<T> = Result<T, Error>;
 #[cfg(test)]
 mod tests {
     use crate::{
-        from_avro_datum, types::{Record, Value}, Codec, Reader, Schema,
-        Writer,
+        Codec, Reader, Schema, Writer, from_avro_datum,
+        types::{Record, Value},
     };
     use pretty_assertions::assert_eq;
 

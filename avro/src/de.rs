@@ -16,16 +16,16 @@
 // under the License.
 
 //! Logic for serde-compatible deserialization.
-use crate::{bytes::DE_BYTES_BORROWED, error::Details, types::Value, AvroResult, Error};
+use crate::{AvroResult, Error, bytes::DE_BYTES_BORROWED, error::Details, types::Value};
 use serde::{
+    Deserialize,
     de::{self, DeserializeSeed, Deserializer as _, Visitor},
     forward_to_deserialize_any,
-    Deserialize,
 };
 use std::{
     collections::{
-        hash_map::{Keys, Values},
         HashMap,
+        hash_map::{Keys, Values},
     },
     slice::Iter,
 };

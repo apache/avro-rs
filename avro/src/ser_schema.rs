@@ -1766,7 +1766,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut SchemaAwareWriteSerializer<'s
 mod tests {
     use super::*;
     use crate::{
-        decimal::Decimal, error::Details, schema::ResolvedSchema, Days, Duration, Millis, Months,
+        Days, Duration, Millis, Months, decimal::Decimal, error::Details, schema::ResolvedSchema,
     };
     use apache_avro_test_helper::TestResult;
     use bigdecimal::BigDecimal;

@@ -18,17 +18,17 @@
 //! Logic handling reading from Avro format at user level.
 use crate::error::Details;
 use crate::{
-    de_schema::SchemaAwareReadDeserializer, decode::{decode, decode_internal}, from_value,
+    AvroResult, Codec, Error,
+    de_schema::SchemaAwareReadDeserializer,
+    decode::{decode, decode_internal},
+    from_value,
     headers::{HeaderBuilder, RabinFingerprintHeader},
     schema::{
-        resolve_names, resolve_names_with_schemata, AvroSchema, Names, NamesRef, ResolvedOwnedSchema, ResolvedSchema,
-        Schema,
+        AvroSchema, Names, ResolvedOwnedSchema, ResolvedSchema, Schema, resolve_names,
+        resolve_names_with_schemata,
     },
     types::Value,
     util,
-    AvroResult,
-    Codec,
-    Error,
 };
 use log::warn;
 use serde::de::DeserializeOwned;
@@ -603,8 +603,8 @@ pub fn read_avro_datum_ref<D: DeserializeOwned, R: Read>(
     schema: &Schema,
     reader: &mut R,
 ) -> AvroResult<D> {
-    let names: NamesRef = NamesRef::default();
-    let deserializer = SchemaAwareReadDeserializer::new(reader, schema, &names, None);
+    // let names: NamesRef = NamesRef::default();
+    let deserializer = SchemaAwareReadDeserializer::new(reader, schema);
     D::deserialize(deserializer)
 }
 

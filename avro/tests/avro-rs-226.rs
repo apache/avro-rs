@@ -15,10 +15,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{AvroSchema, Schema, Writer, from_value};
+use apache_avro::{AvroSchema, Schema, Writer, read_avro_datum_ref};
 use apache_avro_test_helper::TestResult;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::fmt::Debug;
+use std::io::Cursor;
 
 fn ser_deser<T>(schema: &Schema, record: T) -> TestResult
 where
@@ -35,13 +36,17 @@ where
     // let deserialized = from_value::<T>(&value)?;
     // assert_eq!(deserialized, record2);
 
-    let reader = apache_avro::Reader::with_schema(schema, &bytes_written[..])?;
-    for value in reader {
-        let value = value?;
-        dbg!(&value);
-        let deserialized = from_value::<T>(&value)?;
-        assert_eq!(deserialized, record2);
-    }
+    // let reader = apache_avro::Reader::with_schema(schema, &bytes_written[..])?;
+    // for value in reader {
+    //     let value = value?;
+    //     dbg!(&value);
+    //     let deserialized = from_value::<T>(&value)?;
+    //     assert_eq!(deserialized, record2);
+    // }
+
+    let mut reader = Cursor::new(&bytes_written);
+    let deserialized: T = read_avro_datum_ref(schema, &mut reader)?;
+    assert_eq!(deserialized, record2);
 
     Ok(())
 }
@@ -70,7 +75,7 @@ fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_middle_field
 fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_first_field() -> TestResult {
     #[derive(AvroSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
     struct T {
-        // #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none")]
         x: Option<i8>,
         y: Option<String>,
         z: Option<i8>,

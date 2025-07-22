@@ -1,32 +1,24 @@
 use crate::error::Details;
 use crate::{
-    schema::{NamesRef, Namespace}, util::{zag_i32, zag_i64},
-    Error,
+    util::{zag_i32, zag_i64}, Error,
     Schema,
 };
 use serde::de::Visitor;
+use serde::{de, forward_to_deserialize_any};
 use std::io::Read;
+use std::slice::Iter;
 
 pub struct SchemaAwareReadDeserializer<'s, R: Read> {
     reader: &'s mut R,
     root_schema: &'s Schema,
-    _names: &'s NamesRef<'s>,
-    _enclosing_namespace: Namespace,
 }
 
 impl<'s, R: Read> SchemaAwareReadDeserializer<'s, R> {
     #[allow(dead_code)] // TODO: remove! It is actually used in reader.rs
-    pub(crate) fn new(
-        reader: &'s mut R,
-        root_schema: &'s Schema,
-        _names: &'s NamesRef<'s>,
-        _enclosing_namespace: Namespace,
-    ) -> Self {
+    pub(crate) fn new(reader: &'s mut R, root_schema: &'s Schema) -> Self {
         Self {
             reader,
             root_schema,
-            _names,
-            _enclosing_namespace,
         }
     }
 }
@@ -136,14 +128,14 @@ impl<'de, R: Read> serde::de::Deserializer<'de> for SchemaAwareReadDeserializer<
     where
         V: Visitor<'de>,
     {
-        todo!()
+        todo!("Implement deserialization for str")
     }
 
     fn deserialize_string<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        todo!()
+        todo!("Implement deserialization for String")
     }
 
     fn deserialize_bytes<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
@@ -164,7 +156,7 @@ impl<'de, R: Read> serde::de::Deserializer<'de> for SchemaAwareReadDeserializer<
     where
         V: Visitor<'de>,
     {
-        todo!()
+        todo!("Implement deserialization for Option")
     }
 
     fn deserialize_unit<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
@@ -231,14 +223,18 @@ impl<'de, R: Read> serde::de::Deserializer<'de> for SchemaAwareReadDeserializer<
 
     fn deserialize_struct<V>(
         self,
-        _name: &'static str,
-        _fields: &'static [&'static str],
-        _visitor: V,
+        name: &'static str,
+        fields: &'static [&'static str],
+        visitor: V,
     ) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        todo!()
+        // dbg!(name, fields, self.root_schema);
+        // todo!("Implement deserialization for struct");
+        let schema = self.root_schema;
+        let mut this = self;
+        this.deserialize_struct_with_schema(name, fields, visitor, schema)
     }
 
     fn deserialize_enum<V>(
@@ -268,8 +264,8 @@ impl<'de, R: Read> serde::de::Deserializer<'de> for SchemaAwareReadDeserializer<
     }
 }
 
-impl<R: Read> SchemaAwareReadDeserializer<'_, R> {
-    fn deserialize_bool_with_schema<'de, V>(
+impl<'de, R: Read> SchemaAwareReadDeserializer<'de, R> {
+    fn deserialize_bool_with_schema<V>(
         &mut self,
         visitor: V,
         schema: &Schema,
@@ -278,8 +274,7 @@ impl<R: Read> SchemaAwareReadDeserializer<'_, R> {
         V: Visitor<'de>,
     {
         let create_error = |cause: &str| {
-            Details::SerializeValueWithSchema {
-                // TODO: DeserializeValueWithSchema
+            Details::DeserializeValueWithSchema {
                 value_type: "bool",
                 value: format!("Cause: {cause}"),
                 schema: schema.clone(),
@@ -315,7 +310,7 @@ impl<R: Read> SchemaAwareReadDeserializer<'_, R> {
         }
     }
 
-    fn deserialize_i32_with_schema<'de, V>(
+    fn deserialize_i32_with_schema<V>(
         &mut self,
         visitor: V,
         schema: &Schema,
@@ -324,8 +319,7 @@ impl<R: Read> SchemaAwareReadDeserializer<'_, R> {
         V: Visitor<'de>,
     {
         let create_error = |cause: &str| {
-            Error::new(Details::SerializeValueWithSchema {
-                // TODO: DeserializeValueWithSchema
+            Error::new(Details::DeserializeValueWithSchema {
                 value_type: "i32",
                 value: format!("Cause: {cause}"),
                 schema: schema.clone(),
@@ -334,7 +328,7 @@ impl<R: Read> SchemaAwareReadDeserializer<'_, R> {
 
         match schema {
             Schema::Int | Schema::TimeMillis | Schema::Date => {
-                let int = zag_i32(&mut self.reader)?;
+                let int = zag_i32(self.reader)?;
                 visitor.visit_i32(int)
             }
             Schema::Union(union_schema) => {
@@ -356,7 +350,7 @@ impl<R: Read> SchemaAwareReadDeserializer<'_, R> {
         }
     }
 
-    fn deserialize_i64_with_schema<'de, V>(
+    fn deserialize_i64_with_schema<V>(
         &mut self,
         visitor: V,
         schema: &Schema,
@@ -365,8 +359,7 @@ impl<R: Read> SchemaAwareReadDeserializer<'_, R> {
         V: Visitor<'de>,
     {
         let create_error = |cause: &str| {
-            Details::SerializeValueWithSchema {
-                // TODO: DeserializeValueWithSchema
+            Details::DeserializeValueWithSchema {
                 value_type: "i64",
                 value: format!("Cause: {cause}"),
                 schema: schema.clone(),
@@ -376,7 +369,7 @@ impl<R: Read> SchemaAwareReadDeserializer<'_, R> {
 
         match schema {
             Schema::Int | Schema::TimeMillis | Schema::Date => {
-                let long = zag_i64(&mut self.reader)?;
+                let long = zag_i64(self.reader)?;
                 let int = i32::try_from(long)
                     .map_err(|cause| create_error(cause.to_string().as_str()))?;
                 visitor.visit_i32(int)
@@ -389,7 +382,7 @@ impl<R: Read> SchemaAwareReadDeserializer<'_, R> {
             | Schema::LocalTimestampMillis
             | Schema::LocalTimestampMicros
             | Schema::LocalTimestampNanos => {
-                let long = zag_i64(&mut self.reader)?;
+                let long = zag_i64(self.reader)?;
                 visitor.visit_i64(long)
             }
             Schema::Union(union_schema) => {
@@ -419,6 +412,149 @@ impl<R: Read> SchemaAwareReadDeserializer<'_, R> {
                 "Expected a Long[-like] schema, found: {unexpected:?}"
             ))),
         }
+    }
+
+    fn deserialize_struct_with_schema<V>(
+        &'de mut self,
+        name: &'static str,
+        fields: &'static [&'static str],
+        visitor: V,
+        schema: &'de Schema,
+    ) -> Result<V::Value, Error>
+    where
+        V: Visitor<'de>,
+    {
+        let create_error = |cause: &str| {
+            Details::DeserializeValueWithSchema {
+                value_type: "struct",
+                value: format!("Cause: {cause}"),
+                schema: schema.clone(),
+            }
+            .into()
+        };
+
+        match schema {
+            Schema::Record(record_schema) => visitor.visit_map(
+                RecordSchemaAwareReadDeserializer::new(self, name, fields.iter(), record_schema),
+            ),
+            Schema::Union(union_schema) => {
+                for variant_schema in union_schema.schemas.iter() {
+                    match variant_schema {
+                        Schema::Int
+                        | Schema::TimeMillis
+                        | Schema::Date
+                        | Schema::Long
+                        | Schema::TimeMicros
+                        | Schema::TimestampMillis
+                        | Schema::TimestampMicros
+                        | Schema::TimestampNanos
+                        | Schema::LocalTimestampMillis
+                        | Schema::LocalTimestampMicros
+                        | Schema::LocalTimestampNanos => {
+                            return self.deserialize_i64_with_schema(visitor, variant_schema);
+                        }
+                        _ => { /* skip */ }
+                    }
+                }
+                Err(create_error(&format!(
+                    "The union schema must have a Long[-like] variant: {schema:?}"
+                )))
+            }
+            unexpected => Err(create_error(&format!(
+                "Expected a Long[-like] schema, found: {unexpected:?}"
+            ))),
+        }
+    }
+}
+
+struct RecordSchemaAwareReadDeserializer<'s, R: Read> {
+    deser: &'s mut SchemaAwareReadDeserializer<'s, R>,
+    schema_name: &'static str,
+    fields: Iter<'s, &'static str>,
+    record_schema: &'s crate::schema::RecordSchema,
+}
+
+impl<'s, R: Read> RecordSchemaAwareReadDeserializer<'s, R> {
+    fn new(
+        deser: &'s mut SchemaAwareReadDeserializer<'s, R>,
+        schema_name: &'static str,
+        fields: Iter<'s, &'static str>,
+        record_schema: &'s crate::schema::RecordSchema,
+    ) -> Self {
+        Self {
+            deser,
+            schema_name,
+            fields,
+            record_schema,
+        }
+    }
+}
+
+impl<'de, R: Read> de::MapAccess<'de> for RecordSchemaAwareReadDeserializer<'de, R> {
+    type Error = Error;
+
+    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
+    where
+        K: de::DeserializeSeed<'de>,
+    {
+        match self.fields.next() {
+            Some(&field_name) => seed
+                .deserialize(StringDeserializer { input: field_name })
+                .map(Some),
+            None => Ok(None),
+        }
+    }
+
+    fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, Self::Error>
+    where
+        V: de::DeserializeSeed<'de>,
+    {
+        match self.fields.next() {
+            Some(&field_name) => {
+                let field_idx = self.record_schema.lookup.get(field_name).ok_or_else(|| {
+                    return Error::new(Details::DeserializeValueWithSchema {
+                        value_type: "field",
+                        value: format!("Field '{field_name}' not found in record schema"),
+                        schema: Schema::Record(self.record_schema.clone()),
+                    });
+                })?;
+                let record_field = self.record_schema.fields.get(*field_idx).ok_or_else(|| {
+                    return Error::new(Details::DeserializeValueWithSchema {
+                        value_type: "field",
+                        value: format!("Field index {field_idx} out of bounds"),
+                        schema: Schema::Record(self.record_schema.clone()),
+                    });
+                })?;
+                let field_schema = &record_field.schema;
+                seed.deserialize(SchemaAwareReadDeserializer::new(
+                    self.deser.reader,
+                    field_schema,
+                ))
+            }
+            None => Err(de::Error::custom("should not happen - too many values")),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct StringDeserializer<'de> {
+    input: &'de str,
+}
+
+impl<'de> de::Deserializer<'de> for StringDeserializer<'de> {
+    type Error = Error;
+
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        visitor.visit_str(self.input)
+    }
+
+    forward_to_deserialize_any! {
+        bool u8 u16 u32 u64 i8 i16 i32 i64 f32 f64 char str string unit option
+        seq bytes byte_buf map unit_struct newtype_struct
+        tuple_struct struct tuple enum identifier ignored_any
     }
 }
 
@@ -463,12 +599,13 @@ mod tests {
         let schema = Schema::Long; // Using a non-boolean schema
 
         let mut reader: &[u8] = &[0, 1, 2];
-        match read_avro_datum_ref::<bool, &[u8]>(&schema, &mut reader) {
-            Err(Error::new(Details::SerializeValueWithSchema {
+        match read_avro_datum_ref::<bool, &[u8]>(&schema, &mut reader).map_err(Error::into_details)
+        {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
-            })) => {
+            }) => {
                 assert_eq!(value_type, "bool");
                 assert!(value.contains("Cause: Expected a boolean schema"));
                 assert_eq!(schema.to_string(), schema.to_string());
@@ -484,12 +621,13 @@ mod tests {
         let schema = Schema::Union(UnionSchema::new(vec![Schema::Null, Schema::Long])?);
 
         let mut reader: &[u8] = &[1, 2, 3];
-        match read_avro_datum_ref::<bool, &[u8]>(&schema, &mut reader) {
-            Err(Error::new(Details::SerializeValueWithSchema {
+        match read_avro_datum_ref::<bool, &[u8]>(&schema, &mut reader).map_err(Error::into_details)
+        {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
-            })) => {
+            }) => {
                 assert_eq!(value_type, "bool");
                 assert!(value.contains("The union schema must have a Boolean variant"));
                 assert_eq!(schema.to_string(), schema.to_string());
@@ -533,7 +671,7 @@ mod tests {
         let schema = Schema::Long; // Using a non-Int schema
 
         let mut reader: &[u8] = &[0, 1, 2];
-        match read_avro_datum_ref::<i32, &[u8]>(&schema, &mut reader) {
+        match read_avro_datum_ref::<i32, &[u8]>(&schema, &mut reader).map_err(Error::into_details) {
             Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
@@ -557,7 +695,7 @@ mod tests {
         let schema = Schema::Union(UnionSchema::new(vec![Schema::Null, Schema::Long])?);
 
         let mut reader: &[u8] = &[1, 2, 3];
-        match read_avro_datum_ref::<i32, &[u8]>(&schema, &mut reader) {
+        match read_avro_datum_ref::<i32, &[u8]>(&schema, &mut reader).map_err(Error::into_details) {
             Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
@@ -623,8 +761,8 @@ mod tests {
         let schema = Schema::Uuid; // Using a non-Long schema
 
         let mut reader: &[u8] = &[0, 1, 2];
-        match read_avro_datum_ref::<i64, &[u8]>(&schema, &mut reader) {
-            Err(Error::SerializeValueWithSchema {
+        match read_avro_datum_ref::<i64, &[u8]>(&schema, &mut reader).map_err(Error::into_details) {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -647,8 +785,8 @@ mod tests {
         let schema = Schema::Union(UnionSchema::new(vec![Schema::Null, Schema::String])?);
 
         let mut reader: &[u8] = &[1, 2, 3];
-        match read_avro_datum_ref::<i64, &[u8]>(&schema, &mut reader) {
-            Err(Error::SerializeValueWithSchema {
+        match read_avro_datum_ref::<i64, &[u8]>(&schema, &mut reader).map_err(Error::into_details) {
+            Err(Details::SerializeValueWithSchema {
                 value_type,
                 value,
                 schema,
