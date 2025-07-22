@@ -85,4 +85,4 @@ The second-best option is probably using `block_on` in a separate thread. But th
 - [Blog post by the maintainer of `RSpotify` who tried multiple of the above options](https://nullderef.com/blog/rust-async-sync/)
 - [A discussion about Sans I/O](https://sdr-podcast.com/episodes/sans-io/)
 - [A explanation of Sans I/O by the author of `rc-zip`](https://fasterthanli.me/articles/the-case-for-sans-io)
-  - The blog post is currently not freely available, but the video (which has the exact same content) is freely available
+  - The blog post is currently not freely available, but the [video](https://www.youtube.com/watch?v=RYHYiXMJdZI) (which has the exact same content) is freely available
