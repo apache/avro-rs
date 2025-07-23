@@ -657,7 +657,7 @@ mod test_derive {
     }
 
     #[test]
-    fn test_enum_named() {
+    fn avro_rs_239_test_enum_named() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
         #[avro(name = "Other", rename_all = "snake_case")]
         #[serde(rename_all = "snake_case")]
