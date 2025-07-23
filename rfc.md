@@ -51,6 +51,7 @@ Pros:
 Cons:
  - Have to manually implement the state machines
    - In the distant future [it's possible to use coroutines/generators](https://internals.rust-lang.org/t/using-coroutines-for-a-sans-io-parser/22968), but they're currently *very* unstable.
+   - You can use async functions to generate the state machines for you, [according to this blogpost](https://jeffmcbride.net/blog/2025/05/16/rust-async-functions-as-state-machines/)
 
 ## Do not provide an async implementation
 
