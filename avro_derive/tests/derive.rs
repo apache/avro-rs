@@ -237,8 +237,8 @@ mod test_derive {
         let schema = Schema::parse_str(schema).unwrap();
         assert_eq!(schema, TestNamedRecord::get_schema());
         if let Schema::Record(RecordSchema { name, .. }) = TestNamedRecord::get_schema() {
-            assert_eq!("Other".to_owned(), name.name);
-            assert_eq!("com.testing.namespace".to_owned(), name.namespace.unwrap())
+            assert_eq!("Other", name.name.as_str());
+            assert_eq!(Some("com.testing.namespace"), name.namespace.as_deref())
         } else {
             panic!("TestNamedRecord schema must be a record schema")
         }
