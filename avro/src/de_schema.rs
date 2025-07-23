@@ -131,11 +131,41 @@ impl<'de: 'a, 'a, R: Read> serde::de::Deserializer<'de> for SchemaAwareReadDeser
         todo!("Implement deserialization for str")
     }
 
-    fn deserialize_string<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_string<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        todo!("Implement deserialization for String")
+        match self.root_schema {
+            Schema::String => {
+                match zag_i64(self.reader)
+                    .map_err(Error::into_details) {
+                    Ok(len) => {
+                        dbg!(len);
+                        let mut buf = vec![0; usize::try_from(len)
+                            .map_err(|e| Details::ConvertI64ToUsize(e, len))?];
+                        dbg!(&buf);
+                        self.reader.read_exact(&mut buf).map_err(|e| {
+                            Details::ReadBytes(e)
+                        })?;
+                        let string = String::from_utf8(buf)
+                            .map_err(|e| Details::ConvertToUtf8(e))?;
+                        visitor.visit_string(string)
+                    }
+                    Err(details) => {
+                        Err(de::Error::custom(format!(
+                            "Cannot read the length of the string schema {details:?}",
+                        )))
+                    }
+                }
+
+            }
+            not_implemented => {
+                Err(de::Error::custom(format!(
+                    "Expected a String schema, but got {:?}",
+                    not_implemented
+                )))
+            }
+        }
     }
 
     fn deserialize_bytes<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
@@ -152,11 +182,40 @@ impl<'de: 'a, 'a, R: Read> serde::de::Deserializer<'de> for SchemaAwareReadDeser
         todo!()
     }
 
-    fn deserialize_option<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        todo!("Implement deserialization for Option")
+        match self.root_schema {
+            Schema::Null => visitor.visit_none(),
+            Schema::Union(union_schema) => {
+                match zag_i64(self.reader).map_err(Error::into_details) {
+                    Ok(index) => {
+                        let variants = union_schema.variants();
+                        let variant = variants
+                            .get(usize::try_from(index).map_err(|e| Details::ConvertI64ToUsize(e, index))?)
+                            .ok_or(Details::GetUnionVariant {
+                                index,
+                                num_variants: variants.len(),
+                            })?;
+                        dbg!(&variant);
+                        match variant {
+                            Schema::Null => visitor.visit_none(),
+                            _ => visitor.visit_some(
+                                SchemaAwareReadDeserializer::new(self.reader, variant),
+                            ),
+                        }
+                    }
+                    Err(details) => Err(de::Error::custom(format!(
+                        "Cannot read the index of the union schema variant {details:?}",
+                    ))),
+                }
+            }
+            _ => Err(de::Error::custom(format!(
+                    "Expected a Union, but got {:?}",
+                    self.root_schema
+                ))),
+            }
     }
 
     fn deserialize_unit<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
@@ -413,7 +472,7 @@ impl<'de: 'a, 'a, R: Read> SchemaAwareReadDeserializer<'a, R> {
     }
 
     fn deserialize_struct_with_schema<V>(
-        &mut self,
+        &'a mut self,
         name: &'static str,
         fields: &'static [&'static str],
         visitor: V,
@@ -430,7 +489,7 @@ impl<'de: 'a, 'a, R: Read> SchemaAwareReadDeserializer<'a, R> {
             }
             .into()
         };
-
+        dbg!(name, fields);
         match schema {
             Schema::Record(record_schema) => {
                 visitor.visit_map(RecordSchemaAwareReadDeserializerStruct::new(
@@ -472,7 +531,7 @@ impl<'de: 'a, 'a, R: Read> SchemaAwareReadDeserializer<'a, R> {
 
 struct RecordSchemaAwareReadDeserializerStruct<'a, R: Read> {
     deser: &'a mut SchemaAwareReadDeserializer<'a, R>,
-    schema_name: &'static str,
+    _schema_name: &'static str,
     fields: Iter<'a, &'static str>,
     current_field: Option<&'static str>,
     record_schema: &'a crate::schema::RecordSchema,
@@ -481,13 +540,13 @@ struct RecordSchemaAwareReadDeserializerStruct<'a, R: Read> {
 impl<'a, R: Read> RecordSchemaAwareReadDeserializerStruct<'a, R> {
     fn new(
         deser: &'a mut SchemaAwareReadDeserializer<'a, R>,
-        schema_name: &'static str,
+        _schema_name: &'static str,
         fields: Iter<'a, &'static str>,
         record_schema: &'a crate::schema::RecordSchema,
     ) -> Self {
         Self {
             deser,
-            schema_name,
+            _schema_name,
             fields,
             current_field: None,
             record_schema,
@@ -525,11 +584,11 @@ impl<'de: 'a, 'a, R: Read> de::MapAccess<'de>
                 let record_field = schema.lookup.get(field_name)
                     .and_then(|idx| schema.fields.get(*idx))
                     .ok_or_else(|| {
-                    return Error::new(Details::DeserializeValueWithSchema {
+                    Error::new(Details::DeserializeValueWithSchema {
                         value_type: "struct",
                         value: format!("Field '{field_name}' not found in record schema"),
                         schema: Schema::Record(schema.clone()),
-                    });
+                    })
                 })?;
                 let field_schema = &record_field.schema;
                 seed.deserialize(SchemaAwareReadDeserializer::new(
@@ -676,7 +735,7 @@ mod tests {
         let mut reader: &[u8] = &[0, 1, 2];
         match read_avro_datum_ref::<bool, &[u8]>(&schema, &mut reader).map_err(Error::into_details)
         {
-            Err(Details::SerializeValueWithSchema {
+            Err(Details::DeserializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -698,7 +757,7 @@ mod tests {
         let mut reader: &[u8] = &[1, 2, 3];
         match read_avro_datum_ref::<bool, &[u8]>(&schema, &mut reader).map_err(Error::into_details)
         {
-            Err(Details::SerializeValueWithSchema {
+            Err(Details::DeserializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -747,7 +806,7 @@ mod tests {
 
         let mut reader: &[u8] = &[0, 1, 2];
         match read_avro_datum_ref::<i32, &[u8]>(&schema, &mut reader).map_err(Error::into_details) {
-            Err(Details::SerializeValueWithSchema {
+            Err(Details::DeserializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -771,7 +830,7 @@ mod tests {
 
         let mut reader: &[u8] = &[1, 2, 3];
         match read_avro_datum_ref::<i32, &[u8]>(&schema, &mut reader).map_err(Error::into_details) {
-            Err(Details::SerializeValueWithSchema {
+            Err(Details::DeserializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -837,7 +896,7 @@ mod tests {
 
         let mut reader: &[u8] = &[0, 1, 2];
         match read_avro_datum_ref::<i64, &[u8]>(&schema, &mut reader).map_err(Error::into_details) {
-            Err(Details::SerializeValueWithSchema {
+            Err(Details::DeserializeValueWithSchema {
                 value_type,
                 value,
                 schema,
@@ -861,7 +920,7 @@ mod tests {
 
         let mut reader: &[u8] = &[1, 2, 3];
         match read_avro_datum_ref::<i64, &[u8]>(&schema, &mut reader).map_err(Error::into_details) {
-            Err(Details::SerializeValueWithSchema {
+            Err(Details::DeserializeValueWithSchema {
                 value_type,
                 value,
                 schema,

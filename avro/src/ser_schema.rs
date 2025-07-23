@@ -344,6 +344,16 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
     }
 }
 
+fn field_matches(record_field: &RecordField, expected_name: &str) -> bool {
+    let field_name = record_field.name.as_str();
+    match &record_field.aliases {
+        Some(aliases) => {
+            expected_name == field_name || aliases.iter().any(|a| expected_name == a.as_str())
+        }
+        None => expected_name == field_name,
+    }
+}
+
 impl<W: Write> ser::SerializeStructVariant for SchemaAwareWriteSerializeStruct<'_, '_, W> {
     type Ok = usize;
     type Error = Error;

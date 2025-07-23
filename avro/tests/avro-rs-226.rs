@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{AvroSchema, Schema, Writer, read_avro_datum_ref};
+use apache_avro::{AvroSchema, Schema, read_avro_datum_ref, write_avro_datum_ref};
 use apache_avro_test_helper::TestResult;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::fmt::Debug;
@@ -26,9 +26,12 @@ where
     T: Serialize + DeserializeOwned + Debug + PartialEq + Clone,
 {
     let record2 = record.clone();
-    let mut writer = Writer::new(schema, vec![]);
-    writer.append_ser(record)?;
-    let bytes_written = writer.into_inner()?;
+    // let mut writer = Writer::new(schema, vec![]);
+    // writer.append_ser(record)?;
+    // let bytes_written = writer.into_inner()?;
+
+    let mut writer = vec![];
+    let _written = write_avro_datum_ref(schema, &record, &mut writer)?;
 
     // let mut bytes_written = Cursor::new(bytes_written);
     // let value = from_avro_datum(schema, &mut bytes_written, None)?;
@@ -44,31 +47,12 @@ where
     //     assert_eq!(deserialized, record2);
     // }
 
-    let mut reader = Cursor::new(&bytes_written);
+    // let mut reader = Cursor::new(&bytes_written);
+    let mut reader = Cursor::new(&writer);
     let deserialized: T = read_avro_datum_ref(schema, &mut reader)?;
     assert_eq!(deserialized, record2);
 
     Ok(())
-}
-
-#[test]
-fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_middle_field() -> TestResult {
-    #[derive(AvroSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
-    struct T {
-        x: Option<i8>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        y: Option<String>,
-        z: Option<i8>,
-    }
-
-    ser_deser::<T>(
-        &T::get_schema(),
-        T {
-            x: None,
-            y: None,
-            z: Some(1),
-        },
-    )
 }
 
 #[test]
@@ -77,6 +61,26 @@ fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_first_field(
     struct T {
         #[serde(skip_serializing_if = "Option::is_none")]
         x: Option<i8>,
+        y: Option<String>,
+        z: Option<i8>,
+    }
+
+    ser_deser::<T>(
+        &T::get_schema(),
+        T {
+            x: None,
+            y: Some("test".to_string()),
+            z: Some(23),
+        },
+    )
+}
+
+#[test]
+fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_middle_field() -> TestResult {
+    #[derive(AvroSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
+    struct T {
+        x: Option<i8>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         y: Option<String>,
         z: Option<i8>,
     }
