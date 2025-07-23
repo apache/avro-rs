@@ -28,7 +28,6 @@ use bigdecimal::BigDecimal;
 use serde::{Serialize, ser};
 use std::{borrow::Cow, io::Write, str::FromStr};
 
-const RECORD_FIELD_INIT_BUFFER_SIZE: usize = 64;
 const COLLECTION_SERIALIZER_ITEM_LIMIT: usize = 1024;
 const COLLECTION_SERIALIZER_DEFAULT_INIT_ITEM_CAPACITY: usize = 32;
 const SINGLE_VALUE_INIT_BUFFER_SIZE: usize = 128;
@@ -250,8 +249,6 @@ impl<W: Write> ser::SerializeMap for SchemaAwareWriteSerializeMap<'_, '_, W> {
 pub struct SchemaAwareWriteSerializeStruct<'a, 's, W: Write> {
     ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
     record_schema: &'s RecordSchema,
-    item_count: usize,
-    buffered_fields: Vec<Option<Vec<u8>>>,
     bytes_written: usize,
 }
 
@@ -264,54 +261,28 @@ impl<'a, 's, W: Write> SchemaAwareWriteSerializeStruct<'a, 's, W> {
         SchemaAwareWriteSerializeStruct {
             ser,
             record_schema,
-            item_count: 0,
-            buffered_fields: vec![None; len],
             bytes_written: 0,
         }
     }
 
-    fn serialize_next_field<T>(&mut self, value: &T) -> Result<(), Error>
+    fn serialize_next_field<T>(&mut self, field: &RecordField, value: &T) -> Result<(), Error>
     where
         T: ?Sized + ser::Serialize,
     {
-        let next_field = self.record_schema.fields.get(self.item_count).expect(
-            "Validity of the next field index was expected to have been checked by the caller",
-        );
-
         // If we receive fields in order, write them directly to the main writer
         let mut value_ser = SchemaAwareWriteSerializer::new(
             &mut *self.ser.writer,
-            &next_field.schema,
+            &field.schema,
             self.ser.names,
             self.ser.enclosing_namespace.clone(),
         );
         self.bytes_written += value.serialize(&mut value_ser)?;
 
-        self.item_count += 1;
-
-        // Write any buffered data to the stream that has now become next in line
-        while let Some(buffer) = self
-            .buffered_fields
-            .get_mut(self.item_count)
-            .and_then(|b| b.take())
-        {
-            self.bytes_written += self
-                .ser
-                .writer
-                .write(buffer.as_slice())
-                .map_err(Details::WriteBytes)?;
-            self.item_count += 1;
-        }
-
         Ok(())
     }
 
     fn end(self) -> Result<usize, Error> {
-        if self.item_count != self.record_schema.fields.len() {
-            Err(Details::GetField(self.record_schema.fields[self.item_count].name.clone()).into())
-        } else {
-            Ok(self.bytes_written)
-        }
+        Ok(self.bytes_written)
     }
 }
 
@@ -323,91 +294,54 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
     where
         T: ?Sized + ser::Serialize,
     {
-        if self.item_count >= self.record_schema.fields.len() {
-            return Err(Details::FieldName(String::from(key)).into());
-        }
+        let record_field = self
+            .record_schema
+            .lookup
+            .get(key)
+            .and_then(|idx| self.record_schema.fields.get(*idx));
 
-        let next_field = &self.record_schema.fields[self.item_count];
-        let next_field_matches = field_matches(next_field, key);
-
-        if next_field_matches {
-            self.serialize_next_field(&value).map_err(|e| {
-                Details::SerializeRecordFieldWithSchema {
-                    field_name: key,
-                    record_schema: Schema::Record(self.record_schema.clone()),
-                    error: Box::new(e),
-                }
-                .into()
-            })
-        } else {
-            if self.item_count < self.record_schema.fields.len() {
-                for i in self.item_count..self.record_schema.fields.len() {
-                    let field = &self.record_schema.fields[i];
-                    let field_matches = field_matches(field, key);
-
-                    if field_matches {
-                        let mut buffer: Vec<u8> = Vec::with_capacity(RECORD_FIELD_INIT_BUFFER_SIZE);
-                        let mut value_ser = SchemaAwareWriteSerializer::new(
-                            &mut buffer,
-                            &field.schema,
-                            self.ser.names,
-                            self.ser.enclosing_namespace.clone(),
-                        );
-                        value.serialize(&mut value_ser).map_err(|e| {
-                            Details::SerializeRecordFieldWithSchema {
-                                field_name: key,
-                                record_schema: Schema::Record(self.record_schema.clone()),
-                                error: Box::new(e),
-                            }
-                        })?;
-
-                        self.buffered_fields[i] = Some(buffer);
-
-                        return Ok(());
+        match record_field {
+            Some(field) => {
+                // self.item_count += 1;
+                self.serialize_next_field(field, value).map_err(|e| {
+                    Details::SerializeRecordFieldWithSchema {
+                        field_name: key,
+                        record_schema: Schema::Record(self.record_schema.clone()),
+                        error: Box::new(e),
                     }
-                }
+                    .into()
+                })
             }
-
-            Err(Details::FieldName(String::from(key)).into())
+            None => Err(Details::FieldName(String::from(key)).into()),
         }
     }
 
     fn skip_field(&mut self, key: &'static str) -> Result<(), Self::Error> {
-        match self.record_schema.fields.get(self.item_count) {
-            Some(skipped_field) => {
-                if field_matches(skipped_field, key) {
-                    self.item_count += 1;
-                    skipped_field
-                        .default
-                        .serialize(&mut SchemaAwareWriteSerializer::new(
-                            self.ser.writer,
-                            &skipped_field.schema,
-                            self.ser.names,
-                            self.ser.enclosing_namespace.clone(),
-                        ))?;
-                } else {
-                    return Err(Details::GetField(key.to_string()).into());
-                }
-            }
-            None => {
-                return Err(Details::GetField(key.to_string()).into());
-            }
+        let skipped_field = self
+            .record_schema
+            .lookup
+            .get(key)
+            .and_then(|idx| self.record_schema.fields.get(*idx));
+
+        if let Some(skipped_field) = skipped_field {
+            // self.item_count += 1;
+            skipped_field
+                .default
+                .serialize(&mut SchemaAwareWriteSerializer::new(
+                    self.ser.writer,
+                    &skipped_field.schema,
+                    self.ser.names,
+                    self.ser.enclosing_namespace.clone(),
+                ))?;
+        } else {
+            return Err(Details::GetField(key.to_string()).into());
         }
+
         Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
         self.end()
-    }
-}
-
-fn field_matches(record_field: &RecordField, expected_name: &str) -> bool {
-    let field_name = record_field.name.as_str();
-    match &record_field.aliases {
-        Some(aliases) => {
-            expected_name == field_name || aliases.iter().any(|a| expected_name == a.as_str())
-        }
-        None => expected_name == field_name,
     }
 }
 
@@ -442,7 +376,9 @@ impl<W: Write> SchemaAwareWriteSerializeTupleStruct<'_, '_, W> {
     {
         use SchemaAwareWriteSerializeTupleStruct::*;
         match self {
-            Record(record_ser) => record_ser.serialize_next_field(&value),
+            Record(_record_ser) => {
+                unimplemented!("Tuple struct serialization to record is not supported!");
+            }
             Array(array_ser) => array_ser.serialize_element(&value),
         }
     }

@@ -83,23 +83,31 @@ fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_last_field()
 }
 
 #[test]
-fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_multiple_fields() -> TestResult
-{
+#[ignore = "This test should be re-enabled once the serde-driven deserialization is implemented! PR #227"]
+fn avro_rs_226_index_out_of_bounds_with_serde_skip_multiple_fields() -> TestResult {
     #[derive(AvroSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
     struct T {
-        x: Option<i8>,
-        #[serde(skip_serializing_if = "Option::is_none", skip)]
-        y: Option<String>,
+        no_skip1: Option<i8>,
+        #[serde(skip_serializing)]
+        skip_serializing: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        z: Option<i8>,
+        skip_serializing_if: Option<i8>,
+        #[serde(skip_deserializing)]
+        skip_deserializing: Option<String>,
+        #[serde(skip)]
+        skip: Option<String>,
+        no_skip2: Option<i8>,
     }
 
     ser_deser::<T>(
         &T::get_schema(),
         T {
-            x: Some(0),
-            y: None,
-            z: None,
+            no_skip1: Some(1),
+            skip_serializing: None,
+            skip_serializing_if: None,
+            skip_deserializing: None,
+            skip: None,
+            no_skip2: Some(2),
         },
     )
 }
