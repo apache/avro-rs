@@ -18,6 +18,7 @@
 //! Logic for serde-compatible schema-aware serialization
 //! which writes directly to a `Write` stream
 
+use crate::schema::RecordField;
 use crate::{
     bigdecimal::big_decimal_as_bytes,
     encode::{encode_int, encode_long},
@@ -25,7 +26,7 @@ use crate::{
     schema::{Name, NamesRef, Namespace, RecordSchema, Schema},
 };
 use bigdecimal::BigDecimal;
-use serde::ser;
+use serde::{Serialize, ser};
 use std::{borrow::Cow, io::Write, str::FromStr};
 
 const RECORD_FIELD_INIT_BUFFER_SIZE: usize = 64;
@@ -328,12 +329,7 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
         }
 
         let next_field = &self.record_schema.fields[self.item_count];
-        let next_field_matches = match &next_field.aliases {
-            Some(aliases) => {
-                key == next_field.name.as_str() || aliases.iter().any(|a| key == a.as_str())
-            }
-            None => key == next_field.name.as_str(),
-        };
+        let next_field_matches = field_matches(next_field, key);
 
         if next_field_matches {
             self.serialize_next_field(&value).map_err(|e| {
@@ -342,18 +338,13 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
                     record_schema: Schema::Record(self.record_schema.clone()),
                     error: Box::new(e),
                 }
-            })?;
-            Ok(())
+                .into()
+            })
         } else {
             if self.item_count < self.record_schema.fields.len() {
                 for i in self.item_count..self.record_schema.fields.len() {
                     let field = &self.record_schema.fields[i];
-                    let field_matches = match &field.aliases {
-                        Some(aliases) => {
-                            key == field.name.as_str() || aliases.iter().any(|a| key == a.as_str())
-                        }
-                        None => key == field.name.as_str(),
-                    };
+                    let field_matches = field_matches(field, key);
 
                     if field_matches {
                         let mut buffer: Vec<u8> = Vec::with_capacity(RECORD_FIELD_INIT_BUFFER_SIZE);
@@ -382,13 +373,42 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
         }
     }
 
-    fn skip_field(&mut self, _key: &'static str) -> Result<(), Self::Error> {
-        self.item_count += 1;
+    fn skip_field(&mut self, key: &'static str) -> Result<(), Self::Error> {
+        match self.record_schema.fields.get(self.item_count) {
+            Some(skipped_field) => {
+                if field_matches(skipped_field, key) {
+                    self.item_count += 1;
+                    skipped_field
+                        .default
+                        .serialize(&mut SchemaAwareWriteSerializer::new(
+                            self.ser.writer,
+                            &skipped_field.schema,
+                            self.ser.names,
+                            self.ser.enclosing_namespace.clone(),
+                        ))?;
+                } else {
+                    return Err(Details::GetField(key.to_string()).into());
+                }
+            }
+            None => {
+                return Err(Details::GetField(key.to_string()).into());
+            }
+        }
         Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
         self.end()
+    }
+}
+
+fn field_matches(record_field: &RecordField, expected_name: &str) -> bool {
+    let field_name = record_field.name.as_str();
+    match &record_field.aliases {
+        Some(aliases) => {
+            expected_name == field_name || aliases.iter().any(|a| expected_name == a.as_str())
+        }
+        None => expected_name == field_name,
     }
 }
 
@@ -1132,7 +1152,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     match variant_schema {
                         Schema::Null => { /* skip */ }
                         _ => {
-                            encode_int(i as i32, &mut *self.writer)?;
+                            encode_long(i as i64, &mut *self.writer)?;
                             let mut variant_ser = SchemaAwareWriteSerializer::new(
                                 &mut *self.writer,
                                 variant_schema,
