@@ -210,7 +210,7 @@ mod test_derive {
     }
 
     #[test]
-    fn test_named_record() {
+    fn avro_rs_239_test_named_record() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
         #[avro(name = "Other", namespace = "com.testing.namespace")]
         struct TestNamedRecord {
