@@ -256,7 +256,6 @@ impl<'a, 's, W: Write> SchemaAwareWriteSerializeStruct<'a, 's, W> {
     fn new(
         ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
         record_schema: &'s RecordSchema,
-        len: usize,
     ) -> SchemaAwareWriteSerializeStruct<'a, 's, W> {
         SchemaAwareWriteSerializeStruct {
             ser,
@@ -1366,7 +1365,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 SchemaAwareWriteSerializeSeq::new(self, &sch.items, Some(len)),
             )),
             Schema::Record(sch) => Ok(SchemaAwareWriteSerializeTupleStruct::Record(
-                SchemaAwareWriteSerializeStruct::new(self, sch, len),
+                SchemaAwareWriteSerializeStruct::new(self, sch),
             )),
             Schema::Ref { name: ref_name } => {
                 let ref_schema = self.get_ref_schema(ref_name)?;
@@ -1503,11 +1502,9 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         };
 
         match schema {
-            Schema::Record(record_schema) => Ok(SchemaAwareWriteSerializeStruct::new(
-                self,
-                record_schema,
-                len,
-            )),
+            Schema::Record(record_schema) => {
+                Ok(SchemaAwareWriteSerializeStruct::new(self, record_schema))
+            }
             Schema::Ref { name: ref_name } => {
                 let ref_schema = self.get_ref_schema(ref_name)?;
                 self.serialize_struct_with_schema(name, len, ref_schema)
