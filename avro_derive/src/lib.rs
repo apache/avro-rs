@@ -52,6 +52,8 @@ struct VariantOptions {
 #[darling(attributes(avro))]
 struct NamedTypeOptions {
     #[darling(default)]
+    name: Option<String>,
+    #[darling(default)]
     namespace: Option<String>,
     #[darling(default)]
     doc: Option<String>,
@@ -75,8 +77,9 @@ fn derive_avro_schema(input: &mut DeriveInput) -> Result<TokenStream, Vec<syn::E
         NamedTypeOptions::from_attributes(&input.attrs[..]).map_err(darling_to_syn)?;
 
     let rename_all = parse_case(named_type_options.rename_all.as_deref(), input.span())?;
+    let name = named_type_options.name.unwrap_or(input.ident.to_string());
 
-    let full_schema_name = vec![named_type_options.namespace, Some(input.ident.to_string())]
+    let full_schema_name = vec![named_type_options.namespace, Some(name)]
         .into_iter()
         .flatten()
         .collect::<Vec<String>>()

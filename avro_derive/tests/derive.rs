@@ -209,6 +209,41 @@ mod test_derive {
         }
     }
 
+    #[test]
+    fn test_named_record() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
+        #[avro(name = "Other", namespace = "com.testing.namespace")]
+        struct TestNamedRecord {
+            a: i32,
+            b: String,
+        }
+
+        let schema = r#"
+        {
+            "type":"record",
+            "name":"com.testing.namespace.Other",
+            "fields":[
+                {
+                    "name":"a",
+                    "type":"int"
+                },
+                {
+                    "name":"b",
+                    "type":"string"
+                }
+            ]
+        }
+        "#;
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, TestNamedRecord::get_schema());
+        if let Schema::Record(RecordSchema { name, .. }) = TestNamedRecord::get_schema() {
+            assert_eq!("Other".to_owned(), name.name);
+            assert_eq!("com.testing.namespace".to_owned(), name.namespace.unwrap())
+        } else {
+            panic!("TestNamedRecord schema must be a record schema")
+        }
+    }
+
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
     struct TestAllSupportedBaseTypes {
         //Basics test
@@ -616,6 +651,55 @@ mod test_derive {
         assert_eq!(schema, TestAllowedEnumNested::get_schema());
         let enum_included = TestAllowedEnumNested {
             a: TestAllowedEnum::B,
+            b: "hey".to_owned(),
+        };
+        serde_assert(enum_included);
+    }
+
+    #[test]
+    fn test_enum_named() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
+        #[avro(name = "Other", rename_all = "snake_case")]
+        #[serde(rename_all = "snake_case")]
+        enum TestNamedEnum {
+            A,
+            B,
+            C,
+            #[avro(rename = "e")]
+            #[serde(rename = "e")]
+            D,
+        }
+
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
+        struct TestNamedEnumNested {
+            a: TestNamedEnum,
+            b: String,
+        }
+
+        let schema = r#"
+        {
+            "type":"record",
+            "name":"TestNamedEnumNested",
+            "fields":[
+                {
+                    "name":"a",
+                    "type": {
+                        "type":"enum",
+                        "name":"Other",
+                        "symbols":["a","b","c","e"]
+                    }
+                },
+                {
+                    "name":"b",
+                    "type":"string"
+                }
+            ]
+        }
+        "#;
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, TestNamedEnumNested::get_schema());
+        let enum_included = TestNamedEnumNested {
+            a: TestNamedEnum::B,
             b: "hey".to_owned(),
         };
         serde_assert(enum_included);
