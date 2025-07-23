@@ -29,14 +29,15 @@ Cons:
 
 ## Implement in async, use `maybe_async` to generate sync implementation
 
-[`maybe_async`](https://crates.io/crates/maybe-async) is a proc macro that removes the `.await` from the async code and uses it to generate sync code.
+[`maybe_async`](https://crates.io/crates/maybe-async) is a proc macro that removes the `.await` from the async code and uses it to generate sync code. [`synca`](https://docs.rs/synca/latest/synca/) is another option where both sync and async code can coexist.
 
 Pros:
  - Only need to maintain/test/upgrade one implementation
  - Optimal performance for both async and sync code
 
 Cons:
- - Crate breaks if both the `sync` and `async` features are enabled
+ - Crate breaks if both the `sync` and `async` features are enabled (only for `maybe_async`)
+ - `synca` hasn't seen an update in more than a year, but seems to be feature complete
 
 ## Sans I/O
 
