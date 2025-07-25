@@ -1,0 +1,12 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 7808c1b336ad8808516f0338a69eb961f7b70c7700e6d00f528b86c9ec48b9e7 # shrinks to a = false, b = 0, c = 0, d = 0, e = 0, f = 0, g = -4611686018427387905, h = 0.0, i = 0.0, j = ""
+cc f9d4f3f6442d2c9a718a23a9450e94ec2cef74ac62776b068581376082f0aace # shrinks to a = 0, b = ""
+cc 7bc3220d3d8a41cdbf5ab3618aeb4c8dd8268b524c1feb510d4ad39d104b261a # shrinks to a = "", b = [], c = {}
+cc 2d98b332f36a28eba7e4a8d5e97856a4ba7ea54defb427285a70129cb4782b1a # shrinks to a = false, b = 0, c = 0, d = 0, e = 0, f = 0, g = 0, h = 0.0, i = -0.0, j = ""
+cc 5b163ba13d686d86e78c8139e88278720019789f6841e58ead62807244f7582a # shrinks to a = false, b = 0, c = 0, d = 0, e = 0, f = 0, g = 0, h = 0.0, i = 0.0, j = ""
+cc aa33e374dc52ac66d49a7bad56cb62eeb80c60f42c9dc8e831db1f581d4a2b07 # shrinks to a = false, b = 0, c = 0, d = 0, e = 0, f = 0, g = 0, h = 0.0, i = 0.0, j = "", aa = 0
