@@ -75,6 +75,8 @@ xz2 = { default-features = false, version = "0.1.7", optional = true }
 zstd = { default-features = false, version = "0.13.3", optional = true }
 winnow = { version = "0.7.12", features = ["simd"] }
 oval = { version = "2.0.0", features = ["bytes"] }
+futures = "0.3.31"
+async-stream = "0.3.6"
 
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
