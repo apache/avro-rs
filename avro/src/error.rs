@@ -17,6 +17,7 @@
 
 use crate::{
     schema::{Name, Schema, SchemaKind, UnionSchema},
+    state_machines::reading::error::ValueFromTapeError,
     types::{Value, ValueKind},
 };
 use std::{error::Error as _, fmt};
@@ -53,6 +54,12 @@ impl Error {
 impl From<Details> for Error {
     fn from(details: Details) -> Self {
         Self::new(details)
+    }
+}
+
+impl From<ValueFromTapeError> for Error {
+    fn from(value: ValueFromTapeError) -> Self {
+        Self::new(value.into())
     }
 }
 
@@ -576,6 +583,9 @@ pub enum Details {
 
     #[error("Cannot convert a slice to Uuid: {0}")]
     UuidFromSlice(#[source] uuid::Error),
+
+    #[error(transparent)]
+    ValueFromTapeError(#[from] ValueFromTapeError),
 }
 
 #[derive(thiserror::Error, PartialEq)]

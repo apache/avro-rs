@@ -947,7 +947,6 @@ mod bytes;
 mod codec;
 mod de;
 mod decimal;
-mod decode;
 mod duration;
 mod encode;
 mod reader;
@@ -961,6 +960,7 @@ pub mod rabin;
 pub mod schema;
 pub mod schema_compatibility;
 pub mod schema_equality;
+pub mod state_machines;
 pub mod types;
 pub mod util;
 pub mod validator;
@@ -1036,6 +1036,12 @@ pub fn max_allocation_bytes(num_bytes: usize) -> usize {
 )]
 pub fn set_serde_human_readable(human_readable: bool) -> bool {
     util::set_serde_human_readable(human_readable)
+}
+
+/// Async versions of the types and functions.
+pub mod not_sync {
+    #[doc(inline)]
+    pub use crate::reader::async_reader::*;
 }
 
 #[cfg(test)]

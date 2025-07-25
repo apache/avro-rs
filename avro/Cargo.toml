@@ -29,11 +29,14 @@ categories.workspace = true
 documentation.workspace = true
 
 [features]
+default = ["futures", "sync"]
 bzip = ["dep:bzip2"]
 derive = ["dep:apache-avro-derive"]
 snappy = ["dep:crc32fast", "dep:snap"]
 xz = ["dep:liblzma"]
 zstandard = ["dep:zstd"]
+futures = []
+sync = []
 
 [lib]
 # disable benchmarks to allow passing criterion arguments to `cargo bench`
@@ -73,6 +76,9 @@ thiserror = { default-features = false, version = "2.0.17" }
 uuid = { default-features = false, version = "1.18.1", features = ["serde", "std"] }
 liblzma = { default-features = false, version = "0.4.5", optional = true }
 zstd = { default-features = false, version = "0.13.3", optional = true }
+oval = { version = "2.0.0", features = ["bytes"] }
+futures = "0.3.31"
+async-stream = "0.3.6"
 
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
