@@ -17,10 +17,9 @@
 
 use crate::{
     AvroResult,
-    decode::{decode_len, decode_long},
     encode::{encode_bytes, encode_long},
     error::Details,
-    types::Value,
+    util::{decode_len_simple, decode_variable},
 };
 pub use bigdecimal::BigDecimal;
 use num_bigint::BigInt;
@@ -47,10 +46,12 @@ pub(crate) fn serialize_big_decimal(decimal: &BigDecimal) -> AvroResult<Vec<u8>>
     Ok(final_buffer)
 }
 
-pub(crate) fn deserialize_big_decimal(bytes: &Vec<u8>) -> AvroResult<BigDecimal> {
-    let mut bytes: &[u8] = bytes.as_slice();
-    let mut big_decimal_buffer = match decode_len(&mut bytes) {
-        Ok(size) => vec![0u8; size],
+pub(crate) fn deserialize_big_decimal(mut bytes: &[u8]) -> AvroResult<BigDecimal> {
+    let mut big_decimal_buffer = match decode_len_simple(bytes) {
+        Ok((size, bytes_read)) => {
+            bytes = &bytes[bytes_read..];
+            vec![0u8; size]
+        }
         Err(err) => return Err(Details::BigDecimalLen(Box::new(err)).into()),
     };
 
@@ -58,8 +59,8 @@ pub(crate) fn deserialize_big_decimal(bytes: &Vec<u8>) -> AvroResult<BigDecimal>
         .read_exact(&mut big_decimal_buffer[..])
         .map_err(Details::ReadDouble)?;
 
-    match decode_long(&mut bytes) {
-        Ok(Value::Long(scale_value)) => {
+    match decode_variable(bytes) {
+        Ok(Some((scale_value, _))) => {
             let big_int: BigInt = BigInt::from_signed_bytes_be(&big_decimal_buffer);
             let decimal = BigDecimal::new(big_int, scale_value);
             Ok(decimal)
@@ -71,7 +72,11 @@ pub(crate) fn deserialize_big_decimal(bytes: &Vec<u8>) -> AvroResult<BigDecimal>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Codec, Reader, Schema, Writer, error::Error, types::Record};
+    use crate::{
+        Codec, Reader, Schema, Writer,
+        error::Error,
+        types::{Record, Value},
+    };
     use apache_avro_test_helper::TestResult;
     use bigdecimal::{One, Zero};
     use pretty_assertions::assert_eq;
@@ -92,7 +97,8 @@ mod tests {
             let buffer: Vec<u8> = serialize_big_decimal(&current)?;
 
             let mut as_slice = buffer.as_slice();
-            decode_long(&mut as_slice)?;
+            let (_, bytes_read) = decode_variable(as_slice)?.unwrap();
+            as_slice = &as_slice[bytes_read..];
 
             let mut result: Vec<u8> = Vec::new();
             result.extend_from_slice(as_slice);
@@ -109,7 +115,8 @@ mod tests {
 
         let buffer: Vec<u8> = serialize_big_decimal(&BigDecimal::zero())?;
         let mut as_slice = buffer.as_slice();
-        decode_long(&mut as_slice)?;
+        let (_, bytes_read) = decode_variable(as_slice)?.unwrap();
+        as_slice = &as_slice[bytes_read..];
 
         let mut result: Vec<u8> = Vec::new();
         result.extend_from_slice(as_slice);
