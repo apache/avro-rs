@@ -268,12 +268,18 @@ writer.append_ser(test).unwrap();
 let encoded = writer.into_inner();
 ```
 
+#### Importance of the fields' order
+
+*Important*: The order of the fields in the struct must match the order of the fields in the Avro schema!
+
+#### Simple types
+
 The vast majority of the times, schemas tend to define a record as a top-level container
 encapsulating all the values to convert as fields and providing documentation for them, but in
 case we want to directly define an Avro value, any type implementing `Serialize` should work.
 
 ```rust
-let mut value = "foo".to_string();
+let value = "foo".to_string();
 ```
 
 ### Using codecs to compress data
