@@ -2,10 +2,16 @@ use oval::Buffer;
 
 use crate::{
     error::Details,
-    state_machines::reading::{DataRequest, StateMachine, StateMachineControlFlow, decode_zigzag},
+    state_machines::reading::{StateMachine, StateMachineControlFlow, decode_zigzag},
 };
 
 use super::StateMachineResult;
+
+// TODO: Also make a String specific state machine. This allows checking the utf-8 while parsing
+//       which would make the parser fail quicker on large invalid strings.
+// TODO: This state machine could also produce inline strings (smolstr)  for strings smaller than
+//       size_of::<String>, and use some extra bits to store well-known strings
+//       like avro.schema and avro.codec as fixed strings.
 
 #[derive(Default)]
 pub struct BytesStateMachine {
@@ -36,12 +42,9 @@ impl StateMachine for BytesStateMachine {
     fn parse(mut self, buffer: &mut Buffer) -> StateMachineResult<Self, Self::Output> {
         if self.length.is_none() {
             let Some(length) = decode_zigzag(buffer)? else {
-                // Not enough data left in the buffer, need at least one more varint byte plus we know
+                // Not enough data left in the buffer varint byte plus we know
                 // there at least 127 bytes in the buffer now (as otherwise we wouldn't need one more varint byte).
-                return Ok(StateMachineControlFlow::Continue(
-                    self,
-                    DataRequest::new(128),
-                ));
+                return Ok(StateMachineControlFlow::NeedMore(self));
             };
             let length =
                 usize::try_from(length).map_err(|e| Details::ConvertI64ToUsize(e, length))?;
@@ -61,10 +64,7 @@ impl StateMachine for BytesStateMachine {
         if remaining - available == 0 {
             Ok(StateMachineControlFlow::Done(self.data))
         } else {
-            Ok(StateMachineControlFlow::Continue(
-                self,
-                DataRequest::new(remaining - available),
-            ))
+            Ok(StateMachineControlFlow::NeedMore(self))
         }
     }
 }

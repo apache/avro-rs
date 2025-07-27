@@ -17,38 +17,29 @@ pub mod async_impl;
 pub mod block;
 pub mod bytes;
 pub mod object;
+mod object_container_file;
 pub mod sync;
 
 pub trait StateMachine: Sized {
     type Output: Sized;
 
+    /// Start/continue the state machine.
+    ///
+    /// Implementers are not allowed to return until they can't make progress anymore.
     fn parse(self, buffer: &mut Buffer) -> StateMachineResult<Self, Self::Output>;
 }
 
 /// Indicates whether the state machine has completed or needs to be polled again.
 #[must_use]
 pub enum StateMachineControlFlow<StateMachine, Output> {
-    /// The I/O loop needs to continue, the state machine is given back.
-    Continue(StateMachine, DataRequest),
+    /// The state machine needs more data before it can continue.
+    NeedMore(StateMachine),
     /// The state machine is done and the result is returned.s
     Done(Output),
 }
 
 pub type StateMachineResult<StateMachine, Output> =
     Result<StateMachineControlFlow<StateMachine, Output>, Error>;
-
-/// How much more data is needed to continue.
-///
-/// If less than this is available the reader should wait for more data or error out if no more data is coming.
-pub struct DataRequest {
-    pub at_least: usize,
-}
-
-impl DataRequest {
-    pub fn new(at_least: usize) -> Self {
-        Self { at_least }
-    }
-}
 
 /// The sub state machine that is currently being driven.
 ///
@@ -137,6 +128,8 @@ impl CommandTape {
     pub const STRING: u8 = 7;
     pub const ENUM: u8 = 8;
     pub const FIXED: u8 = 9;
+    // TODO: Maybe combine Array and Map into Block
+    // TODO: Add a type reference type, so that if a Block has a single type no reference is needed
     pub const ARRAY: u8 = 10;
     pub const MAP: u8 = 11;
     pub const UNION: u8 = 12;
@@ -197,7 +190,6 @@ impl CommandTape {
             .next()
             .expect("The caller read past the tape");
         let byte = self.inner[position];
-        // TODO: Define these numbers as constants
         match byte & 0xF {
             Self::NULL => ToRead::Null,
             Self::BOOLEAN => ToRead::Boolean,
@@ -221,6 +213,8 @@ impl CommandTape {
             Self::ARRAY => {
                 // ToRead::Array
                 // TODO: If the length of the type is less than 16 we can store the length inline
+                // TODO: Change end to length
+                // TODO: Use varint for start and length
                 let start = usize::from_ne_bytes(self.read_array());
                 let end = usize::from_ne_bytes(self.read_array());
                 ToRead::Array(self.extract(start, end))
@@ -228,6 +222,8 @@ impl CommandTape {
             Self::MAP => {
                 // ToRead::Map
                 // TODO: If the length of the type is less than 16 we can store the length inline
+                // TODO: Change end to length
+                // TODO: Use varint for start and length
                 let start = usize::from_ne_bytes(self.read_array());
                 let end = usize::from_ne_bytes(self.read_array());
                 ToRead::Map(self.extract(start, end))
@@ -238,11 +234,13 @@ impl CommandTape {
                 let number_of_options = if byte >> 4 != 0 {
                     (byte >> 4) as usize
                 } else {
+                    // TODO: Use varint
                     let number_of_options = u32::from_ne_bytes(self.read_array());
                     number_of_options as usize
                 };
 
                 // Where are the references to the variants? Every reference is a pair of usizes.
+                // TODO: Use varint
                 let position_of_options = usize::from_ne_bytes(self.read_array());
 
                 // Assert that the references are inside the tape.
@@ -251,6 +249,8 @@ impl CommandTape {
                         < self.inner.len(),
                     "Options are (partly) outside the tape"
                 );
+                // TODO: Change options from start-end to start-length
+                // TODO: Use varint for start and length
                 // TODO: Find a safe way to do this
                 // SAFETY: As asserted above, the references are entirely inside the slice. The ptr is not null as we've
                 //         just read from the slice. We check that the options are aligned before creating the new slice.
