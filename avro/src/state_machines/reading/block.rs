@@ -6,7 +6,7 @@ use crate::{
     Error,
     error::Details,
     state_machines::reading::{
-        CommandTape, DataRequest, ItemRead, StateMachine, StateMachineControlFlow, SubStateMachine,
+        CommandTape, ItemRead, StateMachine, StateMachineControlFlow, SubStateMachine,
         bytes::BytesStateMachine, decode_zigzag, object::ObjectStateMachine, replace_drop,
     },
 };
@@ -42,8 +42,8 @@ impl StateMachine for ArrayStateMachine {
             // If we finished the last block (or are newly created) read the block info
             if self.left_in_current_block == 0 {
                 let Some(block) = decode_zigzag(buffer)? else {
-                    // Not enough data left in the buffer, need at least one more
-                    return Ok(StateMachineControlFlow::Continue(self, DataRequest::new(1)));
+                    // Not enough data left in the buffer
+                    return Ok(StateMachineControlFlow::NeedMore(self));
                 };
                 self.need_to_read_block_byte_size = block.is_negative();
                 let abs_block = block.unsigned_abs();
@@ -58,8 +58,8 @@ impl StateMachine for ArrayStateMachine {
             // If the block length was negative we need to read the block size
             if self.need_to_read_block_byte_size {
                 let Some(block) = decode_zigzag(buffer)? else {
-                    // Not enough data left in the buffer, need at least one more
-                    return Ok(StateMachineControlFlow::Continue(self, DataRequest::new(1)));
+                    // Not enough data left in the buffer
+                    return Ok(StateMachineControlFlow::NeedMore(self));
                 };
                 // Make sure the value is sane
                 let _ = usize::try_from(block).map_err(|e| Details::ConvertI64ToUsize(e, block))?;
@@ -75,12 +75,12 @@ impl StateMachine for ArrayStateMachine {
                     );
                     // Optimistically run the state machine
                     match fsm.parse(buffer)? {
-                        StateMachineControlFlow::Continue(fsm, data_request) => {
+                        StateMachineControlFlow::NeedMore(fsm) => {
                             replace_drop(
                                 self.current_sub_machine.deref_mut(),
                                 SubStateMachine::Object(fsm),
                             );
-                            return Ok(StateMachineControlFlow::Continue(self, data_request));
+                            return Ok(StateMachineControlFlow::NeedMore(self));
                         }
                         StateMachineControlFlow::Done(tape) => {
                             self.tape = tape;
@@ -89,12 +89,12 @@ impl StateMachine for ArrayStateMachine {
                     }
                 }
                 SubStateMachine::Object(fsm) => match fsm.parse(buffer)? {
-                    StateMachineControlFlow::Continue(fsm, data_request) => {
+                    StateMachineControlFlow::NeedMore(fsm) => {
                         replace_drop(
                             self.current_sub_machine.deref_mut(),
                             SubStateMachine::Object(fsm),
                         );
-                        return Ok(StateMachineControlFlow::Continue(self, data_request));
+                        return Ok(StateMachineControlFlow::NeedMore(self));
                     }
                     StateMachineControlFlow::Done(tape) => {
                         self.tape = tape;
@@ -139,8 +139,8 @@ impl StateMachine for MapStateMachine {
             // If we finished the last block (or are newly created) read the block info
             if self.left_in_current_block == 0 {
                 let Some(block) = decode_zigzag(buffer)? else {
-                    // Not enough data left in the buffer, need at least one more
-                    return Ok(StateMachineControlFlow::Continue(self, DataRequest::new(1)));
+                    // Not enough data left in the buffer
+                    return Ok(StateMachineControlFlow::NeedMore(self));
                 };
                 self.need_to_read_block_byte_size = block.is_negative();
                 let abs_block = block.unsigned_abs();
@@ -155,8 +155,8 @@ impl StateMachine for MapStateMachine {
             // If the block length was negative we need to read the block size
             if self.need_to_read_block_byte_size {
                 let Some(block) = decode_zigzag(buffer)? else {
-                    // Not enough data left in the buffer, need at least one more
-                    return Ok(StateMachineControlFlow::Continue(self, DataRequest::new(1)));
+                    // Not enough data left in the buffer
+                    return Ok(StateMachineControlFlow::NeedMore(self));
                 };
                 // Make sure the value is sane
                 let _ = usize::try_from(block).map_err(|e| Details::ConvertI64ToUsize(e, block))?;
@@ -169,12 +169,12 @@ impl StateMachine for MapStateMachine {
                     let fsm = BytesStateMachine::new();
                     // Optimistically run the state machine
                     match fsm.parse(buffer)? {
-                        StateMachineControlFlow::Continue(fsm, data_request) => {
+                        StateMachineControlFlow::NeedMore(fsm) => {
                             replace_drop(
                                 self.current_sub_machine.deref_mut(),
                                 SubStateMachine::String(fsm),
                             );
-                            return Ok(StateMachineControlFlow::Continue(self, data_request));
+                            return Ok(StateMachineControlFlow::NeedMore(self));
                         }
                         StateMachineControlFlow::Done(bytes) => {
                             let string =
@@ -193,12 +193,12 @@ impl StateMachine for MapStateMachine {
                     );
                     // Optimistically run the state machine
                     match fsm.parse(buffer)? {
-                        StateMachineControlFlow::Continue(fsm, data_request) => {
+                        StateMachineControlFlow::NeedMore(fsm) => {
                             replace_drop(
                                 self.current_sub_machine.deref_mut(),
                                 SubStateMachine::Object(fsm),
                             );
-                            return Ok(StateMachineControlFlow::Continue(self, data_request));
+                            return Ok(StateMachineControlFlow::NeedMore(self));
                         }
                         StateMachineControlFlow::Done(tape) => {
                             self.tape = tape;
@@ -209,12 +209,12 @@ impl StateMachine for MapStateMachine {
                 SubStateMachine::String(fsm) => {
                     // We didn't finish reading the key last loop
                     match fsm.parse(buffer)? {
-                        StateMachineControlFlow::Continue(fsm, data_request) => {
+                        StateMachineControlFlow::NeedMore(fsm) => {
                             replace_drop(
                                 self.current_sub_machine.deref_mut(),
                                 SubStateMachine::String(fsm),
                             );
-                            return Ok(StateMachineControlFlow::Continue(self, data_request));
+                            return Ok(StateMachineControlFlow::NeedMore(self));
                         }
                         StateMachineControlFlow::Done(bytes) => {
                             let string =
@@ -233,12 +233,12 @@ impl StateMachine for MapStateMachine {
                     );
                     // Optimistically run the state machine
                     match fsm.parse(buffer)? {
-                        StateMachineControlFlow::Continue(fsm, data_request) => {
+                        StateMachineControlFlow::NeedMore(fsm) => {
                             replace_drop(
                                 self.current_sub_machine.deref_mut(),
                                 SubStateMachine::Object(fsm),
                             );
-                            return Ok(StateMachineControlFlow::Continue(self, data_request));
+                            return Ok(StateMachineControlFlow::NeedMore(self));
                         }
                         StateMachineControlFlow::Done(tape) => {
                             self.tape = tape;
@@ -249,12 +249,12 @@ impl StateMachine for MapStateMachine {
                 SubStateMachine::Object(fsm) => {
                     // We didn't finish reading the value last loop
                     match fsm.parse(buffer)? {
-                        StateMachineControlFlow::Continue(fsm, data_request) => {
+                        StateMachineControlFlow::NeedMore(fsm) => {
                             replace_drop(
                                 self.current_sub_machine.deref_mut(),
                                 SubStateMachine::Object(fsm),
                             );
-                            return Ok(StateMachineControlFlow::Continue(self, data_request));
+                            return Ok(StateMachineControlFlow::NeedMore(self));
                         }
                         StateMachineControlFlow::Done(tape) => {
                             self.tape = tape;

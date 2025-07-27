@@ -5,8 +5,7 @@ use oval::Buffer;
 use crate::{
     error::Details,
     state_machines::reading::{
-        CommandTape, DataRequest, ItemRead, StateMachine, StateMachineControlFlow, SubStateMachine,
-        ToRead,
+        CommandTape, ItemRead, StateMachine, StateMachineControlFlow, SubStateMachine, ToRead,
         block::{ArrayStateMachine, MapStateMachine},
         bytes::BytesStateMachine,
         decode_zigzag, replace_drop,
@@ -60,30 +59,24 @@ impl StateMachine for ObjectStateMachine {
                         }
                         ToRead::Int => {
                             let Some(n) = decode_zigzag(buffer)? else {
-                                // Not enough data left in the buffer, need at least one more
+                                // Not enough data left in the buffer
                                 replace_drop(
                                     self.current_sub_machine.deref_mut(),
                                     SubStateMachine::Int,
                                 );
-                                return Ok(StateMachineControlFlow::Continue(
-                                    self,
-                                    DataRequest::new(1),
-                                ));
+                                return Ok(StateMachineControlFlow::NeedMore(self));
                             };
                             let n = i32::try_from(n).map_err(|e| Details::ZagI32(e, n))?;
                             self.tape.push(ItemRead::Int(n));
                         }
                         ToRead::Long => {
                             let Some(n) = decode_zigzag(buffer)? else {
-                                // Not enough data left in the buffer, need at least one more
+                                // Not enough data left in the buffer
                                 replace_drop(
                                     self.current_sub_machine.deref_mut(),
                                     SubStateMachine::Long,
                                 );
-                                return Ok(StateMachineControlFlow::Continue(
-                                    self,
-                                    DataRequest::new(1),
-                                ));
+                                return Ok(StateMachineControlFlow::NeedMore(self));
                             };
                             self.tape.push(ItemRead::Long(n));
                         }
@@ -94,10 +87,7 @@ impl StateMachine for ObjectStateMachine {
                                     self.current_sub_machine.deref_mut(),
                                     SubStateMachine::Float,
                                 );
-                                return Ok(StateMachineControlFlow::Continue(
-                                    self,
-                                    DataRequest::new(4 - buffer.available_data()),
-                                ));
+                                return Ok(StateMachineControlFlow::NeedMore(self));
                             };
                             self.tape.push(ItemRead::Float(f32::from_le_bytes(bytes)))
                         }
@@ -108,10 +98,7 @@ impl StateMachine for ObjectStateMachine {
                                     self.current_sub_machine.deref_mut(),
                                     SubStateMachine::Double,
                                 );
-                                return Ok(StateMachineControlFlow::Continue(
-                                    self,
-                                    DataRequest::new(8 - buffer.available_data()),
-                                ));
+                                return Ok(StateMachineControlFlow::NeedMore(self));
                             };
                             self.tape.push(ItemRead::Double(f64::from_le_bytes(bytes)))
                         }
@@ -119,15 +106,12 @@ impl StateMachine for ObjectStateMachine {
                             let fsm = BytesStateMachine::new();
                             // Optimistically run the state machine
                             match fsm.parse(buffer)? {
-                                StateMachineControlFlow::Continue(fsm, data_request) => {
+                                StateMachineControlFlow::NeedMore(fsm) => {
                                     replace_drop(
                                         self.current_sub_machine.deref_mut(),
                                         SubStateMachine::Bytes(fsm),
                                     );
-                                    return Ok(StateMachineControlFlow::Continue(
-                                        self,
-                                        data_request,
-                                    ));
+                                    return Ok(StateMachineControlFlow::NeedMore(self));
                                 }
                                 StateMachineControlFlow::Done(bytes) => {
                                     self.tape.push(ItemRead::Bytes(bytes.into_boxed_slice()))
@@ -138,15 +122,12 @@ impl StateMachine for ObjectStateMachine {
                             let fsm = BytesStateMachine::new();
                             // Optimistically run the state machine
                             match fsm.parse(buffer)? {
-                                StateMachineControlFlow::Continue(fsm, data_request) => {
+                                StateMachineControlFlow::NeedMore(fsm) => {
                                     replace_drop(
                                         self.current_sub_machine.deref_mut(),
                                         SubStateMachine::String(fsm),
                                     );
-                                    return Ok(StateMachineControlFlow::Continue(
-                                        self,
-                                        data_request,
-                                    ));
+                                    return Ok(StateMachineControlFlow::NeedMore(self));
                                 }
                                 StateMachineControlFlow::Done(bytes) => {
                                     let string =
@@ -157,15 +138,12 @@ impl StateMachine for ObjectStateMachine {
                         }
                         ToRead::Enum => {
                             let Some(n) = decode_zigzag(buffer)? else {
-                                // Not enough data left in the buffer, need at least one more
+                                // Not enough data left in the buffer
                                 replace_drop(
                                     self.current_sub_machine.deref_mut(),
                                     SubStateMachine::Enum,
                                 );
-                                return Ok(StateMachineControlFlow::Continue(
-                                    self,
-                                    DataRequest::new(1),
-                                ));
+                                return Ok(StateMachineControlFlow::NeedMore(self));
                             };
                             // TODO: Wrong error
                             let n = u32::try_from(n).map_err(|e| Details::ZagI32(e, n))?;
@@ -175,15 +153,12 @@ impl StateMachine for ObjectStateMachine {
                             let fsm = BytesStateMachine::new_with_length(length);
                             // Optimistically run the state machine
                             match fsm.parse(buffer)? {
-                                StateMachineControlFlow::Continue(fsm, data_request) => {
+                                StateMachineControlFlow::NeedMore(fsm) => {
                                     replace_drop(
                                         self.current_sub_machine.deref_mut(),
                                         SubStateMachine::Bytes(fsm),
                                     );
-                                    return Ok(StateMachineControlFlow::Continue(
-                                        self,
-                                        data_request,
-                                    ));
+                                    return Ok(StateMachineControlFlow::NeedMore(self));
                                 }
                                 StateMachineControlFlow::Done(bytes) => {
                                     self.tape.push(ItemRead::Bytes(bytes.into_boxed_slice()))
@@ -197,15 +172,12 @@ impl StateMachine for ObjectStateMachine {
                             );
                             // Optimistically run the state machine
                             match fsm.parse(buffer)? {
-                                StateMachineControlFlow::Continue(fsm, data_request) => {
+                                StateMachineControlFlow::NeedMore(fsm) => {
                                     replace_drop(
                                         self.current_sub_machine.deref_mut(),
                                         SubStateMachine::Array(fsm),
                                     );
-                                    return Ok(StateMachineControlFlow::Continue(
-                                        self,
-                                        data_request,
-                                    ));
+                                    return Ok(StateMachineControlFlow::NeedMore(self));
                                 }
                                 StateMachineControlFlow::Done(tape) => {
                                     self.tape = tape;
@@ -217,15 +189,12 @@ impl StateMachine for ObjectStateMachine {
                                 MapStateMachine::new(command_tape, std::mem::take(&mut self.tape));
                             // Optimistically run the state machine
                             match fsm.parse(buffer)? {
-                                StateMachineControlFlow::Continue(fsm, data_request) => {
+                                StateMachineControlFlow::NeedMore(fsm) => {
                                     replace_drop(
                                         self.current_sub_machine.deref_mut(),
                                         SubStateMachine::Map(fsm),
                                     );
-                                    return Ok(StateMachineControlFlow::Continue(
-                                        self,
-                                        data_request,
-                                    ));
+                                    return Ok(StateMachineControlFlow::NeedMore(self));
                                 }
                                 StateMachineControlFlow::Done(tape) => {
                                     self.tape = tape;
@@ -235,15 +204,12 @@ impl StateMachine for ObjectStateMachine {
                         ToRead::Union(variants) => {
                             // Optimistically try to get the variant
                             let Some(index) = decode_zigzag(buffer)? else {
-                                // Not enough data left in the buffer, need at least one more
+                                // Not enough data left in the buffer
                                 replace_drop(
                                     self.current_sub_machine.deref_mut(),
                                     SubStateMachine::Union(variants),
                                 );
-                                return Ok(StateMachineControlFlow::Continue(
-                                    self,
-                                    DataRequest::new(1),
-                                ));
+                                return Ok(StateMachineControlFlow::NeedMore(self));
                             };
                             let option = usize::try_from(index)
                                 .map_err(|e| Details::ConvertI64ToUsize(e, index))?;
@@ -258,15 +224,12 @@ impl StateMachine for ObjectStateMachine {
 
                             // Optimistically run the state machine
                             match fsm.parse(buffer)? {
-                                StateMachineControlFlow::Continue(fsm, data_request) => {
+                                StateMachineControlFlow::NeedMore(fsm) => {
                                     replace_drop(
                                         self.current_sub_machine.deref_mut(),
                                         SubStateMachine::Object(fsm),
                                     );
-                                    return Ok(StateMachineControlFlow::Continue(
-                                        self,
-                                        data_request,
-                                    ));
+                                    return Ok(StateMachineControlFlow::NeedMore(self));
                                 }
                                 StateMachineControlFlow::Done(tape) => {
                                     self.tape = tape;
@@ -277,67 +240,61 @@ impl StateMachine for ObjectStateMachine {
                 }
                 SubStateMachine::Int => {
                     let Some(n) = decode_zigzag(buffer)? else {
-                        // Not enough data left in the buffer, need at least one more
-                        return Ok(StateMachineControlFlow::Continue(self, DataRequest::new(1)));
+                        // Not enough data left in the buffer
+                        return Ok(StateMachineControlFlow::NeedMore(self));
                     };
                     let n = i32::try_from(n).map_err(|e| Details::ZagI32(e, n))?;
                     self.tape.push(ItemRead::Int(n));
                 }
                 SubStateMachine::Long => {
                     let Some(n) = decode_zigzag(buffer)? else {
-                        // Not enough data left in the buffer, need at least one more
-                        return Ok(StateMachineControlFlow::Continue(self, DataRequest::new(1)));
+                        // Not enough data left in the buffer
+                        return Ok(StateMachineControlFlow::NeedMore(self));
                     };
                     self.tape.push(ItemRead::Long(n));
                 }
                 SubStateMachine::Float => {
                     let Some(bytes) = buffer.data().first_chunk().copied() else {
                         // Not enough data left in the buffer
-                        return Ok(StateMachineControlFlow::Continue(
-                            self,
-                            DataRequest::new(4 - buffer.available_data()),
-                        ));
+                        return Ok(StateMachineControlFlow::NeedMore(self));
                     };
                     self.tape.push(ItemRead::Float(f32::from_le_bytes(bytes)))
                 }
                 SubStateMachine::Double => {
                     let Some(bytes) = buffer.data().first_chunk().copied() else {
                         // Not enough data left in the buffer
-                        return Ok(StateMachineControlFlow::Continue(
-                            self,
-                            DataRequest::new(8 - buffer.available_data()),
-                        ));
+                        return Ok(StateMachineControlFlow::NeedMore(self));
                     };
                     self.tape.push(ItemRead::Double(f64::from_le_bytes(bytes)))
                 }
                 SubStateMachine::Enum => {
                     let Some(n) = decode_zigzag(buffer)? else {
-                        // Not enough data left in the buffer, need at least one more
-                        return Ok(StateMachineControlFlow::Continue(self, DataRequest::new(1)));
+                        // Not enough data left in the buffer
+                        return Ok(StateMachineControlFlow::NeedMore(self));
                     };
                     // TODO: Wrong error
                     let n = u32::try_from(n).map_err(|e| Details::ZagI32(e, n))?;
                     self.tape.push(ItemRead::Enum(n));
                 }
                 SubStateMachine::Bytes(fsm) => match fsm.parse(buffer)? {
-                    StateMachineControlFlow::Continue(fsm, data_request) => {
+                    StateMachineControlFlow::NeedMore(fsm) => {
                         replace_drop(
                             self.current_sub_machine.deref_mut(),
                             SubStateMachine::Bytes(fsm),
                         );
-                        return Ok(StateMachineControlFlow::Continue(self, data_request));
+                        return Ok(StateMachineControlFlow::NeedMore(self));
                     }
                     StateMachineControlFlow::Done(bytes) => {
                         self.tape.push(ItemRead::Bytes(bytes.into_boxed_slice()))
                     }
                 },
                 SubStateMachine::String(fsm) => match fsm.parse(buffer)? {
-                    StateMachineControlFlow::Continue(fsm, data_request) => {
+                    StateMachineControlFlow::NeedMore(fsm) => {
                         replace_drop(
                             self.current_sub_machine.deref_mut(),
                             SubStateMachine::String(fsm),
                         );
-                        return Ok(StateMachineControlFlow::Continue(self, data_request));
+                        return Ok(StateMachineControlFlow::NeedMore(self));
                     }
                     StateMachineControlFlow::Done(bytes) => {
                         let string = String::from_utf8(bytes).map_err(Details::ConvertToUtf8)?;
@@ -345,36 +302,36 @@ impl StateMachine for ObjectStateMachine {
                     }
                 },
                 SubStateMachine::Fixed(fsm) => match fsm.parse(buffer)? {
-                    StateMachineControlFlow::Continue(fsm, data_request) => {
+                    StateMachineControlFlow::NeedMore(fsm) => {
                         replace_drop(
                             self.current_sub_machine.deref_mut(),
                             SubStateMachine::Bytes(fsm),
                         );
-                        return Ok(StateMachineControlFlow::Continue(self, data_request));
+                        return Ok(StateMachineControlFlow::NeedMore(self));
                     }
                     StateMachineControlFlow::Done(bytes) => {
                         self.tape.push(ItemRead::Bytes(bytes.into_boxed_slice()))
                     }
                 },
                 SubStateMachine::Array(fsm) => match fsm.parse(buffer)? {
-                    StateMachineControlFlow::Continue(fsm, data_request) => {
+                    StateMachineControlFlow::NeedMore(fsm) => {
                         replace_drop(
                             self.current_sub_machine.deref_mut(),
                             SubStateMachine::Array(fsm),
                         );
-                        return Ok(StateMachineControlFlow::Continue(self, data_request));
+                        return Ok(StateMachineControlFlow::NeedMore(self));
                     }
                     StateMachineControlFlow::Done(tape) => {
                         self.tape = tape;
                     }
                 },
                 SubStateMachine::Map(fsm) => match fsm.parse(buffer)? {
-                    StateMachineControlFlow::Continue(fsm, data_request) => {
+                    StateMachineControlFlow::NeedMore(fsm) => {
                         replace_drop(
                             self.current_sub_machine.deref_mut(),
                             SubStateMachine::Map(fsm),
                         );
-                        return Ok(StateMachineControlFlow::Continue(self, data_request));
+                        return Ok(StateMachineControlFlow::NeedMore(self));
                     }
                     StateMachineControlFlow::Done(tape) => {
                         self.tape = tape;
@@ -382,8 +339,8 @@ impl StateMachine for ObjectStateMachine {
                 },
                 SubStateMachine::Union(variants) => {
                     let Some(index) = decode_zigzag(buffer)? else {
-                        // Not enough data left in the buffer, need at least one more
-                        return Ok(StateMachineControlFlow::Continue(self, DataRequest::new(1)));
+                        // Not enough data left in the buffer
+                        return Ok(StateMachineControlFlow::NeedMore(self));
                     };
                     let option =
                         usize::try_from(index).map_err(|e| Details::ConvertI64ToUsize(e, index))?;
@@ -398,12 +355,12 @@ impl StateMachine for ObjectStateMachine {
 
                     // Optimistically run the state machine
                     match fsm.parse(buffer)? {
-                        StateMachineControlFlow::Continue(fsm, data_request) => {
+                        StateMachineControlFlow::NeedMore(fsm) => {
                             replace_drop(
                                 self.current_sub_machine.deref_mut(),
                                 SubStateMachine::Object(fsm),
                             );
-                            return Ok(StateMachineControlFlow::Continue(self, data_request));
+                            return Ok(StateMachineControlFlow::NeedMore(self));
                         }
                         StateMachineControlFlow::Done(tape) => {
                             self.tape = tape;
@@ -416,7 +373,7 @@ impl StateMachine for ObjectStateMachine {
         if self.command_tape.is_finished() {
             Ok(StateMachineControlFlow::Done(self.tape))
         } else {
-            Ok(StateMachineControlFlow::Continue(self, DataRequest::new(1)))
+            Ok(StateMachineControlFlow::NeedMore(self))
         }
     }
 }
