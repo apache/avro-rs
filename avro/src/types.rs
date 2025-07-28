@@ -615,8 +615,8 @@ impl Value {
     /// See [Schema Resolution](https://avro.apache.org/docs/current/specification/#schema-resolution)
     /// in the Avro specification for the full set of rules of schema
     /// resolution.
-    pub fn resolve(self, schema: &Schema) -> AvroResult<Self> {
-        self.resolve_schemata(schema, Vec::with_capacity(0))
+    pub async fn resolve(self, schema: &Schema) -> AvroResult<Self> {
+        self.resolve_schemata(schema, Vec::with_capacity(0)).await
     }
 
     /// Attempt to perform schema resolution on the value, with the given
@@ -625,17 +625,17 @@ impl Value {
     /// See [Schema Resolution](https://avro.apache.org/docs/current/specification/#schema-resolution)
     /// in the Avro specification for the full set of rules of schema
     /// resolution.
-    pub fn resolve_schemata(self, schema: &Schema, schemata: Vec<&Schema>) -> AvroResult<Self> {
+    pub async fn resolve_schemata(self, schema: &Schema, schemata: Vec<&Schema>) -> AvroResult<Self> {
         let enclosing_namespace = schema.namespace();
         let rs = if schemata.is_empty() {
             ResolvedSchema::try_from(schema)?
         } else {
             ResolvedSchema::try_from(schemata)?
         };
-        self.resolve_internal(schema, rs.get_names(), &enclosing_namespace, &None)
+        self.resolve_internal(schema, rs.get_names(), &enclosing_namespace, &None).await
     }
 
-    pub(crate) fn resolve_internal<S: Borrow<Schema> + Debug>(
+    pub(crate) async fn resolve_internal<S: Borrow<Schema> + Debug>(
         mut self,
         schema: &Schema,
         names: &HashMap<Name, S>,
@@ -659,7 +659,7 @@ impl Value {
 
                 if let Some(resolved) = names.get(&name) {
                     debug!("Resolved {name:?}");
-                    self.resolve_internal(resolved.borrow(), names, &name.namespace, field_default)
+                    Box::pin(self.resolve_internal(resolved.borrow(), names, &name.namespace, field_default)).await
                 } else {
                     error!("Failed to resolve schema {name:?}");
                     Err(Details::SchemaResolutionError(name.clone()).into())
@@ -675,7 +675,7 @@ impl Value {
             Schema::String => self.resolve_string(),
             Schema::Fixed(FixedSchema { size, .. }) => self.resolve_fixed(size),
             Schema::Union(ref inner) => {
-                self.resolve_union(inner, names, enclosing_namespace, field_default)
+                Box::pin(self.resolve_union(inner, names, enclosing_namespace, field_default)).await
             }
             Schema::Enum(EnumSchema {
                 ref symbols,
@@ -683,18 +683,18 @@ impl Value {
                 ..
             }) => self.resolve_enum(symbols, default, field_default),
             Schema::Array(ref inner) => {
-                self.resolve_array(&inner.items, names, enclosing_namespace)
+                self.resolve_array(&inner.items, names, enclosing_namespace).await
             }
             Schema::Map(ref inner) => self.resolve_map(&inner.types, names, enclosing_namespace),
             Schema::Record(RecordSchema { ref fields, .. }) => {
-                self.resolve_record(fields, names, enclosing_namespace)
+                self.resolve_record(fields, names, enclosing_namespace).await
             }
             Schema::Decimal(DecimalSchema {
                 scale,
                 precision,
                 ref inner,
             }) => self.resolve_decimal(precision, scale, inner),
-            Schema::BigDecimal => self.resolve_bigdecimal(),
+            Schema::BigDecimal => self.resolve_bigdecimal().await,
             Schema::Date => self.resolve_date(),
             Schema::TimeMillis => self.resolve_time_millis(),
             Schema::TimeMicros => self.resolve_time_micros(),
@@ -719,10 +719,10 @@ impl Value {
         })
     }
 
-    fn resolve_bigdecimal(self) -> Result<Self, Error> {
+    async fn resolve_bigdecimal(self) -> Result<Self, Error> {
         Ok(match self {
             bg @ Value::BigDecimal(_) => bg,
-            Value::Bytes(b) => Value::BigDecimal(deserialize_big_decimal(&b).unwrap()),
+            Value::Bytes(b) => Value::BigDecimal(deserialize_big_decimal(&b).await.unwrap()),
             other => return Err(Details::GetBigDecimal(other).into()),
         })
     }
@@ -1017,7 +1017,7 @@ impl Value {
         }
     }
 
-    fn resolve_union<S: Borrow<Schema> + Debug>(
+    async fn resolve_union<S: Borrow<Schema> + Debug>(
         self,
         schema: &UnionSchema,
         names: &HashMap<Name, S>,
@@ -1039,11 +1039,11 @@ impl Value {
 
         Ok(Value::Union(
             i as u32,
-            Box::new(v.resolve_internal(inner, names, enclosing_namespace, field_default)?),
+            Box::new(v.resolve_internal(inner, names, enclosing_namespace, field_default).await?),
         ))
     }
 
-    fn resolve_array<S: Borrow<Schema> + Debug>(
+    async fn resolve_array<S: Borrow<Schema> + Debug>(
         self,
         schema: &Schema,
         names: &HashMap<Name, S>,
@@ -1053,8 +1053,8 @@ impl Value {
             Value::Array(items) => Ok(Value::Array(
                 items
                     .into_iter()
-                    .map(|item| item.resolve_internal(schema, names, enclosing_namespace, &None))
-                    .collect::<Result<_, _>>()?,
+                    .map(async |item| item.resolve_internal(schema, names, enclosing_namespace, &None).await)
+                    .collect::<Result<_, _>>()?
             )),
             other => Err(Details::GetArray {
                 expected: schema.into(),
@@ -1074,9 +1074,9 @@ impl Value {
             Value::Map(items) => Ok(Value::Map(
                 items
                     .into_iter()
-                    .map(|(key, value)| {
+                    .map(async |(key, value)| {
                         value
-                            .resolve_internal(schema, names, enclosing_namespace, &None)
+                            .resolve_internal(schema, names, enclosing_namespace, &None).await
                             .map(|value| (key, value))
                     })
                     .collect::<Result<_, _>>()?,
@@ -1089,7 +1089,7 @@ impl Value {
         }
     }
 
-    fn resolve_record<S: Borrow<Schema> + Debug>(
+    async fn resolve_record<S: Borrow<Schema> + Debug>(
         self,
         fields: &[RecordField],
         names: &HashMap<Name, S>,
@@ -1109,7 +1109,7 @@ impl Value {
 
         let new_fields = fields
             .iter()
-            .map(|field| {
+            .map(async |field| {
                 let value = match items.remove(&field.name) {
                     Some(value) => value,
                     None => match field.default {
@@ -1136,7 +1136,7 @@ impl Value {
                                             names,
                                             enclosing_namespace,
                                             &field.default,
-                                        )?),
+                                        ).await?),
                                     ),
                                 }
                             }
@@ -1148,7 +1148,7 @@ impl Value {
                     },
                 };
                 value
-                    .resolve_internal(&field.schema, names, enclosing_namespace, &field.default)
+                    .resolve_internal(&field.schema, names, enclosing_namespace, &field.default).await
                     .map(|value| (field.name.clone(), value))
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -1156,8 +1156,8 @@ impl Value {
         Ok(Value::Record(new_fields))
     }
 
-    fn try_u8(self) -> AvroResult<u8> {
-        let int = self.resolve(&Schema::Int)?;
+    async fn try_u8(self) -> AvroResult<u8> {
+        let int = self.resolve(&Schema::Int).await?;
         if let Value::Int(n) = int {
             if n >= 0 && n <= i32::from(u8::MAX) {
                 return Ok(n as u8);
@@ -1184,8 +1184,8 @@ mod tests {
     use pretty_assertions::assert_eq;
     use serde_json::json;
 
-    #[test]
-    fn avro_3809_validate_nested_records_with_implicit_namespace() -> TestResult {
+    #[tokio::test]
+    async fn avro_3809_validate_nested_records_with_implicit_namespace() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "name": "record_name",
@@ -1234,8 +1234,8 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn validate() -> TestResult {
+    #[tokio::test]
+    async fn validate() -> TestResult {
         let value_schema_valid = vec![
             (Value::Int(42), Schema::Int, true, ""),
             (Value::Int(43), Schema::Long, true, ""),
@@ -1387,8 +1387,8 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn validate_fixed() -> TestResult {
+    #[tokio::test]
+    async fn validate_fixed() -> TestResult {
         let schema = Schema::Fixed(FixedSchema {
             size: 4,
             name: Name::new("some_fixed").unwrap(),
@@ -1423,8 +1423,8 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn validate_enum() -> TestResult {
+    #[tokio::test]
+    async fn validate_enum() -> TestResult {
         let schema = Schema::Enum(EnumSchema {
             name: Name::new("some_enum").unwrap(),
             aliases: None,
@@ -1499,8 +1499,8 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn validate_record() -> TestResult {
+    #[tokio::test]
+    async fn validate_record() -> TestResult {
         // {
         //    "type": "record",
         //    "fields": [
@@ -1671,60 +1671,60 @@ Field with name '"b"' is not a member of the map items"#,
         Ok(())
     }
 
-    #[test]
-    fn resolve_bytes_ok() -> TestResult {
+    #[tokio::test]
+    async fn resolve_bytes_ok() -> TestResult {
         let value = Value::Array(vec![Value::Int(0), Value::Int(42)]);
         assert_eq!(
-            value.resolve(&Schema::Bytes)?,
+            value.resolve(&Schema::Bytes).await?,
             Value::Bytes(vec![0u8, 42u8])
         );
 
         Ok(())
     }
 
-    #[test]
-    fn resolve_string_from_bytes() -> TestResult {
+    #[tokio::test]
+    async fn resolve_string_from_bytes() -> TestResult {
         let value = Value::Bytes(vec![97, 98, 99]);
         assert_eq!(
-            value.resolve(&Schema::String)?,
+            value.resolve(&Schema::String).await?,
             Value::String("abc".to_string())
         );
 
         Ok(())
     }
 
-    #[test]
-    fn resolve_string_from_fixed() -> TestResult {
+    #[tokio::test]
+    async fn resolve_string_from_fixed() -> TestResult {
         let value = Value::Fixed(3, vec![97, 98, 99]);
         assert_eq!(
-            value.resolve(&Schema::String)?,
+            value.resolve(&Schema::String).await?,
             Value::String("abc".to_string())
         );
 
         Ok(())
     }
 
-    #[test]
-    fn resolve_bytes_failure() {
+    #[tokio::test]
+    async fn resolve_bytes_failure() {
         let value = Value::Array(vec![Value::Int(2000), Value::Int(-42)]);
-        assert!(value.resolve(&Schema::Bytes).is_err());
+        assert!(value.resolve(&Schema::Bytes).await.is_err());
     }
 
-    #[test]
-    fn resolve_decimal_bytes() -> TestResult {
+    #[tokio::test]
+    async fn resolve_decimal_bytes() -> TestResult {
         let value = Value::Decimal(Decimal::from(vec![1, 2, 3, 4, 5]));
         value.clone().resolve(&Schema::Decimal(DecimalSchema {
             precision: 10,
             scale: 4,
             inner: Box::new(Schema::Bytes),
-        }))?;
-        assert!(value.resolve(&Schema::String).is_err());
+        })).await?;
+        assert!(value.resolve(&Schema::String).await.is_err());
 
         Ok(())
     }
 
-    #[test]
-    fn resolve_decimal_invalid_scale() {
+    #[tokio::test]
+    async fn resolve_decimal_invalid_scale() {
         let value = Value::Decimal(Decimal::from(vec![1, 2]));
         assert!(
             value
@@ -1732,13 +1732,13 @@ Field with name '"b"' is not a member of the map items"#,
                     precision: 2,
                     scale: 3,
                     inner: Box::new(Schema::Bytes),
-                }))
+                })).await
                 .is_err()
         );
     }
 
-    #[test]
-    fn resolve_decimal_invalid_precision_for_length() {
+    #[tokio::test]
+    async fn resolve_decimal_invalid_precision_for_length() {
         let value = Value::Decimal(Decimal::from((1u8..=8u8).rev().collect::<Vec<_>>()));
         assert!(
             value
@@ -1746,13 +1746,13 @@ Field with name '"b"' is not a member of the map items"#,
                     precision: 1,
                     scale: 0,
                     inner: Box::new(Schema::Bytes),
-                }))
+                })).await
                 .is_ok()
         );
     }
 
-    #[test]
-    fn resolve_decimal_fixed() {
+    #[tokio::test]
+    async fn resolve_decimal_fixed() {
         let value = Value::Decimal(Decimal::from(vec![1, 2, 3, 4, 5]));
         assert!(
             value
@@ -1768,122 +1768,122 @@ Field with name '"b"' is not a member of the map items"#,
                         default: None,
                         attributes: Default::default(),
                     }))
-                }))
+                })).await
                 .is_ok()
         );
-        assert!(value.resolve(&Schema::String).is_err());
+        assert!(value.resolve(&Schema::String).await.is_err());
     }
 
-    #[test]
-    fn resolve_date() {
+    #[tokio::test]
+    async fn resolve_date() {
         let value = Value::Date(2345);
-        assert!(value.clone().resolve(&Schema::Date).is_ok());
-        assert!(value.resolve(&Schema::String).is_err());
+        assert!(value.clone().resolve(&Schema::Date).await.is_ok());
+        assert!(value.resolve(&Schema::String).await.is_err());
     }
 
-    #[test]
-    fn resolve_time_millis() {
+    #[tokio::test]
+    async fn resolve_time_millis() {
         let value = Value::TimeMillis(10);
-        assert!(value.clone().resolve(&Schema::TimeMillis).is_ok());
-        assert!(value.resolve(&Schema::TimeMicros).is_err());
+        assert!(value.clone().resolve(&Schema::TimeMillis).await.is_ok());
+        assert!(value.resolve(&Schema::TimeMicros).await.is_err());
     }
 
-    #[test]
-    fn resolve_time_micros() {
+    #[tokio::test]
+    async fn resolve_time_micros() {
         let value = Value::TimeMicros(10);
-        assert!(value.clone().resolve(&Schema::TimeMicros).is_ok());
-        assert!(value.resolve(&Schema::TimeMillis).is_err());
+        assert!(value.clone().resolve(&Schema::TimeMicros).await.is_ok());
+        assert!(value.resolve(&Schema::TimeMillis).await.is_err());
     }
 
-    #[test]
-    fn resolve_timestamp_millis() {
+    #[tokio::test]
+    async fn resolve_timestamp_millis() {
         let value = Value::TimestampMillis(10);
-        assert!(value.clone().resolve(&Schema::TimestampMillis).is_ok());
-        assert!(value.resolve(&Schema::Float).is_err());
+        assert!(value.clone().resolve(&Schema::TimestampMillis).await.is_ok());
+        assert!(value.resolve(&Schema::Float).await.is_err());
 
         let value = Value::Float(10.0f32);
-        assert!(value.resolve(&Schema::TimestampMillis).is_err());
+        assert!(value.resolve(&Schema::TimestampMillis).await.is_err());
     }
 
-    #[test]
-    fn resolve_timestamp_micros() {
+    #[tokio::test]
+    async fn resolve_timestamp_micros() {
         let value = Value::TimestampMicros(10);
-        assert!(value.clone().resolve(&Schema::TimestampMicros).is_ok());
-        assert!(value.resolve(&Schema::Int).is_err());
+        assert!(value.clone().resolve(&Schema::TimestampMicros).await.is_ok());
+        assert!(value.resolve(&Schema::Int).await.is_err());
 
         let value = Value::Double(10.0);
-        assert!(value.resolve(&Schema::TimestampMicros).is_err());
+        assert!(value.resolve(&Schema::TimestampMicros).await.is_err());
     }
 
-    #[test]
-    fn test_avro_3914_resolve_timestamp_nanos() {
+    #[tokio::test]
+    async fn test_avro_3914_resolve_timestamp_nanos() {
         let value = Value::TimestampNanos(10);
-        assert!(value.clone().resolve(&Schema::TimestampNanos).is_ok());
-        assert!(value.resolve(&Schema::Int).is_err());
+        assert!(value.clone().resolve(&Schema::TimestampNanos).await.is_ok());
+        assert!(value.resolve(&Schema::Int).await.is_err());
 
         let value = Value::Double(10.0);
-        assert!(value.resolve(&Schema::TimestampNanos).is_err());
+        assert!(value.resolve(&Schema::TimestampNanos).await.is_err());
     }
 
-    #[test]
-    fn test_avro_3853_resolve_timestamp_millis() {
+    #[tokio::test]
+    async fn test_avro_3853_resolve_timestamp_millis() {
         let value = Value::LocalTimestampMillis(10);
-        assert!(value.clone().resolve(&Schema::LocalTimestampMillis).is_ok());
-        assert!(value.resolve(&Schema::Float).is_err());
+        assert!(value.clone().resolve(&Schema::LocalTimestampMillis).await.is_ok());
+        assert!(value.resolve(&Schema::Float).await.is_err());
 
         let value = Value::Float(10.0f32);
-        assert!(value.resolve(&Schema::LocalTimestampMillis).is_err());
+        assert!(value.resolve(&Schema::LocalTimestampMillis).await.is_err());
     }
 
-    #[test]
-    fn test_avro_3853_resolve_timestamp_micros() {
+    #[tokio::test]
+    async fn test_avro_3853_resolve_timestamp_micros() {
         let value = Value::LocalTimestampMicros(10);
-        assert!(value.clone().resolve(&Schema::LocalTimestampMicros).is_ok());
-        assert!(value.resolve(&Schema::Int).is_err());
+        assert!(value.clone().resolve(&Schema::LocalTimestampMicros).await.is_ok());
+        assert!(value.resolve(&Schema::Int).await.is_err());
 
         let value = Value::Double(10.0);
-        assert!(value.resolve(&Schema::LocalTimestampMicros).is_err());
+        assert!(value.resolve(&Schema::LocalTimestampMicros).await.is_err());
     }
 
-    #[test]
-    fn test_avro_3916_resolve_timestamp_nanos() {
+    #[tokio::test]
+    async fn test_avro_3916_resolve_timestamp_nanos() {
         let value = Value::LocalTimestampNanos(10);
-        assert!(value.clone().resolve(&Schema::LocalTimestampNanos).is_ok());
-        assert!(value.resolve(&Schema::Int).is_err());
+        assert!(value.clone().resolve(&Schema::LocalTimestampNanos).await.is_ok());
+        assert!(value.resolve(&Schema::Int).await.is_err());
 
         let value = Value::Double(10.0);
-        assert!(value.resolve(&Schema::LocalTimestampNanos).is_err());
+        assert!(value.resolve(&Schema::LocalTimestampNanos).await.is_err());
     }
 
-    #[test]
-    fn resolve_duration() {
+    #[tokio::test]
+    async fn resolve_duration() {
         let value = Value::Duration(Duration::new(
             Months::new(10),
             Days::new(5),
             Millis::new(3000),
         ));
-        assert!(value.clone().resolve(&Schema::Duration).is_ok());
-        assert!(value.resolve(&Schema::TimestampMicros).is_err());
-        assert!(Value::Long(1i64).resolve(&Schema::Duration).is_err());
+        assert!(value.clone().resolve(&Schema::Duration).await.is_ok());
+        assert!(value.resolve(&Schema::TimestampMicros).await.is_err());
+        assert!(Value::Long(1i64).resolve(&Schema::Duration).await.is_err());
     }
 
-    #[test]
-    fn resolve_uuid() -> TestResult {
+    #[tokio::test]
+    async fn resolve_uuid() -> TestResult {
         let value = Value::Uuid(Uuid::parse_str("1481531d-ccc9-46d9-a56f-5b67459c0537")?);
-        assert!(value.clone().resolve(&Schema::Uuid).is_ok());
-        assert!(value.resolve(&Schema::TimestampMicros).is_err());
+        assert!(value.clone().resolve(&Schema::Uuid).await.is_ok());
+        assert!(value.resolve(&Schema::TimestampMicros).await.is_err());
 
         Ok(())
     }
 
-    #[test]
-    fn avro_3678_resolve_float_to_double() {
+    #[tokio::test]
+    async fn avro_3678_resolve_float_to_double() {
         let value = Value::Float(2345.1);
-        assert!(value.resolve(&Schema::Double).is_ok());
+        assert!(value.resolve(&Schema::Double).await.is_ok());
     }
 
-    #[test]
-    fn test_avro_3621_resolve_to_nullable_union() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3621_resolve_to_nullable_union() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "type": "record",
@@ -1922,19 +1922,19 @@ Field with name '"b"' is not a member of the map items"#,
             "event".to_string(),
             Value::Record(vec![("amount".to_string(), Value::Int(200))]),
         )]);
-        assert!(value.resolve(&schema).is_ok());
+        assert!(value.resolve(&schema).await.is_ok());
 
         let value = Value::Record(vec![(
             "event".to_string(),
             Value::Record(vec![("size".to_string(), Value::Int(1))]),
         )]);
-        assert!(value.resolve(&schema).is_err());
+        assert!(value.resolve(&schema).await.is_err());
 
         Ok(())
     }
 
-    #[test]
-    fn json_from_avro() -> TestResult {
+    #[tokio::test]
+    async fn json_from_avro() -> TestResult {
         assert_eq!(JsonValue::try_from(Value::Null)?, JsonValue::Null);
         assert_eq!(
             JsonValue::try_from(Value::Boolean(true))?,
@@ -2108,8 +2108,8 @@ Field with name '"b"' is not a member of the map items"#,
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3433_recursive_resolves_record() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3433_recursive_resolves_record() -> TestResult {
         let schema = Schema::parse_str(
             r#"
         {
@@ -2139,14 +2139,14 @@ Field with name '"b"' is not a member of the map items"#,
         let inner_value2 = Value::Record(vec![("z".into(), Value::Int(6))]);
         let outer = Value::Record(vec![("a".into(), inner_value1), ("b".into(), inner_value2)]);
         outer
-            .resolve(&schema)
+            .resolve(&schema).await
             .expect("Record definition defined in one field must be available in other field");
 
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3433_recursive_resolves_array() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3433_recursive_resolves_array() -> TestResult {
         let schema = Schema::parse_str(
             r#"
         {
@@ -2188,14 +2188,14 @@ Field with name '"b"' is not a member of the map items"#,
             ),
         ]);
         outer_value
-            .resolve(&schema)
+            .resolve(&schema).await
             .expect("Record defined in array definition must be resolvable from map");
 
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3433_recursive_resolves_map() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3433_recursive_resolves_map() -> TestResult {
         let schema = Schema::parse_str(
             r#"
         {
@@ -2234,14 +2234,14 @@ Field with name '"b"' is not a member of the map items"#,
             ),
         ]);
         outer_value
-            .resolve(&schema)
+            .resolve(&schema).await
             .expect("Record defined in record field must be resolvable from map field");
 
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3433_recursive_resolves_record_wrapper() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3433_recursive_resolves_record_wrapper() -> TestResult {
         let schema = Schema::parse_str(
             r#"
         {
@@ -2281,13 +2281,13 @@ Field with name '"b"' is not a member of the map items"#,
         )]);
         let outer_value =
             Value::Record(vec![("a".into(), inner_value1), ("b".into(), inner_value2)]);
-        outer_value.resolve(&schema).expect("Record schema defined in field must be resolvable in Record schema defined in other field");
+        outer_value.resolve(&schema).await.expect("Record schema defined in field must be resolvable in Record schema defined in other field");
 
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3433_recursive_resolves_map_and_array() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3433_recursive_resolves_map_and_array() -> TestResult {
         let schema = Schema::parse_str(
             r#"
         {
@@ -2329,14 +2329,14 @@ Field with name '"b"' is not a member of the map items"#,
             ("b".into(), Value::Array(vec![inner_value1])),
         ]);
         outer_value
-            .resolve(&schema)
+            .resolve(&schema).await
             .expect("Record defined in map definition must be resolvable from array");
 
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3433_recursive_resolves_union() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3433_recursive_resolves_union() -> TestResult {
         let schema = Schema::parse_str(
             r#"
         {
@@ -2369,18 +2369,18 @@ Field with name '"b"' is not a member of the map items"#,
             ("b".into(), inner_value2.clone()),
         ]);
         outer1
-            .resolve(&schema)
+            .resolve(&schema).await
             .expect("Record definition defined in union must be resolved in other field");
         let outer2 = Value::Record(vec![("a".into(), Value::Null), ("b".into(), inner_value2)]);
         outer2
-            .resolve(&schema)
+            .resolve(&schema).await
             .expect("Record definition defined in union must be resolved in other field");
 
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3461_test_multi_level_resolve_outer_namespace() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3461_test_multi_level_resolve_outer_namespace() -> TestResult {
         let schema = r#"
         {
           "name": "record_name",
@@ -2455,20 +2455,20 @@ Field with name '"b"' is not a member of the map items"#,
         ]);
 
         outer_record_variation_1
-            .resolve(&schema)
+            .resolve(&schema).await
             .expect("Should be able to resolve value to the schema that is it's definition");
         outer_record_variation_2
-            .resolve(&schema)
+            .resolve(&schema).await
             .expect("Should be able to resolve value to the schema that is it's definition");
         outer_record_variation_3
-            .resolve(&schema)
+            .resolve(&schema).await
             .expect("Should be able to resolve value to the schema that is it's definition");
 
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3461_test_multi_level_resolve_middle_namespace() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3461_test_multi_level_resolve_middle_namespace() -> TestResult {
         let schema = r#"
         {
           "name": "record_name",
@@ -2544,20 +2544,20 @@ Field with name '"b"' is not a member of the map items"#,
         ]);
 
         outer_record_variation_1
-            .resolve(&schema)
+            .resolve(&schema).await
             .expect("Should be able to resolve value to the schema that is it's definition");
         outer_record_variation_2
-            .resolve(&schema)
+            .resolve(&schema).await
             .expect("Should be able to resolve value to the schema that is it's definition");
         outer_record_variation_3
-            .resolve(&schema)
+            .resolve(&schema).await
             .expect("Should be able to resolve value to the schema that is it's definition");
 
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3461_test_multi_level_resolve_inner_namespace() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3461_test_multi_level_resolve_inner_namespace() -> TestResult {
         let schema = r#"
         {
           "name": "record_name",
@@ -2635,20 +2635,20 @@ Field with name '"b"' is not a member of the map items"#,
         ]);
 
         outer_record_variation_1
-            .resolve(&schema)
+            .resolve(&schema).await
             .expect("Should be able to resolve value to the schema that is it's definition");
         outer_record_variation_2
-            .resolve(&schema)
+            .resolve(&schema).await
             .expect("Should be able to resolve value to the schema that is it's definition");
         outer_record_variation_3
-            .resolve(&schema)
+            .resolve(&schema).await
             .expect("Should be able to resolve value to the schema that is it's definition");
 
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3460_validation_with_refs() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3460_validation_with_refs() -> TestResult {
         let schema = Schema::parse_str(
             r#"
         {
@@ -2699,8 +2699,8 @@ Field with name '"b"' is not a member of the map items"#,
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3460_validation_with_refs_real_struct() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3460_validation_with_refs_real_struct() -> TestResult {
         use crate::ser::Serializer;
         use serde::Serialize;
 
@@ -2789,7 +2789,7 @@ Field with name '"b"' is not a member of the map items"#,
         Ok(())
     }
 
-    fn avro_3674_with_or_without_namespace(with_namespace: bool) -> TestResult {
+    async fn avro_3674_with_or_without_namespace(with_namespace: bool) -> TestResult {
         use crate::ser::Serializer;
         use serde::Serialize;
 
@@ -2865,24 +2865,24 @@ Field with name '"b"' is not a member of the map items"#,
         let test_value: Value = msg.serialize(&mut ser)?;
         assert!(test_value.validate(&schema), "test_value should validate");
         assert!(
-            test_value.resolve(&schema).is_ok(),
+            test_value.resolve(&schema).await.is_ok(),
             "test_value should resolve"
         );
 
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3674_validate_no_namespace_resolution() -> TestResult {
-        avro_3674_with_or_without_namespace(false)
+    #[tokio::test]
+    async fn test_avro_3674_validate_no_namespace_resolution() -> TestResult {
+        avro_3674_with_or_without_namespace(false).await
     }
 
-    #[test]
-    fn test_avro_3674_validate_with_namespace_resolution() -> TestResult {
-        avro_3674_with_or_without_namespace(true)
+    #[tokio::test]
+    async fn test_avro_3674_validate_with_namespace_resolution() -> TestResult {
+        avro_3674_with_or_without_namespace(true).await
     }
 
-    fn avro_3688_schema_resolution_panic(set_field_b: bool) -> TestResult {
+    async fn avro_3688_schema_resolution_panic(set_field_b: bool) -> TestResult {
         use crate::ser::Serializer;
         use serde::{Deserialize, Serialize};
 
@@ -2948,25 +2948,25 @@ Field with name '"b"' is not a member of the map items"#,
         let test_value: Value = msg.serialize(&mut ser)?;
         assert!(test_value.validate(&schema), "test_value should validate");
         assert!(
-            test_value.resolve(&schema).is_ok(),
+            test_value.resolve(&schema).await.is_ok(),
             "test_value should resolve"
         );
 
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3688_field_b_not_set() -> TestResult {
-        avro_3688_schema_resolution_panic(false)
+    #[tokio::test]
+    async fn test_avro_3688_field_b_not_set() -> TestResult {
+        avro_3688_schema_resolution_panic(false).await
     }
 
-    #[test]
-    fn test_avro_3688_field_b_set() -> TestResult {
-        avro_3688_schema_resolution_panic(true)
+    #[tokio::test]
+    async fn test_avro_3688_field_b_set() -> TestResult {
+        avro_3688_schema_resolution_panic(true).await
     }
 
-    #[test]
-    fn test_avro_3764_use_resolve_schemata() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3764_use_resolve_schemata() -> TestResult {
         let referenced_schema =
             r#"{"name": "enumForReference", "type": "enum", "symbols": ["A", "B"]}"#;
         let main_schema = r#"{"name": "recordWithReference", "type": "record", "fields": [{"name": "reference", "type": "enumForReference"}]}"#;
@@ -2986,14 +2986,14 @@ Field with name '"b"' is not a member of the map items"#,
         let main_schema = schemas.first().unwrap();
         let schemata: Vec<_> = schemas.iter().skip(1).collect();
 
-        let resolve_result = avro_value.clone().resolve_schemata(main_schema, schemata);
+        let resolve_result = avro_value.clone().resolve_schemata(main_schema, schemata).await;
 
         assert!(
             resolve_result.is_ok(),
             "result of resolving with schemata should be ok, got: {resolve_result:?}"
         );
 
-        let resolve_result = avro_value.resolve(main_schema);
+        let resolve_result = avro_value.resolve(main_schema).await;
         assert!(
             resolve_result.is_err(),
             "result of resolving without schemata should be err, got: {resolve_result:?}"
@@ -3002,8 +3002,8 @@ Field with name '"b"' is not a member of the map items"#,
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3767_union_resolve_complex_refs() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3767_union_resolve_complex_refs() -> TestResult {
         let referenced_enum =
             r#"{"name": "enumForReference", "type": "enum", "symbols": ["A", "B"]}"#;
         let referenced_record = r#"{"name": "recordForReference", "type": "record", "fields": [{"name": "refInRecord", "type": "enumForReference"}]}"#;
@@ -3026,7 +3026,7 @@ Field with name '"b"' is not a member of the map items"#,
         let main_schema = schemata.last().unwrap();
         let other_schemata: Vec<&Schema> = schemata.iter().take(2).collect();
 
-        let resolve_result = avro_value.resolve_schemata(main_schema, other_schemata);
+        let resolve_result = avro_value.resolve_schemata(main_schema, other_schemata).await;
 
         assert!(
             resolve_result.is_ok(),
@@ -3041,15 +3041,15 @@ Field with name '"b"' is not a member of the map items"#,
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3782_incorrect_decimal_resolving() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3782_incorrect_decimal_resolving() -> TestResult {
         let schema = r#"{"name": "decimalSchema", "logicalType": "decimal", "type": "fixed", "precision": 8, "scale": 0, "size": 8}"#;
 
         let avro_value = Value::Decimal(Decimal::from(
             BigInt::from(12345678u32).to_signed_bytes_be(),
         ));
         let schema = Schema::parse_str(schema)?;
-        let resolve_result = avro_value.resolve(&schema);
+        let resolve_result = avro_value.resolve(&schema).await;
         assert!(
             resolve_result.is_ok(),
             "resolve result must be ok, got: {resolve_result:?}"
@@ -3058,14 +3058,14 @@ Field with name '"b"' is not a member of the map items"#,
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3779_bigdecimal_resolving() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3779_bigdecimal_resolving() -> TestResult {
         let schema =
             r#"{"name": "bigDecimalSchema", "logicalType": "big-decimal", "type": "bytes" }"#;
 
         let avro_value = Value::BigDecimal(BigDecimal::from(12345678u32));
         let schema = Schema::parse_str(schema)?;
-        let resolve_result: AvroResult<Value> = avro_value.resolve(&schema);
+        let resolve_result: AvroResult<Value> = avro_value.resolve(&schema).await;
         assert!(
             resolve_result.is_ok(),
             "resolve result must be ok, got: {resolve_result:?}"
@@ -3074,8 +3074,8 @@ Field with name '"b"' is not a member of the map items"#,
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3892_resolve_fixed_from_bytes() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3892_resolve_fixed_from_bytes() -> TestResult {
         let value = Value::Bytes(vec![97, 98, 99]);
         assert_eq!(
             value.resolve(&Schema::Fixed(FixedSchema {
@@ -3085,7 +3085,7 @@ Field with name '"b"' is not a member of the map items"#,
                 size: 3,
                 default: None,
                 attributes: Default::default()
-            }))?,
+            })).await?,
             Value::Fixed(3, vec![97, 98, 99])
         );
 
@@ -3099,7 +3099,7 @@ Field with name '"b"' is not a member of the map items"#,
                     size: 3,
                     default: None,
                     attributes: Default::default()
-                }))
+                })).await
                 .is_err(),
         );
 
@@ -3113,15 +3113,15 @@ Field with name '"b"' is not a member of the map items"#,
                     size: 3,
                     default: None,
                     attributes: Default::default()
-                }))
+                })).await
                 .is_err(),
         );
 
         Ok(())
     }
 
-    #[test]
-    fn avro_3928_from_serde_value_to_types_value() {
+    #[tokio::test]
+    async fn avro_3928_from_serde_value_to_types_value() {
         assert_eq!(Value::from(serde_json::Value::Null), Value::Null);
         assert_eq!(Value::from(json!(true)), Value::Boolean(true));
         assert_eq!(Value::from(json!(false)), Value::Boolean(false));
@@ -3165,11 +3165,11 @@ Field with name '"b"' is not a member of the map items"#,
         );
     }
 
-    #[test]
-    fn avro_4024_resolve_double_from_unknown_string_err() -> TestResult {
+    #[tokio::test]
+    async fn avro_4024_resolve_double_from_unknown_string_err() -> TestResult {
         let schema = Schema::parse_str(r#"{"type": "double"}"#)?;
         let value = Value::String("unknown".to_owned());
-        match value.resolve(&schema).map_err(Error::into_details) {
+        match value.resolve(&schema).await.map_err(Error::into_details) {
             Err(err @ Details::GetDouble(_)) => {
                 assert_eq!(
                     format!("{err:?}"),
@@ -3183,11 +3183,11 @@ Field with name '"b"' is not a member of the map items"#,
         Ok(())
     }
 
-    #[test]
-    fn avro_4024_resolve_float_from_unknown_string_err() -> TestResult {
+    #[tokio::test]
+    async fn avro_4024_resolve_float_from_unknown_string_err() -> TestResult {
         let schema = Schema::parse_str(r#"{"type": "float"}"#)?;
         let value = Value::String("unknown".to_owned());
-        match value.resolve(&schema).map_err(Error::into_details) {
+        match value.resolve(&schema).await.map_err(Error::into_details) {
             Err(err @ Details::GetFloat(_)) => {
                 assert_eq!(
                     format!("{err:?}"),
@@ -3201,8 +3201,8 @@ Field with name '"b"' is not a member of the map items"#,
         Ok(())
     }
 
-    #[test]
-    fn avro_4029_resolve_from_unsupported_err() -> TestResult {
+    #[tokio::test]
+    async fn avro_4029_resolve_from_unsupported_err() -> TestResult {
         let data: Vec<(&str, Value, &str)> = vec![
             (
                 r#"{ "name": "NAME", "type": "int" }"#,
@@ -3338,7 +3338,7 @@ Field with name '"b"' is not a member of the map items"#,
 
         for (schema_str, value, expected_error) in data {
             let schema = Schema::parse_str(schema_str)?;
-            match value.resolve(&schema) {
+            match value.resolve(&schema).await {
                 Err(error) => {
                     assert_eq!(format!("{error}"), expected_error);
                 }
@@ -3350,8 +3350,8 @@ Field with name '"b"' is not a member of the map items"#,
         Ok(())
     }
 
-    #[test]
-    fn avro_rs_130_get_from_record() -> TestResult {
+    #[tokio::test]
+    async fn avro_rs_130_get_from_record() -> TestResult {
         let schema = r#"
         {
             "type": "record",

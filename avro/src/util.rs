@@ -15,15 +15,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::{AvroResult, error::Details, schema::Documentation};
-use serde_json::{Map, Value};
 use std::{
-    io::{Read, Write},
     sync::{
         Once,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize},
     },
 };
+use std::sync::atomic::Ordering;
+use crate::AvroResult;
+use crate::error::Details;
 
 /// Maximum number of bytes that can be allocated when decoding
 /// Avro-encoded values. This is a protection against ill-formed
@@ -40,108 +40,8 @@ static MAX_ALLOCATION_BYTES_ONCE: Once = Once::new();
 pub(crate) static SERDE_HUMAN_READABLE: AtomicBool = AtomicBool::new(true);
 static SERDE_HUMAN_READABLE_ONCE: Once = Once::new();
 
-pub trait MapHelper {
-    fn string(&self, key: &str) -> Option<String>;
-
-    fn name(&self) -> Option<String> {
-        self.string("name")
-    }
-
-    fn doc(&self) -> Documentation {
-        self.string("doc")
-    }
-
-    fn aliases(&self) -> Option<Vec<String>>;
-}
-
-impl MapHelper for Map<String, Value> {
-    fn string(&self, key: &str) -> Option<String> {
-        self.get(key)
-            .and_then(|v| v.as_str())
-            .map(|v| v.to_string())
-    }
-
-    fn aliases(&self) -> Option<Vec<String>> {
-        // FIXME no warning when aliases aren't a json array of json strings
-        self.get("aliases")
-            .and_then(|aliases| aliases.as_array())
-            .and_then(|aliases| {
-                aliases
-                    .iter()
-                    .map(|alias| alias.as_str())
-                    .map(|alias| alias.map(|a| a.to_string()))
-                    .collect::<Option<_>>()
-            })
-    }
-}
-
-pub fn read_long<R: Read>(reader: &mut R) -> AvroResult<i64> {
-    zag_i64(reader)
-}
-
-pub fn zig_i32<W: Write>(n: i32, buffer: W) -> AvroResult<usize> {
-    zig_i64(n as i64, buffer)
-}
-
-pub fn zig_i64<W: Write>(n: i64, writer: W) -> AvroResult<usize> {
-    encode_variable(((n << 1) ^ (n >> 63)) as u64, writer)
-}
-
-pub fn zag_i32<R: Read>(reader: &mut R) -> AvroResult<i32> {
-    let i = zag_i64(reader)?;
-    i32::try_from(i).map_err(|e| Details::ZagI32(e, i).into())
-}
-
-pub fn zag_i64<R: Read>(reader: &mut R) -> AvroResult<i64> {
-    let z = decode_variable(reader)?;
-    Ok(if z & 0x1 == 0 {
-        (z >> 1) as i64
-    } else {
-        !(z >> 1) as i64
-    })
-}
-
-fn encode_variable<W: Write>(mut z: u64, mut writer: W) -> AvroResult<usize> {
-    let mut buffer = [0u8; 10];
-    let mut i: usize = 0;
-    loop {
-        if z <= 0x7F {
-            buffer[i] = (z & 0x7F) as u8;
-            i += 1;
-            break;
-        } else {
-            buffer[i] = (0x80 | (z & 0x7F)) as u8;
-            i += 1;
-            z >>= 7;
-        }
-    }
-    writer
-        .write(&buffer[..i])
-        .map_err(|e| Details::WriteBytes(e).into())
-}
-
-fn decode_variable<R: Read>(reader: &mut R) -> AvroResult<u64> {
-    let mut i = 0u64;
-    let mut buf = [0u8; 1];
-
-    let mut j = 0;
-    loop {
-        if j > 9 {
-            // if j * 7 > 64
-            return Err(Details::IntegerOverflow.into());
-        }
-        reader
-            .read_exact(&mut buf[..])
-            .map_err(Details::ReadVariableIntegerBytes)?;
-        i |= (u64::from(buf[0] & 0x7F)) << (j * 7);
-        if (buf[0] >> 7) == 0 {
-            break;
-        } else {
-            j += 1;
-        }
-    }
-
-    Ok(i)
+pub(crate) fn is_human_readable() -> bool {
+    SERDE_HUMAN_READABLE.load(Ordering::Acquire)
 }
 
 /// Set a new maximum number of bytes that can be allocated when decoding data.
@@ -157,7 +57,6 @@ pub fn max_allocation_bytes(num_bytes: usize) -> usize {
     });
     MAX_ALLOCATION_BYTES.load(Ordering::Acquire)
 }
-
 pub fn safe_len(len: usize) -> AvroResult<usize> {
     let max_bytes = max_allocation_bytes(DEFAULT_MAX_ALLOCATION_BYTES);
 
@@ -168,7 +67,7 @@ pub fn safe_len(len: usize) -> AvroResult<usize> {
             desired: len,
             maximum: max_bytes,
         }
-        .into())
+            .into())
     }
 }
 
@@ -186,111 +85,238 @@ pub fn set_serde_human_readable(human_readable: bool) {
     });
 }
 
-pub(crate) fn is_human_readable() -> bool {
-    SERDE_HUMAN_READABLE.load(Ordering::Acquire)
-}
+#[synca::synca(
+  #[cfg(feature = "tokio")]
+  pub mod tokio { },
+  #[cfg(feature = "sync")]
+  pub mod sync {
+    sync!();
+    replace!(
+      tokio::io::AsyncRead => std::io::Read,
+      #[tokio::test] => #[test]
+    );
+  }
+)]
+mod util {
+    #[synca::cfg(tokio)]
+    use tokio::io::AsyncReadExt;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use apache_avro_test_helper::TestResult;
-    use pretty_assertions::assert_eq;
+    use std::{
+        io::{Write},
+    };
+    use crate::schema::Documentation;
+    use serde_json::{Map, Value};
+    use crate::AvroResult;
+    use crate::error::Details;
 
-    #[test]
-    fn test_zigzag() {
-        let mut a = Vec::new();
-        let mut b = Vec::new();
-        zig_i32(42i32, &mut a).unwrap();
-        zig_i64(42i64, &mut b).unwrap();
-        assert_eq!(a, b);
+    pub trait MapHelper {
+        fn string(&self, key: &str) -> Option<String>;
+
+        fn name(&self) -> Option<String> {
+            self.string("name")
+        }
+
+        fn doc(&self) -> Documentation {
+            self.string("doc")
+        }
+
+        fn aliases(&self) -> Option<Vec<String>>;
     }
 
-    #[test]
-    fn test_zig_i64() {
-        let mut s = Vec::new();
+    impl MapHelper for Map<String, Value> {
+        fn string(&self, key: &str) -> Option<String> {
+            self.get(key)
+                .and_then(|v| v.as_str())
+                .map(|v| v.to_string())
+        }
 
-        zig_i64(0, &mut s).unwrap();
-        assert_eq!(s, [0]);
-
-        s.clear();
-        zig_i64(-1, &mut s).unwrap();
-        assert_eq!(s, [1]);
-
-        s.clear();
-        zig_i64(1, &mut s).unwrap();
-        assert_eq!(s, [2]);
-
-        s.clear();
-        zig_i64(-64, &mut s).unwrap();
-        assert_eq!(s, [127]);
-
-        s.clear();
-        zig_i64(64, &mut s).unwrap();
-        assert_eq!(s, [128, 1]);
-
-        s.clear();
-        zig_i64(i32::MAX as i64, &mut s).unwrap();
-        assert_eq!(s, [254, 255, 255, 255, 15]);
-
-        s.clear();
-        zig_i64(i32::MAX as i64 + 1, &mut s).unwrap();
-        assert_eq!(s, [128, 128, 128, 128, 16]);
-
-        s.clear();
-        zig_i64(i32::MIN as i64, &mut s).unwrap();
-        assert_eq!(s, [255, 255, 255, 255, 15]);
-
-        s.clear();
-        zig_i64(i32::MIN as i64 - 1, &mut s).unwrap();
-        assert_eq!(s, [129, 128, 128, 128, 16]);
-
-        s.clear();
-        zig_i64(i64::MAX, &mut s).unwrap();
-        assert_eq!(s, [254, 255, 255, 255, 255, 255, 255, 255, 255, 1]);
-
-        s.clear();
-        zig_i64(i64::MIN, &mut s).unwrap();
-        assert_eq!(s, [255, 255, 255, 255, 255, 255, 255, 255, 255, 1]);
+        fn aliases(&self) -> Option<Vec<String>> {
+            // FIXME no warning when aliases aren't a json array of json strings
+            self.get("aliases")
+                .and_then(|aliases| aliases.as_array())
+                .and_then(|aliases| {
+                    aliases
+                        .iter()
+                        .map(|alias| alias.as_str())
+                        .map(|alias| alias.map(|a| a.to_string()))
+                        .collect::<Option<_>>()
+                })
+        }
     }
 
-    #[test]
-    fn test_zig_i32() {
-        let mut s = Vec::new();
-        zig_i32(i32::MAX / 2, &mut s).unwrap();
-        assert_eq!(s, [254, 255, 255, 255, 7]);
-
-        s.clear();
-        zig_i32(i32::MIN / 2, &mut s).unwrap();
-        assert_eq!(s, [255, 255, 255, 255, 7]);
-
-        s.clear();
-        zig_i32(-(i32::MIN / 2), &mut s).unwrap();
-        assert_eq!(s, [128, 128, 128, 128, 8]);
-
-        s.clear();
-        zig_i32(i32::MIN / 2 - 1, &mut s).unwrap();
-        assert_eq!(s, [129, 128, 128, 128, 8]);
-
-        s.clear();
-        zig_i32(i32::MAX, &mut s).unwrap();
-        assert_eq!(s, [254, 255, 255, 255, 15]);
-
-        s.clear();
-        zig_i32(i32::MIN, &mut s).unwrap();
-        assert_eq!(s, [255, 255, 255, 255, 15]);
+    pub async fn read_long<R: tokio::io::AsyncRead + Unpin>(reader: &mut R) -> AvroResult<i64> {
+        zag_i64(reader).await
     }
 
-    #[test]
-    fn test_overflow() {
-        let causes_left_shift_overflow: &[u8] = &[0xe1, 0xe1, 0xe1, 0xe1, 0xe1];
-        assert!(decode_variable(&mut &*causes_left_shift_overflow).is_err());
+    pub fn zig_i32<W: Write>(n: i32, buffer: W) -> AvroResult<usize> {
+        zig_i64(n as i64, buffer)
     }
 
-    #[test]
-    fn test_safe_len() -> TestResult {
-        assert_eq!(42usize, safe_len(42usize)?);
-        assert!(safe_len(1024 * 1024 * 1024).is_err());
+    pub fn zig_i64<W: Write>(n: i64, writer: W) -> AvroResult<usize> {
+        encode_variable(((n << 1) ^ (n >> 63)) as u64, writer)
+    }
 
-        Ok(())
+    pub async fn zag_i32<R: tokio::io::AsyncRead + Unpin>(reader: &mut R) -> AvroResult<i32> {
+        let i = zag_i64(reader).await?;
+        i32::try_from(i).map_err(|e| Details::ZagI32(e, i).into())
+    }
+
+    pub async fn zag_i64<R: tokio::io::AsyncRead + Unpin>(reader: &mut R) -> AvroResult<i64> {
+        let z = decode_variable(reader).await?;
+        Ok(if z & 0x1 == 0 {
+            (z >> 1) as i64
+        } else {
+            !(z >> 1) as i64
+        })
+    }
+
+    fn encode_variable<W: Write>(mut z: u64, mut writer: W) -> AvroResult<usize> {
+        let mut buffer = [0u8; 10];
+        let mut i: usize = 0;
+        loop {
+            if z <= 0x7F {
+                buffer[i] = (z & 0x7F) as u8;
+                i += 1;
+                break;
+            } else {
+                buffer[i] = (0x80 | (z & 0x7F)) as u8;
+                i += 1;
+                z >>= 7;
+            }
+        }
+        writer
+            .write(&buffer[..i])
+            .map_err(|e| Details::WriteBytes(e).into())
+    }
+
+    async fn decode_variable<R: tokio::io::AsyncRead + Unpin>(reader: &mut R) -> AvroResult<u64> {
+        let mut i = 0u64;
+        let mut buf = [0u8; 1];
+
+        let mut j = 0;
+        loop {
+            if j > 9 {
+                // if j * 7 > 64
+                return Err(Details::IntegerOverflow.into());
+            }
+            reader
+                .read_exact(&mut buf[..]).await
+                .map_err(Details::ReadVariableIntegerBytes)?;
+            i |= (u64::from(buf[0] & 0x7F)) << (j * 7);
+            if (buf[0] >> 7) == 0 {
+                break;
+            } else {
+                j += 1;
+            }
+        }
+
+        Ok(i)
+    }
+
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use apache_avro_test_helper::TestResult;
+        use pretty_assertions::assert_eq;
+        use crate::util::safe_len;
+
+        #[test]
+        fn test_zigzag() {
+            let mut a = Vec::new();
+            let mut b = Vec::new();
+            zig_i32(42i32, &mut a).unwrap();
+            zig_i64(42i64, &mut b).unwrap();
+            assert_eq!(a, b);
+        }
+
+        #[test]
+        fn test_zig_i64() {
+            let mut s = Vec::new();
+
+            zig_i64(0, &mut s).unwrap();
+            assert_eq!(s, [0]);
+
+            s.clear();
+            zig_i64(-1, &mut s).unwrap();
+            assert_eq!(s, [1]);
+
+            s.clear();
+            zig_i64(1, &mut s).unwrap();
+            assert_eq!(s, [2]);
+
+            s.clear();
+            zig_i64(-64, &mut s).unwrap();
+            assert_eq!(s, [127]);
+
+            s.clear();
+            zig_i64(64, &mut s).unwrap();
+            assert_eq!(s, [128, 1]);
+
+            s.clear();
+            zig_i64(i32::MAX as i64, &mut s).unwrap();
+            assert_eq!(s, [254, 255, 255, 255, 15]);
+
+            s.clear();
+            zig_i64(i32::MAX as i64 + 1, &mut s).unwrap();
+            assert_eq!(s, [128, 128, 128, 128, 16]);
+
+            s.clear();
+            zig_i64(i32::MIN as i64, &mut s).unwrap();
+            assert_eq!(s, [255, 255, 255, 255, 15]);
+
+            s.clear();
+            zig_i64(i32::MIN as i64 - 1, &mut s).unwrap();
+            assert_eq!(s, [129, 128, 128, 128, 16]);
+
+            s.clear();
+            zig_i64(i64::MAX, &mut s).unwrap();
+            assert_eq!(s, [254, 255, 255, 255, 255, 255, 255, 255, 255, 1]);
+
+            s.clear();
+            zig_i64(i64::MIN, &mut s).unwrap();
+            assert_eq!(s, [255, 255, 255, 255, 255, 255, 255, 255, 255, 1]);
+        }
+
+        #[test]
+        fn test_zig_i32() {
+            let mut s = Vec::new();
+            zig_i32(i32::MAX / 2, &mut s).unwrap();
+            assert_eq!(s, [254, 255, 255, 255, 7]);
+
+            s.clear();
+            zig_i32(i32::MIN / 2, &mut s).unwrap();
+            assert_eq!(s, [255, 255, 255, 255, 7]);
+
+            s.clear();
+            zig_i32(-(i32::MIN / 2), &mut s).unwrap();
+            assert_eq!(s, [128, 128, 128, 128, 8]);
+
+            s.clear();
+            zig_i32(i32::MIN / 2 - 1, &mut s).unwrap();
+            assert_eq!(s, [129, 128, 128, 128, 8]);
+
+            s.clear();
+            zig_i32(i32::MAX, &mut s).unwrap();
+            assert_eq!(s, [254, 255, 255, 255, 15]);
+
+            s.clear();
+            zig_i32(i32::MIN, &mut s).unwrap();
+            assert_eq!(s, [255, 255, 255, 255, 15]);
+        }
+
+        #[test]
+        fn test_overflow() {
+            let causes_left_shift_overflow: &[u8] = &[0xe1, 0xe1, 0xe1, 0xe1, 0xe1];
+            assert!(decode_variable(&mut &*causes_left_shift_overflow).is_err());
+        }
+
+        #[test]
+        fn test_safe_len() -> TestResult {
+            assert_eq!(42usize, safe_len(42usize)?);
+            assert!(safe_len(1024 * 1024 * 1024).is_err());
+
+            Ok(())
+        }
     }
 }

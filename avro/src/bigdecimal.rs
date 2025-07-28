@@ -15,9 +15,23 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#[synca::synca(
+  #[cfg(feature = "tokio")]
+  pub mod tokio { },
+  #[cfg(feature = "sync")]
+  pub mod sync {
+    sync!();
+    replace!(
+      tokio::io::AsyncRead => std::io::Read,
+      decode::tokio => decode::sync,
+      #[tokio::test] => #[test]
+    );
+  }
+)]
+mod bigdecimal {}
 use crate::{
     AvroResult,
-    decode::{decode_len, decode_long},
+    decode::tokio::{decode_len, decode_long},
     encode::{encode_bytes, encode_long},
     error::Details,
     types::Value,
@@ -47,9 +61,9 @@ pub(crate) fn serialize_big_decimal(decimal: &BigDecimal) -> AvroResult<Vec<u8>>
     Ok(final_buffer)
 }
 
-pub(crate) fn deserialize_big_decimal(bytes: &Vec<u8>) -> AvroResult<BigDecimal> {
+pub(crate) async fn deserialize_big_decimal(bytes: &Vec<u8>) -> AvroResult<BigDecimal> {
     let mut bytes: &[u8] = bytes.as_slice();
-    let mut big_decimal_buffer = match decode_len(&mut bytes) {
+    let mut big_decimal_buffer = match decode_len(&mut bytes).await {
         Ok(size) => vec![0u8; size],
         Err(err) => return Err(Details::BigDecimalLen(Box::new(err)).into()),
     };
@@ -58,7 +72,7 @@ pub(crate) fn deserialize_big_decimal(bytes: &Vec<u8>) -> AvroResult<BigDecimal>
         .read_exact(&mut big_decimal_buffer[..])
         .map_err(Details::ReadDouble)?;
 
-    match decode_long(&mut bytes) {
+    match decode_long(&mut bytes).await {
         Ok(Value::Long(scale_value)) => {
             let big_int: BigInt = BigInt::from_signed_bytes_be(&big_decimal_buffer);
             let decimal = BigDecimal::new(big_int, scale_value);
@@ -82,8 +96,8 @@ mod tests {
         str::FromStr,
     };
 
-    #[test]
-    fn test_avro_3779_bigdecimal_serial() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3779_bigdecimal_serial() -> TestResult {
         let value: BigDecimal =
             bigdecimal::BigDecimal::from(-1421).div(bigdecimal::BigDecimal::from(2));
         let mut current: BigDecimal = BigDecimal::one();
@@ -92,7 +106,7 @@ mod tests {
             let buffer: Vec<u8> = serialize_big_decimal(&current)?;
 
             let mut as_slice = buffer.as_slice();
-            decode_long(&mut as_slice)?;
+            decode_long(&mut as_slice).await?;
 
             let mut result: Vec<u8> = Vec::new();
             result.extend_from_slice(as_slice);
@@ -109,7 +123,7 @@ mod tests {
 
         let buffer: Vec<u8> = serialize_big_decimal(&BigDecimal::zero())?;
         let mut as_slice = buffer.as_slice();
-        decode_long(&mut as_slice)?;
+        decode_long(&mut as_slice).await?;
 
         let mut result: Vec<u8> = Vec::new();
         result.extend_from_slice(as_slice);
@@ -128,8 +142,8 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3779_record_with_bg() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3779_record_with_bg() -> TestResult {
         let schema_str = r#"
         {
           "type": "record",
@@ -165,7 +179,7 @@ mod tests {
         let wrote_data = writer.into_inner()?;
         let mut reader = Reader::new(&wrote_data[..])?;
 
-        let value = reader.next().unwrap()?;
+        let value = reader.next().await.unwrap()?;
 
         // extract field value
         let big_decimal_value: &Value = match value {
@@ -182,13 +196,13 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_avro_3779_from_java_file() -> TestResult {
+    #[tokio::test]
+    async fn test_avro_3779_from_java_file() -> TestResult {
         // Open file generated with Java code to ensure compatibility
         // with Java big decimal logical type.
         let file: File = File::open("./tests/bigdec.avro")?;
         let mut reader = Reader::new(BufReader::new(&file))?;
-        let next_element = reader.next();
+        let next_element = reader.next().await;
         assert!(next_element.is_some());
         let value = next_element.unwrap()?;
         let bg = match value {
