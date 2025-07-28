@@ -508,6 +508,13 @@ pub enum Details {
         schema: Schema,
     },
 
+    #[error("Failed to deserialize value of type {value_type} using schema {schema:?}: {value}")]
+    DeserializeValueWithSchema {
+        value_type: &'static str,
+        value: String,
+        schema: Schema,
+    },
+
     #[error("Failed to serialize field '{field_name}' for record {record_schema:?}: {error}")]
     SerializeRecordFieldWithSchema {
         field_name: &'static str,
