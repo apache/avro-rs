@@ -20,7 +20,6 @@ use crate::{
     AvroResult,
     error::{Details, Error},
     schema_equality, types,
-    util::MapHelper,
     validator::{
         validate_enum_symbol_name, validate_namespace, validate_record_field_name,
         validate_schema_name,
@@ -43,6 +42,10 @@ use std::{
     str::FromStr,
 };
 use strum_macros::{Display, EnumDiscriminants, EnumString};
+#[cfg(feature = "tokio")]
+use crate::util::tokio::MapHelper;
+#[cfg(feature = "sync")]
+use crate::util::sync::MapHelper;
 
 /// Represents an Avro schema fingerprint
 /// More information about Avro schema fingerprints can be found in the
@@ -662,7 +665,7 @@ pub enum RecordFieldOrder {
 
 impl RecordField {
     /// Parse a `serde_json::Value` into a `RecordField`.
-    fn parse(
+    async fn parse(
         field: &Map<String, Value>,
         position: usize,
         parser: &mut Parser,
@@ -686,7 +689,7 @@ impl RecordField {
             &enclosing_record.fullname(None),
             &parser.parsed_schemas,
             &default,
-        )?;
+        ).await?;
 
         let aliases = field.get("aliases").and_then(|aliases| {
             aliases.as_array().map(|aliases| {
@@ -716,7 +719,7 @@ impl RecordField {
         })
     }
 
-    fn resolve_default_value(
+    async fn resolve_default_value(
         field_schema: &Schema,
         field_name: &str,
         record_name: &str,
@@ -728,10 +731,10 @@ impl RecordField {
             match field_schema {
                 Schema::Union(union_schema) => {
                     let schemas = &union_schema.schemas;
-                    let resolved = schemas.iter().any(|schema| {
+                    let resolved = schemas.iter().any(async |schema| {
                         avro_value
                             .to_owned()
-                            .resolve_internal(schema, names, &schema.namespace(), &None)
+                            .resolve_internal(schema, names, &schema.namespace(), &None).await
                             .is_ok()
                     });
 
@@ -749,7 +752,7 @@ impl RecordField {
                 }
                 _ => {
                     let resolved = avro_value
-                        .resolve_internal(field_schema, names, &field_schema.namespace(), &None)
+                        .resolve_internal(field_schema, names, &field_schema.namespace(), &None).await
                         .is_ok();
 
                     if !resolved {
@@ -964,7 +967,7 @@ impl UnionSchema {
                 })
                 .unwrap_or_default();
 
-            self.schemas.iter().enumerate().find(|(_, schema)| {
+            self.schemas.iter().enumerate().find(async |(_, schema)| {
                 let resolved_schema = ResolvedSchema::new_with_known_schemata(
                     vec![*schema],
                     enclosing_namespace,
@@ -979,7 +982,7 @@ impl UnionSchema {
 
                 value
                     .clone()
-                    .resolve_internal(schema, &collected_names, namespace, &None)
+                    .resolve_internal(schema, &collected_names, namespace, &None).await
                     .is_ok()
             })
         }

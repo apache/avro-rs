@@ -24,8 +24,11 @@ use crate::{
         Schema, SchemaKind, UnionSchema,
     },
     types::{Value, ValueKind},
-    util::{zig_i32, zig_i64},
 };
+#[cfg(feature = "tokio")]
+use crate::util::tokio::{zig_i32, zig_i64};
+#[cfg(feature = "sync")]
+use crate::util::sync::{zig_i32, zig_i64};
 use log::error;
 use std::{borrow::Borrow, collections::HashMap, io::Write};
 

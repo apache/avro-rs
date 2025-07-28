@@ -29,11 +29,14 @@ categories.workspace = true
 documentation.workspace = true
 
 [features]
+default = [ "tokio"]
 bzip = ["dep:bzip2"]
 derive = ["dep:apache-avro-derive"]
 snappy = ["dep:crc32fast", "dep:snap"]
 xz = ["dep:xz2"]
 zstandard = ["dep:zstd"]
+sync = [  ]
+tokio = [ "dep:tokio", "dep:futures" ]
 
 [lib]
 # disable benchmarks to allow passing criterion arguments to `cargo bench`
@@ -70,9 +73,12 @@ snap = { default-features = false, version = "1.1.0", optional = true }
 strum = { default-features = false, version = "0.27.2" }
 strum_macros = { default-features = false, version = "0.27.2" }
 thiserror = { default-features = false, version = "2.0.12" }
+tokio = { version = "1.47.0", features = [ "full" ], optional = true }
 uuid = { default-features = false, version = "1.17.0", features = ["serde", "std"] }
 xz2 = { default-features = false, version = "0.1.7", optional = true }
 zstd = { default-features = false, version = "0.13.3", optional = true }
+synca = "0.5.3"
+futures = { version =  "0.3.31", optional = true }
 
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
