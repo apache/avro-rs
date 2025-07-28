@@ -900,7 +900,14 @@ pub use de::from_value;
 pub use decimal::Decimal;
 pub use duration::{Days, Duration, Millis, Months};
 pub use error::Error;
-pub use reader::{
+
+#[cfg(feature = "sync")]
+pub use reader::sync::{
+    GenericSingleObjectReader, Reader, SpecificSingleObjectReader, from_avro_datum,
+    from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
+};
+#[cfg(feature = "tokio")]
+pub use reader::tokio::{
     GenericSingleObjectReader, Reader, SpecificSingleObjectReader, from_avro_datum,
     from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
 };
@@ -919,6 +926,18 @@ pub use apache_avro_derive::*;
 /// A convenience type alias for `Result`s with `Error`s.
 pub type AvroResult<T> = Result<T, Error>;
 
+#[synca::synca(
+  #[cfg(feature = "tokio")]
+  pub mod tests_tokio { },
+  #[cfg(feature = "sync")]
+  pub mod tests_sync {
+    sync!();
+    replace!(
+      tokio::io::AsyncRead => std::io::Read,
+      #[tokio::test] => #[test]
+    );
+  }
+)]
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -928,8 +947,8 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     //TODO: move where it fits better
-    #[test]
-    fn test_enum_default() {
+    #[tokio::test]
+    async fn test_enum_default() {
         let writer_raw_schema = r#"
             {
                 "type": "record",
@@ -967,16 +986,18 @@ mod tests {
         record.put("b", "foo");
         writer.append(record).unwrap();
         let input = writer.into_inner().unwrap();
-        let mut reader = Reader::with_schema(&reader_schema, &input[..]).unwrap();
+        let mut reader = Reader::with_schema(&reader_schema, &input[..])
+            .await
+            .unwrap();
         assert_eq!(
-            reader.next().unwrap().unwrap(),
+            reader.next().await.unwrap().unwrap(),
             Value::Record(vec![
                 ("a".to_string(), Value::Long(27)),
                 ("b".to_string(), Value::String("foo".to_string())),
                 ("c".to_string(), Value::Enum(1, "spades".to_string())),
             ])
         );
-        assert!(reader.next().is_none());
+        assert!(reader.next().await.is_none());
     }
 
     //TODO: move where it fits better
@@ -1022,8 +1043,8 @@ mod tests {
     }
 
     //TODO: move where it fits better
-    #[test]
-    fn test_enum_no_reader_schema() {
+    #[tokio::test]
+    async fn test_enum_no_reader_schema() {
         let writer_raw_schema = r#"
             {
                 "type": "record",
@@ -1053,7 +1074,7 @@ mod tests {
         let input = writer.into_inner().unwrap();
         let mut reader = Reader::new(&input[..]).unwrap();
         assert_eq!(
-            reader.next().unwrap().unwrap(),
+            reader.next().await.unwrap().unwrap(),
             Value::Record(vec![
                 ("a".to_string(), Value::Long(27)),
                 ("b".to_string(), Value::String("foo".to_string())),
