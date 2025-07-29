@@ -22,43 +22,47 @@
   pub mod sync {
     sync!();
     replace!(
-      tokio::io::AsyncRead => std::io::Read,
-      decode::tokio::decode => decode::sync::decode,
-      decode::tokio::decode_internal => decode::sync::decode_internal,
+      bigdecimal::tokio => bigdecimal::sync,
+      decode::tokio => decode::sync,
+      encode::tokio => encode::sync,
+      error::tokio => error::sync,
+      schema::tokio => schema::sync,
       util::tokio => util::sync,
       #[tokio::test] => #[test]
     );
   }
 )]
 mod reader {
-    #[synca::cfg(tokio)]
+    #[cfg(feature = "sync")]
+    use std::io::Read as AvroRead;
+    #[cfg(feature = "tokio")]
+    use tokio::io::AsyncRead as AvroRead;
+    #[cfg(feature = "tokio")]
     use tokio::io::AsyncReadExt;
 
+    use crate::decode::tokio::{decode, decode_internal};
     use crate::{
         AvroResult, Codec, Error,
-        decode::tokio::{decode, decode_internal},
-        error::Details,
+        error::tokio::Details,
         from_value,
-        headers::{HeaderBuilder, RabinFingerprintHeader},
-        schema::{
+        headers::tokio::{HeaderBuilder, RabinFingerprintHeader},
+        schema::tokio::{
             AvroSchema, Names, ResolvedOwnedSchema, ResolvedSchema, Schema, resolve_names,
             resolve_names_with_schemata,
         },
-        types::Value,
-        util,
+        types::tokio::Value,
+        util::tokio::read_long,
     };
+    #[cfg(feature = "tokio")]
     use futures::Stream;
     use log::warn;
     use serde::de::DeserializeOwned;
     use serde_json::from_slice;
+    #[cfg(feature = "tokio")]
     use std::pin::Pin;
+    #[cfg(feature = "tokio")]
     use std::task::Poll;
-    use std::{
-        collections::HashMap,
-        io::ErrorKind,
-        marker::PhantomData,
-        str::FromStr,
-    };
+    use std::{collections::HashMap, io::ErrorKind, marker::PhantomData};
     /// Internal Block reader.
 
     #[derive(Debug, Clone)]
@@ -77,7 +81,7 @@ mod reader {
         names_refs: Names,
     }
 
-    impl<'r, R: tokio::io::AsyncRead + Unpin> Block<'r, R> {
+    impl<'r, R: AvroRead + Unpin> Block<'r, R> {
         async fn new(reader: R, schemata: Vec<&'r Schema>) -> AvroResult<Block<'r, R>> {
             let mut block = Block {
                 reader,
@@ -152,7 +156,7 @@ mod reader {
             //    We need to resize to ensure that the buffer len is safe to read `n` elements.
             //
             // TODO: Figure out a way to avoid having to truncate for the second case.
-            self.buf.resize(util::safe_len(n)?, 0);
+            self.buf.resize(crate::util::safe_len(n)?, 0);
             self.reader
                 .read_exact(&mut self.buf)
                 .await
@@ -165,17 +169,18 @@ mod reader {
         /// the block. The objects are stored in an internal buffer to the `Reader`.
         async fn read_block_next(&mut self) -> AvroResult<()> {
             assert!(self.is_empty(), "Expected self to be empty!");
-            match util::tokio::read_long(&mut self.reader)
+            match read_long(&mut self.reader)
                 .await
                 .map_err(Error::into_details)
             {
                 Ok(block_len) => {
                     self.message_count = block_len as usize;
-                    let block_bytes = util::tokio::read_long(&mut self.reader).await?;
+                    let block_bytes = read_long(&mut self.reader).await?;
                     self.fill_buf(block_bytes as usize).await?;
                     let mut marker = [0u8; 16];
                     self.reader
-                        .read_exact(&mut marker).await
+                        .read_exact(&mut marker)
+                        .await
                         .map_err(Details::ReadBlockMarker)?;
 
                     if marker != self.marker {
@@ -364,7 +369,7 @@ mod reader {
         should_resolve_schema: bool,
     }
 
-    impl<'a, R: tokio::io::AsyncRead + Unpin> Reader<'a, R> {
+    impl<'a, R: AvroRead + Unpin> Reader<'a, R> {
         /// Creates a `Reader` given something implementing the `io::Read` trait to read from.
         /// No reader `Schema` will be set.
         ///
@@ -449,28 +454,30 @@ mod reader {
     }
 
     #[cfg(feature = "tokio")]
-    impl<R: tokio::io::AsyncRead + Unpin> Stream for Reader<'_, R> {
+    impl<R: AvroRead + Unpin> Stream for Reader<'_, R> {
         type Item = AvroResult<Value>;
-        async fn poll_next(
+        fn poll_next(
             mut self: Pin<&mut Self>,
             _cx: &mut futures::task::Context<'_>,
-        ) -> Poll<Option<Result<Self::Item, Error>>> {
+        ) -> Poll<Option<Self::Item>> {
             // to prevent keep on reading after the first error occurs
             if self.errored {
                 return Poll::Ready(None);
             };
-            match self.read_next().await {
-                Ok(opt) => Poll::Ready(opt.map(Ok)),
-                Err(e) => {
-                    self.errored = true;
-                    Poll::Ready(Some(Err(e)))
+            async {
+                match self.read_next().await {
+                    Ok(opt) => Poll::Ready(opt.map(Ok)),
+                    Err(e) => {
+                        self.errored = true;
+                        Poll::Ready(Some(Err(e)))
+                    }
                 }
             }
         }
     }
 
     #[cfg(feature = "sync")]
-    impl<R: Read> Iterator for Reader<'_, R> {
+    impl<R: std::io::Read> Iterator for Reader<'_, R> {
         type Item = AvroResult<Value>;
 
         fn next(&mut self) -> Option<Self::Item> {
@@ -496,7 +503,7 @@ mod reader {
     /// **NOTE** This function has a quite small niche of usage and does NOT take care of reading the
     /// header and consecutive data blocks; use [`Reader`](struct.Reader.html) if you don't know what
     /// you are doing, instead.
-    pub async fn from_avro_datum<R: tokio::io::AsyncRead + Unpin>(
+    pub async fn from_avro_datum<R: AvroRead + Unpin>(
         writer_schema: &Schema,
         reader: &mut R,
         reader_schema: Option<&Schema>,
@@ -514,7 +521,7 @@ mod reader {
     /// schemata to resolve any dependencies.
     ///
     /// In case a reader `Schema` is provided, schema resolution will also be performed.
-    pub async fn from_avro_datum_schemata<R: tokio::io::AsyncRead + Unpin>(
+    pub async fn from_avro_datum_schemata<R: AvroRead + Unpin>(
         writer_schema: &Schema,
         writer_schemata: Vec<&Schema>,
         reader: &mut R,
@@ -526,7 +533,8 @@ mod reader {
             reader,
             reader_schema,
             Vec::with_capacity(0),
-        ).await
+        )
+        .await
     }
 
     /// Decode a `Value` encoded in Avro format given the provided `Schema` and anything implementing `io::Read`
@@ -535,7 +543,7 @@ mod reader {
     /// schemata to resolve any dependencies.
     ///
     /// In case a reader `Schema` is provided, schema resolution will also be performed.
-    pub async fn from_avro_datum_reader_schemata<R: tokio::io::AsyncRead + Unpin>(
+    pub async fn from_avro_datum_reader_schemata<R: AvroRead + Unpin>(
         writer_schema: &Schema,
         writer_schemata: Vec<&Schema>,
         reader: &mut R,
@@ -578,7 +586,7 @@ mod reader {
             })
         }
 
-        pub async fn read_value<R: tokio::io::AsyncRead + Unpin>(&self, reader: &mut R) -> AvroResult<Value> {
+        pub async fn read_value<R: AvroRead + Unpin>(&self, reader: &mut R) -> AvroResult<Value> {
             let mut header = vec![0; self.expected_header.len()];
             match reader.read_exact(&mut header).await {
                 Ok(_) => {
@@ -588,7 +596,8 @@ mod reader {
                             self.write_schema.get_names(),
                             &None,
                             reader,
-                        ).await
+                        )
+                        .await
                     } else {
                         Err(Details::SingleObjectHeaderMismatch(
                             self.expected_header.clone(),
@@ -626,7 +635,7 @@ mod reader {
     where
         T: AvroSchema + From<Value>,
     {
-        pub async fn read_from_value<R: tokio::io::AsyncRead + Unpin>(&self, reader: &mut R) -> AvroResult<T> {
+        pub async fn read_from_value<R: AvroRead + Unpin>(&self, reader: &mut R) -> AvroResult<T> {
             self.inner.read_value(reader).await.map(|v| v.into())
         }
     }
@@ -635,7 +644,7 @@ mod reader {
     where
         T: AvroSchema + DeserializeOwned,
     {
-        pub async fn read<R: tokio::io::AsyncRead + Unpin>(&self, reader: &mut R) -> AvroResult<T> {
+        pub async fn read<R: AvroRead + Unpin>(&self, reader: &mut R) -> AvroResult<T> {
             from_value::<T>(&self.inner.read_value(reader).await?)
         }
     }
