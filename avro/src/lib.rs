@@ -882,13 +882,11 @@ pub mod schema_equality;
 pub mod types;
 pub mod validator;
 
-pub use crate::{
-    bigdecimal::BigDecimal,
-    bytes::{
-        serde_avro_bytes, serde_avro_bytes_opt, serde_avro_fixed, serde_avro_fixed_opt,
-        serde_avro_slice, serde_avro_slice_opt,
-    },
+pub use crate::bytes::{
+    serde_avro_bytes, serde_avro_bytes_opt, serde_avro_fixed, serde_avro_fixed_opt,
+    serde_avro_slice, serde_avro_slice_opt,
 };
+pub use crate::tokio::bigdecimal::BigDecimal;
 #[cfg(feature = "bzip")]
 pub use codec::bzip::Bzip2Settings;
 #[cfg(feature = "xz")]
@@ -901,12 +899,6 @@ pub use decimal::Decimal;
 pub use duration::{Days, Duration, Millis, Months};
 pub use error::Error;
 
-#[cfg(feature = "sync")]
-pub use reader::sync::{
-    GenericSingleObjectReader, Reader, SpecificSingleObjectReader, from_avro_datum,
-    from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
-};
-#[cfg(feature = "tokio")]
 pub use reader::tokio::{
     GenericSingleObjectReader, Reader, SpecificSingleObjectReader, from_avro_datum,
     from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
@@ -926,18 +918,6 @@ pub use apache_avro_derive::*;
 /// A convenience type alias for `Result`s with `Error`s.
 pub type AvroResult<T> = Result<T, Error>;
 
-#[synca::synca(
-  #[cfg(feature = "tokio")]
-  pub mod tests_tokio { },
-  #[cfg(feature = "sync")]
-  pub mod tests_sync {
-    sync!();
-    replace!(
-      tokio::io::AsyncRead => std::io::Read,
-      #[tokio::test] => #[test]
-    );
-  }
-)]
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -950,34 +930,34 @@ mod tests {
     #[tokio::test]
     async fn test_enum_default() {
         let writer_raw_schema = r#"
-            {
-                "type": "record",
-                "name": "test",
-                "fields": [
-                    {"name": "a", "type": "long", "default": 42},
-                    {"name": "b", "type": "string"}
-                ]
-            }
-        "#;
+        {
+            "type": "record",
+            "name": "test",
+            "fields": [
+                {"name": "a", "type": "long", "default": 42},
+                {"name": "b", "type": "string"}
+            ]
+        }
+    "#;
         let reader_raw_schema = r#"
-            {
-                "type": "record",
-                "name": "test",
-                "fields": [
-                    {"name": "a", "type": "long", "default": 42},
-                    {"name": "b", "type": "string"},
-                    {
-                        "name": "c",
-                        "type": {
-                            "type": "enum",
-                            "name": "suit",
-                            "symbols": ["diamonds", "spades", "clubs", "hearts"]
-                        },
-                        "default": "spades"
-                    }
-                ]
-            }
-        "#;
+        {
+            "type": "record",
+            "name": "test",
+            "fields": [
+                {"name": "a", "type": "long", "default": 42},
+                {"name": "b", "type": "string"},
+                {
+                    "name": "c",
+                    "type": {
+                        "type": "enum",
+                        "name": "suit",
+                        "symbols": ["diamonds", "spades", "clubs", "hearts"]
+                    },
+                    "default": "spades"
+                }
+            ]
+        }
+    "#;
         let writer_schema = Schema::parse_str(writer_raw_schema).unwrap();
         let reader_schema = Schema::parse_str(reader_raw_schema).unwrap();
         let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null);
@@ -1004,24 +984,24 @@ mod tests {
     #[test]
     fn test_enum_string_value() {
         let raw_schema = r#"
-            {
-                "type": "record",
-                "name": "test",
-                "fields": [
-                    {"name": "a", "type": "long", "default": 42},
-                    {"name": "b", "type": "string"},
-                    {
-                        "name": "c",
-                        "type": {
-                            "type": "enum",
-                            "name": "suit",
-                            "symbols": ["diamonds", "spades", "clubs", "hearts"]
-                        },
-                        "default": "spades"
-                    }
-                ]
-            }
-        "#;
+        {
+            "type": "record",
+            "name": "test",
+            "fields": [
+                {"name": "a", "type": "long", "default": 42},
+                {"name": "b", "type": "string"},
+                {
+                    "name": "c",
+                    "type": {
+                        "type": "enum",
+                        "name": "suit",
+                        "symbols": ["diamonds", "spades", "clubs", "hearts"]
+                    },
+                    "default": "spades"
+                }
+            ]
+        }
+    "#;
         let schema = Schema::parse_str(raw_schema).unwrap();
         let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Null);
         let mut record = Record::new(writer.schema()).unwrap();
@@ -1046,24 +1026,24 @@ mod tests {
     #[tokio::test]
     async fn test_enum_no_reader_schema() {
         let writer_raw_schema = r#"
-            {
-                "type": "record",
-                "name": "test",
-                "fields": [
-                    {"name": "a", "type": "long", "default": 42},
-                    {"name": "b", "type": "string"},
-                    {
-                        "name": "c",
-                        "type": {
-                            "type": "enum",
-                            "name": "suit",
-                            "symbols": ["diamonds", "spades", "clubs", "hearts"]
-                        },
-                        "default": "spades"
-                    }
-                ]
-            }
-        "#;
+        {
+            "type": "record",
+            "name": "test",
+            "fields": [
+                {"name": "a", "type": "long", "default": 42},
+                {"name": "b", "type": "string"},
+                {
+                    "name": "c",
+                    "type": {
+                        "type": "enum",
+                        "name": "suit",
+                        "symbols": ["diamonds", "spades", "clubs", "hearts"]
+                    },
+                    "default": "spades"
+                }
+            ]
+        }
+    "#;
         let writer_schema = Schema::parse_str(writer_raw_schema).unwrap();
         let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null);
         let mut record = Record::new(writer.schema()).unwrap();
@@ -1086,15 +1066,15 @@ mod tests {
     #[test]
     fn test_illformed_length() {
         let raw_schema = r#"
-            {
-                "type": "record",
-                "name": "test",
-                "fields": [
-                    {"name": "a", "type": "long", "default": 42},
-                    {"name": "b", "type": "string"}
-                ]
-            }
-        "#;
+        {
+            "type": "record",
+            "name": "test",
+            "fields": [
+                {"name": "a", "type": "long", "default": 42},
+                {"name": "b", "type": "string"}
+            ]
+        }
+    "#;
 
         let schema = Schema::parse_str(raw_schema).unwrap();
 

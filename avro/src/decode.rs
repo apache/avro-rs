@@ -22,48 +22,59 @@
   pub mod sync {
     sync!();
     replace!(
-      tokio::io::AsyncRead => std::io::Read,
+      bigdecimal::tokio => bigdecimal::sync,
+      decimal::tokio => decimal::sync,
+      decode::tokio => decode::sync,
+      encode::tokio => encode::sync,
+      error::tokio => error::sync,
+      schema::tokio => schema::sync,
+      util::tokio => util::sync,
       #[tokio::test] => #[test]
     );
   }
 )]
 mod decode {
-    #[synca::cfg(tokio)]
+    #[cfg(feature = "tokio")]
+    use futures::FutureExt;
+    #[cfg(feature = "tokio")]
+    use futures::TryFutureExt;
+    #[cfg(feature = "sync")]
+    use std::io::Read as AvroRead;
+    #[cfg(feature = "tokio")]
+    use tokio::io::AsyncRead as AvroRead;
+    #[cfg(feature = "tokio")]
     use tokio::io::AsyncReadExt;
 
+    use crate::util::safe_len;
+    use crate::util::tokio::{zag_i32, zag_i64};
     use crate::{
         AvroResult, Error,
-        bigdecimal::deserialize_big_decimal,
-        decimal::Decimal,
+        bigdecimal::tokio::deserialize_big_decimal,
+        decimal::tokio::Decimal,
         duration::Duration,
-        encode::encode_long,
-        error::Details,
-        schema::{
+        encode::tokio::encode_long,
+        error::tokio::Details,
+        schema::tokio::{
             DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, RecordSchema, ResolvedSchema,
             Schema,
         },
-        types::Value,
+        types::tokio::Value,
     };
     use std::{borrow::Borrow, collections::HashMap, io::ErrorKind, str::FromStr};
     use uuid::Uuid;
-    use crate::util::safe_len;
-    #[cfg(feature = "tokio")]
-    use crate::util::tokio::{zag_i32, zag_i64};
-    #[cfg(feature = "sync")]
-    use crate::util::sync::{zag_i32, zag_i64};
 
     #[inline]
-    pub(crate) async fn decode_long<R: tokio::io::AsyncRead + Unpin>(reader: &mut R) -> AvroResult<Value> {
-        zag_i64(reader).await.map(Value::Long)
+    pub(crate) async fn decode_long<R: AvroRead + Unpin>(reader: &mut R) -> AvroResult<Value> {
+        zag_i64(reader).await?.map(Value::Long)
     }
 
     #[inline]
-    async fn decode_int<R: tokio::io::AsyncRead + Unpin>(reader: &mut R) -> AvroResult<Value> {
-        zag_i32(reader).await.map(Value::Int)
+    async fn decode_int<R: AvroRead + Unpin>(reader: &mut R) -> AvroResult<Value> {
+        zag_i32(reader).await?.map(Value::Int)
     }
 
     #[inline]
-    pub(crate) async fn decode_len<R: tokio::io::AsyncRead + Unpin>(reader: &mut R) -> AvroResult<usize> {
+    pub(crate) async fn decode_len<R: AvroRead + Unpin>(reader: &mut R) -> AvroResult<usize> {
         let len = zag_i64(reader).await?;
         safe_len(usize::try_from(len).map_err(|e| Details::ConvertI64ToUsize(e, len))?)
     }
@@ -72,7 +83,7 @@ mod decode {
     ///
     /// Maps and arrays are 0-terminated, 0i64 is also encoded as 0 in Avro reading a length of 0 means
     /// the end of the map or array.
-    async fn decode_seq_len<R: tokio::io::AsyncRead + Unpin>(reader: &mut R) -> AvroResult<usize> {
+    async fn decode_seq_len<R: AvroRead + Unpin>(reader: &mut R) -> AvroResult<usize> {
         let raw_len = zag_i64(reader).await?;
         safe_len(
             usize::try_from(match raw_len.cmp(&0) {
@@ -88,15 +99,12 @@ mod decode {
     }
 
     /// Decode a `Value` from avro format given its `Schema`.
-    pub async fn decode<R: tokio::io::AsyncRead + Unpin>(
-        schema: &Schema,
-        reader: &mut R,
-    ) -> AvroResult<Value> {
+    pub async fn decode<R: AvroRead + Unpin>(schema: &Schema, reader: &mut R) -> AvroResult<Value> {
         let rs = ResolvedSchema::try_from(schema)?;
         decode_internal(schema, rs.get_names(), &None, reader).await
     }
 
-    pub(crate) async fn decode_internal<R: tokio::io::AsyncRead + Unpin, S: Borrow<Schema>>(
+    pub(crate) async fn decode_internal<R: AvroRead + Unpin, S: Borrow<Schema>>(
         schema: &Schema,
         names: &HashMap<Name, S>,
         enclosing_namespace: &Namespace,
@@ -123,13 +131,17 @@ mod decode {
             }
             Schema::Decimal(DecimalSchema { ref inner, .. }) => match &**inner {
                 Schema::Fixed { .. } => {
-                    match Box::pin(decode_internal(inner, names, enclosing_namespace, reader)).await? {
+                    match Box::pin(decode_internal(inner, names, enclosing_namespace, reader))
+                        .await?
+                    {
                         Value::Fixed(_, bytes) => Ok(Value::Decimal(Decimal::from(bytes))),
                         value => Err(Details::FixedValue(value).into()),
                     }
                 }
                 Schema::Bytes => {
-                    match Box::pin(decode_internal(inner, names, enclosing_namespace, reader)).await? {
+                    match Box::pin(decode_internal(inner, names, enclosing_namespace, reader))
+                        .await?
+                    {
                         Value::Bytes(bytes) => Ok(Value::Decimal(Decimal::from(bytes))),
                         value => Err(Details::BytesValue(value).into()),
                     }
@@ -137,8 +149,17 @@ mod decode {
                 schema => Err(Details::ResolveDecimalSchema(schema.into()).into()),
             },
             Schema::BigDecimal => {
-                match Box::pin(decode_internal(&Schema::Bytes, names, enclosing_namespace, reader)).await? {
-                    Value::Bytes(bytes) => deserialize_big_decimal(&bytes).await.map(Value::BigDecimal),
+                match Box::pin(decode_internal(
+                    &Schema::Bytes,
+                    names,
+                    enclosing_namespace,
+                    reader,
+                ))
+                .await?
+                {
+                    Value::Bytes(bytes) => {
+                        deserialize_big_decimal(&bytes).await.map(Value::BigDecimal)
+                    }
                     value => Err(Details::BytesValue(value).into()),
                 }
             }
@@ -206,16 +227,16 @@ mod decode {
                 Ok(Value::Uuid(uuid))
             }
             Schema::Int => decode_int(reader).await,
-            Schema::Date => zag_i32(reader).await.map(Value::Date),
-            Schema::TimeMillis => zag_i32(reader).await.map(Value::TimeMillis),
+            Schema::Date => zag_i32(reader).await?.map(Value::Date),
+            Schema::TimeMillis => zag_i32(reader).await?.map(Value::TimeMillis),
             Schema::Long => decode_long(reader).await,
-            Schema::TimeMicros => zag_i64(reader).await.map(Value::TimeMicros),
-            Schema::TimestampMillis => zag_i64(reader).await.map(Value::TimestampMillis),
-            Schema::TimestampMicros => zag_i64(reader).await.map(Value::TimestampMicros),
-            Schema::TimestampNanos => zag_i64(reader).await.map(Value::TimestampNanos),
-            Schema::LocalTimestampMillis => zag_i64(reader).await.map(Value::LocalTimestampMillis),
-            Schema::LocalTimestampMicros => zag_i64(reader).await.map(Value::LocalTimestampMicros),
-            Schema::LocalTimestampNanos => zag_i64(reader).await.map(Value::LocalTimestampNanos),
+            Schema::TimeMicros => zag_i64(reader).await?.map(Value::TimeMicros),
+            Schema::TimestampMillis => zag_i64(reader).await?.map(Value::TimestampMillis),
+            Schema::TimestampMicros => zag_i64(reader).await?.map(Value::TimestampMicros),
+            Schema::TimestampNanos => zag_i64(reader).await?.map(Value::TimestampNanos),
+            Schema::LocalTimestampMillis => zag_i64(reader).await?.map(Value::LocalTimestampMillis),
+            Schema::LocalTimestampMicros => zag_i64(reader).await?.map(Value::LocalTimestampMicros),
+            Schema::LocalTimestampNanos => zag_i64(reader).await?.map(Value::LocalTimestampNanos),
             Schema::Duration => {
                 let mut buf = [0u8; 12];
                 reader
@@ -243,7 +264,10 @@ mod decode {
             Schema::Bytes => {
                 let len = decode_len(reader).await?;
                 let mut buf = vec![0u8; len];
-                reader.read_exact(&mut buf).await.map_err(Details::ReadBytes)?;
+                reader
+                    .read_exact(&mut buf)
+                    .await
+                    .map_err(Details::ReadBytes)?;
                 Ok(Value::Bytes(buf))
             }
             Schema::String => {
@@ -282,8 +306,13 @@ mod decode {
                     items.reserve(len);
                     for _ in 0..len {
                         items.push(
-                            Box::pin(decode_internal(&inner.items, names, enclosing_namespace, reader))
-                                .await?,
+                            Box::pin(decode_internal(
+                                &inner.items,
+                                names,
+                                enclosing_namespace,
+                                reader,
+                            ))
+                            .await?,
                         );
                     }
                 }
@@ -301,8 +330,13 @@ mod decode {
 
                     items.reserve(len);
                     for _ in 0..len {
-                        match Box::pin(decode_internal(&Schema::String, names, enclosing_namespace, reader))
-                            .await?
+                        match Box::pin(decode_internal(
+                            &Schema::String,
+                            names,
+                            enclosing_namespace,
+                            reader,
+                        ))
+                        .await?
                         {
                             Value::String(key) => {
                                 let value = Box::pin(decode_internal(
@@ -334,7 +368,8 @@ mod decode {
                             num_variants: variants.len(),
                         })?;
                     let value =
-                        Box::pin(decode_internal(variant, names, enclosing_namespace, reader)).await?;
+                        Box::pin(decode_internal(variant, names, enclosing_namespace, reader))
+                            .await?;
                     Ok(Value::Union(index as u32, Box::new(value)))
                 }
                 Err(Details::ReadVariableIntegerBytes(io_err)) => {

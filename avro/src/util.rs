@@ -15,15 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::{
-    sync::{
-        Once,
-        atomic::{AtomicBool, AtomicUsize},
-    },
-};
-use std::sync::atomic::Ordering;
 use crate::AvroResult;
-use crate::error::Details;
+use crate::error::sync::Details;
+use std::sync::atomic::Ordering;
+use std::sync::{
+    Once,
+    atomic::{AtomicBool, AtomicUsize},
+};
 
 /// Maximum number of bytes that can be allocated when decoding
 /// Avro-encoded values. This is a protection against ill-formed
@@ -67,7 +65,7 @@ pub fn safe_len(len: usize) -> AvroResult<usize> {
             desired: len,
             maximum: max_bytes,
         }
-            .into())
+        .into())
     }
 }
 
@@ -92,22 +90,31 @@ pub fn set_serde_human_readable(human_readable: bool) {
   pub mod sync {
     sync!();
     replace!(
-      tokio::io::AsyncRead => std::io::Read,
+      bigdecimal::tokio => bigdecimal::sync,
+      decode::tokio => decode::sync,
+      encode::tokio => encode::sync,
+      error::tokio => error::sync,
+      schema::tokio => schema::sync,
+      util::tokio => util::sync,
       #[tokio::test] => #[test]
     );
   }
 )]
 mod util {
-    #[synca::cfg(tokio)]
+    #[cfg(feature = "tokio")]
+    use futures::future::TryFutureExt;
+    #[cfg(feature = "sync")]
+    use std::io::Read as AvroRead;
+    #[cfg(feature = "tokio")]
+    use tokio::io::AsyncRead as AvroRead;
+    #[cfg(feature = "tokio")]
     use tokio::io::AsyncReadExt;
 
-    use std::{
-        io::{Write},
-    };
-    use crate::schema::Documentation;
-    use serde_json::{Map, Value};
     use crate::AvroResult;
-    use crate::error::Details;
+    use crate::error::tokio::Details;
+    use crate::schema::tokio::Documentation;
+    use serde_json::{Map, Value};
+    use std::io::Write;
 
     pub trait MapHelper {
         fn string(&self, key: &str) -> Option<String>;
@@ -144,7 +151,7 @@ mod util {
         }
     }
 
-    pub async fn read_long<R: tokio::io::AsyncRead + Unpin>(reader: &mut R) -> AvroResult<i64> {
+    pub async fn read_long<R: AvroRead + Unpin>(reader: &mut R) -> AvroResult<i64> {
         zag_i64(reader).await
     }
 
@@ -156,12 +163,12 @@ mod util {
         encode_variable(((n << 1) ^ (n >> 63)) as u64, writer)
     }
 
-    pub async fn zag_i32<R: tokio::io::AsyncRead + Unpin>(reader: &mut R) -> AvroResult<i32> {
+    pub async fn zag_i32<R: AvroRead + Unpin>(reader: &mut R) -> AvroResult<i32> {
         let i = zag_i64(reader).await?;
         i32::try_from(i).map_err(|e| Details::ZagI32(e, i).into())
     }
 
-    pub async fn zag_i64<R: tokio::io::AsyncRead + Unpin>(reader: &mut R) -> AvroResult<i64> {
+    pub async fn zag_i64<R: AvroRead + Unpin>(reader: &mut R) -> AvroResult<i64> {
         let z = decode_variable(reader).await?;
         Ok(if z & 0x1 == 0 {
             (z >> 1) as i64
@@ -189,7 +196,7 @@ mod util {
             .map_err(|e| Details::WriteBytes(e).into())
     }
 
-    async fn decode_variable<R: tokio::io::AsyncRead + Unpin>(reader: &mut R) -> AvroResult<u64> {
+    async fn decode_variable<R: AvroRead + Unpin>(reader: &mut R) -> AvroResult<u64> {
         let mut i = 0u64;
         let mut buf = [0u8; 1];
 
@@ -200,8 +207,9 @@ mod util {
                 return Err(Details::IntegerOverflow.into());
             }
             reader
-                .read_exact(&mut buf[..]).await
-                .map_err(Details::ReadVariableIntegerBytes)?;
+                .read_exact(&mut buf[..])
+                .map_err(Details::ReadVariableIntegerBytes)
+                .await?;
             i |= (u64::from(buf[0] & 0x7F)) << (j * 7);
             if (buf[0] >> 7) == 0 {
                 break;
@@ -213,13 +221,12 @@ mod util {
         Ok(i)
     }
 
-
     #[cfg(test)]
     mod tests {
         use super::*;
+        use crate::util::safe_len;
         use apache_avro_test_helper::TestResult;
         use pretty_assertions::assert_eq;
-        use crate::util::safe_len;
 
         #[test]
         fn test_zigzag() {
