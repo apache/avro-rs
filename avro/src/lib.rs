@@ -882,13 +882,11 @@ pub mod schema_equality;
 pub mod types;
 pub mod validator;
 
-pub use crate::{
-    bigdecimal::BigDecimal,
-    bytes::{
-        serde_avro_bytes, serde_avro_bytes_opt, serde_avro_fixed, serde_avro_fixed_opt,
-        serde_avro_slice, serde_avro_slice_opt,
-    },
+pub use crate::bytes::{
+    serde_avro_bytes, serde_avro_bytes_opt, serde_avro_fixed, serde_avro_fixed_opt,
+    serde_avro_slice, serde_avro_slice_opt,
 };
+pub use crate::tokio::bigdecimal::BigDecimal;
 #[cfg(feature = "bzip")]
 pub use codec::bzip::Bzip2Settings;
 #[cfg(feature = "xz")]
@@ -900,7 +898,8 @@ pub use de::from_value;
 pub use decimal::Decimal;
 pub use duration::{Days, Duration, Millis, Months};
 pub use error::Error;
-pub use reader::{
+
+pub use reader::tokio::{
     GenericSingleObjectReader, Reader, SpecificSingleObjectReader, from_avro_datum,
     from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
 };
@@ -928,37 +927,37 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     //TODO: move where it fits better
-    #[test]
-    fn test_enum_default() {
+    #[tokio::test]
+    async fn test_enum_default() {
         let writer_raw_schema = r#"
-            {
-                "type": "record",
-                "name": "test",
-                "fields": [
-                    {"name": "a", "type": "long", "default": 42},
-                    {"name": "b", "type": "string"}
-                ]
-            }
-        "#;
+        {
+            "type": "record",
+            "name": "test",
+            "fields": [
+                {"name": "a", "type": "long", "default": 42},
+                {"name": "b", "type": "string"}
+            ]
+        }
+    "#;
         let reader_raw_schema = r#"
-            {
-                "type": "record",
-                "name": "test",
-                "fields": [
-                    {"name": "a", "type": "long", "default": 42},
-                    {"name": "b", "type": "string"},
-                    {
-                        "name": "c",
-                        "type": {
-                            "type": "enum",
-                            "name": "suit",
-                            "symbols": ["diamonds", "spades", "clubs", "hearts"]
-                        },
-                        "default": "spades"
-                    }
-                ]
-            }
-        "#;
+        {
+            "type": "record",
+            "name": "test",
+            "fields": [
+                {"name": "a", "type": "long", "default": 42},
+                {"name": "b", "type": "string"},
+                {
+                    "name": "c",
+                    "type": {
+                        "type": "enum",
+                        "name": "suit",
+                        "symbols": ["diamonds", "spades", "clubs", "hearts"]
+                    },
+                    "default": "spades"
+                }
+            ]
+        }
+    "#;
         let writer_schema = Schema::parse_str(writer_raw_schema).unwrap();
         let reader_schema = Schema::parse_str(reader_raw_schema).unwrap();
         let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null);
@@ -967,40 +966,42 @@ mod tests {
         record.put("b", "foo");
         writer.append(record).unwrap();
         let input = writer.into_inner().unwrap();
-        let mut reader = Reader::with_schema(&reader_schema, &input[..]).unwrap();
+        let mut reader = Reader::with_schema(&reader_schema, &input[..])
+            .await
+            .unwrap();
         assert_eq!(
-            reader.next().unwrap().unwrap(),
+            reader.next().await.unwrap().unwrap(),
             Value::Record(vec![
                 ("a".to_string(), Value::Long(27)),
                 ("b".to_string(), Value::String("foo".to_string())),
                 ("c".to_string(), Value::Enum(1, "spades".to_string())),
             ])
         );
-        assert!(reader.next().is_none());
+        assert!(reader.next().await.is_none());
     }
 
     //TODO: move where it fits better
     #[test]
     fn test_enum_string_value() {
         let raw_schema = r#"
-            {
-                "type": "record",
-                "name": "test",
-                "fields": [
-                    {"name": "a", "type": "long", "default": 42},
-                    {"name": "b", "type": "string"},
-                    {
-                        "name": "c",
-                        "type": {
-                            "type": "enum",
-                            "name": "suit",
-                            "symbols": ["diamonds", "spades", "clubs", "hearts"]
-                        },
-                        "default": "spades"
-                    }
-                ]
-            }
-        "#;
+        {
+            "type": "record",
+            "name": "test",
+            "fields": [
+                {"name": "a", "type": "long", "default": 42},
+                {"name": "b", "type": "string"},
+                {
+                    "name": "c",
+                    "type": {
+                        "type": "enum",
+                        "name": "suit",
+                        "symbols": ["diamonds", "spades", "clubs", "hearts"]
+                    },
+                    "default": "spades"
+                }
+            ]
+        }
+    "#;
         let schema = Schema::parse_str(raw_schema).unwrap();
         let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Null);
         let mut record = Record::new(writer.schema()).unwrap();
@@ -1022,27 +1023,27 @@ mod tests {
     }
 
     //TODO: move where it fits better
-    #[test]
-    fn test_enum_no_reader_schema() {
+    #[tokio::test]
+    async fn test_enum_no_reader_schema() {
         let writer_raw_schema = r#"
-            {
-                "type": "record",
-                "name": "test",
-                "fields": [
-                    {"name": "a", "type": "long", "default": 42},
-                    {"name": "b", "type": "string"},
-                    {
-                        "name": "c",
-                        "type": {
-                            "type": "enum",
-                            "name": "suit",
-                            "symbols": ["diamonds", "spades", "clubs", "hearts"]
-                        },
-                        "default": "spades"
-                    }
-                ]
-            }
-        "#;
+        {
+            "type": "record",
+            "name": "test",
+            "fields": [
+                {"name": "a", "type": "long", "default": 42},
+                {"name": "b", "type": "string"},
+                {
+                    "name": "c",
+                    "type": {
+                        "type": "enum",
+                        "name": "suit",
+                        "symbols": ["diamonds", "spades", "clubs", "hearts"]
+                    },
+                    "default": "spades"
+                }
+            ]
+        }
+    "#;
         let writer_schema = Schema::parse_str(writer_raw_schema).unwrap();
         let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null);
         let mut record = Record::new(writer.schema()).unwrap();
@@ -1053,7 +1054,7 @@ mod tests {
         let input = writer.into_inner().unwrap();
         let mut reader = Reader::new(&input[..]).unwrap();
         assert_eq!(
-            reader.next().unwrap().unwrap(),
+            reader.next().await.unwrap().unwrap(),
             Value::Record(vec![
                 ("a".to_string(), Value::Long(27)),
                 ("b".to_string(), Value::String("foo".to_string())),
@@ -1065,15 +1066,15 @@ mod tests {
     #[test]
     fn test_illformed_length() {
         let raw_schema = r#"
-            {
-                "type": "record",
-                "name": "test",
-                "fields": [
-                    {"name": "a", "type": "long", "default": 42},
-                    {"name": "b", "type": "string"}
-                ]
-            }
-        "#;
+        {
+            "type": "record",
+            "name": "test",
+            "fields": [
+                {"name": "a", "type": "long", "default": 42},
+                {"name": "b", "type": "string"}
+            ]
+        }
+    "#;
 
         let schema = Schema::parse_str(raw_schema).unwrap();
 
