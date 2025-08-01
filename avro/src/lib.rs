@@ -886,28 +886,36 @@ pub use crate::bytes::{
     serde_avro_bytes, serde_avro_bytes_opt, serde_avro_fixed, serde_avro_fixed_opt,
     serde_avro_slice, serde_avro_slice_opt,
 };
-pub use crate::tokio::bigdecimal::BigDecimal;
+#[cfg(feature = "tokio")]
+pub use crate::bigdecimal::tokio::BigDecimal;
 #[cfg(feature = "bzip")]
 pub use codec::bzip::Bzip2Settings;
 #[cfg(feature = "xz")]
 pub use codec::xz::XzSettings;
 #[cfg(feature = "zstandard")]
 pub use codec::zstandard::ZstandardSettings;
-pub use codec::{Codec, DeflateSettings};
-pub use de::from_value;
-pub use decimal::Decimal;
+#[cfg(feature = "tokio")]
+pub use codec::tokio::{Codec, DeflateSettings};
+#[cfg(feature = "tokio")]
+pub use de::tokio::from_value;
+#[cfg(feature = "tokio")]
+pub use decimal::tokio::Decimal;
 pub use duration::{Days, Duration, Millis, Months};
-pub use error::Error;
-
+#[cfg(feature = "tokio")]
+pub use error::tokio::Error;
+#[cfg(feature = "tokio")]
 pub use reader::tokio::{
     GenericSingleObjectReader, Reader, SpecificSingleObjectReader, from_avro_datum,
     from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
 };
-pub use schema::{AvroSchema, Schema};
-pub use ser::to_value;
+#[cfg(feature = "tokio")]
+pub use schema::tokio::{AvroSchema, Schema};
+#[cfg(feature = "tokio")]
+pub use ser::tokio::to_value;
 pub use util::{max_allocation_bytes, set_serde_human_readable};
 pub use uuid::Uuid;
-pub use writer::{
+#[cfg(feature = "tokio")]
+pub use writer::tokio::{
     GenericSingleObjectWriter, SpecificSingleObjectWriter, Writer, WriterBuilder, to_avro_datum,
     to_avro_datum_schemata, write_avro_datum_ref,
 };
@@ -922,7 +930,7 @@ pub type AvroResult<T> = Result<T, Error>;
 mod tests {
     use crate::{
         Codec, Reader, Schema, Writer, from_avro_datum,
-        types::{Record, Value},
+        types::tokio::{Record, Value},
     };
     use pretty_assertions::assert_eq;
 

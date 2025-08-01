@@ -22,22 +22,19 @@
   pub mod sync {
     sync!();
     replace!(
-      bigdecimal::tokio => bigdecimal::sync,
-      decimal::tokio => decimal::sync,
-      decode::tokio => decode::sync,
-      encode::tokio => encode::sync,
-      error::tokio => error::sync,
-      schema::tokio => schema::sync,
-      util::tokio => util::sync,
+      crate::bigdecimal::tokio => crate::bigdecimal::sync,
+      crate::decimal::tokio => crate::decimal::sync,
+      crate::decode::tokio => crate::decode::sync,
+      crate::encode::tokio => crate::encode::sync,
+      crate::error::tokio => crate::error::sync,
+      crate::schema::tokio => crate::schema::sync,
+      crate::util::tokio => crate::util::sync,
+      crate::types::tokio => crate::types::sync,
       #[tokio::test] => #[test]
     );
   }
 )]
 mod decode {
-    #[cfg(feature = "tokio")]
-    use futures::FutureExt;
-    #[cfg(feature = "tokio")]
-    use futures::TryFutureExt;
     #[cfg(feature = "sync")]
     use std::io::Read as AvroRead;
     #[cfg(feature = "tokio")]
@@ -45,8 +42,7 @@ mod decode {
     #[cfg(feature = "tokio")]
     use tokio::io::AsyncReadExt;
 
-    use crate::util::safe_len;
-    use crate::util::tokio::{zag_i32, zag_i64};
+    use crate::util::tokio::{safe_len, zag_i32, zag_i64};
     use crate::{
         AvroResult, Error,
         bigdecimal::tokio::deserialize_big_decimal,
@@ -65,12 +61,12 @@ mod decode {
 
     #[inline]
     pub(crate) async fn decode_long<R: AvroRead + Unpin>(reader: &mut R) -> AvroResult<Value> {
-        zag_i64(reader).await?.map(Value::Long)
+        zag_i64(reader).await.map(Value::Long)
     }
 
     #[inline]
     async fn decode_int<R: AvroRead + Unpin>(reader: &mut R) -> AvroResult<Value> {
-        zag_i32(reader).await?.map(Value::Int)
+        zag_i32(reader).await.map(Value::Int)
     }
 
     #[inline]
@@ -227,16 +223,16 @@ mod decode {
                 Ok(Value::Uuid(uuid))
             }
             Schema::Int => decode_int(reader).await,
-            Schema::Date => zag_i32(reader).await?.map(Value::Date),
-            Schema::TimeMillis => zag_i32(reader).await?.map(Value::TimeMillis),
+            Schema::Date => zag_i32(reader).await.map(Value::Date),
+            Schema::TimeMillis => zag_i32(reader).await.map(Value::TimeMillis),
             Schema::Long => decode_long(reader).await,
-            Schema::TimeMicros => zag_i64(reader).await?.map(Value::TimeMicros),
-            Schema::TimestampMillis => zag_i64(reader).await?.map(Value::TimestampMillis),
-            Schema::TimestampMicros => zag_i64(reader).await?.map(Value::TimestampMicros),
-            Schema::TimestampNanos => zag_i64(reader).await?.map(Value::TimestampNanos),
-            Schema::LocalTimestampMillis => zag_i64(reader).await?.map(Value::LocalTimestampMillis),
-            Schema::LocalTimestampMicros => zag_i64(reader).await?.map(Value::LocalTimestampMicros),
-            Schema::LocalTimestampNanos => zag_i64(reader).await?.map(Value::LocalTimestampNanos),
+            Schema::TimeMicros => zag_i64(reader).await.map(Value::TimeMicros),
+            Schema::TimestampMillis => zag_i64(reader).await.map(Value::TimestampMillis),
+            Schema::TimestampMicros => zag_i64(reader).await.map(Value::TimestampMicros),
+            Schema::TimestampNanos => zag_i64(reader).await.map(Value::TimestampNanos),
+            Schema::LocalTimestampMillis => zag_i64(reader).await.map(Value::LocalTimestampMillis),
+            Schema::LocalTimestampMicros => zag_i64(reader).await.map(Value::LocalTimestampMicros),
+            Schema::LocalTimestampNanos => zag_i64(reader).await.map(Value::LocalTimestampNanos),
             Schema::Duration => {
                 let mut buf = [0u8; 12];
                 reader
