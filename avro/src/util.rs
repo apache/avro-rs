@@ -15,8 +15,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::AvroResult;
-use crate::error::sync::Details;
 use std::sync::atomic::Ordering;
 use std::sync::{
     Once,
@@ -55,19 +53,6 @@ pub fn max_allocation_bytes(num_bytes: usize) -> usize {
     });
     MAX_ALLOCATION_BYTES.load(Ordering::Acquire)
 }
-pub fn safe_len(len: usize) -> AvroResult<usize> {
-    let max_bytes = max_allocation_bytes(DEFAULT_MAX_ALLOCATION_BYTES);
-
-    if len <= max_bytes {
-        Ok(len)
-    } else {
-        Err(Details::MemoryAllocation {
-            desired: len,
-            maximum: max_bytes,
-        }
-        .into())
-    }
-}
 
 /// Set whether serializing/deserializing is marked as human readable in serde traits.
 /// This will adjust the return value of `is_human_readable()` for both.
@@ -90,12 +75,17 @@ pub fn set_serde_human_readable(human_readable: bool) {
   pub mod sync {
     sync!();
     replace!(
-      bigdecimal::tokio => bigdecimal::sync,
-      decode::tokio => decode::sync,
-      encode::tokio => encode::sync,
-      error::tokio => error::sync,
-      schema::tokio => schema::sync,
-      util::tokio => util::sync,
+      crate::bigdecimal::tokio => crate::bigdecimal::sync,
+      crate::decimal::tokio => crate::decimal::sync,
+      crate::decode::tokio => crate::decode::sync,
+      crate::encode::tokio => crate::encode::sync,
+      crate::error::tokio => crate::error::sync,
+      crate::schema::tokio => crate::schema::sync,
+      crate::util::tokio => crate::util::sync,
+      crate::types::tokio => crate::types::sync,
+      crate::schema_equality::tokio => crate::schema_equality::sync,
+      crate::util::tokio => crate::util::sync,
+      crate::validator::tokio => crate::validator::sync,
       #[tokio::test] => #[test]
     );
   }
@@ -221,10 +211,25 @@ mod util {
         Ok(i)
     }
 
+    pub fn safe_len(len: usize) -> crate::AvroResult<usize> {
+        let max_bytes = crate::util::max_allocation_bytes(crate::util::DEFAULT_MAX_ALLOCATION_BYTES);
+
+        if len <= max_bytes {
+            Ok(len)
+        } else {
+            Err(Details::MemoryAllocation {
+                desired: len,
+                maximum: max_bytes,
+            }
+                .into())
+        }
+    }
+
+
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::util::safe_len;
+        use crate::util::tokio::safe_len;
         use apache_avro_test_helper::TestResult;
         use pretty_assertions::assert_eq;
 
@@ -312,10 +317,10 @@ mod util {
             assert_eq!(s, [255, 255, 255, 255, 15]);
         }
 
-        #[test]
-        fn test_overflow() {
+        #[tokio::test]
+        async fn test_overflow() {
             let causes_left_shift_overflow: &[u8] = &[0xe1, 0xe1, 0xe1, 0xe1, 0xe1];
-            assert!(decode_variable(&mut &*causes_left_shift_overflow).is_err());
+            assert!(decode_variable(&mut &*causes_left_shift_overflow).await.is_err());
         }
 
         #[test]

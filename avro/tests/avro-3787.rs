@@ -15,7 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{Schema, from_avro_datum, to_avro_datum, to_value, types};
+use apache_avro::{from_avro_datum, to_avro_datum, to_value};
+use apache_avro::schema::tokio::Schema;
+use apache_avro::types::tokio::Value;
 use apache_avro_test_helper::TestResult;
 
 #[test]
@@ -138,10 +140,10 @@ fn avro_3787_deserialize_union_with_unknown_symbol() -> TestResult {
     let reader_schema = Schema::parse_str(reader_schema)?;
     let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
     match deser_value {
-        types::Value::Record(fields) => {
+        Value::Record(fields) => {
             assert_eq!(fields.len(), 2);
             assert_eq!(fields[0].0, "barInit");
-            assert_eq!(fields[0].1, types::Value::Enum(1, "bar1".to_string()));
+            assert_eq!(fields[0].1, Value::Enum(1, "bar1".to_string()));
             assert_eq!(fields[1].0, "barUseParent");
             // TODO: test value
         }
@@ -265,12 +267,12 @@ fn avro_3787_deserialize_union_with_unknown_symbol_no_ref() -> TestResult {
     let reader_schema = Schema::parse_str(reader_schema)?;
     let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
     match deser_value {
-        types::Value::Record(fields) => {
+        Value::Record(fields) => {
             assert_eq!(fields.len(), 1);
             // assert_eq!(fields[0].0, "barInit");
-            // assert_eq!(fields[0].1, types::Value::Enum(0, "bar0".to_string()));
+            // assert_eq!(fields[0].1, Value::Enum(0, "bar0".to_string()));
             assert_eq!(fields[0].0, "barParent");
-            // assert_eq!(fields[1].1, types::Value::Enum(1, "bar1".to_string()));
+            // assert_eq!(fields[1].1, Value::Enum(1, "bar1".to_string()));
         }
         _ => panic!("Expected Value::Record"),
     }

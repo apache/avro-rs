@@ -24,13 +24,14 @@
   pub mod sync {
     sync!();
     replace!(
-      tokio::io::AsyncRead => std::io::Read,
-      bigdecimal::tokio => bigdecimal::sync,
-      decode::tokio => decode::sync,
-      encode::tokio => encode::sync,
-      headers::tokio => headers::sync,
-      schema::tokio => schema::sync,
-      util::tokio => util::sync,
+      crate::bigdecimal::tokio => crate::bigdecimal::sync,
+      crate::decimal::tokio => crate::decimal::sync,
+      crate::decode::tokio => crate::decode::sync,
+      crate::encode::tokio => crate::encode::sync,
+      crate::error::tokio => crate::error::sync,
+      crate::schema::tokio => crate::schema::sync,
+      crate::util::tokio => crate::util::sync,
+      crate::types::tokio => crate::types::sync,
       #[tokio::test] => #[test]
     );
   }
@@ -41,8 +42,6 @@ mod de {
         Error, bytes::DE_BYTES_BORROWED, error::tokio::Details, schema::tokio::SchemaKind,
         types::tokio::Value,
     };
-    #[cfg(feature = "tokio")]
-    use futures::FutureExt;
     use serde::{
         Deserialize,
         de::{self, DeserializeSeed, Deserializer as _, Visitor},
@@ -803,10 +802,11 @@ mod de {
         use serial_test::serial;
         use std::sync::atomic::Ordering;
         use uuid::Uuid;
+        use crate::ser::tokio::to_value;
 
         use apache_avro_test_helper::TestResult;
 
-        use crate::Decimal;
+        use crate::{Decimal, Schema};
 
         use super::*;
 
@@ -836,18 +836,18 @@ mod de {
 }
 "#;
 
-            let schema = crate::Schema::parse_str(schema_content)?;
+            let schema = Schema::parse_str(schema_content)?;
             let data = StringEnum {
                 source: "SOZU".to_string(),
             };
 
             // encode into avro
-            let value = crate::to_value(&data)?;
+            let value = to_value(&data)?;
 
             let mut buf = std::io::Cursor::new(crate::to_avro_datum(&schema, value)?);
 
             // decode from avro
-            let value = crate::from_avro_datum(&schema, &mut buf, None)?;
+            let value = from_avro_datum(&schema, &mut buf, None)?;
 
             let decoded_data: StringEnum = crate::from_value(&value)?;
 

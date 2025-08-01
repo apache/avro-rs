@@ -22,8 +22,14 @@
   pub mod sync {
     sync!();
     replace!(
-      tokio::io::AsyncRead + Unpin => std::io::Read,
+      crate::bigdecimal::tokio => crate::bigdecimal::sync,
+      crate::decimal::tokio => crate::decimal::sync,
+      crate::decode::tokio => crate::decode::sync,
+      crate::encode::tokio => crate::encode::sync,
+      crate::error::tokio => crate::error::sync,
+      crate::schema::tokio => crate::schema::sync,
       crate::util::tokio => crate::util::sync,
+      crate::types::tokio => crate::types::sync,
       #[tokio::test] => #[test]
     );
   }
@@ -34,13 +40,13 @@ mod encode {
 
     use crate::{
         AvroResult,
-        bigdecimal::serialize_big_decimal,
-        error::Details,
-        schema::{
+        bigdecimal::tokio::serialize_big_decimal,
+        error::tokio::Details,
+        schema::tokio::{
             DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, RecordSchema, ResolvedSchema,
             Schema, SchemaKind, UnionSchema,
         },
-        types::{Value, ValueKind},
+        types::tokio::{Value, ValueKind},
     };
     use log::error;
     use std::{borrow::Borrow, collections::HashMap, io::Write};

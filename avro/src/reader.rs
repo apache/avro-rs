@@ -22,12 +22,14 @@
   pub mod sync {
     sync!();
     replace!(
-      bigdecimal::tokio => bigdecimal::sync,
-      decode::tokio => decode::sync,
-      encode::tokio => encode::sync,
-      error::tokio => error::sync,
-      schema::tokio => schema::sync,
-      util::tokio => util::sync,
+      crate::bigdecimal::tokio => crate::bigdecimal::sync,
+      crate::decimal::tokio => crate::decimal::sync,
+      crate::decode::tokio => crate::decode::sync,
+      crate::encode::tokio => crate::encode::sync,
+      crate::error::tokio => crate::error::sync,
+      crate::schema::tokio => crate::schema::sync,
+      crate::util::tokio => crate::util::sync,
+      crate::types::tokio => crate::types::sync,
       #[tokio::test] => #[test]
     );
   }
@@ -39,10 +41,10 @@ mod reader {
     use tokio::io::AsyncRead as AvroRead;
     #[cfg(feature = "tokio")]
     use tokio::io::AsyncReadExt;
-
+    use std::str::FromStr;
     use crate::decode::tokio::{decode, decode_internal};
     use crate::{
-        AvroResult, Codec, Error,
+        AvroResult, codec::tokio::Codec, error::tokio::Error,
         error::tokio::Details,
         from_value,
         headers::tokio::{HeaderBuilder, RabinFingerprintHeader},
@@ -63,6 +65,8 @@ mod reader {
     #[cfg(feature = "tokio")]
     use std::task::Poll;
     use std::{collections::HashMap, io::ErrorKind, marker::PhantomData};
+    use crate::util::tokio::safe_len;
+
     /// Internal Block reader.
 
     #[derive(Debug, Clone)]
@@ -156,7 +160,7 @@ mod reader {
             //    We need to resize to ensure that the buffer len is safe to read `n` elements.
             //
             // TODO: Figure out a way to avoid having to truncate for the second case.
-            self.buf.resize(crate::util::safe_len(n)?, 0);
+            self.buf.resize(safe_len(n)?, 0);
             self.reader
                 .read_exact(&mut self.buf)
                 .await
