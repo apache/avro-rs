@@ -22,13 +22,17 @@
   pub mod sync {
     sync!();
     replace!(
-      tokio::io::AsyncRead + Unpin => std::io::Read,
-      bigdecimal::tokio => bigdecimal::sync,
-      decode::tokio => decode::sync,
-      encode::tokio => encode::sync,
-      error::tokio => error::sync,
-      schema::tokio => schema::sync,
-      util::tokio => util::sync,
+      crate::bigdecimal::tokio => crate::bigdecimal::sync,
+      crate::decimal::tokio => crate::decimal::sync,
+      crate::decode::tokio => crate::decode::sync,
+      crate::encode::tokio => crate::encode::sync,
+      crate::error::tokio => crate::error::sync,
+      crate::schema::tokio => crate::schema::sync,
+      crate::util::tokio => crate::util::sync,
+      crate::types::tokio => crate::types::sync,
+      crate::schema_equality::tokio => crate::schema_equality::sync,
+      crate::util::tokio => crate::util::sync,
+      crate::validator::tokio => crate::validator::sync,
       #[tokio::test] => #[test]
     );
   }

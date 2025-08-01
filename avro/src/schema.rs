@@ -24,15 +24,16 @@
   pub mod sync {
     sync!();
     replace!(
-      tokio::io::AsyncRead + Unpin => std::io::Read,
       bigdecimal::tokio => bigdecimal::sync,
+      decimal::tokio => decimal::sync,
       decode::tokio => decode::sync,
       encode::tokio => encode::sync,
       error::tokio => error::sync,
       schema::tokio => schema::sync,
-      schema_equality::tokio => schema_equality::sync,
       util::tokio => util::sync,
       types::tokio => types::sync,
+      schema_equality::tokio => schema_equality::sync,
+      util::tokio => util::sync,
       validator::tokio => validator::sync,
       #[tokio::test] => #[test]
     );
@@ -40,7 +41,7 @@
 )]
 mod schema {
 
-    use crate::{
+    use {
         AvroResult,
         error::tokio::{Details, Error},
         schema_equality::tokio as schema_equality,
@@ -211,7 +212,7 @@ mod schema {
 
     impl From<&types::Value> for SchemaKind {
         fn from(value: &types::Value) -> Self {
-            use crate::types::tokio::Value;
+            use types::tokio::Value;
             match value {
                 Value::Null => Self::Null,
                 Value::Boolean(_) => Self::Boolean,
@@ -2698,7 +2699,7 @@ mod schema {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::{SpecificSingleObjectWriter, error::Details, rabin::Rabin};
+        use {SpecificSingleObjectWriter, error::Details, rabin::Rabin};
         use apache_avro_test_helper::{
             TestResult,
             logger::{assert_logged, assert_not_logged},
@@ -3784,7 +3785,7 @@ mod schema {
 
         #[test]
         fn test_schema_fingerprint() -> TestResult {
-            use crate::rabin::Rabin;
+            use rabin::Rabin;
             use md5::Md5;
             use sha2::Sha256;
 
@@ -5328,10 +5329,10 @@ mod schema {
                 bar_use: Bar::Bar1,
             };
 
-            let avro_value = crate::to_value(foo)?;
+            let avro_value = to_value(foo)?;
             assert!(avro_value.validate(&schema));
 
-            let mut writer = crate::Writer::new(&schema, Vec::new());
+            let mut writer = Writer::new(&schema, Vec::new());
 
             // schema validation happens here
             writer.append(avro_value)?;
@@ -5426,15 +5427,15 @@ mod schema {
                 bar_init: Bar::Bar0,
                 bar_use: Bar::Bar1,
             };
-            let avro_value = crate::to_value(foo)?;
+            let avro_value = to_value(foo)?;
             assert!(
                 avro_value.validate(&writer_schema),
                 "value is valid for schema",
             );
-            let datum = crate::to_avro_datum(&writer_schema, avro_value)?;
+            let datum = to_avro_datum(&writer_schema, avro_value)?;
             let mut x = &datum[..];
             let reader_schema = Schema::parse_str(reader_schema)?;
-            let deser_value = crate::from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
+            let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
             match deser_value {
                 types::Value::Record(fields) => {
                     assert_eq!(fields.len(), 2);
@@ -6007,23 +6008,23 @@ mod schema {
 
             // Serialize using the writer schema.
             let writer_schema = Schema::parse(&writer_schema)?;
-            let avro_value = crate::to_value(s)?;
+            let avro_value = to_value(s)?;
             assert!(
                 avro_value.validate(&writer_schema),
                 "value is valid for schema",
             );
-            let datum = crate::to_avro_datum(&writer_schema, avro_value)?;
+            let datum = to_avro_datum(&writer_schema, avro_value)?;
 
             // Now, attempt to deserialize using the reader schema.
             let reader_schema = Schema::parse(&reader_schema)?;
             let mut x = &datum[..];
 
             // Deserialization should succeed and we should be able to resolve the schema.
-            let deser_value = crate::from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
+            let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
             assert!(deser_value.validate(&reader_schema));
 
             // Verify that we can read a field from the record.
-            let d: MyRecordReader = crate::from_value(&deser_value)?;
+            let d: MyRecordReader = from_value(&deser_value)?;
             assert_eq!(d.inner_record.unwrap().a, "foo".to_string());
             Ok(())
         }
@@ -6800,7 +6801,7 @@ mod schema {
         fn avro_rs_53_uuid_with_fixed() -> TestResult {
             #[derive(Debug, Serialize, Deserialize)]
             struct Comment {
-                id: crate::Uuid,
+                id: Uuid,
             }
 
             impl AvroSchema for Comment {
@@ -6830,13 +6831,13 @@ mod schema {
             let mut buffer = Vec::new();
 
             // serialize the Uuid as String
-            crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
+            util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
             let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)?
                 .write_ref(&payload, &mut buffer)?;
             assert_eq!(bytes, 47);
 
             // serialize the Uuid as Bytes
-            crate::util::SERDE_HUMAN_READABLE.store(false, Ordering::Release);
+            util::SERDE_HUMAN_READABLE.store(false, Ordering::Release);
             let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)?
                 .write_ref(&payload, &mut buffer)?;
             assert_eq!(bytes, 27);
