@@ -483,7 +483,13 @@ pub enum Details {
     #[error("Read into buffer failed: {0}")]
     ReadIntoBuf(#[source] std::io::Error),
 
-    #[error("block marker does not match header marker")]
+    #[error(
+        "Invalid sync marker! The sync marker in the data block \
+        doesn't match the file header's sync marker. This likely \
+        indicates data corruption, truncated file, or incorrectly \
+        concatenated Avro files. Verify file integrity and ensure \
+        proper file transmission or creation."
+    )]
     GetBlockMarker,
 
     #[error("Overflow when decoding integer value")]
