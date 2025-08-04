@@ -41,7 +41,7 @@
 )]
 mod schema {
 
-    use {
+    use crate::{
         AvroResult,
         error::tokio::{Details, Error},
         schema_equality::tokio as schema_equality,
@@ -212,7 +212,7 @@ mod schema {
 
     impl From<&types::Value> for SchemaKind {
         fn from(value: &types::Value) -> Self {
-            use types::tokio::Value;
+            use crate::types::tokio::Value;
             match value {
                 Value::Null => Self::Null,
                 Value::Boolean(_) => Self::Boolean,
