@@ -24,17 +24,17 @@
   pub mod sync {
     sync!();
     replace!(
-      bigdecimal::tokio => bigdecimal::sync,
-      decimal::tokio => decimal::sync,
-      decode::tokio => decode::sync,
-      encode::tokio => encode::sync,
-      error::tokio => error::sync,
-      schema::tokio => schema::sync,
-      util::tokio => util::sync,
-      types::tokio => types::sync,
-      schema_equality::tokio => schema_equality::sync,
-      util::tokio => util::sync,
-      validator::tokio => validator::sync,
+      crate::bigdecimal::tokio => crate::bigdecimal::sync,
+      crate::decimal::tokio => crate::decimal::sync,
+      crate::decode::tokio => crate::decode::sync,
+      crate::encode::tokio => crate::encode::sync,
+      crate::error::tokio => crate::error::sync,
+      crate::schema::tokio => crate::schema::sync,
+      crate::util::tokio => crate::util::sync,
+      crate::types::tokio => crate::types::sync,
+      crate::schema_equality::tokio => crate::schema_equality::sync,
+      crate::util::tokio => crate::util::sync,
+      crate::validator::tokio => crate::validator::sync,
       #[tokio::test] => #[test]
     );
   }
@@ -62,7 +62,6 @@ mod schema {
     use std::{
         borrow::Borrow,
         collections::{BTreeMap, HashMap, HashSet},
-        fmt,
         fmt::Debug,
         hash::Hash,
         io::Read,
@@ -77,8 +76,8 @@ mod schema {
         pub bytes: Vec<u8>,
     }
 
-    impl fmt::Display for SchemaFingerprint {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    impl std::fmt::Display for SchemaFingerprint {
+        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             write!(
                 f,
                 "{}",
@@ -370,8 +369,8 @@ mod schema {
         }
     }
 
-    impl fmt::Display for Name {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    impl std::fmt::Display for Name {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.write_str(&self.fullname(None)[..])
         }
     }

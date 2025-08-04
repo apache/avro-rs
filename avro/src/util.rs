@@ -93,9 +93,9 @@ pub fn set_serde_human_readable(human_readable: bool) {
 mod util {
     #[cfg(feature = "tokio")]
     use futures::future::TryFutureExt;
-    #[cfg(feature = "sync")]
+    #[synca::cfg(sync)]
     use std::io::Read as AvroRead;
-    #[cfg(feature = "tokio")]
+    #[synca::cfg(tokio)]
     use tokio::io::AsyncRead as AvroRead;
     #[cfg(feature = "tokio")]
     use tokio::io::AsyncReadExt;
