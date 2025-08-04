@@ -100,6 +100,9 @@ mod util {
     #[cfg(feature = "tokio")]
     use tokio::io::AsyncReadExt;
 
+    #[synca::cfg(tokio)]
+    use crate::AsyncAvroResult as AvroResult;
+    #[synca::cfg(sync)]
     use crate::AvroResult;
     use crate::error::tokio::Details;
     use crate::schema::tokio::Documentation;
@@ -211,7 +214,7 @@ mod util {
         Ok(i)
     }
 
-    pub fn safe_len(len: usize) -> crate::AvroResult<usize> {
+    pub fn safe_len(len: usize) -> AvroResult<usize> {
         let max_bytes = crate::util::max_allocation_bytes(crate::util::DEFAULT_MAX_ALLOCATION_BYTES);
 
         if len <= max_bytes {

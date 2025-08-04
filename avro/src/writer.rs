@@ -25,6 +25,7 @@
     sync!();
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
+      crate::codec::tokio => crate::codec::sync,
       crate::decimal::tokio => crate::decimal::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
@@ -41,8 +42,12 @@
 )]
 mod writer {
 
+    #[synca::cfg(tokio)]
+    use crate::AsyncAvroResult as AvroResult;
+    #[synca::cfg(sync)]
+    use crate::AvroResult;
     use crate::{
-        AvroResult, Codec, Error,
+        codec::tokio::Codec, error::tokio::Error,
         encode::tokio::{encode, encode_internal, encode_to_vec},
         error::tokio::Details,
         headers::tokio::{HeaderBuilder, RabinFingerprintHeader},

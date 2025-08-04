@@ -42,7 +42,7 @@
 mod ser {
 
     use crate::{
-        Error,
+        error::tokio::Error,
         bytes::{BytesType, SER_BYTES_TYPE},
         types::tokio::Value,
     };

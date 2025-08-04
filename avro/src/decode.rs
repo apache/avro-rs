@@ -44,7 +44,7 @@ mod decode {
 
     use crate::util::tokio::{safe_len, zag_i32, zag_i64};
     use crate::{
-        AvroResult, Error,
+        error::tokio::Error,
         bigdecimal::tokio::deserialize_big_decimal,
         decimal::tokio::Decimal,
         duration::Duration,
@@ -58,6 +58,11 @@ mod decode {
     };
     use std::{borrow::Borrow, collections::HashMap, io::ErrorKind, str::FromStr};
     use uuid::Uuid;
+    #[synca::cfg(tokio)]
+    use crate::AsyncAvroResult as AvroResult;
+    #[synca::cfg(sync)]
+    use crate::AvroResult;
+
 
     #[inline]
     pub(crate) async fn decode_long<R: AvroRead + Unpin>(reader: &mut R) -> AvroResult<Value> {

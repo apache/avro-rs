@@ -37,9 +37,13 @@
   }
 )]
 mod codec {
-    use crate::{AvroResult, error::tokio::Details, error::tokio::Error, types::tokio::Value};
+    use crate::{error::tokio::Details, error::tokio::Error, types::tokio::Value};
     use strum_macros::{EnumIter, EnumString, IntoStaticStr};
-
+    #[synca::cfg(tokio)]
+    use crate::AsyncAvroResult as AvroResult;
+    #[synca::cfg(sync)]
+    use crate::AvroResult;
+    
     /// Settings for the `Deflate` codec.
     #[derive(Clone, Copy, Eq, PartialEq, Debug)]
     pub struct DeflateSettings {

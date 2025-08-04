@@ -43,10 +43,18 @@ mod reader {
     use tokio::io::AsyncReadExt;
     use std::str::FromStr;
     use crate::decode::tokio::{decode, decode_internal};
+    #[synca::cfg(tokio)]
+    use crate::AsyncAvroResult as AvroResult;
+    #[synca::cfg(sync)]
+    use crate::AvroResult;
+    #[synca::cfg(tokio)]
+    use crate::async_from_value as from_value;
+    #[synca::cfg(sync)]
+    use crate::from_value;
+
     use crate::{
-        AvroResult, codec::tokio::Codec, error::tokio::Error,
+        codec::tokio::Codec, error::tokio::Error,
         error::tokio::Details,
-        from_value,
         headers::tokio::{HeaderBuilder, RabinFingerprintHeader},
         schema::tokio::{
             AvroSchema, Names, ResolvedOwnedSchema, ResolvedSchema, Schema, resolve_names,
