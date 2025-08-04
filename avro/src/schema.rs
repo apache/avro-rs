@@ -44,8 +44,8 @@ mod schema {
     use crate::{
         AvroResult,
         error::tokio::{Details, Error},
-        schema_equality::tokio as schema_equality,
-        types::tokio as types,
+        schema_equality::tokio::compare_schemata,
+        types::tokio::{Value, ValueKind},
         util::tokio::MapHelper,
         validator::tokio::{
             validate_enum_symbol_name, validate_namespace, validate_record_field_name,
@@ -58,7 +58,6 @@ mod schema {
         Deserialize, Serialize, Serializer,
         ser::{SerializeMap, SerializeSeq},
     };
-    use serde_json::{Map, Value};
     use std::{
         borrow::Borrow,
         collections::{BTreeMap, HashMap, HashSet},
@@ -167,13 +166,13 @@ mod schema {
     #[derive(Clone, Debug, PartialEq)]
     pub struct MapSchema {
         pub types: Box<Schema>,
-        pub attributes: BTreeMap<String, Value>,
+        pub attributes: BTreeMap<String, serde_json::Value>,
     }
 
     #[derive(Clone, Debug, PartialEq)]
     pub struct ArraySchema {
         pub items: Box<Schema>,
-        pub attributes: BTreeMap<String, Value>,
+        pub attributes: BTreeMap<String, serde_json::Value>,
     }
 
     impl PartialEq for Schema {
@@ -182,7 +181,7 @@ mod schema {
         /// [Parsing Canonical Form]:
         /// https://avro.apache.org/docs/1.11.1/specification/#parsing-canonical-form-for-schemas
         fn eq(&self, other: &Self) -> bool {
-            schema_equality::compare_schemata(self, other)
+            compare_schemata(self, other)
         }
     }
 
@@ -209,8 +208,8 @@ mod schema {
         }
     }
 
-    impl From<&types::Value> for SchemaKind {
-        fn from(value: &types::Value) -> Self {
+    impl From<&Value> for SchemaKind {
+        fn from(value: &Value) -> Self {
             use crate::types::tokio::Value;
             match value {
                 Value::Null => Self::Null,
@@ -289,7 +288,7 @@ mod schema {
 
         /// Parse a `serde_json::Value` into a `Name`.
         pub(crate) fn parse(
-            complex: &Map<String, Value>,
+            complex: &serde_json::Map<String, serde_json::Value>,
             enclosing_namespace: &Namespace,
         ) -> AvroResult<Self> {
             let (name, namespace_from_name) = complex
@@ -298,7 +297,7 @@ mod schema {
                 .ok_or(Details::GetNameField)?;
             // FIXME Reading name from the type is wrong ! The name there is just a metadata (AVRO-3430)
             let type_name = match complex.get("type") {
-                Some(Value::Object(complex_type)) => complex_type.name().or(None),
+                Some(serde_json::Value::Object(complex_type)) => complex_type.name().or(None),
                 _ => None,
             };
 
@@ -699,7 +698,7 @@ mod schema {
     impl RecordField {
         /// Parse a `serde_json::Value` into a `RecordField`.
         async fn parse(
-            field: &Map<String, Value>,
+            field: &serde_json::Map<String, serde_json::Value>,
             position: usize,
             parser: &mut Parser,
             enclosing_record: &Name,
@@ -721,7 +720,7 @@ mod schema {
                 &name,
                 &enclosing_record.fullname(None),
                 &parser.parsed_schemas,
-                &default,
+                &default.into(),
             )
             .await?;
 
@@ -744,7 +743,7 @@ mod schema {
             Ok(RecordField {
                 name,
                 doc: field.doc(),
-                default,
+                default: default.into(),
                 aliases,
                 order,
                 position,
@@ -761,7 +760,7 @@ mod schema {
             default: &Option<Value>,
         ) -> AvroResult<()> {
             if let Some(value) = default {
-                let avro_value = types::Value::from(value.clone());
+                let avro_value = Value::from(value.clone());
                 match field_schema {
                     Schema::Union(union_schema) => {
                         let schemas = &union_schema.schemas;
@@ -784,7 +783,7 @@ mod schema {
                             return match schema {
                                 Some(first_schema) => Err(Details::GetDefaultUnion(
                                     SchemaKind::from(first_schema),
-                                    types::ValueKind::from(avro_value),
+                                    ValueKind::from(avro_value),
                                 )
                                 .into()),
                                 None => Err(Details::EmptyUnion.into()),
@@ -813,7 +812,7 @@ mod schema {
         }
 
         fn get_field_custom_attributes(
-            field: &Map<String, Value>,
+            field: &serde_json::Map<String, serde_json::Value>,
             schema: &Schema,
         ) -> BTreeMap<String, Value> {
             let mut custom_attributes: BTreeMap<String, Value> = BTreeMap::new();
@@ -988,7 +987,7 @@ mod schema {
         /// - `known_schemata` - mapping between `Name` and `Schema` - if passed, additional external schemas would be used to resolve references.
         pub async fn find_schema_with_known_schemata<S: Borrow<Schema> + Debug>(
             &self,
-            value: &types::Value,
+            value: &Value,
             known_schemata: Option<&HashMap<Name, S>>,
             enclosing_namespace: &Namespace,
         ) -> Option<(usize, &Schema)> {
@@ -1500,14 +1499,14 @@ mod schema {
         }
 
         fn parse_precision_and_scale(
-            complex: &Map<String, Value>,
+            complex: &serde_json::Map<String, serde_json::Value>,
         ) -> Result<(Precision, Scale), Error> {
             fn get_decimal_integer(
-                complex: &Map<String, Value>,
+                complex: &serde_json::Map<String, serde_json::Value>,
                 key: &'static str,
             ) -> Result<DecimalMetadata, Error> {
                 match complex.get(key) {
-                    Some(Value::Number(value)) => parse_json_integer_for_decimal(value),
+                    Some(serde_json::Value::Number(value)) => parse_json_integer_for_decimal(value),
                     None => {
                         if key == "scale" {
                             Ok(0)
@@ -1543,19 +1542,19 @@ mod schema {
         /// e.g: {"type": {"type": "string"}}
         fn parse_complex(
             &mut self,
-            complex: &Map<String, Value>,
+            complex: &serde_json::Map<String, serde_json::Value>,
             enclosing_namespace: &Namespace,
             parse_location: RecordSchemaParseLocation,
         ) -> AvroResult<Schema> {
             // Try to parse this as a native complex type.
             fn parse_as_native_complex(
-                complex: &Map<String, Value>,
+                complex: &serde_json::Map<String, serde_json::Value>,
                 parser: &mut Parser,
                 enclosing_namespace: &Namespace,
             ) -> AvroResult<Schema> {
                 match complex.get("type") {
                     Some(value) => match value {
-                        Value::String(s) if s == "fixed" => {
+                        serde_json::Value::String(s) if s == "fixed" => {
                             parser.parse_fixed(complex, enclosing_namespace)
                         }
                         _ => parser.parse(value, enclosing_namespace),
@@ -1591,7 +1590,7 @@ mod schema {
             }
 
             match complex.get("logicalType") {
-                Some(Value::String(t)) => match t.as_str() {
+                Some(serde_json::Value::String(t)) => match t.as_str() {
                     "decimal" => {
                         return try_convert_to_logical_type(
                             "decimal",
@@ -1734,7 +1733,7 @@ mod schema {
                 _ => {}
             }
             match complex.get("type") {
-                Some(Value::String(t)) => match t.as_str() {
+                Some(serde_json::Value::String(t)) => match t.as_str() {
                     "record" => match parse_location {
                         RecordSchemaParseLocation::Root => {
                             self.parse_record(complex, enclosing_namespace)
@@ -1749,10 +1748,10 @@ mod schema {
                     "fixed" => self.parse_fixed(complex, enclosing_namespace),
                     other => self.parse_known_schema(other, enclosing_namespace),
                 },
-                Some(Value::Object(data)) => {
+                Some(serde_json::Value::Object(data)) => {
                     self.parse_complex(data, enclosing_namespace, RecordSchemaParseLocation::Root)
                 }
-                Some(Value::Array(variants)) => self.parse_union(variants, enclosing_namespace),
+                Some(serde_json::Value::Array(variants)) => self.parse_union(variants, enclosing_namespace),
                 Some(unknown) => Err(Details::GetComplexType(unknown.clone()).into()),
                 None => Err(Details::GetComplexTypeField.into()),
             }
@@ -1800,7 +1799,7 @@ mod schema {
         /// Returns already parsed schema or a schema that is currently being resolved.
         fn get_already_seen_schema(
             &self,
-            complex: &Map<String, Value>,
+            complex: &serde_json::Map<String, serde_json::Value>,
             enclosing_namespace: &Namespace,
         ) -> Option<&Schema> {
             match complex.get("type") {
@@ -1820,7 +1819,7 @@ mod schema {
         /// `Schema`.
         fn parse_record(
             &mut self,
-            complex: &Map<String, Value>,
+            complex: &serde_json::Map<String, serde_json::Value>,
             enclosing_namespace: &Namespace,
         ) -> AvroResult<Schema> {
             let fields_opt = complex.get("fields");
@@ -1881,10 +1880,10 @@ mod schema {
 
         fn get_custom_attributes(
             &self,
-            complex: &Map<String, Value>,
+            complex: &serde_json::Map<String, serde_json::Value>,
             excluded: Vec<&'static str>,
         ) -> BTreeMap<String, Value> {
-            let mut custom_attributes: BTreeMap<String, Value> = BTreeMap::new();
+            let mut custom_attributes: BTreeMap<String, serde_json::Value> = BTreeMap::new();
             for (key, value) in complex {
                 match key.as_str() {
                     "type" | "name" | "namespace" | "doc" | "aliases" => continue,
@@ -1899,7 +1898,7 @@ mod schema {
         /// `Schema`.
         fn parse_enum(
             &mut self,
-            complex: &Map<String, Value>,
+            complex: &serde_json::Map<String, serde_json::Value>,
             enclosing_namespace: &Namespace,
         ) -> AvroResult<Schema> {
             let symbols_opt = complex.get("symbols");
@@ -1946,7 +1945,7 @@ mod schema {
             }
 
             if let Some(ref value) = default {
-                let resolved = types::Value::from(value.clone())
+                let resolved = Value::from(value.clone())
                     .resolve_enum(&symbols, &Some(value.to_string()), &None)
                     .is_ok();
                 if !resolved {
@@ -1976,7 +1975,7 @@ mod schema {
         /// `Schema`.
         fn parse_array(
             &mut self,
-            complex: &Map<String, Value>,
+            complex: &serde_json::Map<String, serde_json::Value>,
             enclosing_namespace: &Namespace,
         ) -> AvroResult<Schema> {
             complex
@@ -1995,7 +1994,7 @@ mod schema {
         /// `Schema`.
         fn parse_map(
             &mut self,
-            complex: &Map<String, Value>,
+            complex: &serde_json::Map<String, serde_json::Value>,
             enclosing_namespace: &Namespace,
         ) -> AvroResult<Schema> {
             complex
@@ -2043,7 +2042,7 @@ mod schema {
         /// `Schema`.
         fn parse_fixed(
             &mut self,
-            complex: &Map<String, Value>,
+            complex: &serde_json::Map<String, serde_json::Value>,
             enclosing_namespace: &Namespace,
         ) -> AvroResult<Schema> {
             let size_opt = complex.get("size");
@@ -2119,9 +2118,9 @@ mod schema {
         })
     }
 
-    fn get_schema_type_name(name: Name, value: Value) -> Name {
+    fn get_schema_type_name(name: Name, value: serde_json::Value) -> Name {
         match value.get("type") {
-            Some(Value::Object(complex_type)) => match complex_type.name() {
+            Some(serde_json::Value::Object(complex_type)) => match complex_type.name() {
                 Some(name) => Name::new(name.as_str()).unwrap(),
                 _ => name,
             },
@@ -2373,7 +2372,7 @@ mod schema {
         }
     }
 
-    fn pcf_map(schema: &Map<String, Value>, defined_names: &mut HashSet<String>) -> String {
+    fn pcf_map(schema: &serde_json::Map<String, serde_json::Value>, defined_names: &mut HashSet<String>) -> String {
         // Look for the namespace variant up front.
         let ns = schema.get("namespace").and_then(|v| v.as_str());
         let typ = schema.get("type").and_then(|v| v.as_str());
@@ -2634,7 +2633,7 @@ mod schema {
             }
         }
 
-        impl<T> AvroSchemaComponent for Map<String, T>
+        impl<T> AvroSchemaComponent for serde_json::Map<String, T>
         where
             T: AvroSchemaComponent,
         {
@@ -2698,7 +2697,7 @@ mod schema {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use {SpecificSingleObjectWriter, error::Details, rabin::Rabin};
+        use {SpecificSingleObjectWriter, error::tokio::Details, rabin::Rabin};
         use apache_avro_test_helper::{
             TestResult,
             logger::{assert_logged, assert_not_logged},
@@ -5436,12 +5435,12 @@ mod schema {
             let reader_schema = Schema::parse_str(reader_schema)?;
             let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
             match deser_value {
-                types::Value::Record(fields) => {
+                Value::Record(fields) => {
                     assert_eq!(fields.len(), 2);
                     assert_eq!(fields[0].0, "barInit");
-                    assert_eq!(fields[0].1, types::Value::Enum(0, "bar0".to_string()));
+                    assert_eq!(fields[0].1, Value::Enum(0, "bar0".to_string()));
                     assert_eq!(fields[1].0, "barUse");
-                    assert_eq!(fields[1].1, types::Value::Enum(1, "bar1".to_string()));
+                    assert_eq!(fields[1].1, Value::Enum(1, "bar1".to_string()));
                 }
                 _ => panic!("Expected Value::Record"),
             }
@@ -7153,8 +7152,8 @@ mod schema {
                     assert_eq!(field.name, "birthday");
                     assert_eq!(field.schema, Schema::Date);
                     assert_eq!(
-                        types::Value::from(field.default.clone().unwrap()),
-                        types::Value::Int(1681601653)
+                        Value::from(field.default.clone().unwrap()),
+                        Value::Int(1681601653)
                     );
                 }
                 _ => unreachable!("Expected Schema::Record"),

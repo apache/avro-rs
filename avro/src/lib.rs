@@ -887,6 +887,8 @@ pub use crate::bytes::{
     serde_avro_slice, serde_avro_slice_opt,
 };
 #[cfg(feature = "tokio")]
+pub use crate::bigdecimal::tokio::BigDecimal as AsyncBigDecimal;
+#[cfg(feature = "sync")]
 pub use crate::bigdecimal::tokio::BigDecimal;
 #[cfg(feature = "bzip")]
 pub use codec::bzip::Bzip2Settings;
@@ -895,27 +897,56 @@ pub use codec::xz::XzSettings;
 #[cfg(feature = "zstandard")]
 pub use codec::zstandard::ZstandardSettings;
 #[cfg(feature = "tokio")]
-pub use codec::tokio::{Codec, DeflateSettings};
+pub use codec::tokio::{Codec as AsyncCodec, DeflateSettings as AsyncDeflateSettings};
+#[cfg(feature = "sync")]
+pub use codec::sync::{Codec, DeflateSettings};
 #[cfg(feature = "tokio")]
-pub use de::tokio::from_value;
+pub use de::tokio::from_value as async_from_value;
+#[cfg(feature = "sync")]
+pub use de::sync::from_value;
 #[cfg(feature = "tokio")]
-pub use decimal::tokio::Decimal;
+pub use decimal::tokio::Decimal as AsyncDecimal;
+#[cfg(feature = "sync")]
+pub use decimal::sync::Decimal;
 pub use duration::{Days, Duration, Millis, Months};
 #[cfg(feature = "tokio")]
-pub use error::tokio::Error;
+pub use error::tokio::Error as AsyncError;
+#[cfg(feature = "sync")]
+pub use error::sync::Error;
 #[cfg(feature = "tokio")]
 pub use reader::tokio::{
-    GenericSingleObjectReader, Reader, SpecificSingleObjectReader, from_avro_datum,
+    GenericSingleObjectReader as AsyncGenericSingleObjectReader, Reader as AsyncReader,
+    SpecificSingleObjectReader as AsyncSpecificSingleObjectReader, from_avro_datum as async_from_avro_datum,
+    from_avro_datum_reader_schemata as async_from_avro_datum_reader_schemata,
+    from_avro_datum_schemata as async_from_avro_datum_schemata, read_marker as async_read_marker,
+};
+#[cfg(feature = "sync")]
+pub use reader::sync::{
+    GenericSingleObjectReader, Reader,
+    SpecificSingleObjectReader, from_avro_datum,
     from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
 };
 #[cfg(feature = "tokio")]
-pub use schema::tokio::{AvroSchema, Schema};
+pub use schema::tokio::{AvroSchema as AsyncAvroSchema, Schema as AsyncSchema};
+#[cfg(feature = "sync")]
+pub use schema::sync::{AvroSchema, Schema};
 #[cfg(feature = "tokio")]
-pub use ser::tokio::to_value;
+pub use ser::tokio::to_value as async_to_value;
+#[cfg(feature = "sync")]
+pub use ser::sync::to_value;
 pub use util::{max_allocation_bytes, set_serde_human_readable};
 pub use uuid::Uuid;
 #[cfg(feature = "tokio")]
 pub use writer::tokio::{
+    GenericSingleObjectWriter as AsyncGenericSingleObjectWriter,
+    SpecificSingleObjectWriter as AsyncSpecificSingleObjectWriter,
+    Writer as AsyncWriter, WriterBuilder as AsyncWriterBuilder,
+    to_avro_datum as async_to_avro_datum,
+    to_avro_datum_schemata as async_to_avro_datum_schemata,
+    write_avro_datum_ref as async_write_avro_datum_ref,
+};
+#[cfg(feature = "sync")]
+pub use writer::sync::{
     GenericSingleObjectWriter, SpecificSingleObjectWriter, Writer, WriterBuilder, to_avro_datum,
     to_avro_datum_schemata, write_avro_datum_ref,
 };
@@ -924,6 +955,9 @@ pub use writer::tokio::{
 pub use apache_avro_derive::*;
 
 /// A convenience type alias for `Result`s with `Error`s.
+#[cfg(feature = "tokio")]
+pub type AsyncAvroResult<T> = Result<T, AsyncError>;
+#[cfg(feature = "sync")]
 pub type AvroResult<T> = Result<T, Error>;
 
 #[cfg(test)]

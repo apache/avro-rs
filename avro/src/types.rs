@@ -56,7 +56,6 @@ mod types {
     #[synca::cfg(tokio)]
     use futures::FutureExt;
     use log::{debug, error};
-    use serde_json::{Number, Value as JsonValue};
     use std::{
         borrow::Borrow,
         collections::{BTreeMap, HashMap},
@@ -295,12 +294,12 @@ mod types {
         }
     }
 
-    impl From<JsonValue> for Value {
-        fn from(value: JsonValue) -> Self {
+    impl From<serde_json::Value> for Value {
+        fn from(value: serde_json::Value) -> Self {
             match value {
-                JsonValue::Null => Self::Null,
-                JsonValue::Bool(b) => b.into(),
-                JsonValue::Number(ref n) if n.is_i64() => {
+                serde_json::Value::Null => Self::Null,
+                serde_json::Value::Bool(b) => b.into(),
+                serde_json::Value::Number(ref n) if n.is_i64() => {
                     let n = n.as_i64().unwrap();
                     if n >= i32::MIN as i64 && n <= i32::MAX as i64 {
                         Value::Int(n as i32)
@@ -308,13 +307,13 @@ mod types {
                         Value::Long(n)
                     }
                 }
-                JsonValue::Number(ref n) if n.is_f64() => Value::Double(n.as_f64().unwrap()),
-                JsonValue::Number(n) => Value::Long(n.as_u64().unwrap() as i64), // TODO: Not so great
-                JsonValue::String(s) => s.into(),
-                JsonValue::Array(items) => {
+                serde_json::Value::Number(ref n) if n.is_f64() => Value::Double(n.as_f64().unwrap()),
+                serde_json::Value::Number(n) => Value::Long(n.as_u64().unwrap() as i64), // TODO: Not so great
+                serde_json::Value::String(s) => s.into(),
+                serde_json::Value::Array(items) => {
                     Value::Array(items.into_iter().map(Value::from).collect())
                 }
-                JsonValue::Object(items) => Value::Map(
+                serde_json::Value::Object(items) => Value::Map(
                     items
                         .into_iter()
                         .map(|(key, value)| (key, value.into()))
@@ -325,7 +324,7 @@ mod types {
     }
 
     /// Convert Avro values to Json values
-    impl TryFrom<Value> for JsonValue {
+    impl TryFrom<Value> for serde_json::Value {
         type Error = Error;
         fn try_from(value: Value) -> AvroResult<Self> {
             match value {
@@ -333,10 +332,10 @@ mod types {
                 Value::Boolean(b) => Ok(Self::Bool(b)),
                 Value::Int(i) => Ok(Self::Number(i.into())),
                 Value::Long(l) => Ok(Self::Number(l.into())),
-                Value::Float(f) => Number::from_f64(f.into())
+                Value::Float(f) => serde_json::Number::from_f64(f.into())
                     .map(Self::Number)
                     .ok_or_else(|| Details::ConvertF64ToJson(f.into()).into()),
-                Value::Double(d) => Number::from_f64(d)
+                Value::Double(d) => serde_json::Number::from_f64(d)
                     .map(Self::Number)
                     .ok_or_else(|| Details::ConvertF64ToJson(d).into()),
                 Value::Bytes(bytes) => {
@@ -700,7 +699,7 @@ mod types {
             schema: &Schema,
             names: &HashMap<Name, S>,
             enclosing_namespace: &Namespace,
-            field_default: &Option<JsonValue>,
+            field_default: &Option<serde_json::Value>,
         ) -> AvroResult<Self> {
             // Check if this schema is a union, and if the reader schema is not.
             if SchemaKind::from(&self) == SchemaKind::Union
@@ -1058,7 +1057,7 @@ mod types {
             self,
             symbols: &[String],
             enum_default: &Option<String>,
-            _field_default: &Option<JsonValue>,
+            _field_default: &Option<serde_json::Value>,
         ) -> Result<Self, Error> {
             let validate_symbol = |symbol: String, symbols: &[String]| {
                 if let Some(index) = symbols.iter().position(|item| item == &symbol) {
@@ -1097,7 +1096,7 @@ mod types {
             schema: &UnionSchema,
             names: &HashMap<Name, S>,
             enclosing_namespace: &Namespace,
-            field_default: &Option<JsonValue>,
+            field_default: &Option<serde_json::Value>,
         ) -> Result<Self, Error> {
             let v = match self {
                 // Both are unions case.
@@ -1260,8 +1259,8 @@ mod types {
         use super::*;
         use crate::{
             duration::{Days, Millis, Months},
-            error::Details,
-            schema::RecordFieldOrder,
+            error::tokio::Details,
+            schema::tokio::RecordFieldOrder,
         };
         use apache_avro_test_helper::{
             TestResult,
@@ -1628,7 +1627,7 @@ mod types {
                     RecordField {
                         name: "c".to_string(),
                         doc: None,
-                        default: Some(JsonValue::Null),
+                        default: Some(serde_json::Value::Null),
                         aliases: None,
                         schema: Schema::Union(UnionSchema::new(vec![Schema::Null, Schema::Int])?),
                         order: RecordFieldOrder::Ascending,
@@ -2058,69 +2057,69 @@ Field with name '"b"' is not a member of the map items"#,
 
         #[tokio::test]
         async fn json_from_avro() -> TestResult {
-            assert_eq!(JsonValue::try_from(Value::Null)?, JsonValue::Null);
+            assert_eq!(serde_json::Value::try_from(Value::Null)?, serde_json::Value::Null);
             assert_eq!(
-                JsonValue::try_from(Value::Boolean(true))?,
-                JsonValue::Bool(true)
+                serde_json::Value::try_from(Value::Boolean(true))?,
+                serde_json::Value::Bool(true)
             );
             assert_eq!(
-                JsonValue::try_from(Value::Int(1))?,
-                JsonValue::Number(1.into())
+                serde_json::Value::try_from(Value::Int(1))?,
+                serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                JsonValue::try_from(Value::Long(1))?,
-                JsonValue::Number(1.into())
+                serde_json::Value::try_from(Value::Long(1))?,
+                serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                JsonValue::try_from(Value::Float(1.0))?,
-                JsonValue::Number(Number::from_f64(1.0).unwrap())
+                serde_json::Value::try_from(Value::Float(1.0))?,
+                serde_json::Value::Number(Number::from_f64(1.0).unwrap())
             );
             assert_eq!(
-                JsonValue::try_from(Value::Double(1.0))?,
-                JsonValue::Number(Number::from_f64(1.0).unwrap())
+                serde_json::Value::try_from(Value::Double(1.0))?,
+                serde_json::Value::Number(Number::from_f64(1.0).unwrap())
             );
             assert_eq!(
-                JsonValue::try_from(Value::Bytes(vec![1, 2, 3]))?,
-                JsonValue::Array(vec![
-                    JsonValue::Number(1.into()),
-                    JsonValue::Number(2.into()),
-                    JsonValue::Number(3.into())
+                serde_json::Value::try_from(Value::Bytes(vec![1, 2, 3]))?,
+                serde_json::Value::Array(vec![
+                    serde_json::Value::Number(1.into()),
+                    serde_json::Value::Number(2.into()),
+                    serde_json::Value::Number(3.into())
                 ])
             );
             assert_eq!(
-                JsonValue::try_from(Value::String("test".into()))?,
-                JsonValue::String("test".into())
+                serde_json::Value::try_from(Value::String("test".into()))?,
+                serde_json::Value::String("test".into())
             );
             assert_eq!(
-                JsonValue::try_from(Value::Fixed(3, vec![1, 2, 3]))?,
-                JsonValue::Array(vec![
-                    JsonValue::Number(1.into()),
-                    JsonValue::Number(2.into()),
-                    JsonValue::Number(3.into())
+                serde_json::Value::try_from(Value::Fixed(3, vec![1, 2, 3]))?,
+                serde_json::Value::Array(vec![
+                    serde_json::Value::Number(1.into()),
+                    serde_json::Value::Number(2.into()),
+                    serde_json::Value::Number(3.into())
                 ])
             );
             assert_eq!(
-                JsonValue::try_from(Value::Enum(1, "test_enum".into()))?,
-                JsonValue::String("test_enum".into())
+                serde_json::Value::try_from(Value::Enum(1, "test_enum".into()))?,
+                serde_json::Value::String("test_enum".into())
             );
             assert_eq!(
-                JsonValue::try_from(Value::Union(1, Box::new(Value::String("test_enum".into()))))?,
-                JsonValue::String("test_enum".into())
+                serde_json::Value::try_from(Value::Union(1, Box::new(Value::String("test_enum".into()))))?,
+                serde_json::Value::String("test_enum".into())
             );
             assert_eq!(
-                JsonValue::try_from(Value::Array(vec![
+                serde_json::Value::try_from(Value::Array(vec![
                     Value::Int(1),
                     Value::Int(2),
                     Value::Int(3)
                 ]))?,
-                JsonValue::Array(vec![
-                    JsonValue::Number(1.into()),
-                    JsonValue::Number(2.into()),
-                    JsonValue::Number(3.into())
+                serde_json::Value::Array(vec![
+                    serde_json::Value::Number(1.into()),
+                    serde_json::Value::Number(2.into()),
+                    serde_json::Value::Number(3.into())
                 ])
             );
             assert_eq!(
-                JsonValue::try_from(Value::Map(
+                serde_json::Value::try_from(Value::Map(
                     vec![
                         ("v1".to_string(), Value::Int(1)),
                         ("v2".to_string(), Value::Int(2)),
@@ -2129,103 +2128,103 @@ Field with name '"b"' is not a member of the map items"#,
                     .into_iter()
                     .collect()
                 ))?,
-                JsonValue::Object(
+                serde_json::Value::Object(
                     vec![
-                        ("v1".to_string(), JsonValue::Number(1.into())),
-                        ("v2".to_string(), JsonValue::Number(2.into())),
-                        ("v3".to_string(), JsonValue::Number(3.into()))
+                        ("v1".to_string(), serde_json::Value::Number(1.into())),
+                        ("v2".to_string(), serde_json::Value::Number(2.into())),
+                        ("v3".to_string(), serde_json::Value::Number(3.into()))
                     ]
                     .into_iter()
                     .collect()
                 )
             );
             assert_eq!(
-                JsonValue::try_from(Value::Record(vec![
+                serde_json::Value::try_from(Value::Record(vec![
                     ("v1".to_string(), Value::Int(1)),
                     ("v2".to_string(), Value::Int(2)),
                     ("v3".to_string(), Value::Int(3))
                 ]))?,
-                JsonValue::Object(
+                serde_json::Value::Object(
                     vec![
-                        ("v1".to_string(), JsonValue::Number(1.into())),
-                        ("v2".to_string(), JsonValue::Number(2.into())),
-                        ("v3".to_string(), JsonValue::Number(3.into()))
+                        ("v1".to_string(), serde_json::Value::Number(1.into())),
+                        ("v2".to_string(), serde_json::Value::Number(2.into())),
+                        ("v3".to_string(), serde_json::Value::Number(3.into()))
                     ]
                     .into_iter()
                     .collect()
                 )
             );
             assert_eq!(
-                JsonValue::try_from(Value::Date(1))?,
-                JsonValue::Number(1.into())
+                serde_json::Value::try_from(Value::Date(1))?,
+                serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                JsonValue::try_from(Value::Decimal(vec![1, 2, 3].into()))?,
-                JsonValue::Array(vec![
-                    JsonValue::Number(1.into()),
-                    JsonValue::Number(2.into()),
-                    JsonValue::Number(3.into())
+                serde_json::Value::try_from(Value::Decimal(vec![1, 2, 3].into()))?,
+                serde_json::Value::Array(vec![
+                    serde_json::Value::Number(1.into()),
+                    serde_json::Value::Number(2.into()),
+                    serde_json::Value::Number(3.into())
                 ])
             );
             assert_eq!(
-                JsonValue::try_from(Value::TimeMillis(1))?,
-                JsonValue::Number(1.into())
+                serde_json::Value::try_from(Value::TimeMillis(1))?,
+                serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                JsonValue::try_from(Value::TimeMicros(1))?,
-                JsonValue::Number(1.into())
+                serde_json::Value::try_from(Value::TimeMicros(1))?,
+                serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                JsonValue::try_from(Value::TimestampMillis(1))?,
-                JsonValue::Number(1.into())
+                serde_json::Value::try_from(Value::TimestampMillis(1))?,
+                serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                JsonValue::try_from(Value::TimestampMicros(1))?,
-                JsonValue::Number(1.into())
+                serde_json::Value::try_from(Value::TimestampMicros(1))?,
+                serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                JsonValue::try_from(Value::TimestampNanos(1))?,
-                JsonValue::Number(1.into())
+                serde_json::Value::try_from(Value::TimestampNanos(1))?,
+                serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                JsonValue::try_from(Value::LocalTimestampMillis(1))?,
-                JsonValue::Number(1.into())
+                serde_json::Value::try_from(Value::LocalTimestampMillis(1))?,
+                serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                JsonValue::try_from(Value::LocalTimestampMicros(1))?,
-                JsonValue::Number(1.into())
+                serde_json::Value::try_from(Value::LocalTimestampMicros(1))?,
+                serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                JsonValue::try_from(Value::LocalTimestampNanos(1))?,
-                JsonValue::Number(1.into())
+                serde_json::Value::try_from(Value::LocalTimestampNanos(1))?,
+                serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                JsonValue::try_from(Value::Duration(
+                serde_json::Value::try_from(Value::Duration(
                     [
                         1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8, 10u8, 11u8, 12u8
                     ]
                     .into()
                 ))?,
-                JsonValue::Array(vec![
-                    JsonValue::Number(1.into()),
-                    JsonValue::Number(2.into()),
-                    JsonValue::Number(3.into()),
-                    JsonValue::Number(4.into()),
-                    JsonValue::Number(5.into()),
-                    JsonValue::Number(6.into()),
-                    JsonValue::Number(7.into()),
-                    JsonValue::Number(8.into()),
-                    JsonValue::Number(9.into()),
-                    JsonValue::Number(10.into()),
-                    JsonValue::Number(11.into()),
-                    JsonValue::Number(12.into()),
+                serde_json::Value::Array(vec![
+                    serde_json::Value::Number(1.into()),
+                    serde_json::Value::Number(2.into()),
+                    serde_json::Value::Number(3.into()),
+                    serde_json::Value::Number(4.into()),
+                    serde_json::Value::Number(5.into()),
+                    serde_json::Value::Number(6.into()),
+                    serde_json::Value::Number(7.into()),
+                    serde_json::Value::Number(8.into()),
+                    serde_json::Value::Number(9.into()),
+                    serde_json::Value::Number(10.into()),
+                    serde_json::Value::Number(11.into()),
+                    serde_json::Value::Number(12.into()),
                 ])
             );
             assert_eq!(
-                JsonValue::try_from(Value::Uuid(Uuid::parse_str(
+                serde_json::Value::try_from(Value::Uuid(Uuid::parse_str(
                     "936DA01F-9ABD-4D9D-80C7-02AF85C822A8"
                 )?))?,
-                JsonValue::String("936da01f-9abd-4d9d-80c7-02af85c822a8".into())
+                serde_json::Value::String("936da01f-9abd-4d9d-80c7-02af85c822a8".into())
             );
 
             Ok(())
