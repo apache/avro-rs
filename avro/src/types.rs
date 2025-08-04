@@ -53,8 +53,8 @@ mod types {
         },
     };
     use bigdecimal::BigDecimal;
-    #[cfg(feature = "tokio")]
-    use futures::future::try_join_all;
+    #[synca::cfg(tokio)]
+    use futures::FutureExt;
     use log::{debug, error};
     use serde_json::{Number, Value as JsonValue};
     use std::{
@@ -438,16 +438,15 @@ mod types {
             match (self, schema) {
                 (_, Schema::Ref { name }) => {
                     let name = name.fully_qualified_name(enclosing_namespace);
-                    names.get(&name).map_or_else(
-                        || {
-                            Some(format!(
-                                "Unresolved schema reference: '{:?}'. Parsed names: {:?}",
-                                name,
-                                names.keys()
-                            ))
-                        },
-                        async |s: &S| self.validate_internal(s.borrow(), names, &name.namespace).await,
-                    )
+                    if let Some(s) = names.get(&name) {
+                        Box::pin(self.validate_internal(s.borrow(), names, &name.namespace)).await
+                    } else {
+                        Some(format!(
+                            "Unresolved schema reference: '{:?}'. Parsed names: {:?}",
+                            name,
+                            names.keys()
+                        ))
+                    }
                 }
                 (&Value::Null, &Schema::Null) => None,
                 (&Value::Boolean(_), &Schema::Boolean) => None,
@@ -538,11 +537,13 @@ mod types {
                         None => Some(format!("No symbol at position '{i}'")),
                     }),
                 // (&Value::Union(None), &Schema::Union(_)) => None,
-                (&Value::Union(i, ref value), Schema::Union(inner)) => inner
-                    .variants()
-                    .get(i as usize)
-                    .map(|schema| value.validate_internal(schema, names, enclosing_namespace).await)
-                    .unwrap_or_else(|| Some(format!("No schema in the union at position '{i}'"))),
+                (&Value::Union(i, ref value), Schema::Union(inner)) => {
+                    if let Some(schema) = inner.variants().get(i as usize) {
+                        Box::pin(value.validate_internal(schema, names, enclosing_namespace)).await
+                    } else {
+                        Some(format!("No schema in the union at position '{i}'"))
+                    }
+                },
                 (v, Schema::Union(inner)) => {
                     match inner.find_schema_with_known_schemata(v, Some(names), enclosing_namespace).await
                     {
@@ -753,7 +754,7 @@ mod types {
                         .await
                 }
                 Schema::Map(ref inner) => {
-                    self.resolve_map(&inner.types, names, enclosing_namespace)
+                    self.resolve_map(&inner.types, names, enclosing_namespace).await
                 }
                 Schema::Record(RecordSchema { ref fields, .. }) => {
                     self.resolve_record(fields, names, enclosing_namespace)
@@ -1128,12 +1129,14 @@ mod types {
             enclosing_namespace: &Namespace,
         ) -> Result<Self, Error> {
             match self {
-                Value::Array(items) => Ok(Value::Array(
-                    try_join_all(items.into_iter().map(|item| {
+                Value::Array(items) => {
+                    let resolved = items.into_iter().map(|item| {
                         item.resolve_internal(schema, names, enclosing_namespace, &None)
-                    }))
-                    .await?,
-                )),
+                    });
+                    #[synca::cfg(tokio)]
+                    let resolved = futures::future::try_join_all(resolved).await?;
+                    Ok(Value::Array(resolved))
+                },
                 other => Err(Details::GetArray {
                     expected: schema.into(),
                     other,
@@ -1142,24 +1145,26 @@ mod types {
             }
         }
 
-        fn resolve_map<S: Borrow<Schema> + Debug>(
+        async fn resolve_map<S: Borrow<Schema> + Debug>(
             self,
             schema: &Schema,
             names: &HashMap<Name, S>,
             enclosing_namespace: &Namespace,
         ) -> Result<Self, Error> {
             match self {
-                Value::Map(items) => Ok(Value::Map(
-                    items
+                Value::Map(items) => {
+                    let resolved = items
                         .into_iter()
-                        .map(async |(key, value)| {
+                        .map(|(key, value)| {
                             value
                                 .resolve_internal(schema, names, enclosing_namespace, &None)
-                                .await
                                 .map(|value| (key, value))
                         })
-                        .collect::<Result<_, _>>()?,
-                )),
+                        .collect::<Result<_, _>>();
+                    #[synca::cfg(tokio)]
+                    let resolved = futures::future::try_join_all(resolved).await?;
+                    Ok(Value::Map(resolved))
+                },
                 other => Err(Details::GetMap {
                     expected: schema.into(),
                     other,
@@ -1186,7 +1191,7 @@ mod types {
                 })),
             }?;
 
-            let new_fields = try_join_all(fields.iter().map(|field| async {
+            let new_fields = fields.iter().map(|field| {
                 let value = match items.remove(&field.name) {
                     Some(value) => value,
                     None => match field.default {
@@ -1215,8 +1220,7 @@ mod types {
                                                     names,
                                                     enclosing_namespace,
                                                     &field.default,
-                                                )
-                                                .await?,
+                                                ),
                                         ),
                                     ),
                                 }
@@ -1228,13 +1232,14 @@ mod types {
                         }
                     },
                 };
+
                 value
                     .resolve_internal(&field.schema, names, enclosing_namespace, &field.default)
-                    .await
                     .map(|value| (field.name.clone(), value))
-            }))
-            .await?;
+            });
 
+            #[synca::cfg(tokio)]
+            let new_fields = futures::future::try_join_all(new_fields).await?;
             Ok(Value::Record(new_fields))
         }
 

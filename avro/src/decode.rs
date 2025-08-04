@@ -35,9 +35,9 @@
   }
 )]
 mod decode {
-    #[cfg(feature = "sync")]
+    #[synca::cfg(sync)]
     use std::io::Read as AvroRead;
-    #[cfg(feature = "tokio")]
+    #[synca::cfg(tokio)]
     use tokio::io::AsyncRead as AvroRead;
     #[cfg(feature = "tokio")]
     use tokio::io::AsyncReadExt;
