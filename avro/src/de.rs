@@ -39,7 +39,7 @@
 mod de {
 
     use crate::{
-        Error, bytes::DE_BYTES_BORROWED, error::tokio::Details, schema::tokio::SchemaKind,
+        error::tokio::Error, bytes::DE_BYTES_BORROWED, error::tokio::Details, schema::tokio::SchemaKind,
         types::tokio::Value,
     };
     use serde::{
