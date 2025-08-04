@@ -41,8 +41,12 @@
 )]
 mod types {
 
+    #[synca::cfg(tokio)]
+    use crate::AsyncAvroResult as AvroResult;
+    #[synca::cfg(sync)]
+    use crate::AvroResult;
     use crate::{
-        AvroResult, Error,
+        error::tokio::Error,
         bigdecimal::tokio::{deserialize_big_decimal, serialize_big_decimal},
         decimal::tokio::Decimal,
         duration::Duration,

@@ -39,7 +39,6 @@ mod encode {
     use crate::util::tokio::{zig_i32, zig_i64};
 
     use crate::{
-        AvroResult,
         bigdecimal::tokio::serialize_big_decimal,
         error::tokio::Details,
         schema::tokio::{
@@ -48,6 +47,11 @@ mod encode {
         },
         types::tokio::{Value, ValueKind},
     };
+    #[synca::cfg(tokio)]
+    use crate::AsyncAvroResult as AvroResult;
+    #[synca::cfg(sync)]
+    use crate::AvroResult;
+
     use log::error;
     use std::{borrow::Borrow, collections::HashMap, io::Write};
 

@@ -40,9 +40,14 @@ mod headers {
     use uuid::Uuid;
 
     use crate::{
-        AvroResult, error::tokio::Details, rabin::Rabin, schema::tokio::Schema,
+        error::tokio::Details, rabin::Rabin, schema::tokio::Schema,
         schema::tokio::SchemaFingerprint,
     };
+    #[synca::cfg(tokio)]
+    use crate::AsyncAvroResult as AvroResult;
+    #[synca::cfg(sync)]
+    use crate::AvroResult;
+
 
     /// This trait represents that an object is able to construct an Avro message header. It is
     /// implemented for some known header types already. If you need a header type that is not already

@@ -41,8 +41,11 @@
 )]
 mod schema {
 
+    #[synca::cfg(tokio)]
+    use crate::AsyncAvroResult as AvroResult;
+    #[synca::cfg(sync)]
+    use crate::AvroResult;
     use crate::{
-        AvroResult,
         error::tokio::{Details, Error},
         schema_equality::tokio::compare_schemata,
         types::tokio::{Value, ValueKind},
@@ -670,7 +673,7 @@ mod schema {
         /// Default value of the field.
         /// This value will be used when reading Avro datum if schema resolution
         /// is enabled.
-        pub default: Option<Value>,
+        pub default: Option<serde_json::Value>,
         /// Schema of the field.
         pub schema: Schema,
         /// Order of the field.
@@ -683,7 +686,7 @@ mod schema {
         pub position: usize,
         /// A collection of all unknown fields in the record field.
         #[builder(default = BTreeMap::new())]
-        pub custom_attributes: BTreeMap<String, Value>,
+        pub custom_attributes: BTreeMap<String, serde_json::Value>,
     }
 
     /// Represents any valid order for a `field` in a `record` Avro schema.
@@ -720,7 +723,7 @@ mod schema {
                 &name,
                 &enclosing_record.fullname(None),
                 &parser.parsed_schemas,
-                &default.into(),
+                &default,
             )
             .await?;
 
@@ -743,7 +746,7 @@ mod schema {
             Ok(RecordField {
                 name,
                 doc: field.doc(),
-                default: default.into(),
+                default,
                 aliases,
                 order,
                 position,
@@ -757,7 +760,7 @@ mod schema {
             field_name: &str,
             record_name: &str,
             names: &Names,
-            default: &Option<Value>,
+            default: &Option<serde_json::Value>,
         ) -> AvroResult<()> {
             if let Some(value) = default {
                 let avro_value = Value::from(value.clone());
@@ -814,8 +817,8 @@ mod schema {
         fn get_field_custom_attributes(
             field: &serde_json::Map<String, serde_json::Value>,
             schema: &Schema,
-        ) -> BTreeMap<String, Value> {
-            let mut custom_attributes: BTreeMap<String, Value> = BTreeMap::new();
+        ) -> BTreeMap<String, serde_json::Value> {
+            let mut custom_attributes: BTreeMap<String, serde_json::Value> = BTreeMap::new();
             for (key, value) in field {
                 match key.as_str() {
                     "type" | "name" | "doc" | "default" | "order" | "position" | "aliases"
@@ -855,7 +858,7 @@ mod schema {
         pub lookup: BTreeMap<String, usize>,
         /// The custom attributes of the schema
         #[builder(default = BTreeMap::new())]
-        pub attributes: BTreeMap<String, Value>,
+        pub attributes: BTreeMap<String, serde_json::Value>,
     }
 
     /// A description of an Enum schema.
@@ -875,7 +878,7 @@ mod schema {
         pub default: Option<String>,
         /// The custom attributes of the schema
         #[builder(default = BTreeMap::new())]
-        pub attributes: BTreeMap<String, Value>,
+        pub attributes: BTreeMap<String, serde_json::Value>,
     }
 
     /// A description of a Union schema.
@@ -895,7 +898,7 @@ mod schema {
         pub default: Option<String>,
         /// The custom attributes of the schema
         #[builder(default = BTreeMap::new())]
-        pub attributes: BTreeMap<String, Value>,
+        pub attributes: BTreeMap<String, serde_json::Value>,
     }
 
     impl FixedSchema {
@@ -1081,7 +1084,7 @@ mod schema {
 
     #[derive(Default)]
     struct Parser {
-        input_schemas: HashMap<Name, Value>,
+        input_schemas: HashMap<Name, serde_json::Value>,
         /// A map of name -> Schema::Ref
         /// Used to resolve cyclic references, i.e. when a
         /// field's type is a reference to its record's type
@@ -1147,12 +1150,12 @@ mod schema {
         ) -> AvroResult<Vec<Schema>> {
             let input = input.into_iter();
             let input_len = input.size_hint().0;
-            let mut input_schemas: HashMap<Name, Value> = HashMap::with_capacity(input_len);
+            let mut input_schemas: HashMap<Name, serde_json::Value> = HashMap::with_capacity(input_len);
             let mut input_order: Vec<Name> = Vec::with_capacity(input_len);
             for json in input {
                 let json = json.as_ref();
-                let schema: Value = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
-                if let Value::Object(inner) = &schema {
+                let schema: serde_json::Value = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
+                if let serde_json::Value::Object(inner) = &schema {
                     let name = Name::parse(inner, &None)?;
                     let previous_value = input_schemas.insert(name.clone(), schema);
                     if previous_value.is_some() {
@@ -1190,12 +1193,12 @@ mod schema {
         ) -> AvroResult<(Schema, Vec<Schema>)> {
             let schemata = schemata.into_iter();
             let schemata_len = schemata.size_hint().0;
-            let mut input_schemas: HashMap<Name, Value> = HashMap::with_capacity(schemata_len);
+            let mut input_schemas: HashMap<Name, serde_json::Value> = HashMap::with_capacity(schemata_len);
             let mut input_order: Vec<Name> = Vec::with_capacity(schemata_len);
             for json in schemata {
                 let json = json.as_ref();
-                let schema: Value = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
-                if let Value::Object(inner) = &schema {
+                let schema: serde_json::Value = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
+                if let serde_json::Value::Object(inner) = &schema {
                     let name = Name::parse(inner, &None)?;
                     if let Some(_previous) = input_schemas.insert(name.clone(), schema) {
                         return Err(Details::NameCollision(name.fullname(None)).into());
@@ -1229,14 +1232,14 @@ mod schema {
         }
 
         /// Parses an Avro schema from JSON.
-        pub fn parse(value: &Value) -> AvroResult<Schema> {
+        pub fn parse(value: &serde_json::Value) -> AvroResult<Schema> {
             let mut parser = Parser::default();
             parser.parse(value, &None)
         }
 
         /// Parses an Avro schema from JSON.
         /// Any `Schema::Ref`s must be known in the `names` map.
-        pub(crate) fn parse_with_names(value: &Value, names: Names) -> AvroResult<Schema> {
+        pub(crate) fn parse_with_names(value: &serde_json::Value, names: Names) -> AvroResult<Schema> {
             let mut parser = Parser {
                 input_schemas: HashMap::with_capacity(1),
                 resolving_schemas: Names::default(),
@@ -1247,7 +1250,7 @@ mod schema {
         }
 
         /// Returns the custom attributes (metadata) if the schema supports them.
-        pub fn custom_attributes(&self) -> Option<&BTreeMap<String, Value>> {
+        pub fn custom_attributes(&self) -> Option<&BTreeMap<String, serde_json::Value>> {
             match self {
                 Schema::Record(RecordSchema { attributes, .. })
                 | Schema::Enum(EnumSchema { attributes, .. })
@@ -1303,7 +1306,7 @@ mod schema {
         }
 
         /// Returns a Schema::Map with the given types and custom attributes.
-        pub fn map_with_attributes(types: Schema, attributes: BTreeMap<String, Value>) -> Self {
+        pub fn map_with_attributes(types: Schema, attributes: BTreeMap<String, serde_json::Value>) -> Self {
             Schema::Map(MapSchema {
                 types: Box::new(types),
                 attributes,
@@ -1319,7 +1322,7 @@ mod schema {
         }
 
         /// Returns a Schema::Array with the given items and custom attributes.
-        pub fn array_with_attributes(items: Schema, attributes: BTreeMap<String, Value>) -> Self {
+        pub fn array_with_attributes(items: Schema, attributes: BTreeMap<String, serde_json::Value>) -> Self {
             Schema::Array(ArraySchema {
                 items: Box::new(items),
                 attributes,
@@ -1407,13 +1410,13 @@ mod schema {
 
         /// Create a `Schema` from a `serde_json::Value` representing a JSON Avro
         /// schema.
-        fn parse(&mut self, value: &Value, enclosing_namespace: &Namespace) -> AvroResult<Schema> {
+        fn parse(&mut self, value: &serde_json::Value, enclosing_namespace: &Namespace) -> AvroResult<Schema> {
             match *value {
-                Value::String(ref t) => self.parse_known_schema(t.as_str(), enclosing_namespace),
-                Value::Object(ref data) => {
+                serde_json::Value::String(ref t) => self.parse_known_schema(t.as_str(), enclosing_namespace),
+                serde_json::Value::Object(ref data) => {
                     self.parse_complex(data, enclosing_namespace, RecordSchemaParseLocation::Root)
                 }
-                Value::Array(ref data) => self.parse_union(data, enclosing_namespace),
+                serde_json::Value::Array(ref data) => self.parse_union(data, enclosing_namespace),
                 _ => Err(Details::ParseSchemaFromValidJson.into()),
             }
         }
@@ -1803,7 +1806,7 @@ mod schema {
             enclosing_namespace: &Namespace,
         ) -> Option<&Schema> {
             match complex.get("type") {
-                Some(Value::String(typ)) => {
+                Some(serde_json::Value::String(typ)) => {
                     let name = Name::new(typ.as_str())
                         .unwrap()
                         .fully_qualified_name(enclosing_namespace);
@@ -1882,7 +1885,7 @@ mod schema {
             &self,
             complex: &serde_json::Map<String, serde_json::Value>,
             excluded: Vec<&'static str>,
-        ) -> BTreeMap<String, Value> {
+        ) -> BTreeMap<String, serde_json::Value> {
             let mut custom_attributes: BTreeMap<String, serde_json::Value> = BTreeMap::new();
             for (key, value) in complex {
                 match key.as_str() {
@@ -1937,7 +1940,7 @@ mod schema {
 
             let mut default: Option<String> = None;
             if let Some(value) = complex.get("default") {
-                if let Value::String(ref s) = *value {
+                if let serde_json::Value::String(ref s) = *value {
                     default = Some(s.clone());
                 } else {
                     return Err(Details::EnumDefaultWrongType(value.clone()).into());
@@ -2013,7 +2016,7 @@ mod schema {
         /// `Schema`.
         fn parse_union(
             &mut self,
-            items: &[Value],
+            items: &[serde_json::Value],
             enclosing_namespace: &Namespace,
         ) -> AvroResult<Schema> {
             items
@@ -2053,7 +2056,7 @@ mod schema {
             }
 
             let doc = complex.get("doc").and_then(|v| match &v {
-                &Value::String(docstr) => Some(docstr.clone()),
+                &serde_json::Value::String(docstr) => Some(docstr.clone()),
                 _ => None,
             });
 
@@ -2065,7 +2068,7 @@ mod schema {
             }?;
 
             let default = complex.get("default").and_then(|v| match &v {
-                &Value::String(default) => Some(default.clone()),
+                &serde_json::Value::String(default) => Some(default.clone()),
                 _ => None,
             });
 
@@ -2363,11 +2366,11 @@ mod schema {
 
     /// Parses a **valid** avro schema into the Parsing Canonical Form.
     /// https://avro.apache.org/docs/current/specification/#parsing-canonical-form-for-schemas
-    fn parsing_canonical_form(schema: &Value, defined_names: &mut HashSet<String>) -> String {
+    fn parsing_canonical_form(schema: &serde_json::Value, defined_names: &mut HashSet<String>) -> String {
         match schema {
-            Value::Object(map) => pcf_map(map, defined_names),
-            Value::String(s) => pcf_string(s),
-            Value::Array(v) => pcf_array(v, defined_names),
+            serde_json::Value::Object(map) => pcf_map(map, defined_names),
+            serde_json::Value::String(s) => pcf_string(s),
+            serde_json::Value::Array(v) => pcf_array(v, defined_names),
             json => panic!("got invalid JSON value for canonical form of schema: {json}"),
         }
     }
@@ -2401,7 +2404,7 @@ mod schema {
             // Reduce primitive types to their simple form. ([PRIMITIVE] rule)
             if schema.len() == 1 && k == "type" {
                 // Invariant: function is only callable from a valid schema, so this is acceptable.
-                if let Value::String(s) = v {
+                if let serde_json::Value::String(s) = v {
                     return pcf_string(s);
                 }
             }
@@ -2462,7 +2465,7 @@ mod schema {
         )
     }
 
-    fn pcf_array(arr: &[Value], defined_names: &mut HashSet<String>) -> String {
+    fn pcf_array(arr: &[serde_json::Value], defined_names: &mut HashSet<String>) -> String {
         let inter = arr
             .iter()
             .map(|a| parsing_canonical_form(a, defined_names))
@@ -3124,7 +3127,7 @@ mod schema {
                     RecordField {
                         name: "a".to_string(),
                         doc: None,
-                        default: Some(Value::Number(42i64.into())),
+                        default: Some(serde_json::Value::Number(42i64.into())),
                         aliases: None,
                         schema: Schema::Long,
                         order: RecordFieldOrder::Ascending,

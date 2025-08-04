@@ -36,7 +36,6 @@
 )]
 mod bigdecimal {
     use crate::{
-        AvroResult,
         decode::tokio::{decode_len, decode_long},
         encode::tokio::{encode_bytes, encode_long},
         error::tokio::Details,
@@ -46,6 +45,11 @@ mod bigdecimal {
     use num_bigint::BigInt;
     use std::io::Read;
 
+    #[synca::cfg(tokio)]
+    use crate::AsyncAvroResult as AvroResult;
+    #[synca::cfg(sync)]
+    use crate::AvroResult;
+    
     pub(crate) fn big_decimal_as_bytes(decimal: &BigDecimal) -> AvroResult<Vec<u8>> {
         let mut buffer: Vec<u8> = Vec::new();
         let (big_int, exponent): (BigInt, i64) = decimal.as_bigint_and_exponent();

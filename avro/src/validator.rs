@@ -39,7 +39,11 @@
 )]
 mod validator {
 
-    use crate::{AvroResult, error::tokio::Details, schema::tokio::Namespace};
+    #[synca::cfg(tokio)]
+    use crate::AsyncAvroResult as AvroResult;
+    #[synca::cfg(sync)]
+    use crate::AvroResult;
+    use crate::{error::tokio::Details, schema::tokio::Namespace};
     use log::debug;
     use regex_lite::Regex;
     use std::sync::OnceLock;
