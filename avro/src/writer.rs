@@ -55,6 +55,8 @@ mod writer {
         collections::HashMap, io::Write, marker::PhantomData, mem::ManuallyDrop,
         ops::RangeInclusive,
     };
+    #[cfg(feature = "tokio")]
+    use futures::TryFutureExt;
 
     const DEFAULT_BLOCK_SIZE: usize = 16000;
     const AVRO_OBJECT_HEADER: &[u8] = b"Obj\x01";
@@ -187,11 +189,11 @@ mod writer {
         /// **NOTE**: This function is not guaranteed to perform any actual write, since it relies on
         /// internal buffering for performance reasons. If you want to be sure the value has been
         /// written, then call [`flush`](Writer::flush).
-        pub fn append<T: Into<Value>>(&mut self, value: T) -> AvroResult<usize> {
+        pub async fn append<T: Into<Value>>(&mut self, value: T) -> AvroResult<usize> {
             let n = self.maybe_write_header()?;
 
             let avro = value.into();
-            self.append_value_ref(&avro).map(|m| m + n)
+            self.append_value_ref(&avro).map_ok(|m| m + n).await
         }
 
         /// Append a compatible value to a `Writer`, also performing schema validation.
@@ -201,13 +203,13 @@ mod writer {
         /// **NOTE**: This function is not guaranteed to perform any actual write, since it relies on
         /// internal buffering for performance reasons. If you want to be sure the value has been
         /// written, then call [`flush`](Writer::flush).
-        pub fn append_value_ref(&mut self, value: &Value) -> AvroResult<usize> {
+        pub async fn append_value_ref(&mut self, value: &Value) -> AvroResult<usize> {
             let n = self.maybe_write_header()?;
 
             // Lazy init for users using the builder pattern with error throwing
             match self.resolved_schema {
                 Some(ref rs) => {
-                    write_value_ref_resolved(self.schema, rs, value, &mut self.buffer)?;
+                    write_value_ref_resolved(self.schema, rs, value, &mut self.buffer).await?;
                     self.num_values += 1;
 
                     if self.buffer.len() >= self.block_size {
@@ -219,7 +221,7 @@ mod writer {
                 None => {
                     let rs = ResolvedSchema::try_from(self.schema)?;
                     self.resolved_schema = Some(rs);
-                    self.append_value_ref(value)
+                    self.append_value_ref(value).await
                 }
             }
         }
@@ -268,7 +270,7 @@ mod writer {
         ///
         /// **NOTE**: This function forces the written data to be flushed (an implicit
         /// call to [`flush`](Writer::flush) is performed).
-        pub fn extend<I, T: Into<Value>>(&mut self, values: I) -> AvroResult<usize>
+        pub async fn extend<I, T: Into<Value>>(&mut self, values: I) -> AvroResult<usize>
         where
             I: IntoIterator<Item = T>,
         {
@@ -288,7 +290,7 @@ mod writer {
 
             let mut num_bytes = 0;
             for value in values {
-                num_bytes += self.append(value)?;
+                num_bytes += self.append(value).await?;
             }
             num_bytes += self.flush()?;
 
@@ -337,10 +339,10 @@ mod writer {
         ///
         /// **NOTE**: This function forces the written data to be flushed (an implicit
         /// call to [`flush`](Writer::flush) is performed).
-        pub fn extend_from_slice(&mut self, values: &[Value]) -> AvroResult<usize> {
+        pub async fn extend_from_slice(&mut self, values: &[Value]) -> AvroResult<usize> {
             let mut num_bytes = 0;
             for value in values {
-                num_bytes += self.append_value_ref(value)?;
+                num_bytes += self.append_value_ref(value).await?;
             }
             num_bytes += self.flush()?;
 
@@ -531,20 +533,20 @@ mod writer {
     ///
     /// This is an internal function which gets the bytes buffer where to write as parameter instead of
     /// creating a new one like `to_avro_datum`.
-    fn write_avro_datum<T: Into<Value>, W: Write>(
+    async fn write_avro_datum<T: Into<Value>, W: Write>(
         schema: &Schema,
         value: T,
         writer: &mut W,
     ) -> Result<(), Error> {
         let avro = value.into();
-        if !avro.validate(schema) {
+        if !avro.validate(schema).await {
             return Err(Details::Validation.into());
         }
         encode(&avro, schema, writer)?;
         Ok(())
     }
 
-    fn write_avro_datum_schemata<T: Into<Value>>(
+    async fn write_avro_datum_schemata<T: Into<Value>>(
         schema: &Schema,
         schemata: Vec<&Schema>,
         value: T,
@@ -554,7 +556,7 @@ mod writer {
         let rs = ResolvedSchema::try_from(schemata)?;
         let names = rs.get_names();
         let enclosing_namespace = schema.namespace();
-        if let Some(_err) = avro.validate_internal(schema, names, &enclosing_namespace) {
+        if let Some(_err) = avro.validate_internal(schema, names, &enclosing_namespace).await {
             return Err(Details::Validation.into());
         }
         encode_internal(&avro, schema, names, &enclosing_namespace, buffer)
@@ -595,7 +597,7 @@ mod writer {
         const HEADER_LENGTH_RANGE: RangeInclusive<usize> = 10_usize..=20_usize;
 
         /// Write the referenced Value to the provided Write object. Returns a result with the number of bytes written including the header
-        pub fn write_value_ref<W: Write>(
+        pub async fn write_value_ref<W: Write>(
             &mut self,
             v: &Value,
             writer: &mut W,
@@ -604,7 +606,7 @@ mod writer {
             if !Self::HEADER_LENGTH_RANGE.contains(&original_length) {
                 Err(Details::IllegalSingleObjectWriterState.into())
             } else {
-                write_value_ref_owned_resolved(&self.resolved, v, &mut self.buffer)?;
+                write_value_ref_owned_resolved(&self.resolved, v, &mut self.buffer).await?;
                 writer
                     .write_all(&self.buffer)
                     .map_err(Details::WriteBytes)?;
@@ -615,8 +617,8 @@ mod writer {
         }
 
         /// Write the Value to the provided Write object. Returns a result with the number of bytes written including the header
-        pub fn write_value<W: Write>(&mut self, v: Value, writer: &mut W) -> AvroResult<usize> {
-            self.write_value_ref(&v, writer)
+        pub async fn write_value<W: Write>(&mut self, v: Value, writer: &mut W) -> AvroResult<usize> {
+            self.write_value_ref(&v, writer).await
         }
     }
 
@@ -652,9 +654,9 @@ mod writer {
     {
         /// Write the `Into<Value>` to the provided Write object. Returns a result with the number
         /// of bytes written including the header
-        pub fn write_value<W: Write>(&mut self, data: T, writer: &mut W) -> AvroResult<usize> {
+        pub async fn write_value<W: Write>(&mut self, data: T, writer: &mut W) -> AvroResult<usize> {
             let v: Value = data.into();
-            self.inner.write_value_ref(&v, writer)
+            self.inner.write_value_ref(&v, writer).await
         }
     }
 
@@ -686,13 +688,13 @@ mod writer {
         }
     }
 
-    fn write_value_ref_resolved(
+    async fn write_value_ref_resolved(
         schema: &Schema,
-        resolved_schema: &ResolvedSchema,
+        resolved_schema: &ResolvedSchema<'_>,
         value: &Value,
         buffer: &mut Vec<u8>,
     ) -> AvroResult<usize> {
-        match value.validate_internal(schema, resolved_schema.get_names(), &schema.namespace()) {
+        match value.validate_internal(schema, resolved_schema.get_names(), &schema.namespace()).await {
             Some(reason) => Err(Details::ValidationWithReason {
                 value: value.clone(),
                 schema: schema.clone(),
@@ -709,7 +711,7 @@ mod writer {
         }
     }
 
-    fn write_value_ref_owned_resolved(
+    async fn write_value_ref_owned_resolved(
         resolved_schema: &ResolvedOwnedSchema,
         value: &Value,
         buffer: &mut Vec<u8>,
@@ -719,7 +721,7 @@ mod writer {
             root_schema,
             resolved_schema.get_names(),
             &root_schema.namespace(),
-        ) {
+        ).await {
             return Err(Details::ValidationWithReason {
                 value: value.clone(),
                 schema: root_schema.clone(),
@@ -743,9 +745,9 @@ mod writer {
     /// **NOTE**: This function has a quite small niche of usage and does NOT generate headers and sync
     /// markers; use [`Writer`] to be fully Avro-compatible if you don't know what
     /// you are doing, instead.
-    pub fn to_avro_datum<T: Into<Value>>(schema: &Schema, value: T) -> AvroResult<Vec<u8>> {
+    pub async fn to_avro_datum<T: Into<Value>>(schema: &Schema, value: T) -> AvroResult<Vec<u8>> {
         let mut buffer = Vec::new();
-        write_avro_datum(schema, value, &mut buffer)?;
+        write_avro_datum(schema, value, &mut buffer).await?;
         Ok(buffer)
     }
 
@@ -770,13 +772,13 @@ mod writer {
     /// performing schema validation.
     /// If the provided `schema` is incomplete then its dependencies must be
     /// provided in `schemata`
-    pub fn to_avro_datum_schemata<T: Into<Value>>(
+    pub async fn to_avro_datum_schemata<T: Into<Value>>(
         schema: &Schema,
         schemata: Vec<&Schema>,
         value: T,
     ) -> AvroResult<Vec<u8>> {
         let mut buffer = Vec::new();
-        write_avro_datum_schemata(schema, schemata, value, &mut buffer)?;
+        write_avro_datum_schemata(schema, schemata, value, &mut buffer).await?;
         Ok(buffer)
     }
 

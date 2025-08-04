@@ -391,18 +391,18 @@ mod types {
         ///
         /// See the [Avro specification](https://avro.apache.org/docs/current/specification)
         /// for the full set of rules of schema validation.
-        pub fn validate(&self, schema: &Schema) -> bool {
-            self.validate_schemata(vec![schema])
+        pub async fn validate(&self, schema: &Schema) -> bool {
+            self.validate_schemata(vec![schema]).await
         }
 
-        pub fn validate_schemata(&self, schemata: Vec<&Schema>) -> bool {
+        pub async fn validate_schemata(&self, schemata: Vec<&Schema>) -> bool {
             let rs = ResolvedSchema::try_from(schemata.clone())
                 .expect("Schemata didn't successfully resolve");
             let schemata_len = schemata.len();
-            schemata.iter().any(|schema| {
+            for schema in schemata {
                 let enclosing_namespace = schema.namespace();
 
-                match self.validate_internal(schema, rs.get_names(), &enclosing_namespace) {
+                match self.validate_internal(schema, rs.get_names(), &enclosing_namespace).await {
                     Some(reason) => {
                         let log_message = format!(
                             "Invalid value: {self:?} for schema: {schema:?}. Reason: {reason}"
@@ -412,11 +412,11 @@ mod types {
                         } else {
                             debug!("{log_message}");
                         };
-                        false
                     }
-                    None => true,
+                    None => return true,
                 }
-            })
+            };
+            false
         }
 
         fn accumulate(accumulator: Option<String>, other: Option<String>) -> Option<String> {
@@ -429,7 +429,7 @@ mod types {
         }
 
         /// Validates the value against the provided schema.
-        pub(crate) fn validate_internal<S: std::borrow::Borrow<Schema> + Debug>(
+        pub(crate) async fn validate_internal<S: Borrow<Schema> + Debug>(
             &self,
             schema: &Schema,
             names: &HashMap<Name, S>,
@@ -446,7 +446,7 @@ mod types {
                                 names.keys()
                             ))
                         },
-                        |s| self.validate_internal(s.borrow(), names, &name.namespace),
+                        async |s: &S| self.validate_internal(s.borrow(), names, &name.namespace).await,
                     )
                 }
                 (&Value::Null, &Schema::Null) => None,
@@ -541,30 +541,46 @@ mod types {
                 (&Value::Union(i, ref value), Schema::Union(inner)) => inner
                     .variants()
                     .get(i as usize)
-                    .map(|schema| value.validate_internal(schema, names, enclosing_namespace))
+                    .map(|schema| value.validate_internal(schema, names, enclosing_namespace).await)
                     .unwrap_or_else(|| Some(format!("No schema in the union at position '{i}'"))),
                 (v, Schema::Union(inner)) => {
-                    match inner.find_schema_with_known_schemata(v, Some(names), enclosing_namespace)
+                    match inner.find_schema_with_known_schemata(v, Some(names), enclosing_namespace).await
                     {
                         Some(_) => None,
                         None => Some("Could not find matching type in union".to_string()),
                     }
                 }
                 (Value::Array(items), Schema::Array(inner)) => {
-                    items.iter().fold(None, |acc, item| {
-                        Value::accumulate(
+                    let mut acc = None;
+                    for item in items.iter() {
+                        acc = Value::accumulate(
                             acc,
-                            item.validate_internal(&inner.items, names, enclosing_namespace),
-                        )
-                    })
+                            item.validate_internal(&inner.items, names, enclosing_namespace).await,
+                        );
+                    }
+                    acc
+                    // items.iter().fold(None, |acc, item| {
+                    //     Value::accumulate(
+                    //         acc,
+                    //         item.validate_internal(&inner.items, names, enclosing_namespace).await,
+                    //     )
+                    // })
                 }
                 (Value::Map(items), Schema::Map(inner)) => {
-                    items.iter().fold(None, |acc, (_, value)| {
-                        Value::accumulate(
+                    let mut acc = None;
+                    for (_, value) in items.iter() {
+                        acc = Value::accumulate(
                             acc,
-                            value.validate_internal(&inner.types, names, enclosing_namespace),
-                        )
-                    })
+                            value.validate_internal(&inner.types, names, enclosing_namespace).await,
+                        );
+                    }
+                    acc
+                    // items.iter().fold(None, |acc, (_, value)| {
+                    //     Value::accumulate(
+                    //         acc,
+                    //         value.validate_internal(&inner.types, names, enclosing_namespace),
+                    //     )
+                    // })
                 }
                 (
                     Value::Record(record_fields),
@@ -593,15 +609,14 @@ mod types {
                         ));
                     }
 
-                    record_fields
-                        .iter()
-                        .fold(None, |acc, (field_name, record_field)| {
+                    let mut acc = None;
+                    for (field_name, record_field) in record_fields.iter() {
                             let record_namespace = if name.namespace.is_none() {
                                 enclosing_namespace
                             } else {
                                 &name.namespace
                             };
-                            match lookup.get(field_name) {
+                            acc = match lookup.get(field_name) {
                                 Some(idx) => {
                                     let field = &fields[*idx];
                                     Value::accumulate(
@@ -610,7 +625,7 @@ mod types {
                                             &field.schema,
                                             names,
                                             record_namespace,
-                                        ),
+                                        ).await
                                     )
                                 }
                                 None => Value::accumulate(
@@ -619,27 +634,28 @@ mod types {
                                         "There is no schema field for field '{field_name}'"
                                     )),
                                 ),
-                            }
-                        })
+                            };
+                        }
+                        acc
                 }
                 (Value::Map(items), Schema::Record(RecordSchema { fields, .. })) => {
-                    fields.iter().fold(None, |acc, field| {
+                    let mut acc = None;
+                    for field in fields.iter() {
                         if let Some(item) = items.get(&field.name) {
                             let res =
-                                item.validate_internal(&field.schema, names, enclosing_namespace);
-                            Value::accumulate(acc, res)
+                                item.validate_internal(&field.schema, names, enclosing_namespace).await;
+                            acc = Value::accumulate(acc, res);
                         } else if !field.is_nullable() {
-                            Value::accumulate(
+                            acc = Value::accumulate(
                                 acc,
                                 Some(format!(
                                     "Field with name '{:?}' is not a member of the map items",
                                     field.name
                                 )),
-                            )
-                        } else {
-                            acc
+                            );
                         }
-                    })
+                    };
+                    acc
                 }
                 (v, s) => Some(format!(
                     "Unsupported value-schema combination! Value: {v:?}, schema: {s:?}"
@@ -2819,7 +2835,7 @@ Field with name '"b"' is not a member of the map items"#,
 
         #[tokio::test]
         async fn test_avro_3460_validation_with_refs_real_struct() -> TestResult {
-            use crate::ser::Serializer;
+            use crate::ser::tokio::Serializer;
             use serde::Serialize;
 
             #[derive(Serialize, Clone)]
