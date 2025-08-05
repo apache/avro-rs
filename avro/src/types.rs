@@ -564,8 +564,12 @@ mod types {
                     for item in items.iter() {
                         acc = Value::accumulate(
                             acc,
-                            Box::pin(item.validate_internal(&inner.items, names, enclosing_namespace))
-                                .await,
+                            Box::pin(item.validate_internal(
+                                &inner.items,
+                                names,
+                                enclosing_namespace,
+                            ))
+                            .await,
                         );
                     }
                     acc
@@ -581,9 +585,12 @@ mod types {
                     for (_, value) in items.iter() {
                         acc = Value::accumulate(
                             acc,
-                            Box::pin(value
-                                .validate_internal(&inner.types, names, enclosing_namespace))
-                                .await,
+                            Box::pin(value.validate_internal(
+                                &inner.types,
+                                names,
+                                enclosing_namespace,
+                            ))
+                            .await,
                         );
                     }
                     acc
@@ -633,9 +640,12 @@ mod types {
                                 let field = &fields[*idx];
                                 Value::accumulate(
                                     acc,
-                                    Box::pin(record_field
-                                        .validate_internal(&field.schema, names, record_namespace))
-                                        .await,
+                                    Box::pin(record_field.validate_internal(
+                                        &field.schema,
+                                        names,
+                                        record_namespace,
+                                    ))
+                                    .await,
                                 )
                             }
                             None => Value::accumulate(
@@ -650,9 +660,12 @@ mod types {
                     let mut acc = None;
                     for field in fields.iter() {
                         if let Some(item) = items.get(&field.name) {
-                            let res = Box::pin(item
-                                .validate_internal(&field.schema, names, enclosing_namespace))
-                                .await;
+                            let res = Box::pin(item.validate_internal(
+                                &field.schema,
+                                names,
+                                enclosing_namespace,
+                            ))
+                            .await;
                             acc = Value::accumulate(acc, res);
                         } else if !field.is_nullable() {
                             acc = Value::accumulate(
@@ -1139,12 +1152,14 @@ mod types {
         ) -> Result<Self, Error> {
             match self {
                 Value::Array(items) => {
-                    let resolved = items.into_iter().map(|item| {
-                        item.resolve_internal(schema, names, enclosing_namespace, &None)
-                    });
-                    #[synca::cfg(tokio)]
-                    let resolved = futures::future::try_join_all(resolved).await?;
-                    Ok(Value::Array(resolved))
+                    let mut resolved_values = Vec::with_capacity(items.len());
+                    for item in items.into_iter() {
+                        let resolved = item
+                            .resolve_internal(schema, names, enclosing_namespace, &None)
+                            .await?;
+                        resolved_values.push(resolved);
+                    }
+                    Ok(Value::Array(resolved_values))
                 }
                 other => Err(Details::GetArray {
                     expected: schema.into(),
@@ -1164,9 +1179,13 @@ mod types {
                 Value::Map(items) => {
                     let mut resolved = HashMap::with_capacity(items.len());
                     for (key, value) in items.into_iter() {
-                        let v = Box::pin(value
-                            .resolve_internal(schema, names, enclosing_namespace, &None))
-                            .await?;
+                        let v = Box::pin(value.resolve_internal(
+                            schema,
+                            names,
+                            enclosing_namespace,
+                            &None,
+                        ))
+                        .await?;
                         resolved.insert(key.clone(), v);
                     }
 
@@ -1231,12 +1250,15 @@ mod types {
                                     Schema::Null => Value::Union(0, Box::new(Value::Null)),
                                     _ => Value::Union(
                                         0,
-                                        Box::new(Box::pin(Value::from(value.clone()).resolve_internal(
-                                            first,
-                                            names,
-                                            enclosing_namespace,
-                                            &field.default,
-                                        )).await?),
+                                        Box::new(
+                                            Box::pin(Value::from(value.clone()).resolve_internal(
+                                                first,
+                                                names,
+                                                enclosing_namespace,
+                                                &field.default,
+                                            ))
+                                            .await?,
+                                        ),
                                     ),
                                 }
                             }
@@ -1248,9 +1270,14 @@ mod types {
                     },
                 };
 
-                let v = Box::pin(value
-                    .resolve_internal(&field.schema, names, enclosing_namespace, &field.default)).await?;
-                    new_fields.push((field.name.clone(), v));
+                let v = Box::pin(value.resolve_internal(
+                    &field.schema,
+                    names,
+                    enclosing_namespace,
+                    &field.default,
+                ))
+                .await?;
+                new_fields.push((field.name.clone(), v));
             }
 
             Ok(Value::Record(new_fields))

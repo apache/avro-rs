@@ -201,7 +201,7 @@ mod writer {
             let n = self.maybe_write_header()?;
 
             let avro = value.into();
-            self.append_value_ref(&avro).map_ok(|m| m + n).await
+            self.append_value_ref(&avro).await.map(|m| m + n)
         }
 
         /// Append a compatible value to a `Writer`, also performing schema validation.

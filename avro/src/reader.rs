@@ -256,7 +256,10 @@ mod reader {
             Ok(Some(item))
         }
 
-        async fn read_writer_schema(&mut self, metadata: &HashMap<String, Value>) -> AvroResult<()> {
+        async fn read_writer_schema(
+            &mut self,
+            metadata: &HashMap<String, Value>,
+        ) -> AvroResult<()> {
             let json: serde_json::Value = metadata
                 .get("avro.schema")
                 .and_then(|bytes| {
