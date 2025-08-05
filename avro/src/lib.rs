@@ -889,7 +889,7 @@ pub use crate::bytes::{
 #[cfg(feature = "tokio")]
 pub use crate::bigdecimal::tokio::BigDecimal as AsyncBigDecimal;
 #[cfg(feature = "sync")]
-pub use crate::bigdecimal::tokio::BigDecimal;
+pub use crate::bigdecimal::sync::BigDecimal;
 #[cfg(feature = "bzip")]
 pub use codec::bzip::Bzip2Settings;
 #[cfg(feature = "xz")]
