@@ -49,7 +49,7 @@ mod bigdecimal {
     use crate::AsyncAvroResult as AvroResult;
     #[synca::cfg(sync)]
     use crate::AvroResult;
-    
+
     pub(crate) fn big_decimal_as_bytes(decimal: &BigDecimal) -> AvroResult<Vec<u8>> {
         let mut buffer: Vec<u8> = Vec::new();
         let (big_int, exponent): (BigInt, i64) = decimal.as_bigint_and_exponent();

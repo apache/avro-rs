@@ -23,10 +23,12 @@
     sync!();
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
+      crate::codec::tokio => crate::codec::sync,
       crate::decimal::tokio => crate::decimal::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
+      crate::headers::tokio => crate::headers::sync,
       crate::schema::tokio => crate::schema::sync,
       crate::util::tokio => crate::util::sync,
       crate::types::tokio => crate::types::sync,
