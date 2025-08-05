@@ -36,13 +36,13 @@
 )]
 mod decimal {
 
-    use crate::{error::tokio::Details, error::tokio::Error};
-    use num_bigint::{BigInt, Sign};
-    use serde::{Deserialize, Serialize, Serializer, de::SeqAccess};
     #[synca::cfg(tokio)]
     use crate::AsyncAvroResult as AvroResult;
     #[synca::cfg(sync)]
     use crate::AvroResult;
+    use crate::{error::tokio::Details, error::tokio::Error};
+    use num_bigint::{BigInt, Sign};
+    use serde::{Deserialize, Serialize, Serializer, de::SeqAccess};
 
     #[derive(Debug, Clone, Eq)]
     pub struct Decimal {

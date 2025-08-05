@@ -288,9 +288,9 @@ pub mod serde_avro_slice_opt {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::de::tokio::from_value;
     use crate::schema::tokio::Schema;
     use crate::ser::tokio::to_value;
-    use crate::de::tokio::from_value;
     use crate::types::tokio::Value;
     use serde::{Deserialize, Serialize};
 

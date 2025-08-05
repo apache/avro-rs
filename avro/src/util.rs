@@ -215,7 +215,8 @@ mod util {
     }
 
     pub fn safe_len(len: usize) -> AvroResult<usize> {
-        let max_bytes = crate::util::max_allocation_bytes(crate::util::DEFAULT_MAX_ALLOCATION_BYTES);
+        let max_bytes =
+            crate::util::max_allocation_bytes(crate::util::DEFAULT_MAX_ALLOCATION_BYTES);
 
         if len <= max_bytes {
             Ok(len)
@@ -224,10 +225,9 @@ mod util {
                 desired: len,
                 maximum: max_bytes,
             }
-                .into())
+            .into())
         }
     }
-
 
     #[cfg(test)]
     mod tests {
@@ -323,7 +323,11 @@ mod util {
         #[tokio::test]
         async fn test_overflow() {
             let causes_left_shift_overflow: &[u8] = &[0xe1, 0xe1, 0xe1, 0xe1, 0xe1];
-            assert!(decode_variable(&mut &*causes_left_shift_overflow).await.is_err());
+            assert!(
+                decode_variable(&mut &*causes_left_shift_overflow)
+                    .await
+                    .is_err()
+            );
         }
 
         #[test]

@@ -382,9 +382,9 @@ mod schema {
         where
             D: serde::de::Deserializer<'de>,
         {
-            Value::deserialize(deserializer).and_then(|value| {
+            serde_json::Value::deserialize(deserializer).and_then(|value| {
                 use serde::de::Error;
-                if let Value::Object(json) = value {
+                if let serde_json::Value::Object(json) = value {
                     Name::parse(&json, &None).map_err(Error::custom)
                 } else {
                     Err(Error::custom(format!("Expected a JSON object: {value:?}")))
@@ -711,11 +711,13 @@ mod schema {
             validate_record_field_name(&name)?;
 
             // TODO: "type" = "<record name>"
-            let schema = parser.parse_complex(
-                field,
-                &enclosing_record.namespace,
-                RecordSchemaParseLocation::FromField,
-            )?;
+            let schema = parser
+                .parse_complex(
+                    field,
+                    &enclosing_record.namespace,
+                    RecordSchemaParseLocation::FromField,
+                )
+                .await?;
 
             let default = field.get("default").cloned();
             Self::resolve_default_value(
@@ -1133,9 +1135,9 @@ mod schema {
         }
 
         /// Create a `Schema` from a string representing a JSON Avro schema.
-        pub fn parse_str(input: &str) -> Result<Schema, Error> {
+        pub async fn parse_str(input: &str) -> Result<Schema, Error> {
             let mut parser = Parser::default();
-            parser.parse_str(input)
+            parser.parse_str(input).await
         }
 
         /// Create an array of `Schema`'s from a list of named JSON Avro schemas (Record, Enum, and
@@ -1145,16 +1147,18 @@ mod schema {
         /// during parsing.
         ///
         /// If two of the input schemas have the same fullname, an Error will be returned.
-        pub fn parse_list(
+        pub async fn parse_list(
             input: impl IntoIterator<Item = impl AsRef<str>>,
         ) -> AvroResult<Vec<Schema>> {
             let input = input.into_iter();
             let input_len = input.size_hint().0;
-            let mut input_schemas: HashMap<Name, serde_json::Value> = HashMap::with_capacity(input_len);
+            let mut input_schemas: HashMap<Name, serde_json::Value> =
+                HashMap::with_capacity(input_len);
             let mut input_order: Vec<Name> = Vec::with_capacity(input_len);
             for json in input {
                 let json = json.as_ref();
-                let schema: serde_json::Value = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
+                let schema: serde_json::Value =
+                    serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
                 if let serde_json::Value::Object(inner) = &schema {
                     let name = Name::parse(inner, &None)?;
                     let previous_value = input_schemas.insert(name.clone(), schema);
@@ -1172,7 +1176,7 @@ mod schema {
                 input_order,
                 parsed_schemas: HashMap::with_capacity(input_len),
             };
-            parser.parse_list()
+            parser.parse_list().await
         }
 
         /// Create a `Schema` from a string representing a JSON Avro schema,
@@ -1187,17 +1191,19 @@ mod schema {
         /// # Arguments
         /// * `schema` - the JSON string of the schema to parse
         /// * `schemata` - a slice of additional schemas that is used to resolve cross-references
-        pub fn parse_str_with_list(
+        pub async fn parse_str_with_list(
             schema: &str,
             schemata: impl IntoIterator<Item = impl AsRef<str>>,
         ) -> AvroResult<(Schema, Vec<Schema>)> {
             let schemata = schemata.into_iter();
             let schemata_len = schemata.size_hint().0;
-            let mut input_schemas: HashMap<Name, serde_json::Value> = HashMap::with_capacity(schemata_len);
+            let mut input_schemas: HashMap<Name, serde_json::Value> =
+                HashMap::with_capacity(schemata_len);
             let mut input_order: Vec<Name> = Vec::with_capacity(schemata_len);
             for json in schemata {
                 let json = json.as_ref();
-                let schema: serde_json::Value = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
+                let schema: serde_json::Value =
+                    serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
                 if let serde_json::Value::Object(inner) = &schema {
                     let name = Name::parse(inner, &None)?;
                     if let Some(_previous) = input_schemas.insert(name.clone(), schema) {
@@ -1214,39 +1220,42 @@ mod schema {
                 input_order,
                 parsed_schemas: HashMap::with_capacity(schemata_len),
             };
-            parser.parse_input_schemas()?;
+            parser.parse_input_schemas().await?;
 
             let value = serde_json::from_str(schema).map_err(Details::ParseSchemaJson)?;
-            let schema = parser.parse(&value, &None)?;
-            let schemata = parser.parse_list()?;
+            let schema = parser.parse(&value, &None).await?;
+            let schemata = parser.parse_list().await?;
             Ok((schema, schemata))
         }
 
         /// Create a `Schema` from a reader which implements [`Read`].
-        pub fn parse_reader(reader: &mut (impl Read + ?Sized)) -> AvroResult<Schema> {
+        pub async fn parse_reader(reader: &mut (impl Read + ?Sized)) -> AvroResult<Schema> {
             let mut buf = String::new();
             match reader.read_to_string(&mut buf) {
-                Ok(_) => Self::parse_str(&buf),
+                Ok(_) => Self::parse_str(&buf).await,
                 Err(e) => Err(Details::ReadSchemaFromReader(e).into()),
             }
         }
 
         /// Parses an Avro schema from JSON.
-        pub fn parse(value: &serde_json::Value) -> AvroResult<Schema> {
+        pub async fn parse(value: &serde_json::Value) -> AvroResult<Schema> {
             let mut parser = Parser::default();
-            parser.parse(value, &None)
+            parser.parse(value, &None).await
         }
 
         /// Parses an Avro schema from JSON.
         /// Any `Schema::Ref`s must be known in the `names` map.
-        pub(crate) fn parse_with_names(value: &serde_json::Value, names: Names) -> AvroResult<Schema> {
+        pub(crate) async fn parse_with_names(
+            value: &serde_json::Value,
+            names: Names,
+        ) -> AvroResult<Schema> {
             let mut parser = Parser {
                 input_schemas: HashMap::with_capacity(1),
                 resolving_schemas: Names::default(),
                 input_order: Vec::with_capacity(1),
                 parsed_schemas: names,
             };
-            parser.parse(value, &None)
+            parser.parse(value, &None).await
         }
 
         /// Returns the custom attributes (metadata) if the schema supports them.
@@ -1306,7 +1315,10 @@ mod schema {
         }
 
         /// Returns a Schema::Map with the given types and custom attributes.
-        pub fn map_with_attributes(types: Schema, attributes: BTreeMap<String, serde_json::Value>) -> Self {
+        pub fn map_with_attributes(
+            types: Schema,
+            attributes: BTreeMap<String, serde_json::Value>,
+        ) -> Self {
             Schema::Map(MapSchema {
                 types: Box::new(types),
                 attributes,
@@ -1322,7 +1334,10 @@ mod schema {
         }
 
         /// Returns a Schema::Array with the given items and custom attributes.
-        pub fn array_with_attributes(items: Schema, attributes: BTreeMap<String, serde_json::Value>) -> Self {
+        pub fn array_with_attributes(
+            items: Schema,
+            attributes: BTreeMap<String, serde_json::Value>,
+        ) -> Self {
             Schema::Array(ArraySchema {
                 items: Box::new(items),
                 attributes,
@@ -1367,15 +1382,15 @@ mod schema {
 
     impl Parser {
         /// Create a `Schema` from a string representing a JSON Avro schema.
-        fn parse_str(&mut self, input: &str) -> Result<Schema, Error> {
+        async fn parse_str(&mut self, input: &str) -> Result<Schema, Error> {
             let value = serde_json::from_str(input).map_err(Details::ParseSchemaJson)?;
-            self.parse(&value, &None)
+            self.parse(&value, &None).await
         }
 
         /// Create an array of `Schema`'s from an iterator of JSON Avro schemas. It is allowed that
         /// the schemas have cross-dependencies; these will be resolved during parsing.
-        fn parse_list(&mut self) -> Result<Vec<Schema>, Error> {
-            self.parse_input_schemas()?;
+        async fn parse_list(&mut self) -> Result<Vec<Schema>, Error> {
+            self.parse_input_schemas().await?;
 
             let mut parsed_schemas = Vec::with_capacity(self.parsed_schemas.len());
             for name in self.input_order.drain(0..) {
@@ -1389,7 +1404,7 @@ mod schema {
         }
 
         /// Convert the input schemas to parsed_schemas
-        fn parse_input_schemas(&mut self) -> Result<(), Error> {
+        async fn parse_input_schemas(&mut self) -> Result<(), Error> {
             while !self.input_schemas.is_empty() {
                 let next_name = self
                     .input_schemas
@@ -1401,7 +1416,7 @@ mod schema {
                     .input_schemas
                     .remove_entry(&next_name)
                     .expect("Key unexpectedly missing");
-                let parsed = self.parse(&value, &None)?;
+                let parsed = self.parse(&value, &None).await?;
                 self.parsed_schemas
                     .insert(get_schema_type_name(name, value), parsed);
             }
@@ -1410,13 +1425,26 @@ mod schema {
 
         /// Create a `Schema` from a `serde_json::Value` representing a JSON Avro
         /// schema.
-        fn parse(&mut self, value: &serde_json::Value, enclosing_namespace: &Namespace) -> AvroResult<Schema> {
+        async fn parse(
+            &mut self,
+            value: &serde_json::Value,
+            enclosing_namespace: &Namespace,
+        ) -> AvroResult<Schema> {
             match *value {
-                serde_json::Value::String(ref t) => self.parse_known_schema(t.as_str(), enclosing_namespace),
-                serde_json::Value::Object(ref data) => {
-                    self.parse_complex(data, enclosing_namespace, RecordSchemaParseLocation::Root)
+                serde_json::Value::String(ref t) => {
+                    Box::pin(self.parse_known_schema(t.as_str(), enclosing_namespace)).await
                 }
-                serde_json::Value::Array(ref data) => self.parse_union(data, enclosing_namespace),
+                serde_json::Value::Object(ref data) => {
+                    Box::pin(self.parse_complex(
+                        data,
+                        enclosing_namespace,
+                        RecordSchemaParseLocation::Root,
+                    ))
+                    .await
+                }
+                serde_json::Value::Array(ref data) => {
+                    Box::pin(self.parse_union(data, enclosing_namespace)).await
+                }
                 _ => Err(Details::ParseSchemaFromValidJson.into()),
             }
         }
@@ -1424,7 +1452,7 @@ mod schema {
         /// Parse a `serde_json::Value` representing an Avro type whose Schema is known into a
         /// `Schema`. A Schema for a `serde_json::Value` is known if it is primitive or has
         /// been parsed previously by the parsed and stored in its map of parsed_schemas.
-        fn parse_known_schema(
+        async fn parse_known_schema(
             &mut self,
             name: &str,
             enclosing_namespace: &Namespace,
@@ -1438,7 +1466,7 @@ mod schema {
                 "float" => Ok(Schema::Float),
                 "bytes" => Ok(Schema::Bytes),
                 "string" => Ok(Schema::String),
-                _ => self.fetch_schema_ref(name, enclosing_namespace),
+                _ => Box::pin(self.fetch_schema_ref(name, enclosing_namespace)).await,
             }
         }
 
@@ -1451,7 +1479,7 @@ mod schema {
         ///
         /// This method allows schemas definitions that depend on other types to
         /// parse their dependencies (or look them up if already parsed).
-        fn fetch_schema_ref(
+        async fn fetch_schema_ref(
             &mut self,
             name: &str,
             enclosing_namespace: &Namespace,
@@ -1494,7 +1522,7 @@ mod schema {
                 .ok_or_else(|| Details::ParsePrimitive(fully_qualified_name.fullname(None)))?;
 
             // parsing a full schema from inside another schema. Other full schema will not inherit namespace
-            let parsed = self.parse(&value, &None)?;
+            let parsed = Box::pin(self.parse(&value, &None)).await?;
             self.parsed_schemas
                 .insert(get_schema_type_name(name, value), parsed.clone());
 
@@ -1543,14 +1571,14 @@ mod schema {
         ///
         /// Avro supports "recursive" definition of types.
         /// e.g: {"type": {"type": "string"}}
-        fn parse_complex(
+        async fn parse_complex(
             &mut self,
             complex: &serde_json::Map<String, serde_json::Value>,
             enclosing_namespace: &Namespace,
             parse_location: RecordSchemaParseLocation,
         ) -> AvroResult<Schema> {
             // Try to parse this as a native complex type.
-            fn parse_as_native_complex(
+            async fn parse_as_native_complex(
                 complex: &serde_json::Map<String, serde_json::Value>,
                 parser: &mut Parser,
                 enclosing_namespace: &Namespace,
@@ -1560,7 +1588,7 @@ mod schema {
                         serde_json::Value::String(s) if s == "fixed" => {
                             parser.parse_fixed(complex, enclosing_namespace)
                         }
-                        _ => parser.parse(value, enclosing_namespace),
+                        _ => Box::pin(parser.parse(value, enclosing_namespace)).await,
                     },
                     None => Err(Details::GetLogicalTypeField.into()),
                 }
@@ -1597,7 +1625,8 @@ mod schema {
                     "decimal" => {
                         return try_convert_to_logical_type(
                             "decimal",
-                            parse_as_native_complex(complex, self, enclosing_namespace)?,
+                            Box::pin(parse_as_native_complex(complex, self, enclosing_namespace))
+                                .await?,
                             &[SchemaKind::Fixed, SchemaKind::Bytes],
                             |inner| -> AvroResult<Schema> {
                                 match Self::parse_precision_and_scale(complex) {
@@ -1617,7 +1646,7 @@ mod schema {
                     "big-decimal" => {
                         return try_convert_to_logical_type(
                             "big-decimal",
-                            parse_as_native_complex(complex, self, enclosing_namespace)?,
+                            parse_as_native_complex(complex, self, enclosing_namespace).await?,
                             &[SchemaKind::Bytes],
                             |_| -> AvroResult<Schema> { Ok(Schema::BigDecimal) },
                         );
@@ -1625,7 +1654,7 @@ mod schema {
                     "uuid" => {
                         return try_convert_to_logical_type(
                             "uuid",
-                            parse_as_native_complex(complex, self, enclosing_namespace)?,
+                            parse_as_native_complex(complex, self, enclosing_namespace).await?,
                             &[SchemaKind::String, SchemaKind::Fixed],
                             |schema| match schema {
                                 Schema::String => Ok(Schema::Uuid),
@@ -1648,7 +1677,7 @@ mod schema {
                     "date" => {
                         return try_convert_to_logical_type(
                             "date",
-                            parse_as_native_complex(complex, self, enclosing_namespace)?,
+                            parse_as_native_complex(complex, self, enclosing_namespace).await?,
                             &[SchemaKind::Int],
                             |_| -> AvroResult<Schema> { Ok(Schema::Date) },
                         );
@@ -1656,7 +1685,7 @@ mod schema {
                     "time-millis" => {
                         return try_convert_to_logical_type(
                             "date",
-                            parse_as_native_complex(complex, self, enclosing_namespace)?,
+                            parse_as_native_complex(complex, self, enclosing_namespace).await?,
                             &[SchemaKind::Int],
                             |_| -> AvroResult<Schema> { Ok(Schema::TimeMillis) },
                         );
@@ -1664,7 +1693,7 @@ mod schema {
                     "time-micros" => {
                         return try_convert_to_logical_type(
                             "time-micros",
-                            parse_as_native_complex(complex, self, enclosing_namespace)?,
+                            parse_as_native_complex(complex, self, enclosing_namespace).await?,
                             &[SchemaKind::Long],
                             |_| -> AvroResult<Schema> { Ok(Schema::TimeMicros) },
                         );
@@ -1672,7 +1701,7 @@ mod schema {
                     "timestamp-millis" => {
                         return try_convert_to_logical_type(
                             "timestamp-millis",
-                            parse_as_native_complex(complex, self, enclosing_namespace)?,
+                            parse_as_native_complex(complex, self, enclosing_namespace).await?,
                             &[SchemaKind::Long],
                             |_| -> AvroResult<Schema> { Ok(Schema::TimestampMillis) },
                         );
@@ -1680,7 +1709,7 @@ mod schema {
                     "timestamp-micros" => {
                         return try_convert_to_logical_type(
                             "timestamp-micros",
-                            parse_as_native_complex(complex, self, enclosing_namespace)?,
+                            parse_as_native_complex(complex, self, enclosing_namespace).await?,
                             &[SchemaKind::Long],
                             |_| -> AvroResult<Schema> { Ok(Schema::TimestampMicros) },
                         );
@@ -1688,7 +1717,7 @@ mod schema {
                     "timestamp-nanos" => {
                         return try_convert_to_logical_type(
                             "timestamp-nanos",
-                            parse_as_native_complex(complex, self, enclosing_namespace)?,
+                            parse_as_native_complex(complex, self, enclosing_namespace).await?,
                             &[SchemaKind::Long],
                             |_| -> AvroResult<Schema> { Ok(Schema::TimestampNanos) },
                         );
@@ -1696,7 +1725,7 @@ mod schema {
                     "local-timestamp-millis" => {
                         return try_convert_to_logical_type(
                             "local-timestamp-millis",
-                            parse_as_native_complex(complex, self, enclosing_namespace)?,
+                            parse_as_native_complex(complex, self, enclosing_namespace).await?,
                             &[SchemaKind::Long],
                             |_| -> AvroResult<Schema> { Ok(Schema::LocalTimestampMillis) },
                         );
@@ -1704,7 +1733,7 @@ mod schema {
                     "local-timestamp-micros" => {
                         return try_convert_to_logical_type(
                             "local-timestamp-micros",
-                            parse_as_native_complex(complex, self, enclosing_namespace)?,
+                            parse_as_native_complex(complex, self, enclosing_namespace).await?,
                             &[SchemaKind::Long],
                             |_| -> AvroResult<Schema> { Ok(Schema::LocalTimestampMicros) },
                         );
@@ -1712,7 +1741,7 @@ mod schema {
                     "local-timestamp-nanos" => {
                         return try_convert_to_logical_type(
                             "local-timestamp-nanos",
-                            parse_as_native_complex(complex, self, enclosing_namespace)?,
+                            parse_as_native_complex(complex, self, enclosing_namespace).await?,
                             &[SchemaKind::Long],
                             |_| -> AvroResult<Schema> { Ok(Schema::LocalTimestampNanos) },
                         );
@@ -1720,7 +1749,7 @@ mod schema {
                     "duration" => {
                         return try_convert_to_logical_type(
                             "duration",
-                            parse_as_native_complex(complex, self, enclosing_namespace)?,
+                            parse_as_native_complex(complex, self, enclosing_namespace).await?,
                             &[SchemaKind::Fixed],
                             |_| -> AvroResult<Schema> { Ok(Schema::Duration) },
                         );
@@ -1739,22 +1768,29 @@ mod schema {
                 Some(serde_json::Value::String(t)) => match t.as_str() {
                     "record" => match parse_location {
                         RecordSchemaParseLocation::Root => {
-                            self.parse_record(complex, enclosing_namespace)
+                            Box::pin(self.parse_record(complex, enclosing_namespace)).await
                         }
                         RecordSchemaParseLocation::FromField => {
-                            self.fetch_schema_ref(t, enclosing_namespace)
+                            self.fetch_schema_ref(t, enclosing_namespace).await
                         }
                     },
                     "enum" => self.parse_enum(complex, enclosing_namespace),
-                    "array" => self.parse_array(complex, enclosing_namespace),
-                    "map" => self.parse_map(complex, enclosing_namespace),
+                    "array" => self.parse_array(complex, enclosing_namespace).await,
+                    "map" => self.parse_map(complex, enclosing_namespace).await,
                     "fixed" => self.parse_fixed(complex, enclosing_namespace),
-                    other => self.parse_known_schema(other, enclosing_namespace),
+                    other => self.parse_known_schema(other, enclosing_namespace).await,
                 },
                 Some(serde_json::Value::Object(data)) => {
-                    self.parse_complex(data, enclosing_namespace, RecordSchemaParseLocation::Root)
+                    Box::pin(self.parse_complex(
+                        data,
+                        enclosing_namespace,
+                        RecordSchemaParseLocation::Root,
+                    ))
+                    .await
                 }
-                Some(serde_json::Value::Array(variants)) => self.parse_union(variants, enclosing_namespace),
+                Some(serde_json::Value::Array(variants)) => {
+                    self.parse_union(variants, enclosing_namespace).await
+                }
                 Some(unknown) => Err(Details::GetComplexType(unknown.clone()).into()),
                 None => Err(Details::GetComplexTypeField.into()),
             }
@@ -1820,7 +1856,7 @@ mod schema {
 
         /// Parse a `serde_json::Value` representing a Avro record type into a
         /// `Schema`.
-        fn parse_record(
+        async fn parse_record(
             &mut self,
             complex: &serde_json::Map<String, serde_json::Value>,
             enclosing_namespace: &Namespace,
@@ -1842,21 +1878,23 @@ mod schema {
 
             debug!("Going to parse record schema: {:?}", &fully_qualified_name);
 
-            let fields: Vec<RecordField> = fields_opt
-                .and_then(|fields| fields.as_array())
-                .ok_or_else(|| Error::new(Details::GetRecordFieldsJson))
-                .and_then(|fields| {
-                    fields
-                        .iter()
-                        .filter_map(|field| field.as_object())
-                        .enumerate()
-                        .map(|(position, field)| {
-                            RecordField::parse(field, position, self, &fully_qualified_name)
-                        })
-                        .collect::<Result<_, _>>()
-                })?;
+            let fields: &Vec<serde_json::Value> =
+                fields_opt
+                    .and_then(|fields| fields.as_array())
+                    .ok_or_else(|| Error::new(Details::GetRecordFieldsJson))?;
 
-            for field in &fields {
+            let mut record_fields: Vec<RecordField> = Vec::with_capacity(fields.len());
+            let mut position = 0;
+            for field in fields.iter() {
+                if let Some(field) = field.as_object() {
+                    let record_field =
+                        Box::pin(RecordField::parse(field, position, self, &fully_qualified_name)).await?;
+                    record_fields.push(record_field);
+                    position += 1;
+                }
+            }
+
+            for field in &record_fields {
                 if let Some(_old) = lookup.insert(field.name.clone(), field.position) {
                     return Err(Details::FieldNameDuplicate(field.name.clone()).into());
                 }
@@ -1872,7 +1910,7 @@ mod schema {
                 name: fully_qualified_name.clone(),
                 aliases: aliases.clone(),
                 doc: complex.doc(),
-                fields,
+                fields: record_fields,
                 lookup,
                 attributes: self.get_custom_attributes(complex, vec!["fields"]),
             });
@@ -1976,69 +2014,66 @@ mod schema {
 
         /// Parse a `serde_json::Value` representing a Avro array type into a
         /// `Schema`.
-        fn parse_array(
+        async fn parse_array(
             &mut self,
             complex: &serde_json::Map<String, serde_json::Value>,
             enclosing_namespace: &Namespace,
         ) -> AvroResult<Schema> {
-            complex
+            let items = complex
                 .get("items")
-                .ok_or_else(|| Details::GetArrayItemsField.into())
-                .and_then(|items| self.parse(items, enclosing_namespace))
-                .map(|items| {
-                    Schema::array_with_attributes(
-                        items,
-                        self.get_custom_attributes(complex, vec!["items"]),
-                    )
-                })
+                .ok_or_else(|| Error::new(Details::GetArrayItemsField))?;
+            let items = Box::pin(self.parse(items, enclosing_namespace)).await?;
+            Ok(Schema::array_with_attributes(
+                items,
+                self.get_custom_attributes(complex, vec!["items"]),
+            ))
         }
 
         /// Parse a `serde_json::Value` representing a Avro map type into a
         /// `Schema`.
-        fn parse_map(
+        async fn parse_map(
             &mut self,
             complex: &serde_json::Map<String, serde_json::Value>,
             enclosing_namespace: &Namespace,
         ) -> AvroResult<Schema> {
-            complex
+            let items = complex
                 .get("values")
-                .ok_or_else(|| Details::GetMapValuesField.into())
-                .and_then(|items| self.parse(items, enclosing_namespace))
-                .map(|items| {
-                    Schema::map_with_attributes(
-                        items,
-                        self.get_custom_attributes(complex, vec!["values"]),
-                    )
-                })
+                .ok_or_else(|| Error::new(Details::GetMapValuesField))?;
+
+            let items = self.parse(items, enclosing_namespace).await?;
+            Ok(Schema::map_with_attributes(
+                items,
+                self.get_custom_attributes(complex, vec!["values"]),
+            ))
         }
 
         /// Parse a `serde_json::Value` representing a Avro union type into a
         /// `Schema`.
-        fn parse_union(
+        async fn parse_union(
             &mut self,
             items: &[serde_json::Value],
             enclosing_namespace: &Namespace,
         ) -> AvroResult<Schema> {
-            items
-                .iter()
-                .map(|v| self.parse(v, enclosing_namespace))
-                .collect::<Result<Vec<_>, _>>()
-                .and_then(|schemas| {
-                    if schemas.is_empty() {
-                        error!(
-                            "Union schemas should have at least two members! \
-                    Please enable debug logging to find out which Record schema \
-                    declares the union with 'RUST_LOG=apache_avro::schema=debug'."
-                        );
-                    } else if schemas.len() == 1 {
-                        warn!(
-                            "Union schema with just one member! Consider dropping the union! \
-                    Please enable debug logging to find out which Record schema \
-                    declares the union with 'RUST_LOG=apache_avro::schema=debug'."
-                        );
-                    }
-                    Ok(Schema::Union(UnionSchema::new(schemas)?))
-                })
+            let mut schemas = Vec::with_capacity(items.len());
+            for variant in items {
+                let schema = Box::pin(self.parse(variant, enclosing_namespace)).await?;
+                schemas.push(schema);
+            }
+
+            if schemas.is_empty() {
+                error!(
+                    "Union schemas should have at least two members! \
+            Please enable debug logging to find out which Record schema \
+            declares the union with 'RUST_LOG=apache_avro::schema=debug'."
+                );
+            } else if schemas.len() == 1 {
+                warn!(
+                    "Union schema with just one member! Consider dropping the union! \
+            Please enable debug logging to find out which Record schema \
+            declares the union with 'RUST_LOG=apache_avro::schema=debug'."
+                );
+            }
+            Ok(Schema::Union(UnionSchema::new(schemas)?))
         }
 
         /// Parse a `serde_json::Value` representing a Avro fixed type into a
@@ -2366,7 +2401,10 @@ mod schema {
 
     /// Parses a **valid** avro schema into the Parsing Canonical Form.
     /// https://avro.apache.org/docs/current/specification/#parsing-canonical-form-for-schemas
-    fn parsing_canonical_form(schema: &serde_json::Value, defined_names: &mut HashSet<String>) -> String {
+    fn parsing_canonical_form(
+        schema: &serde_json::Value,
+        defined_names: &mut HashSet<String>,
+    ) -> String {
         match schema {
             serde_json::Value::Object(map) => pcf_map(map, defined_names),
             serde_json::Value::String(s) => pcf_string(s),
@@ -2375,7 +2413,10 @@ mod schema {
         }
     }
 
-    fn pcf_map(schema: &serde_json::Map<String, serde_json::Value>, defined_names: &mut HashSet<String>) -> String {
+    fn pcf_map(
+        schema: &serde_json::Map<String, serde_json::Value>,
+        defined_names: &mut HashSet<String>,
+    ) -> String {
         // Look for the namespace variant up front.
         let ns = schema.get("namespace").and_then(|v| v.as_str());
         let typ = schema.get("type").and_then(|v| v.as_str());
@@ -2700,7 +2741,6 @@ mod schema {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use {SpecificSingleObjectWriter, error::tokio::Details, rabin::Rabin};
         use apache_avro_test_helper::{
             TestResult,
             logger::{assert_logged, assert_not_logged},
@@ -2708,6 +2748,7 @@ mod schema {
         use serde_json::json;
         use serial_test::serial;
         use std::sync::atomic::Ordering;
+        use {SpecificSingleObjectWriter, error::tokio::Details, rabin::Rabin};
 
         #[test]
         fn test_invalid_schema() {
@@ -2845,7 +2886,8 @@ mod schema {
             ]
         }"#;
 
-            let schema_c = Schema::parse_list([schema_str_a, schema_str_b, schema_str_c])?
+            let schema_c = Schema::parse_list([schema_str_a, schema_str_b, schema_str_c])
+                .await?
                 .last()
                 .unwrap()
                 .clone();
@@ -3027,7 +3069,7 @@ mod schema {
             "fields": [ {"name": "field_one", "type": "A"} ]
         }"#;
 
-            let list = Schema::parse_list([schema_str_a, schema_str_b])?;
+            let list = Schema::parse_list([schema_str_a, schema_str_b]).await?;
 
             let schema_a = list.first().unwrap().clone();
 
@@ -3067,7 +3109,8 @@ mod schema {
             ]
         }"#;
 
-            let schema_option_a = Schema::parse_list([schema_str_a, schema_str_option_a])?
+            let schema_option_a = Schema::parse_list([schema_str_a, schema_str_option_a])
+                .await?
                 .last()
                 .unwrap()
                 .clone();
@@ -3786,8 +3829,8 @@ mod schema {
 
         #[test]
         fn test_schema_fingerprint() -> TestResult {
-            use rabin::Rabin;
             use md5::Md5;
+            use rabin::Rabin;
             use sha2::Sha256;
 
             let raw_schema = r#"

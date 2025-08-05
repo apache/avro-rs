@@ -39,8 +39,8 @@
 mod de {
 
     use crate::{
-        error::tokio::Error, bytes::DE_BYTES_BORROWED, error::tokio::Details, schema::tokio::SchemaKind,
-        types::tokio::Value,
+        bytes::DE_BYTES_BORROWED, error::tokio::Details, error::tokio::Error,
+        schema::tokio::SchemaKind, types::tokio::Value,
     };
     use serde::{
         Deserialize,
@@ -796,13 +796,13 @@ mod de {
 
     #[cfg(test)]
     mod tests {
+        use crate::ser::tokio::to_value;
         use num_bigint::BigInt;
         use pretty_assertions::assert_eq;
         use serde::{Deserialize, Serialize};
         use serial_test::serial;
         use std::sync::atomic::Ordering;
         use uuid::Uuid;
-        use crate::ser::tokio::to_value;
 
         use apache_avro_test_helper::TestResult;
 

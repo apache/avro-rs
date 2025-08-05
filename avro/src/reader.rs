@@ -37,26 +37,28 @@
   }
 )]
 mod reader {
-    #[synca::cfg(sync)]
-    use std::io::Read as AvroRead;
-    #[synca::cfg(tokio)]
-    use tokio::io::AsyncRead as AvroRead;
-    #[cfg(feature = "tokio")]
-    use tokio::io::AsyncReadExt;
-    use std::str::FromStr;
-    use crate::decode::tokio::{decode, decode_internal};
     #[synca::cfg(tokio)]
     use crate::AsyncAvroResult as AvroResult;
     #[synca::cfg(sync)]
     use crate::AvroResult;
     #[synca::cfg(tokio)]
     use crate::async_from_value as from_value;
+    use crate::decode::tokio::{decode, decode_internal};
     #[synca::cfg(sync)]
     use crate::from_value;
+    #[synca::cfg(sync)]
+    use std::io::Read as AvroRead;
+    use std::str::FromStr;
+    #[synca::cfg(tokio)]
+    use tokio::io::AsyncRead as AvroRead;
+    #[cfg(feature = "tokio")]
+    use tokio::io::AsyncReadExt;
 
+    use crate::util::tokio::safe_len;
     use crate::{
-        codec::tokio::Codec, error::tokio::Error,
+        codec::tokio::Codec,
         error::tokio::Details,
+        error::tokio::Error,
         headers::tokio::{HeaderBuilder, RabinFingerprintHeader},
         schema::tokio::{
             AvroSchema, Names, ResolvedOwnedSchema, ResolvedSchema, Schema, resolve_names,
@@ -65,17 +67,10 @@ mod reader {
         types::tokio::Value,
         util::tokio::read_long,
     };
-    #[cfg(feature = "tokio")]
-    use futures::Stream;
     use log::warn;
     use serde::de::DeserializeOwned;
     use serde_json::from_slice;
-    #[cfg(feature = "tokio")]
-    use std::pin::Pin;
-    #[cfg(feature = "tokio")]
-    use std::task::Poll;
     use std::{collections::HashMap, io::ErrorKind, marker::PhantomData};
-    use crate::util::tokio::safe_len;
 
     /// Internal Block reader.
 
@@ -130,7 +125,7 @@ mod reader {
             let meta_schema = Schema::map(Schema::Bytes);
             match decode(&meta_schema, &mut self.reader).await? {
                 Value::Map(metadata) => {
-                    self.read_writer_schema(&metadata)?;
+                    self.read_writer_schema(&metadata).await?;
                     self.codec = read_codec(&metadata)?;
 
                     for (key, value) in metadata {
@@ -261,7 +256,7 @@ mod reader {
             Ok(Some(item))
         }
 
-        fn read_writer_schema(&mut self, metadata: &HashMap<String, Value>) -> AvroResult<()> {
+        async fn read_writer_schema(&mut self, metadata: &HashMap<String, Value>) -> AvroResult<()> {
             let json: serde_json::Value = metadata
                 .get("avro.schema")
                 .and_then(|bytes| {
@@ -279,10 +274,10 @@ mod reader {
                     .iter()
                     .map(|(name, schema)| (name.clone(), (*schema).clone()))
                     .collect();
-                self.writer_schema = Schema::parse_with_names(&json, names)?;
+                self.writer_schema = Schema::parse_with_names(&json, names).await?;
                 resolve_names_with_schemata(&self.schemata, &mut self.names_refs, &None)?;
             } else {
-                self.writer_schema = Schema::parse(&json)?;
+                self.writer_schema = Schema::parse(&json).await?;
                 resolve_names(&self.writer_schema, &mut self.names_refs, &None)?;
             }
             Ok(())
@@ -467,28 +462,26 @@ mod reader {
         }
     }
 
-    #[cfg(feature = "tokio")]
-    impl<R: AvroRead + Unpin> Stream for Reader<'_, R> {
-        type Item = AvroResult<Value>;
-        fn poll_next(
-            mut self: Pin<&mut Self>,
-            _cx: &mut futures::task::Context<'_>,
-        ) -> Poll<Option<Self::Item>> {
-            // to prevent keep on reading after the first error occurs
-            if self.errored {
-                return Poll::Ready(None);
-            };
-            async {
-                match self.read_next().await {
-                    Ok(opt) => Poll::Ready(opt.map(Ok)),
-                    Err(e) => {
-                        self.errored = true;
-                        Poll::Ready(Some(Err(e)))
-                    }
-                }
-            }
-        }
-    }
+    // #[cfg(feature = "tokio")]
+    // impl<R: AvroRead + Unpin> Stream for Reader<'_, R> {
+    //     type Item = AvroResult<Value>;
+    //     fn poll_next(
+    //         mut self: Pin<&mut Self>,
+    //         _cx: &mut futures::task::Context<'_>,
+    //     ) -> Poll<Option<Self::Item>> {
+    //         // to prevent keep on reading after the first error occurs
+    //         if self.errored {
+    //             return Poll::Ready(None);
+    //         };
+    //             match self.read_next().await {
+    //                 Ok(opt) => Poll::Ready(opt.map(Ok)),
+    //                 Err(e) => {
+    //                     self.errored = true;
+    //                     Poll::Ready(Some(Err(e)))
+    //                 }
+    //             }
+    //     }
+    // }
 
     #[cfg(feature = "sync")]
     impl<R: std::io::Read> Iterator for Reader<'_, R> {

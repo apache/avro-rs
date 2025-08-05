@@ -24,7 +24,7 @@ use apache_avro::{
     Codec, Reader, Writer,
     error::tokio::{Details, Error},
     from_avro_datum, from_value,
-    schema::tokio::{Schema, EnumSchema, FixedSchema, Name, RecordField, RecordSchema},
+    schema::tokio::{EnumSchema, FixedSchema, Name, RecordField, RecordSchema, Schema},
     to_avro_datum, to_value,
     types::tokio::{Record, Value},
 };
