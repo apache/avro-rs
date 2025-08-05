@@ -46,19 +46,17 @@ mod types {
     #[synca::cfg(sync)]
     use crate::AvroResult;
     use crate::{
-        error::tokio::Error,
         bigdecimal::tokio::{deserialize_big_decimal, serialize_big_decimal},
         decimal::tokio::Decimal,
         duration::Duration,
         error::tokio::Details,
+        error::tokio::Error,
         schema::tokio::{
             DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, Precision, RecordField,
             RecordSchema, ResolvedSchema, Scale, Schema, SchemaKind, UnionSchema,
         },
     };
     use bigdecimal::BigDecimal;
-    #[synca::cfg(tokio)]
-    use futures::FutureExt;
     use log::{debug, error};
     use std::{
         borrow::Borrow,
@@ -311,7 +309,9 @@ mod types {
                         Value::Long(n)
                     }
                 }
-                serde_json::Value::Number(ref n) if n.is_f64() => Value::Double(n.as_f64().unwrap()),
+                serde_json::Value::Number(ref n) if n.is_f64() => {
+                    Value::Double(n.as_f64().unwrap())
+                }
                 serde_json::Value::Number(n) => Value::Long(n.as_u64().unwrap() as i64), // TODO: Not so great
                 serde_json::Value::String(s) => s.into(),
                 serde_json::Value::Array(items) => {
@@ -405,7 +405,10 @@ mod types {
             for schema in schemata {
                 let enclosing_namespace = schema.namespace();
 
-                match self.validate_internal(schema, rs.get_names(), &enclosing_namespace).await {
+                match self
+                    .validate_internal(schema, rs.get_names(), &enclosing_namespace)
+                    .await
+                {
                     Some(reason) => {
                         let log_message = format!(
                             "Invalid value: {self:?} for schema: {schema:?}. Reason: {reason}"
@@ -418,7 +421,7 @@ mod types {
                     }
                     None => return true,
                 }
-            };
+            }
             false
         }
 
@@ -546,9 +549,11 @@ mod types {
                     } else {
                         Some(format!("No schema in the union at position '{i}'"))
                     }
-                },
+                }
                 (v, Schema::Union(inner)) => {
-                    match inner.find_schema_with_known_schemata(v, Some(names), enclosing_namespace).await
+                    match inner
+                        .find_schema_with_known_schemata(v, Some(names), enclosing_namespace)
+                        .await
                     {
                         Some(_) => None,
                         None => Some("Could not find matching type in union".to_string()),
@@ -559,7 +564,8 @@ mod types {
                     for item in items.iter() {
                         acc = Value::accumulate(
                             acc,
-                            item.validate_internal(&inner.items, names, enclosing_namespace).await,
+                            Box::pin(item.validate_internal(&inner.items, names, enclosing_namespace))
+                                .await,
                         );
                     }
                     acc
@@ -575,7 +581,9 @@ mod types {
                     for (_, value) in items.iter() {
                         acc = Value::accumulate(
                             acc,
-                            value.validate_internal(&inner.types, names, enclosing_namespace).await,
+                            Box::pin(value
+                                .validate_internal(&inner.types, names, enclosing_namespace))
+                                .await,
                         );
                     }
                     acc
@@ -615,39 +623,36 @@ mod types {
 
                     let mut acc = None;
                     for (field_name, record_field) in record_fields.iter() {
-                            let record_namespace = if name.namespace.is_none() {
-                                enclosing_namespace
-                            } else {
-                                &name.namespace
-                            };
-                            acc = match lookup.get(field_name) {
-                                Some(idx) => {
-                                    let field = &fields[*idx];
-                                    Value::accumulate(
-                                        acc,
-                                        record_field.validate_internal(
-                                            &field.schema,
-                                            names,
-                                            record_namespace,
-                                        ).await
-                                    )
-                                }
-                                None => Value::accumulate(
+                        let record_namespace = if name.namespace.is_none() {
+                            enclosing_namespace
+                        } else {
+                            &name.namespace
+                        };
+                        acc = match lookup.get(field_name) {
+                            Some(idx) => {
+                                let field = &fields[*idx];
+                                Value::accumulate(
                                     acc,
-                                    Some(format!(
-                                        "There is no schema field for field '{field_name}'"
-                                    )),
-                                ),
-                            };
-                        }
-                        acc
+                                    Box::pin(record_field
+                                        .validate_internal(&field.schema, names, record_namespace))
+                                        .await,
+                                )
+                            }
+                            None => Value::accumulate(
+                                acc,
+                                Some(format!("There is no schema field for field '{field_name}'")),
+                            ),
+                        };
+                    }
+                    acc
                 }
                 (Value::Map(items), Schema::Record(RecordSchema { fields, .. })) => {
                     let mut acc = None;
                     for field in fields.iter() {
                         if let Some(item) = items.get(&field.name) {
-                            let res =
-                                item.validate_internal(&field.schema, names, enclosing_namespace).await;
+                            let res = Box::pin(item
+                                .validate_internal(&field.schema, names, enclosing_namespace))
+                                .await;
                             acc = Value::accumulate(acc, res);
                         } else if !field.is_nullable() {
                             acc = Value::accumulate(
@@ -658,7 +663,7 @@ mod types {
                                 )),
                             );
                         }
-                    };
+                    }
                     acc
                 }
                 (v, s) => Some(format!(
@@ -757,7 +762,8 @@ mod types {
                         .await
                 }
                 Schema::Map(ref inner) => {
-                    self.resolve_map(&inner.types, names, enclosing_namespace).await
+                    self.resolve_map(&inner.types, names, enclosing_namespace)
+                        .await
                 }
                 Schema::Record(RecordSchema { ref fields, .. }) => {
                     self.resolve_record(fields, names, enclosing_namespace)
@@ -1139,7 +1145,7 @@ mod types {
                     #[synca::cfg(tokio)]
                     let resolved = futures::future::try_join_all(resolved).await?;
                     Ok(Value::Array(resolved))
-                },
+                }
                 other => Err(Details::GetArray {
                     expected: schema.into(),
                     other,
@@ -1156,18 +1162,26 @@ mod types {
         ) -> Result<Self, Error> {
             match self {
                 Value::Map(items) => {
-                    let resolved = items
-                        .into_iter()
-                        .map(|(key, value)| {
-                            value
-                                .resolve_internal(schema, names, enclosing_namespace, &None)
-                                .map(|value| (key, value))
-                        })
-                        .collect::<Result<_, _>>();
-                    #[synca::cfg(tokio)]
-                    let resolved = futures::future::try_join_all(resolved).await?;
+                    let mut resolved = HashMap::with_capacity(items.len());
+                    for (key, value) in items.into_iter() {
+                        let v = Box::pin(value
+                            .resolve_internal(schema, names, enclosing_namespace, &None))
+                            .await?;
+                        resolved.insert(key.clone(), v);
+                    }
+
+                    // let resolved = items
+                    //     .into_iter()
+                    //     .map(|(key, value)| {
+                    //         value
+                    //             .resolve_internal(schema, names, enclosing_namespace, &None)
+                    //             .map(|value| (key, value))
+                    //     })
+                    //     .collect::<Result<_, _>>();
+                    // #[synca::cfg(tokio)]
+                    // let resolved = futures::future::try_join_all(resolved).await?;
                     Ok(Value::Map(resolved))
-                },
+                }
                 other => Err(Details::GetMap {
                     expected: schema.into(),
                     other,
@@ -1194,7 +1208,8 @@ mod types {
                 })),
             }?;
 
-            let new_fields = fields.iter().map(|field| {
+            let mut new_fields = Vec::with_capacity(fields.len());
+            for field in fields.iter() {
                 let value = match items.remove(&field.name) {
                     Some(value) => value,
                     None => match field.default {
@@ -1216,15 +1231,12 @@ mod types {
                                     Schema::Null => Value::Union(0, Box::new(Value::Null)),
                                     _ => Value::Union(
                                         0,
-                                        Box::new(
-                                            Value::from(value.clone())
-                                                .resolve_internal(
-                                                    first,
-                                                    names,
-                                                    enclosing_namespace,
-                                                    &field.default,
-                                                ),
-                                        ),
+                                        Box::new(Box::pin(Value::from(value.clone()).resolve_internal(
+                                            first,
+                                            names,
+                                            enclosing_namespace,
+                                            &field.default,
+                                        )).await?),
                                     ),
                                 }
                             }
@@ -1236,13 +1248,11 @@ mod types {
                     },
                 };
 
-                value
-                    .resolve_internal(&field.schema, names, enclosing_namespace, &field.default)
-                    .map(|value| (field.name.clone(), value))
-            });
+                let v = Box::pin(value
+                    .resolve_internal(&field.schema, names, enclosing_namespace, &field.default)).await?;
+                    new_fields.push((field.name.clone(), v));
+            }
 
-            #[synca::cfg(tokio)]
-            let new_fields = futures::future::try_join_all(new_fields).await?;
             Ok(Value::Record(new_fields))
         }
 
@@ -2061,7 +2071,10 @@ Field with name '"b"' is not a member of the map items"#,
 
         #[tokio::test]
         async fn json_from_avro() -> TestResult {
-            assert_eq!(serde_json::Value::try_from(Value::Null)?, serde_json::Value::Null);
+            assert_eq!(
+                serde_json::Value::try_from(Value::Null)?,
+                serde_json::Value::Null
+            );
             assert_eq!(
                 serde_json::Value::try_from(Value::Boolean(true))?,
                 serde_json::Value::Bool(true)
@@ -2107,7 +2120,10 @@ Field with name '"b"' is not a member of the map items"#,
                 serde_json::Value::String("test_enum".into())
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::Union(1, Box::new(Value::String("test_enum".into()))))?,
+                serde_json::Value::try_from(Value::Union(
+                    1,
+                    Box::new(Value::String("test_enum".into()))
+                ))?,
                 serde_json::Value::String("test_enum".into())
             );
             assert_eq!(

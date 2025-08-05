@@ -42,8 +42,8 @@
 mod ser {
 
     use crate::{
-        error::tokio::Error,
         bytes::{BytesType, SER_BYTES_TYPE},
+        error::tokio::Error,
         types::tokio::Value,
     };
     use serde::{Serialize, ser};

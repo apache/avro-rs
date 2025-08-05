@@ -49,21 +49,22 @@ mod writer {
     #[synca::cfg(sync)]
     use crate::AvroResult;
     use crate::{
-        codec::tokio::Codec, error::tokio::Error,
+        codec::tokio::Codec,
         encode::tokio::{encode, encode_internal, encode_to_vec},
         error::tokio::Details,
+        error::tokio::Error,
         headers::tokio::{HeaderBuilder, RabinFingerprintHeader},
         schema::tokio::{AvroSchema, Name, ResolvedOwnedSchema, ResolvedSchema, Schema},
         ser_schema::tokio::SchemaAwareWriteSerializer,
         types::tokio::Value,
     };
+    #[cfg(feature = "tokio")]
+    use futures::TryFutureExt;
     use serde::Serialize;
     use std::{
         collections::HashMap, io::Write, marker::PhantomData, mem::ManuallyDrop,
         ops::RangeInclusive,
     };
-    #[cfg(feature = "tokio")]
-    use futures::TryFutureExt;
 
     const DEFAULT_BLOCK_SIZE: usize = 16000;
     const AVRO_OBJECT_HEADER: &[u8] = b"Obj\x01";
@@ -228,7 +229,7 @@ mod writer {
                 None => {
                     let rs = ResolvedSchema::try_from(self.schema)?;
                     self.resolved_schema = Some(rs);
-                    self.append_value_ref(value).await
+                    Box::pin(self.append_value_ref(value)).await
                 }
             }
         }
@@ -563,7 +564,10 @@ mod writer {
         let rs = ResolvedSchema::try_from(schemata)?;
         let names = rs.get_names();
         let enclosing_namespace = schema.namespace();
-        if let Some(_err) = avro.validate_internal(schema, names, &enclosing_namespace).await {
+        if let Some(_err) = avro
+            .validate_internal(schema, names, &enclosing_namespace)
+            .await
+        {
             return Err(Details::Validation.into());
         }
         encode_internal(&avro, schema, names, &enclosing_namespace, buffer)
@@ -624,7 +628,11 @@ mod writer {
         }
 
         /// Write the Value to the provided Write object. Returns a result with the number of bytes written including the header
-        pub async fn write_value<W: Write>(&mut self, v: Value, writer: &mut W) -> AvroResult<usize> {
+        pub async fn write_value<W: Write>(
+            &mut self,
+            v: Value,
+            writer: &mut W,
+        ) -> AvroResult<usize> {
             self.write_value_ref(&v, writer).await
         }
     }
@@ -661,7 +669,11 @@ mod writer {
     {
         /// Write the `Into<Value>` to the provided Write object. Returns a result with the number
         /// of bytes written including the header
-        pub async fn write_value<W: Write>(&mut self, data: T, writer: &mut W) -> AvroResult<usize> {
+        pub async fn write_value<W: Write>(
+            &mut self,
+            data: T,
+            writer: &mut W,
+        ) -> AvroResult<usize> {
             let v: Value = data.into();
             self.inner.write_value_ref(&v, writer).await
         }
@@ -701,7 +713,10 @@ mod writer {
         value: &Value,
         buffer: &mut Vec<u8>,
     ) -> AvroResult<usize> {
-        match value.validate_internal(schema, resolved_schema.get_names(), &schema.namespace()).await {
+        match value
+            .validate_internal(schema, resolved_schema.get_names(), &schema.namespace())
+            .await
+        {
             Some(reason) => Err(Details::ValidationWithReason {
                 value: value.clone(),
                 schema: schema.clone(),
@@ -724,11 +739,14 @@ mod writer {
         buffer: &mut Vec<u8>,
     ) -> AvroResult<()> {
         let root_schema = resolved_schema.get_root_schema();
-        if let Some(reason) = value.validate_internal(
-            root_schema,
-            resolved_schema.get_names(),
-            &root_schema.namespace(),
-        ).await {
+        if let Some(reason) = value
+            .validate_internal(
+                root_schema,
+                resolved_schema.get_names(),
+                &root_schema.namespace(),
+            )
+            .await
+        {
             return Err(Details::ValidationWithReason {
                 value: value.clone(),
                 schema: root_schema.clone(),
