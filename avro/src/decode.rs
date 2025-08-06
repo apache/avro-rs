@@ -447,11 +447,11 @@ mod decode {
     #[allow(clippy::expect_fun_call)]
     mod tests {
         use crate::{
-            Decimal,
-            decode::decode,
-            encode::{encode, tests::success},
-            schema::{DecimalSchema, FixedSchema, Schema},
-            types::{
+            decimal::tokio::Decimal,
+            decode::tokio::decode,
+            encode::tokio::{encode, tests::success},
+            schema::tokio::{DecimalSchema, FixedSchema, Schema, Name},
+            types::tokio::{
                 Value,
                 Value::{Array, Int, Map},
             },
@@ -464,7 +464,7 @@ mod decode {
         #[tokio::test]
         async fn test_decode_array_without_size() -> TestResult {
             let mut input: &[u8] = &[6, 2, 4, 6, 0];
-            let result = decode(&Schema::array(Schema::Int), &mut input);
+            let result = decode(&Schema::array(Schema::Int), &mut input).await;
             assert_eq!(Array(vec!(Int(1), Int(2), Int(3))), result?);
 
             Ok(())
@@ -473,7 +473,7 @@ mod decode {
         #[tokio::test]
         async fn test_decode_array_with_size() -> TestResult {
             let mut input: &[u8] = &[5, 6, 2, 4, 6, 0];
-            let result = decode(&Schema::array(Schema::Int), &mut input);
+            let result = decode(&Schema::array(Schema::Int), &mut input).await;
             assert_eq!(Array(vec!(Int(1), Int(2), Int(3))), result?);
 
             Ok(())
@@ -482,7 +482,7 @@ mod decode {
         #[tokio::test]
         async fn test_decode_map_without_size() -> TestResult {
             let mut input: &[u8] = &[0x02, 0x08, 0x74, 0x65, 0x73, 0x74, 0x02, 0x00];
-            let result = decode(&Schema::map(Schema::Int), &mut input);
+            let result = decode(&Schema::map(Schema::Int), &mut input).await;
             let mut expected = HashMap::new();
             expected.insert(String::from("test"), Int(1));
             assert_eq!(Map(expected), result?);
@@ -493,7 +493,7 @@ mod decode {
         #[tokio::test]
         async fn test_decode_map_with_size() -> TestResult {
             let mut input: &[u8] = &[0x01, 0x0C, 0x08, 0x74, 0x65, 0x73, 0x74, 0x02, 0x00];
-            let result = decode(&Schema::map(Schema::Int), &mut input);
+            let result = decode(&Schema::map(Schema::Int), &mut input).await;
             let mut expected = HashMap::new();
             expected.insert(String::from("test"), Int(1));
             assert_eq!(Map(expected), result?);
@@ -503,7 +503,6 @@ mod decode {
 
         #[tokio::test]
         async fn test_negative_decimal_value() -> TestResult {
-            use crate::{encode::encode, schema::Name};
             use num_bigint::ToBigInt;
             let inner = Box::new(Schema::Fixed(
                 FixedSchema::builder()
@@ -523,7 +522,7 @@ mod decode {
             encode(&value, &schema, &mut buffer).expect(&success(&value, &schema));
 
             let mut bytes = &buffer[..];
-            let result = decode(&schema, &mut bytes)?;
+            let result = decode(&schema, &mut bytes).await?;
             assert_eq!(result, value);
 
             Ok(())
@@ -531,7 +530,6 @@ mod decode {
 
         #[tokio::test]
         async fn test_decode_decimal_with_bigger_than_necessary_size() -> TestResult {
-            use crate::{encode::encode, schema::Name};
             use num_bigint::ToBigInt;
             let inner = Box::new(Schema::Fixed(FixedSchema {
                 size: 13,
@@ -553,7 +551,7 @@ mod decode {
 
             encode(&value, &schema, &mut buffer).expect(&success(&value, &schema));
             let mut bytes: &[u8] = &buffer[..];
-            let result = decode(&schema, &mut bytes)?;
+            let result = decode(&schema, &mut bytes).await?;
             assert_eq!(result, value);
 
             Ok(())
@@ -585,7 +583,7 @@ mod decode {
                 }
             ]
         }"#,
-            )?;
+            ).await?;
 
             let inner_value1 = Value::Record(vec![("z".into(), Value::Int(3))]);
             let inner_value2 = Value::Record(vec![("z".into(), Value::Int(6))]);
@@ -599,7 +597,7 @@ mod decode {
             let mut bytes = &buf[..];
             assert_eq!(
                 outer_value1,
-                decode(&schema, &mut bytes).expect(&format!(
+                decode(&schema, &mut bytes).await.expect(&format!(
                     "Failed to decode using recursive definitions with schema:\n {:?}\n",
                     &schema
                 ))
@@ -614,7 +612,7 @@ mod decode {
             let mut bytes = &buf[..];
             assert_eq!(
                 outer_value2,
-                decode(&schema, &mut bytes).expect(&format!(
+                decode(&schema, &mut bytes).await.expect(&format!(
                     "Failed to decode using recursive definitions with schema:\n {:?}\n",
                     &schema
                 ))
@@ -651,7 +649,7 @@ mod decode {
                 }
             ]
         }"#,
-            )?;
+            ).await?;
 
             let inner_value1 = Value::Record(vec![("z".into(), Value::Int(3))]);
             let inner_value2 = Value::Record(vec![("z".into(), Value::Int(6))]);
@@ -664,7 +662,7 @@ mod decode {
             let mut bytes = &buf[..];
             assert_eq!(
                 outer_value,
-                decode(&schema, &mut bytes).expect(&format!(
+                decode(&schema, &mut bytes).await.expect(&format!(
                     "Failed to decode using recursive definitions with schema:\n {:?}\n",
                     &schema
                 ))
@@ -701,7 +699,7 @@ mod decode {
                 }
             ]
         }"#,
-            )?;
+            ).await?;
 
             let inner_value1 = Value::Record(vec![("z".into(), Value::Int(3))]);
             let inner_value2 = Value::Record(vec![("z".into(), Value::Int(6))]);
@@ -717,7 +715,7 @@ mod decode {
             let mut bytes = &buf[..];
             assert_eq!(
                 outer_value,
-                decode(&schema, &mut bytes).expect(&format!(
+                decode(&schema, &mut bytes).await.expect(&format!(
                     "Failed to decode using recursive definitions with schema:\n {:?}\n",
                     &schema
                 ))
@@ -771,7 +769,7 @@ mod decode {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let inner_record = Value::Record(vec![("inner_field_1".into(), Value::Double(5.4))]);
             let middle_record_variation_1 = Value::Record(vec![(
                 "middle_field_1".into(),
@@ -809,7 +807,7 @@ mod decode {
             let mut bytes = &buf[..];
             assert_eq!(
                 outer_record_variation_1,
-                decode(&schema, &mut bytes).expect(&format!(
+                decode(&schema, &mut bytes).await.expect(&format!(
                     "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
                     &schema
                 ))
@@ -821,7 +819,7 @@ mod decode {
             let mut bytes = &buf[..];
             assert_eq!(
                 outer_record_variation_2,
-                decode(&schema, &mut bytes).expect(&format!(
+                decode(&schema, &mut bytes).await.expect(&format!(
                     "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
                     &schema
                 ))
@@ -833,7 +831,7 @@ mod decode {
             let mut bytes = &buf[..];
             assert_eq!(
                 outer_record_variation_3,
-                decode(&schema, &mut bytes).expect(&format!(
+                decode(&schema, &mut bytes).await.expect(&format!(
                     "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
                     &schema
                 ))
@@ -888,7 +886,7 @@ mod decode {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let inner_record = Value::Record(vec![("inner_field_1".into(), Value::Double(5.4))]);
             let middle_record_variation_1 = Value::Record(vec![(
                 "middle_field_1".into(),
@@ -926,7 +924,7 @@ mod decode {
             let mut bytes = &buf[..];
             assert_eq!(
                 outer_record_variation_1,
-                decode(&schema, &mut bytes).expect(&format!(
+                decode(&schema, &mut bytes).await.expect(&format!(
                     "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
                     &schema
                 ))
@@ -938,7 +936,7 @@ mod decode {
             let mut bytes = &buf[..];
             assert_eq!(
                 outer_record_variation_2,
-                decode(&schema, &mut bytes).expect(&format!(
+                decode(&schema, &mut bytes).await.expect(&format!(
                     "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
                     &schema
                 ))
@@ -950,7 +948,7 @@ mod decode {
             let mut bytes = &buf[..];
             assert_eq!(
                 outer_record_variation_3,
-                decode(&schema, &mut bytes).expect(&format!(
+                decode(&schema, &mut bytes).await.expect(&format!(
                     "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
                     &schema
                 ))
@@ -961,15 +959,13 @@ mod decode {
 
         #[tokio::test]
         async fn avro_3926_encode_decode_uuid_to_string() -> TestResult {
-            use crate::encode::encode;
-
             let schema = Schema::String;
             let value = Value::Uuid(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")?);
 
             let mut buffer = Vec::new();
             encode(&value, &schema, &mut buffer).expect(&success(&value, &schema));
 
-            let result = decode(&Schema::Uuid, &mut &buffer[..])?;
+            let result = decode(&Schema::Uuid, &mut &buffer[..]).await?;
             assert_eq!(result, value);
 
             Ok(())
@@ -977,8 +973,6 @@ mod decode {
 
         #[tokio::test]
         async fn avro_3926_encode_decode_uuid_to_fixed() -> TestResult {
-            use crate::encode::encode;
-
             let schema = Schema::Fixed(FixedSchema {
                 size: 16,
                 name: "uuid".into(),
@@ -992,7 +986,7 @@ mod decode {
             let mut buffer = Vec::new();
             encode(&value, &schema, &mut buffer).expect(&success(&value, &schema));
 
-            let result = decode(&Schema::Uuid, &mut &buffer[..])?;
+            let result = decode(&Schema::Uuid, &mut &buffer[..]).await?;
             assert_eq!(result, value);
 
             Ok(())

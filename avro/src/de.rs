@@ -797,6 +797,8 @@ mod de {
     #[cfg(test)]
     mod tests {
         use crate::ser::tokio::to_value;
+        use crate::reader::tokio::from_avro_datum;
+        use crate::writer::tokio::to_avro_datum;
         use num_bigint::BigInt;
         use pretty_assertions::assert_eq;
         use serde::{Deserialize, Serialize};
@@ -805,8 +807,10 @@ mod de {
         use uuid::Uuid;
 
         use apache_avro_test_helper::TestResult;
+        use crate::de::tokio::from_value;
 
-        use crate::{Decimal, Schema};
+        use crate::decimal::tokio::Decimal;
+        use crate::schema::tokio::Schema;
 
         use super::*;
 
@@ -815,8 +819,8 @@ mod de {
             pub source: String,
         }
 
-        #[test]
-        fn avro_3955_decode_enum() -> TestResult {
+        #[tokio::test]
+        async fn avro_3955_decode_enum() -> TestResult {
             let schema_content = r#"
 {
   "name": "AccessLog",
@@ -836,7 +840,7 @@ mod de {
 }
 "#;
 
-            let schema = Schema::parse_str(schema_content)?;
+            let schema = Schema::parse_str(schema_content).await?;
             let data = StringEnum {
                 source: "SOZU".to_string(),
             };
@@ -844,20 +848,20 @@ mod de {
             // encode into avro
             let value = to_value(&data)?;
 
-            let mut buf = std::io::Cursor::new(crate::to_avro_datum(&schema, value)?);
+            let mut buf = std::io::Cursor::new(to_avro_datum(&schema, value).await?);
 
             // decode from avro
-            let value = from_avro_datum(&schema, &mut buf, None)?;
+            let value = from_avro_datum(&schema, &mut buf, None).await?;
 
-            let decoded_data: StringEnum = crate::from_value(&value)?;
+            let decoded_data: StringEnum = from_value(&value)?;
 
             assert_eq!(decoded_data, data);
 
             Ok(())
         }
 
-        #[test]
-        fn avro_3955_encode_enum_data_with_wrong_content() -> TestResult {
+        #[tokio::test]
+        async fn avro_3955_encode_enum_data_with_wrong_content() -> TestResult {
             let schema_content = r#"
 {
   "name": "AccessLog",
@@ -877,16 +881,16 @@ mod de {
 }
 "#;
 
-            let schema = crate::Schema::parse_str(schema_content)?;
+            let schema = Schema::parse_str(schema_content).await?;
             let data = StringEnum {
                 source: "WRONG_ITEM".to_string(),
             };
 
             // encode into avro
-            let value = crate::to_value(data)?;
+            let value = to_value(data)?;
 
             // The following sentence have to fail has the data is wrong.
-            let encoded_data = crate::to_avro_datum(&schema, value);
+            let encoded_data = to_avro_datum(&schema, value).await;
 
             assert!(encoded_data.is_err());
 
@@ -1269,7 +1273,7 @@ mod de {
         fn test_date() -> TestResult {
             let raw_value = 1;
             let value = Value::Date(raw_value);
-            let result = crate::from_value::<i32>(&value)?;
+            let result = from_value::<i32>(&value)?;
             assert_eq!(result, raw_value);
             Ok(())
         }
@@ -1278,7 +1282,7 @@ mod de {
         fn test_time_millis() -> TestResult {
             let raw_value = 1;
             let value = Value::TimeMillis(raw_value);
-            let result = crate::from_value::<i32>(&value)?;
+            let result = from_value::<i32>(&value)?;
             assert_eq!(result, raw_value);
             Ok(())
         }
@@ -1287,7 +1291,7 @@ mod de {
         fn test_time_micros() -> TestResult {
             let raw_value = 1;
             let value = Value::TimeMicros(raw_value);
-            let result = crate::from_value::<i64>(&value)?;
+            let result = from_value::<i64>(&value)?;
             assert_eq!(result, raw_value);
             Ok(())
         }
@@ -1296,7 +1300,7 @@ mod de {
         fn test_timestamp_millis() -> TestResult {
             let raw_value = 1;
             let value = Value::TimestampMillis(raw_value);
-            let result = crate::from_value::<i64>(&value)?;
+            let result = from_value::<i64>(&value)?;
             assert_eq!(result, raw_value);
             Ok(())
         }
@@ -1332,7 +1336,7 @@ mod de {
         fn test_avro_3853_local_timestamp_micros() -> TestResult {
             let raw_value = 1;
             let value = Value::LocalTimestampMicros(raw_value);
-            let result = crate::from_value::<i64>(&value)?;
+            let result = from_value::<i64>(&value)?;
             assert_eq!(result, raw_value);
             Ok(())
         }
@@ -1341,7 +1345,7 @@ mod de {
         fn test_avro_3916_local_timestamp_nanos() -> TestResult {
             let raw_value = 1;
             let value = Value::LocalTimestampNanos(raw_value);
-            let result = crate::from_value::<i64>(&value)?;
+            let result = from_value::<i64>(&value)?;
             assert_eq!(result, raw_value);
             Ok(())
         }
@@ -1359,7 +1363,7 @@ mod de {
         fn test_from_value_uuid_slice() -> TestResult {
             let raw_value = &[4, 54, 67, 12, 43, 2, 2, 76, 32, 50, 87, 5, 1, 33, 43, 87];
             let value = Value::Uuid(Uuid::from_slice(raw_value)?);
-            let result = crate::from_value::<Uuid>(&value)?;
+            let result = from_value::<Uuid>(&value)?;
             assert_eq!(result.as_bytes(), raw_value);
             Ok(())
         }
@@ -1560,7 +1564,7 @@ mod de {
                 ),
             ]);
 
-            let deserialized: StructWithMissingFields = crate::from_value(&record)?;
+            let deserialized: StructWithMissingFields = from_value(&record)?;
             let reference = StructWithMissingFields {
                 a_string: "a valid message field".to_string(),
                 a_record: Some(RecordInUnion {

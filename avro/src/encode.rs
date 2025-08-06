@@ -30,7 +30,7 @@
       crate::schema::tokio => crate::schema::sync,
       crate::util::tokio => crate::util::sync,
       crate::types::tokio => crate::types::sync,
-      #[tokio::test] => #[test]
+      #[tokio::test] => #[tokio::test]
     );
   }
 )]
@@ -379,7 +379,7 @@ mod encode {
     #[allow(clippy::expect_fun_call)]
     pub(crate) mod tests {
         use super::*;
-        use crate::error::{Details, Error};
+        use crate::error::tokio::{Details, Error};
         use apache_avro_test_helper::TestResult;
         use pretty_assertions::assert_eq;
         use uuid::Uuid;
@@ -391,8 +391,8 @@ mod encode {
             )
         }
 
-        #[test]
-        fn test_encode_empty_array() {
+        #[tokio::test]
+        async fn test_encode_empty_array() {
             let mut buf = Vec::new();
             let empty: Vec<Value> = Vec::new();
             encode(
@@ -404,8 +404,8 @@ mod encode {
             assert_eq!(vec![0u8], buf);
         }
 
-        #[test]
-        fn test_encode_empty_map() {
+        #[tokio::test]
+        async fn test_encode_empty_map() {
             let mut buf = Vec::new();
             let empty: HashMap<String, Value> = HashMap::new();
             encode(
@@ -417,8 +417,8 @@ mod encode {
             assert_eq!(vec![0u8], buf);
         }
 
-        #[test]
-        fn test_avro_3433_recursive_definition_encode_record() {
+        #[tokio::test]
+        async fn test_avro_3433_recursive_definition_encode_record() -> TestResult {
             let mut buf = Vec::new();
             let schema = Schema::parse_str(
                 r#"
@@ -443,8 +443,7 @@ mod encode {
                     }
                 ]
             }"#,
-            )
-            .unwrap();
+            ).await?;
 
             let inner_value1 = Value::Record(vec![("z".into(), Value::Int(3))]);
             let inner_value2 = Value::Record(vec![("z".into(), Value::Int(6))]);
@@ -452,10 +451,11 @@ mod encode {
                 Value::Record(vec![("a".into(), inner_value1), ("b".into(), inner_value2)]);
             encode(&outer_value, &schema, &mut buf).expect(&success(&outer_value, &schema));
             assert!(!buf.is_empty());
+            Ok(())
         }
 
-        #[test]
-        fn test_avro_3433_recursive_definition_encode_array() {
+        #[tokio::test]
+        async fn test_avro_3433_recursive_definition_encode_array() -> TestResult {
             let mut buf = Vec::new();
             let schema = Schema::parse_str(
                 r#"
@@ -487,7 +487,7 @@ mod encode {
                 ]
             }"#,
             )
-            .unwrap();
+            .await?;
 
             let inner_value1 = Value::Record(vec![("z".into(), Value::Int(3))]);
             let inner_value2 = Value::Record(vec![("z".into(), Value::Int(6))]);
@@ -500,10 +500,11 @@ mod encode {
             ]);
             encode(&outer_value, &schema, &mut buf).expect(&success(&outer_value, &schema));
             assert!(!buf.is_empty());
+            Ok(())
         }
 
-        #[test]
-        fn test_avro_3433_recursive_definition_encode_map() {
+        #[tokio::test]
+        async fn test_avro_3433_recursive_definition_encode_map() -> TestResult {
             let mut buf = Vec::new();
             let schema = Schema::parse_str(
                 r#"
@@ -532,7 +533,7 @@ mod encode {
             ]
         }"#,
             )
-            .unwrap();
+            .await?;
 
             let inner_value1 = Value::Record(vec![("z".into(), Value::Int(3))]);
             let inner_value2 = Value::Record(vec![("z".into(), Value::Int(6))]);
@@ -545,10 +546,11 @@ mod encode {
             ]);
             encode(&outer_value, &schema, &mut buf).expect(&success(&outer_value, &schema));
             assert!(!buf.is_empty());
+            Ok(())
         }
 
-        #[test]
-        fn test_avro_3433_recursive_definition_encode_record_wrapper() {
+        #[tokio::test]
+        async fn test_avro_3433_recursive_definition_encode_record_wrapper() -> TestResult {
             let mut buf = Vec::new();
             let schema = Schema::parse_str(
                 r#"
@@ -581,7 +583,7 @@ mod encode {
             ]
         }"#,
             )
-            .unwrap();
+            .await?;
 
             let inner_value1 = Value::Record(vec![("z".into(), Value::Int(3))]);
             let inner_value2 = Value::Record(vec![(
@@ -592,10 +594,11 @@ mod encode {
                 Value::Record(vec![("a".into(), inner_value1), ("b".into(), inner_value2)]);
             encode(&outer_value, &schema, &mut buf).expect(&success(&outer_value, &schema));
             assert!(!buf.is_empty());
+            Ok(())
         }
 
-        #[test]
-        fn test_avro_3433_recursive_definition_encode_map_and_array() {
+        #[tokio::test]
+        async fn test_avro_3433_recursive_definition_encode_map_and_array() -> TestResult {
             let mut buf = Vec::new();
             let schema = Schema::parse_str(
                 r#"
@@ -627,7 +630,7 @@ mod encode {
             ]
         }"#,
             )
-            .unwrap();
+            .await?;
 
             let inner_value1 = Value::Record(vec![("z".into(), Value::Int(3))]);
             let inner_value2 = Value::Record(vec![("z".into(), Value::Int(6))]);
@@ -640,10 +643,11 @@ mod encode {
             ]);
             encode(&outer_value, &schema, &mut buf).expect(&success(&outer_value, &schema));
             assert!(!buf.is_empty());
+            Ok(())
         }
 
-        #[test]
-        fn test_avro_3433_recursive_definition_encode_union() {
+        #[tokio::test]
+        async fn test_avro_3433_recursive_definition_encode_union() -> TestResult {
             let mut buf = Vec::new();
             let schema = Schema::parse_str(
                 r#"
@@ -669,7 +673,7 @@ mod encode {
             ]
         }"#,
             )
-            .unwrap();
+            .await?;
 
             let inner_value1 = Value::Record(vec![("z".into(), Value::Int(3))]);
             let inner_value2 = Value::Record(vec![("z".into(), Value::Int(6))]);
@@ -687,10 +691,11 @@ mod encode {
             ]);
             encode(&outer_value2, &schema, &mut buf).expect(&success(&outer_value1, &schema));
             assert!(!buf.is_empty());
+            Ok(())
         }
 
-        #[test]
-        fn test_avro_3448_proper_multi_level_encoding_outer_namespace() {
+        #[tokio::test]
+        async fn test_avro_3448_proper_multi_level_encoding_outer_namespace() -> TestResult {
             let schema = r#"
         {
           "name": "record_name",
@@ -732,7 +737,7 @@ mod encode {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema).unwrap();
+            let schema = Schema::parse_str(schema).await?;
             let inner_record = Value::Record(vec![("inner_field_1".into(), Value::Double(5.4))]);
             let middle_record_variation_1 = Value::Record(vec![(
                 "middle_field_1".into(),
@@ -776,10 +781,11 @@ mod encode {
             encode(&outer_record_variation_3, &schema, &mut buf)
                 .expect(&success(&outer_record_variation_3, &schema));
             assert!(!buf.is_empty());
+            Ok(())
         }
 
-        #[test]
-        fn test_avro_3448_proper_multi_level_encoding_middle_namespace() {
+        #[tokio::test]
+        async fn test_avro_3448_proper_multi_level_encoding_middle_namespace() -> TestResult {
             let schema = r#"
         {
           "name": "record_name",
@@ -822,7 +828,7 @@ mod encode {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema).unwrap();
+            let schema = Schema::parse_str(schema).await?;
             let inner_record = Value::Record(vec![("inner_field_1".into(), Value::Double(5.4))]);
             let middle_record_variation_1 = Value::Record(vec![(
                 "middle_field_1".into(),
@@ -866,10 +872,11 @@ mod encode {
             encode(&outer_record_variation_3, &schema, &mut buf)
                 .expect(&success(&outer_record_variation_3, &schema));
             assert!(!buf.is_empty());
+            Ok(())
         }
 
-        #[test]
-        fn test_avro_3448_proper_multi_level_encoding_inner_namespace() {
+        #[tokio::test]
+        async fn test_avro_3448_proper_multi_level_encoding_inner_namespace() -> TestResult {
             let schema = r#"
         {
           "name": "record_name",
@@ -913,7 +920,7 @@ mod encode {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema).unwrap();
+            let schema = Schema::parse_str(schema).await?;
             let inner_record = Value::Record(vec![("inner_field_1".into(), Value::Double(5.4))]);
             let middle_record_variation_1 = Value::Record(vec![(
                 "middle_field_1".into(),
@@ -957,10 +964,11 @@ mod encode {
             encode(&outer_record_variation_3, &schema, &mut buf)
                 .expect(&success(&outer_record_variation_3, &schema));
             assert!(!buf.is_empty());
+            Ok(())
         }
 
-        #[test]
-        fn test_avro_3585_encode_uuids() {
+        #[tokio::test]
+        async fn test_avro_3585_encode_uuids() {
             let value = Value::String(String::from("00000000-0000-0000-0000-000000000000"));
             let schema = Schema::Uuid;
             let mut buffer = Vec::new();
@@ -969,8 +977,8 @@ mod encode {
             assert!(!buffer.is_empty());
         }
 
-        #[test]
-        fn avro_3926_encode_decode_uuid_to_fixed_wrong_schema_size() -> TestResult {
+        #[tokio::test]
+        async fn avro_3926_encode_decode_uuid_to_fixed_wrong_schema_size() -> TestResult {
             let schema = Schema::Fixed(FixedSchema {
                 size: 15,
                 name: "uuid".into(),
