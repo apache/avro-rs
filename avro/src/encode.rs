@@ -30,7 +30,7 @@
       crate::schema::tokio => crate::schema::sync,
       crate::util::tokio => crate::util::sync,
       crate::types::tokio => crate::types::sync,
-      #[tokio::test] => #[tokio::test]
+      #[tokio::test] => #[test]
     );
   }
 )]

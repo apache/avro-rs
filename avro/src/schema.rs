@@ -25,11 +25,14 @@
     sync!();
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
+      crate::de::tokio => crate::de::sync,
       crate::decimal::tokio => crate::decimal::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
-      crate::schema::tokio => crate::schema::sync,
+      crate::reader::tokio => crate::reader::sync,
+      crate::writer::tokio => crate::writer::sync,
+      crate::ser::tokio => crate::ser::sync,
       crate::util::tokio => crate::util::sync,
       crate::types::tokio => crate::types::sync,
       crate::schema_equality::tokio => crate::schema_equality::sync,
@@ -1887,8 +1890,13 @@ mod schema {
             let mut position = 0;
             for field in fields.iter() {
                 if let Some(field) = field.as_object() {
-                    let record_field =
-                        Box::pin(RecordField::parse(field, position, self, &fully_qualified_name)).await?;
+                    let record_field = Box::pin(RecordField::parse(
+                        field,
+                        position,
+                        self,
+                        &fully_qualified_name,
+                    ))
+                    .await?;
                     record_fields.push(record_field);
                     position += 1;
                 }
@@ -2548,8 +2556,11 @@ mod schema {
     /// through `derive` feature. Do not implement directly!
     /// Implement `apache_avro::schema::derive::AvroSchemaComponent` to get this trait
     /// through a blanket implementation.
+    #[synca::cfg(tokio)]
+    use async_trait::async_trait;
+    #[cfg_attr(feature = "tokio", async_trait)]
     pub trait AvroSchema {
-        fn get_schema() -> Schema;
+        async fn get_schema() -> Schema;
     }
 
     #[cfg(feature = "derive")]
@@ -2741,6 +2752,15 @@ mod schema {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use crate::{
+            Uuid,
+            de::tokio::from_value,
+            error::tokio::Details,
+            rabin::Rabin,
+            reader::tokio::from_avro_datum,
+            ser::tokio::to_value,
+            writer::tokio::{SpecificSingleObjectWriter, Writer, to_avro_datum},
+        };
         use apache_avro_test_helper::{
             TestResult,
             logger::{assert_logged, assert_not_logged},
@@ -2748,38 +2768,37 @@ mod schema {
         use serde_json::json;
         use serial_test::serial;
         use std::sync::atomic::Ordering;
-        use {SpecificSingleObjectWriter, error::tokio::Details, rabin::Rabin};
 
-        #[test]
-        fn test_invalid_schema() {
-            assert!(Schema::parse_str("invalid").is_err());
+        #[tokio::test]
+        async fn test_invalid_schema() {
+            assert!(Schema::parse_str("invalid").await.is_err());
         }
 
-        #[test]
-        fn test_primitive_schema() -> TestResult {
-            assert_eq!(Schema::Null, Schema::parse_str("\"null\"")?);
-            assert_eq!(Schema::Int, Schema::parse_str("\"int\"")?);
-            assert_eq!(Schema::Double, Schema::parse_str("\"double\"")?);
+        #[tokio::test]
+        async fn test_primitive_schema() -> TestResult {
+            assert_eq!(Schema::Null, Schema::parse_str("\"null\"").await?);
+            assert_eq!(Schema::Int, Schema::parse_str("\"int\"").await?);
+            assert_eq!(Schema::Double, Schema::parse_str("\"double\"").await?);
             Ok(())
         }
 
-        #[test]
-        fn test_array_schema() -> TestResult {
-            let schema = Schema::parse_str(r#"{"type": "array", "items": "string"}"#)?;
+        #[tokio::test]
+        async fn test_array_schema() -> TestResult {
+            let schema = Schema::parse_str(r#"{"type": "array", "items": "string"}"#).await?;
             assert_eq!(Schema::array(Schema::String), schema);
             Ok(())
         }
 
-        #[test]
-        fn test_map_schema() -> TestResult {
-            let schema = Schema::parse_str(r#"{"type": "map", "values": "double"}"#)?;
+        #[tokio::test]
+        async fn test_map_schema() -> TestResult {
+            let schema = Schema::parse_str(r#"{"type": "map", "values": "double"}"#).await?;
             assert_eq!(Schema::map(Schema::Double), schema);
             Ok(())
         }
 
-        #[test]
-        fn test_union_schema() -> TestResult {
-            let schema = Schema::parse_str(r#"["null", "int"]"#)?;
+        #[tokio::test]
+        async fn test_union_schema() -> TestResult {
+            let schema = Schema::parse_str(r#"["null", "int"]"#).await?;
             assert_eq!(
                 Schema::Union(UnionSchema::new(vec![Schema::Null, Schema::Int])?),
                 schema
@@ -2787,15 +2806,15 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_union_unsupported_schema() {
-            let schema = Schema::parse_str(r#"["null", ["null", "int"], "string"]"#);
+        #[tokio::test]
+        async fn test_union_unsupported_schema() {
+            let schema = Schema::parse_str(r#"["null", ["null", "int"], "string"]"#).await;
             assert!(schema.is_err());
         }
 
-        #[test]
-        fn test_multi_union_schema() -> TestResult {
-            let schema = Schema::parse_str(r#"["null", "int", "float", "string", "bytes"]"#);
+        #[tokio::test]
+        async fn test_multi_union_schema() -> TestResult {
+            let schema = Schema::parse_str(r#"["null", "int", "float", "string", "bytes"]"#).await;
             assert!(schema.is_ok());
             let schema = schema?;
             assert_eq!(SchemaKind::from(&schema), SchemaKind::Union);
@@ -2824,8 +2843,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3621_nullable_record_field() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3621_nullable_record_field() -> TestResult {
             let nullable_record_field = RecordField::builder()
                 .name("next".to_string())
                 .schema(Schema::Union(UnionSchema::new(vec![
@@ -2856,8 +2875,8 @@ mod schema {
         }
 
         // AVRO-3248
-        #[test]
-        fn test_union_of_records() -> TestResult {
+        #[tokio::test]
+        async fn test_union_of_records() -> TestResult {
             use std::iter::FromIterator;
 
             // A and B are the same except the name.
@@ -2916,8 +2935,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_rs_104_test_root_union_of_records() -> TestResult {
+        #[tokio::test]
+        async fn avro_rs_104_test_root_union_of_records() -> TestResult {
             // A and B are the same except the name.
             let schema_str_a = r#"{
             "name": "A",
@@ -2938,7 +2957,7 @@ mod schema {
             let schema_str_c = r#"["A", "B"]"#;
 
             let (schema_c, schemata) =
-                Schema::parse_str_with_list(schema_str_c, [schema_str_a, schema_str_b])?;
+                Schema::parse_str_with_list(schema_str_c, [schema_str_a, schema_str_b]).await?;
 
             let schema_a_expected = Schema::Record(RecordSchema {
                 name: Name::new("A")?,
@@ -2992,8 +3011,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_rs_104_test_root_union_of_records_name_collision() -> TestResult {
+        #[tokio::test]
+        async fn avro_rs_104_test_root_union_of_records_name_collision() -> TestResult {
             // A and B are exactly the same.
             let schema_str_a1 = r#"{
             "name": "A",
@@ -3013,7 +3032,7 @@ mod schema {
 
             let schema_str_c = r#"["A", "A"]"#;
 
-            match Schema::parse_str_with_list(schema_str_c, [schema_str_a1, schema_str_a2]) {
+            match Schema::parse_str_with_list(schema_str_c, [schema_str_a1, schema_str_a2]).await {
                 Ok(_) => unreachable!("Expected an error that the name is already defined"),
                 Err(e) => assert_eq!(
                     e.to_string(),
@@ -3024,8 +3043,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_rs_104_test_root_union_of_records_no_name() -> TestResult {
+        #[tokio::test]
+        async fn avro_rs_104_test_root_union_of_records_no_name() -> TestResult {
             let schema_str_a = r#"{
             "name": "A",
             "type": "record",
@@ -3044,7 +3063,7 @@ mod schema {
 
             let schema_str_c = r#"["A", "A"]"#;
 
-            match Schema::parse_str_with_list(schema_str_c, [schema_str_a, schema_str_b]) {
+            match Schema::parse_str_with_list(schema_str_c, [schema_str_a, schema_str_b]).await {
                 Ok(_) => {
                     unreachable!("Expected an error that schema_str_b is missing a name field")
                 }
@@ -3054,8 +3073,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3584_test_recursion_records() -> TestResult {
+        #[tokio::test]
+        async fn avro_3584_test_recursion_records() -> TestResult {
             // A and B are the same except the name.
             let schema_str_a = r#"{
             "name": "A",
@@ -3088,8 +3107,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3248_nullable_record() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3248_nullable_record() -> TestResult {
             use std::iter::FromIterator;
 
             let schema_str_a = r#"{
@@ -3122,7 +3141,7 @@ mod schema {
                 fields: vec![RecordField {
                     name: "field_one".to_string(),
                     doc: None,
-                    default: Some(Value::Null),
+                    default: Some(serde_json::Value::Null),
                     aliases: None,
                     schema: Schema::Union(UnionSchema::new(vec![
                         Schema::Null,
@@ -3143,8 +3162,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_record_schema() -> TestResult {
+        #[tokio::test]
+        async fn test_record_schema() -> TestResult {
             let parsed = Schema::parse_str(
                 r#"
             {
@@ -3156,7 +3175,8 @@ mod schema {
                 ]
             }
         "#,
-            )?;
+            )
+            .await?;
 
             let mut lookup = BTreeMap::new();
             lookup.insert("a".to_owned(), 0);
@@ -3197,8 +3217,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3302_record_schema_with_currently_parsing_schema() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3302_record_schema_with_currently_parsing_schema() -> TestResult {
             let schema = Schema::parse_str(
                 r#"
             {
@@ -3217,7 +3237,8 @@ mod schema {
                 }]
             }
         "#,
-            )?;
+            )
+            .await?;
 
             let mut lookup = BTreeMap::new();
             lookup.insert("recordField".to_owned(), 0);
@@ -3283,8 +3304,8 @@ mod schema {
         }
 
         // https://github.com/flavray/avro-rs/pull/99#issuecomment-1016948451
-        #[test]
-        fn test_parsing_of_recursive_type_enum() -> TestResult {
+        #[tokio::test]
+        async fn test_parsing_of_recursive_type_enum() -> TestResult {
             let schema = r#"
     {
         "type": "record",
@@ -3328,7 +3349,7 @@ mod schema {
         }
         "#;
 
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let schema_str = schema.canonical_form();
             let expected = r#"{"name":"office.User","type":"record","fields":[{"name":"details","type":[{"name":"office.Employee","type":"record","fields":[{"name":"gender","type":{"name":"office.Gender","type":"enum","symbols":["male","female"]}}]},{"name":"office.Manager","type":"record","fields":[{"name":"gender","type":"office.Gender"}]}]}]}"#;
             assert_eq!(schema_str, expected);
@@ -3336,8 +3357,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_parsing_of_recursive_type_fixed() -> TestResult {
+        #[tokio::test]
+        async fn test_parsing_of_recursive_type_fixed() -> TestResult {
             let schema = r#"
     {
         "type": "record",
@@ -3378,7 +3399,7 @@ mod schema {
         }
         "#;
 
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let schema_str = schema.canonical_form();
             let expected = r#"{"name":"office.User","type":"record","fields":[{"name":"details","type":[{"name":"office.Employee","type":"record","fields":[{"name":"id","type":{"name":"office.EmployeeId","type":"fixed","size":16}}]},{"name":"office.Manager","type":"record","fields":[{"name":"id","type":"office.EmployeeId"}]}]}]}"#;
             assert_eq!(schema_str, expected);
@@ -3386,8 +3407,9 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3302_record_schema_with_currently_parsing_schema_aliases() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3302_record_schema_with_currently_parsing_schema_aliases() -> TestResult
+        {
             let schema = Schema::parse_str(
                 r#"
             {
@@ -3400,7 +3422,8 @@ mod schema {
               ]
             }
         "#,
-            )?;
+            )
+            .await?;
 
             let mut lookup = BTreeMap::new();
             lookup.insert("value".to_owned(), 0);
@@ -3455,8 +3478,9 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3370_record_schema_with_currently_parsing_schema_named_record() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3370_record_schema_with_currently_parsing_schema_named_record()
+        -> TestResult {
             let schema = Schema::parse_str(
                 r#"
             {
@@ -3468,7 +3492,8 @@ mod schema {
              ]
             }
         "#,
-            )?;
+            )
+            .await?;
 
             let mut lookup = BTreeMap::new();
             lookup.insert("value".to_owned(), 0);
@@ -3520,8 +3545,9 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3370_record_schema_with_currently_parsing_schema_named_enum() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3370_record_schema_with_currently_parsing_schema_named_enum()
+        -> TestResult {
             let schema = Schema::parse_str(
                 r#"
             {
@@ -3537,7 +3563,8 @@ mod schema {
              ]
             }
         "#,
-            )?;
+            )
+            .await?;
 
             let mut lookup = BTreeMap::new();
             lookup.insert("enum".to_owned(), 0);
@@ -3607,8 +3634,9 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3370_record_schema_with_currently_parsing_schema_named_fixed() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3370_record_schema_with_currently_parsing_schema_named_fixed()
+        -> TestResult {
             let schema = Schema::parse_str(
                 r#"
             {
@@ -3624,7 +3652,8 @@ mod schema {
              ]
             }
         "#,
-            )?;
+            )
+            .await?;
 
             let mut lookup = BTreeMap::new();
             lookup.insert("fixed".to_owned(), 0);
@@ -3691,11 +3720,11 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_enum_schema() -> TestResult {
+        #[tokio::test]
+        async fn test_enum_schema() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{"type": "enum", "name": "Suit", "symbols": ["diamonds", "spades", "clubs", "hearts"]}"#,
-            )?;
+            ).await?;
 
             let expected = Schema::Enum(EnumSchema {
                 name: Name::new("Suit")?,
@@ -3716,31 +3745,33 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_enum_schema_duplicate() -> TestResult {
+        #[tokio::test]
+        async fn test_enum_schema_duplicate() -> TestResult {
             // Duplicate "diamonds"
             let schema = Schema::parse_str(
                 r#"{"type": "enum", "name": "Suit", "symbols": ["diamonds", "spades", "clubs", "diamonds"]}"#,
-            );
+            ).await;
             assert!(schema.is_err());
 
             Ok(())
         }
 
-        #[test]
-        fn test_enum_schema_name() -> TestResult {
+        #[tokio::test]
+        async fn test_enum_schema_name() -> TestResult {
             // Invalid name "0000" does not match [A-Za-z_][A-Za-z0-9_]*
             let schema = Schema::parse_str(
                 r#"{"type": "enum", "name": "Enum", "symbols": ["0000", "variant"]}"#,
-            );
+            )
+            .await;
             assert!(schema.is_err());
 
             Ok(())
         }
 
-        #[test]
-        fn test_fixed_schema() -> TestResult {
-            let schema = Schema::parse_str(r#"{"type": "fixed", "name": "test", "size": 16}"#)?;
+        #[tokio::test]
+        async fn test_fixed_schema() -> TestResult {
+            let schema =
+                Schema::parse_str(r#"{"type": "fixed", "name": "test", "size": 16}"#).await?;
 
             let expected = Schema::Fixed(FixedSchema {
                 name: Name::new("test")?,
@@ -3756,11 +3787,11 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_fixed_schema_with_documentation() -> TestResult {
+        #[tokio::test]
+        async fn test_fixed_schema_with_documentation() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{"type": "fixed", "name": "test", "size": 16, "doc": "FixedSchema documentation"}"#,
-            )?;
+            ).await?;
 
             let expected = Schema::Fixed(FixedSchema {
                 name: Name::new("test")?,
@@ -3776,11 +3807,12 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_no_documentation() -> TestResult {
+        #[tokio::test]
+        async fn test_no_documentation() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{"type": "enum", "name": "Coin", "symbols": ["heads", "tails"]}"#,
-            )?;
+            )
+            .await?;
 
             let doc = match schema {
                 Schema::Enum(EnumSchema { doc, .. }) => doc,
@@ -3792,11 +3824,11 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_documentation() -> TestResult {
+        #[tokio::test]
+        async fn test_documentation() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{"type": "enum", "name": "Coin", "doc": "Some documentation", "symbols": ["heads", "tails"]}"#,
-            )?;
+            ).await?;
 
             let doc = match schema {
                 Schema::Enum(EnumSchema { doc, .. }) => doc,
@@ -3810,16 +3842,16 @@ mod schema {
 
         // Tests to ensure Schema is Send + Sync. These tests don't need to _do_ anything, if they can
         // compile, they pass.
-        #[test]
-        fn test_schema_is_send() {
+        #[tokio::test]
+        async fn test_schema_is_send() {
             fn send<S: Send>(_s: S) {}
 
             let schema = Schema::Null;
             send(schema);
         }
 
-        #[test]
-        fn test_schema_is_sync() {
+        #[tokio::test]
+        async fn test_schema_is_sync() {
             fn sync<S: Sync>(_s: S) {}
 
             let schema = Schema::Null;
@@ -3827,10 +3859,10 @@ mod schema {
             sync(schema);
         }
 
-        #[test]
-        fn test_schema_fingerprint() -> TestResult {
+        #[tokio::test]
+        async fn test_schema_fingerprint() -> TestResult {
+            use crate::rabin::Rabin;
             use md5::Md5;
-            use rabin::Rabin;
             use sha2::Sha256;
 
             let raw_schema = r#"
@@ -3845,7 +3877,7 @@ mod schema {
     }
 "#;
 
-            let schema = Schema::parse_str(raw_schema)?;
+            let schema = Schema::parse_str(raw_schema).await?;
             assert_eq!(
                 "7eb3b28d73dfc99bdd9af1848298b40804a2f8ad5d2642be2ecc2ad34842b987",
                 format!("{}", schema.fingerprint::<Sha256>())
@@ -3863,23 +3895,24 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_logical_types() -> TestResult {
-            let schema = Schema::parse_str(r#"{"type": "int", "logicalType": "date"}"#)?;
+        #[tokio::test]
+        async fn test_logical_types() -> TestResult {
+            let schema = Schema::parse_str(r#"{"type": "int", "logicalType": "date"}"#).await?;
             assert_eq!(schema, Schema::Date);
 
             let schema =
-                Schema::parse_str(r#"{"type": "long", "logicalType": "timestamp-micros"}"#)?;
+                Schema::parse_str(r#"{"type": "long", "logicalType": "timestamp-micros"}"#).await?;
             assert_eq!(schema, Schema::TimestampMicros);
 
             Ok(())
         }
 
-        #[test]
-        fn test_nullable_logical_type() -> TestResult {
+        #[tokio::test]
+        async fn test_nullable_logical_type() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{"type": ["null", {"type": "long", "logicalType": "timestamp-micros"}]}"#,
-            )?;
+            )
+            .await?;
             assert_eq!(
                 schema,
                 Schema::Union(UnionSchema::new(vec![
@@ -3912,8 +3945,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3374_preserve_namespace_for_primitive() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3374_preserve_namespace_for_primitive() -> TestResult {
             let schema = Schema::parse_str(
                 r#"
             {
@@ -3925,7 +3958,8 @@ mod schema {
               ]
             }
             "#,
-            )?;
+            )
+            .await?;
 
             let json = schema.canonical_form();
             assert_eq!(
@@ -3936,8 +3970,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3433_preserve_schema_refs_in_json() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3433_preserve_schema_refs_in_json() -> TestResult {
             let schema = r#"
     {
       "name": "test.test",
@@ -3952,7 +3986,7 @@ mod schema {
     }
     "#;
 
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
 
             let expected = r#"{"name":"test.test","type":"record","fields":[{"name":"bar","type":{"name":"test.foo","type":"record","fields":[{"name":"id","type":"long"}]}},{"name":"baz","type":"test.foo"}]}"#;
             assert_eq!(schema.canonical_form(), expected);
@@ -3960,8 +3994,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_read_namespace_from_name() -> TestResult {
+        #[tokio::test]
+        async fn test_read_namespace_from_name() -> TestResult {
             let schema = r#"
     {
       "name": "space.name",
@@ -3975,7 +4009,7 @@ mod schema {
     }
     "#;
 
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             if let Schema::Record(RecordSchema { name, .. }) = schema {
                 assert_eq!(name.name, "name");
                 assert_eq!(name.namespace, Some("space".to_string()));
@@ -3986,8 +4020,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_namespace_from_name_has_priority_over_from_field() -> TestResult {
+        #[tokio::test]
+        async fn test_namespace_from_name_has_priority_over_from_field() -> TestResult {
             let schema = r#"
     {
       "name": "space1.name",
@@ -4002,7 +4036,7 @@ mod schema {
     }
     "#;
 
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             if let Schema::Record(RecordSchema { name, .. }) = schema {
                 assert_eq!(name.namespace, Some("space1".to_string()));
             } else {
@@ -4012,8 +4046,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_namespace_from_field() -> TestResult {
+        #[tokio::test]
+        async fn test_namespace_from_field() -> TestResult {
             let schema = r#"
     {
       "name": "name",
@@ -4028,7 +4062,7 @@ mod schema {
     }
     "#;
 
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             if let Schema::Record(RecordSchema { name, .. }) = schema {
                 assert_eq!(name.namespace, Some("space2".to_string()));
             } else {
@@ -4038,9 +4072,9 @@ mod schema {
             Ok(())
         }
 
-        #[test]
+        #[tokio::test]
         /// Zero-length namespace is considered as no-namespace.
-        fn test_namespace_from_name_with_empty_value() -> TestResult {
+        async fn test_namespace_from_name_with_empty_value() -> TestResult {
             let name = Name::new(".name")?;
             assert_eq!(name.name, "name");
             assert_eq!(name.namespace, None);
@@ -4048,26 +4082,26 @@ mod schema {
             Ok(())
         }
 
-        #[test]
+        #[tokio::test]
         /// Whitespace is not allowed in the name.
-        fn test_name_with_whitespace_value() {
+        async fn test_name_with_whitespace_value() {
             match Name::new(" ").map_err(Error::into_details) {
                 Err(Details::InvalidSchemaName(_, _)) => {}
                 _ => panic!("Expected an Details::InvalidSchemaName!"),
             }
         }
 
-        #[test]
+        #[tokio::test]
         /// The name must be non-empty.
-        fn test_name_with_no_name_part() {
+        async fn test_name_with_no_name_part() {
             match Name::new("space.").map_err(Error::into_details) {
                 Err(Details::InvalidSchemaName(_, _)) => {}
                 _ => panic!("Expected an Details::InvalidSchemaName!"),
             }
         }
 
-        #[test]
-        fn avro_3448_test_proper_resolution_inner_record_inherited_namespace() -> TestResult {
+        #[tokio::test]
+        async fn avro_3448_test_proper_resolution_inner_record_inherited_namespace() -> TestResult {
             let schema = r#"
         {
           "name": "record_name",
@@ -4097,7 +4131,7 @@ mod schema {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
             assert_eq!(rs.get_names().len(), 2);
             for s in &["space.record_name", "space.inner_record_name"] {
@@ -4107,8 +4141,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3448_test_proper_resolution_inner_record_qualified_namespace() -> TestResult {
+        #[tokio::test]
+        async fn avro_3448_test_proper_resolution_inner_record_qualified_namespace() -> TestResult {
             let schema = r#"
         {
           "name": "record_name",
@@ -4138,7 +4172,7 @@ mod schema {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
             assert_eq!(rs.get_names().len(), 2);
             for s in &["space.record_name", "space.inner_record_name"] {
@@ -4148,8 +4182,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3448_test_proper_resolution_inner_enum_inherited_namespace() -> TestResult {
+        #[tokio::test]
+        async fn avro_3448_test_proper_resolution_inner_enum_inherited_namespace() -> TestResult {
             let schema = r#"
         {
           "name": "record_name",
@@ -4174,7 +4208,7 @@ mod schema {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
             assert_eq!(rs.get_names().len(), 2);
             for s in &["space.record_name", "space.inner_enum_name"] {
@@ -4184,8 +4218,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3448_test_proper_resolution_inner_enum_qualified_namespace() -> TestResult {
+        #[tokio::test]
+        async fn avro_3448_test_proper_resolution_inner_enum_qualified_namespace() -> TestResult {
             let schema = r#"
         {
           "name": "record_name",
@@ -4210,7 +4244,7 @@ mod schema {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
             assert_eq!(rs.get_names().len(), 2);
             for s in &["space.record_name", "space.inner_enum_name"] {
@@ -4220,8 +4254,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3448_test_proper_resolution_inner_fixed_inherited_namespace() -> TestResult {
+        #[tokio::test]
+        async fn avro_3448_test_proper_resolution_inner_fixed_inherited_namespace() -> TestResult {
             let schema = r#"
         {
           "name": "record_name",
@@ -4246,7 +4280,7 @@ mod schema {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
             assert_eq!(rs.get_names().len(), 2);
             for s in &["space.record_name", "space.inner_fixed_name"] {
@@ -4256,8 +4290,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3448_test_proper_resolution_inner_fixed_qualified_namespace() -> TestResult {
+        #[tokio::test]
+        async fn avro_3448_test_proper_resolution_inner_fixed_qualified_namespace() -> TestResult {
             let schema = r#"
         {
           "name": "record_name",
@@ -4282,7 +4316,7 @@ mod schema {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
             assert_eq!(rs.get_names().len(), 2);
             for s in &["space.record_name", "space.inner_fixed_name"] {
@@ -4292,8 +4326,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3448_test_proper_resolution_inner_record_inner_namespace() -> TestResult {
+        #[tokio::test]
+        async fn avro_3448_test_proper_resolution_inner_record_inner_namespace() -> TestResult {
             let schema = r#"
         {
           "name": "record_name",
@@ -4324,7 +4358,7 @@ mod schema {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
             assert_eq!(rs.get_names().len(), 2);
             for s in &["space.record_name", "inner_space.inner_record_name"] {
@@ -4334,8 +4368,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3448_test_proper_resolution_inner_enum_inner_namespace() -> TestResult {
+        #[tokio::test]
+        async fn avro_3448_test_proper_resolution_inner_enum_inner_namespace() -> TestResult {
             let schema = r#"
         {
           "name": "record_name",
@@ -4361,7 +4395,7 @@ mod schema {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
             assert_eq!(rs.get_names().len(), 2);
             for s in &["space.record_name", "inner_space.inner_enum_name"] {
@@ -4371,8 +4405,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3448_test_proper_resolution_inner_fixed_inner_namespace() -> TestResult {
+        #[tokio::test]
+        async fn avro_3448_test_proper_resolution_inner_fixed_inner_namespace() -> TestResult {
             let schema = r#"
         {
           "name": "record_name",
@@ -4398,7 +4432,7 @@ mod schema {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
             assert_eq!(rs.get_names().len(), 2);
             for s in &["space.record_name", "inner_space.inner_fixed_name"] {
@@ -4408,9 +4442,9 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3448_test_proper_multi_level_resolution_inner_record_outer_namespace() -> TestResult
-        {
+        #[tokio::test]
+        async fn avro_3448_test_proper_multi_level_resolution_inner_record_outer_namespace()
+        -> TestResult {
             let schema = r#"
         {
           "name": "record_name",
@@ -4452,7 +4486,7 @@ mod schema {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
             assert_eq!(rs.get_names().len(), 3);
             for s in &[
@@ -4466,9 +4500,9 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3448_test_proper_multi_level_resolution_inner_record_middle_namespace() -> TestResult
-        {
+        #[tokio::test]
+        async fn avro_3448_test_proper_multi_level_resolution_inner_record_middle_namespace()
+        -> TestResult {
             let schema = r#"
         {
           "name": "record_name",
@@ -4511,7 +4545,7 @@ mod schema {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
             assert_eq!(rs.get_names().len(), 3);
             for s in &[
@@ -4525,9 +4559,9 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3448_test_proper_multi_level_resolution_inner_record_inner_namespace() -> TestResult
-        {
+        #[tokio::test]
+        async fn avro_3448_test_proper_multi_level_resolution_inner_record_inner_namespace()
+        -> TestResult {
             let schema = r#"
         {
           "name": "record_name",
@@ -4571,7 +4605,7 @@ mod schema {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
             assert_eq!(rs.get_names().len(), 3);
             for s in &[
@@ -4585,8 +4619,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3448_test_proper_in_array_resolution_inherited_namespace() -> TestResult {
+        #[tokio::test]
+        async fn avro_3448_test_proper_in_array_resolution_inherited_namespace() -> TestResult {
             let schema = r#"
         {
           "name": "record_name",
@@ -4616,7 +4650,7 @@ mod schema {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
             assert_eq!(rs.get_names().len(), 2);
             for s in &["space.record_name", "space.in_array_record"] {
@@ -4626,8 +4660,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3448_test_proper_in_map_resolution_inherited_namespace() -> TestResult {
+        #[tokio::test]
+        async fn avro_3448_test_proper_in_map_resolution_inherited_namespace() -> TestResult {
             let schema = r#"
         {
           "name": "record_name",
@@ -4657,7 +4691,7 @@ mod schema {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
             assert_eq!(rs.get_names().len(), 2);
             for s in &["space.record_name", "space.in_map_record"] {
@@ -4667,8 +4701,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3466_test_to_json_inner_enum_inner_namespace() -> TestResult {
+        #[tokio::test]
+        async fn avro_3466_test_to_json_inner_enum_inner_namespace() -> TestResult {
             let schema = r#"
         {
         "name": "record_name",
@@ -4694,7 +4728,7 @@ mod schema {
         ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
 
             // confirm we have expected 2 full-names
@@ -4705,14 +4739,14 @@ mod schema {
 
             // convert Schema back to JSON string
             let schema_str = serde_json::to_string(&schema).expect("test failed");
-            let _schema = Schema::parse_str(&schema_str).expect("test failed");
+            let _schema = Schema::parse_str(&schema_str).await.expect("test failed");
             assert_eq!(schema, _schema);
 
             Ok(())
         }
 
-        #[test]
-        fn avro_3466_test_to_json_inner_fixed_inner_namespace() -> TestResult {
+        #[tokio::test]
+        async fn avro_3466_test_to_json_inner_fixed_inner_namespace() -> TestResult {
             let schema = r#"
         {
         "name": "record_name",
@@ -4738,7 +4772,7 @@ mod schema {
         ]
         }
         "#;
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
 
             // confirm we have expected 2 full-names
@@ -4749,7 +4783,7 @@ mod schema {
 
             // convert Schema back to JSON string
             let schema_str = serde_json::to_string(&schema).expect("test failed");
-            let _schema = Schema::parse_str(&schema_str).expect("test failed");
+            let _schema = Schema::parse_str(&schema_str).await.expect("test failed");
             assert_eq!(schema, _schema);
 
             Ok(())
@@ -4769,8 +4803,8 @@ mod schema {
             }
         }
 
-        #[test]
-        fn avro_3512_alias_with_null_namespace_record() -> TestResult {
+        #[tokio::test]
+        async fn avro_3512_alias_with_null_namespace_record() -> TestResult {
             let schema = Schema::parse_str(
                 r#"
             {
@@ -4783,7 +4817,8 @@ mod schema {
               ]
             }
         "#,
-            )?;
+            )
+            .await?;
 
             if let Schema::Record(RecordSchema { ref aliases, .. }) = schema {
                 assert_avro_3512_aliases(aliases);
@@ -4794,8 +4829,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3512_alias_with_null_namespace_enum() -> TestResult {
+        #[tokio::test]
+        async fn avro_3512_alias_with_null_namespace_enum() -> TestResult {
             let schema = Schema::parse_str(
                 r#"
             {
@@ -4808,7 +4843,8 @@ mod schema {
               ]
             }
         "#,
-            )?;
+            )
+            .await?;
 
             if let Schema::Enum(EnumSchema { ref aliases, .. }) = schema {
                 assert_avro_3512_aliases(aliases);
@@ -4819,8 +4855,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3512_alias_with_null_namespace_fixed() -> TestResult {
+        #[tokio::test]
+        async fn avro_3512_alias_with_null_namespace_fixed() -> TestResult {
             let schema = Schema::parse_str(
                 r#"
             {
@@ -4831,7 +4867,8 @@ mod schema {
               "size" : 12
             }
         "#,
-            )?;
+            )
+            .await?;
 
             if let Schema::Fixed(FixedSchema { ref aliases, .. }) = schema {
                 assert_avro_3512_aliases(aliases);
@@ -4842,8 +4879,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3518_serialize_aliases_record() -> TestResult {
+        #[tokio::test]
+        async fn avro_3518_serialize_aliases_record() -> TestResult {
             let schema = Schema::parse_str(
                 r#"
             {
@@ -4862,7 +4899,8 @@ mod schema {
               ]
             }
         "#,
-            )?;
+            )
+            .await?;
 
             let value = serde_json::to_value(&schema)?;
             let serialized = serde_json::to_string(&value)?;
@@ -4870,13 +4908,13 @@ mod schema {
                 r#"{"aliases":["space.b","x.y","c"],"fields":[{"aliases":["time1","ns.time2"],"default":123,"name":"time","type":"long"}],"name":"a","namespace":"space","type":"record"}"#,
                 &serialized
             );
-            assert_eq!(schema, Schema::parse_str(&serialized)?);
+            assert_eq!(schema, Schema::parse_str(&serialized).await?);
 
             Ok(())
         }
 
-        #[test]
-        fn avro_3518_serialize_aliases_enum() -> TestResult {
+        #[tokio::test]
+        async fn avro_3518_serialize_aliases_enum() -> TestResult {
             let schema = Schema::parse_str(
                 r#"
             {
@@ -4889,7 +4927,8 @@ mod schema {
               ]
             }
         "#,
-            )?;
+            )
+            .await?;
 
             let value = serde_json::to_value(&schema)?;
             let serialized = serde_json::to_string(&value)?;
@@ -4897,13 +4936,13 @@ mod schema {
                 r#"{"aliases":["space.b","x.y","c"],"name":"a","namespace":"space","symbols":["symbol1","symbol2"],"type":"enum"}"#,
                 &serialized
             );
-            assert_eq!(schema, Schema::parse_str(&serialized)?);
+            assert_eq!(schema, Schema::parse_str(&serialized).await?);
 
             Ok(())
         }
 
-        #[test]
-        fn avro_3518_serialize_aliases_fixed() -> TestResult {
+        #[tokio::test]
+        async fn avro_3518_serialize_aliases_fixed() -> TestResult {
             let schema = Schema::parse_str(
                 r#"
             {
@@ -4914,7 +4953,8 @@ mod schema {
               "size" : 12
             }
         "#,
-            )?;
+            )
+            .await?;
 
             let value = serde_json::to_value(&schema)?;
             let serialized = serde_json::to_string(&value)?;
@@ -4922,13 +4962,13 @@ mod schema {
                 r#"{"aliases":["space.b","x.y","c"],"name":"a","namespace":"space","size":12,"type":"fixed"}"#,
                 &serialized
             );
-            assert_eq!(schema, Schema::parse_str(&serialized)?);
+            assert_eq!(schema, Schema::parse_str(&serialized).await?);
 
             Ok(())
         }
 
-        #[test]
-        fn avro_3130_parse_anonymous_union_type() -> TestResult {
+        #[tokio::test]
+        async fn avro_3130_parse_anonymous_union_type() -> TestResult {
             let schema_str = r#"
         {
             "type": "record",
@@ -4948,7 +4988,7 @@ mod schema {
             ]
         }
         "#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
 
             if let Schema::Record(RecordSchema { name, fields, .. }) = schema {
                 assert_eq!(name, Name::new("AccountEvent")?);
@@ -4978,8 +5018,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_custom_attributes_schema_without_attributes() -> TestResult {
+        #[tokio::test]
+        async fn avro_custom_attributes_schema_without_attributes() -> TestResult {
             let schemata_str = [
                 r#"
             {
@@ -5007,7 +5047,7 @@ mod schema {
             "#,
             ];
             for schema_str in schemata_str.iter() {
-                let schema = Schema::parse_str(schema_str)?;
+                let schema = Schema::parse_str(schema_str).await?;
                 assert_eq!(schema.custom_attributes(), Some(&Default::default()));
             }
 
@@ -5024,8 +5064,8 @@ mod schema {
             }
         "#;
 
-        #[test]
-        fn avro_3609_custom_attributes_schema_with_attributes() -> TestResult {
+        #[tokio::test]
+        async fn avro_3609_custom_attributes_schema_with_attributes() -> TestResult {
             let schemata_str = [
                 r#"
             {
@@ -5065,7 +5105,8 @@ mod schema {
                         .to_owned()
                         .replace("{{{}}}", CUSTOM_ATTRS_SUFFIX)
                         .as_str(),
-                )?;
+                )
+                .await?;
 
                 assert_eq!(
                     schema.custom_attributes(),
@@ -5076,24 +5117,29 @@ mod schema {
             Ok(())
         }
 
-        fn expected_custom_attributes() -> BTreeMap<String, Value> {
-            let mut expected_attributes: BTreeMap<String, Value> = Default::default();
-            expected_attributes
-                .insert("string_key".to_string(), Value::String("value".to_string()));
+        fn expected_custom_attributes() -> BTreeMap<String, serde_json::Value> {
+            let mut expected_attributes: BTreeMap<String, serde_json::Value> = Default::default();
+            expected_attributes.insert(
+                "string_key".to_string(),
+                serde_json::Value::String("value".to_string()),
+            );
             expected_attributes.insert("number_key".to_string(), json!(1.23));
-            expected_attributes.insert("null_key".to_string(), Value::Null);
+            expected_attributes.insert("null_key".to_string(), serde_json::Value::Null);
             expected_attributes.insert(
                 "array_key".to_string(),
-                Value::Array(vec![json!(1), json!(2), json!(3)]),
+                serde_json::Value::Array(vec![json!(1), json!(2), json!(3)]),
             );
-            let mut object_value: HashMap<String, Value> = HashMap::new();
-            object_value.insert("key".to_string(), Value::String("value".to_string()));
+            let mut object_value: HashMap<String, serde_json::Value> = HashMap::new();
+            object_value.insert(
+                "key".to_string(),
+                serde_json::Value::String("value".to_string()),
+            );
             expected_attributes.insert("object_key".to_string(), json!(object_value));
             expected_attributes
         }
 
-        #[test]
-        fn avro_3609_custom_attributes_record_field_without_attributes() -> TestResult {
+        #[tokio::test]
+        async fn avro_3609_custom_attributes_record_field_without_attributes() -> TestResult {
             let schema_str = String::from(
                 r#"
             {
@@ -5112,7 +5158,8 @@ mod schema {
             );
 
             let schema =
-                Schema::parse_str(schema_str.replace("{{{}}}", CUSTOM_ATTRS_SUFFIX).as_str())?;
+                Schema::parse_str(schema_str.replace("{{{}}}", CUSTOM_ATTRS_SUFFIX).as_str())
+                    .await?;
 
             match schema {
                 Schema::Record(RecordSchema { name, fields, .. }) => {
@@ -5128,8 +5175,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3625_null_is_first() -> TestResult {
+        #[tokio::test]
+        async fn avro_3625_null_is_first() -> TestResult {
             let schema_str = String::from(
                 r#"
             {
@@ -5142,7 +5189,7 @@ mod schema {
         "#,
             );
 
-            let schema = Schema::parse_str(&schema_str)?;
+            let schema = Schema::parse_str(&schema_str).await?;
 
             match schema {
                 Schema::Record(RecordSchema { name, fields, .. }) => {
@@ -5150,7 +5197,7 @@ mod schema {
                     assert_eq!(fields.len(), 1);
                     let field = &fields[0];
                     assert_eq!(&field.name, "a");
-                    assert_eq!(&field.default, &Some(Value::Null));
+                    assert_eq!(&field.default, &Some(serde_json::Value::Null));
                     match &field.schema {
                         Schema::Union(union) => {
                             assert_eq!(union.variants().len(), 2);
@@ -5167,8 +5214,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3625_null_is_last() -> TestResult {
+        #[tokio::test]
+        async fn avro_3625_null_is_last() -> TestResult {
             let schema_str = String::from(
                 r#"
             {
@@ -5181,7 +5228,7 @@ mod schema {
         "#,
             );
 
-            let schema = Schema::parse_str(&schema_str)?;
+            let schema = Schema::parse_str(&schema_str).await?;
 
             match schema {
                 Schema::Record(RecordSchema { name, fields, .. }) => {
@@ -5205,8 +5252,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3625_null_is_the_middle() -> TestResult {
+        #[tokio::test]
+        async fn avro_3625_null_is_the_middle() -> TestResult {
             let schema_str = String::from(
                 r#"
             {
@@ -5219,7 +5266,7 @@ mod schema {
         "#,
             );
 
-            let schema = Schema::parse_str(&schema_str)?;
+            let schema = Schema::parse_str(&schema_str).await?;
 
             match schema {
                 Schema::Record(RecordSchema { name, fields, .. }) => {
@@ -5244,8 +5291,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3649_default_notintfirst() -> TestResult {
+        #[tokio::test]
+        async fn avro_3649_default_notintfirst() -> TestResult {
             let schema_str = String::from(
                 r#"
             {
@@ -5258,7 +5305,7 @@ mod schema {
         "#,
             );
 
-            let schema = Schema::parse_str(&schema_str)?;
+            let schema = Schema::parse_str(&schema_str).await?;
 
             match schema {
                 Schema::Record(RecordSchema { name, fields, .. }) => {
@@ -5282,8 +5329,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3709_parsing_of_record_field_aliases() -> TestResult {
+        #[tokio::test]
+        async fn avro_3709_parsing_of_record_field_aliases() -> TestResult {
             let schema = r#"
         {
           "name": "rec",
@@ -5298,7 +5345,7 @@ mod schema {
         }
         "#;
 
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
             if let Schema::Record(RecordSchema { fields, .. }) = schema {
                 let num_field = &fields[0];
                 assert_eq!(num_field.name, "num");
@@ -5310,8 +5357,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3735_parse_enum_namespace() -> TestResult {
+        #[tokio::test]
+        async fn avro_3735_parse_enum_namespace() -> TestResult {
             let schema = r#"
         {
             "type": "record",
@@ -5366,7 +5413,7 @@ mod schema {
                 pub bar_use: Bar,
             }
 
-            let schema = Schema::parse_str(schema)?;
+            let schema = Schema::parse_str(schema).await?;
 
             let foo = Foo {
                 bar_init: Bar::Bar0,
@@ -5374,18 +5421,18 @@ mod schema {
             };
 
             let avro_value = to_value(foo)?;
-            assert!(avro_value.validate(&schema));
+            assert!(avro_value.validate(&schema).await);
 
             let mut writer = Writer::new(&schema, Vec::new());
 
             // schema validation happens here
-            writer.append(avro_value)?;
+            writer.append(avro_value).await?;
 
             Ok(())
         }
 
-        #[test]
-        fn avro_3755_deserialize() -> TestResult {
+        #[tokio::test]
+        async fn avro_3755_deserialize() -> TestResult {
             #[derive(
                 Debug,
                 PartialEq,
@@ -5466,20 +5513,20 @@ mod schema {
             ]
             }"#;
 
-            let writer_schema = Schema::parse_str(writer_schema)?;
+            let writer_schema = Schema::parse_str(writer_schema).await?;
             let foo = Foo {
                 bar_init: Bar::Bar0,
                 bar_use: Bar::Bar1,
             };
             let avro_value = to_value(foo)?;
             assert!(
-                avro_value.validate(&writer_schema),
+                avro_value.validate(&writer_schema).await,
                 "value is valid for schema",
             );
-            let datum = to_avro_datum(&writer_schema, avro_value)?;
+            let datum = to_avro_datum(&writer_schema, avro_value).await?;
             let mut x = &datum[..];
-            let reader_schema = Schema::parse_str(reader_schema)?;
-            let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
+            let reader_schema = Schema::parse_str(reader_schema).await?;
+            let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema)).await?;
             match deser_value {
                 Value::Record(fields) => {
                     assert_eq!(fields.len(), 2);
@@ -5494,8 +5541,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3780_decimal_schema_type_with_fixed() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3780_decimal_schema_type_with_fixed() -> TestResult {
             let schema = json!(
             {
               "type": "record",
@@ -5512,7 +5559,7 @@ mod schema {
               ]
             });
 
-            let parse_result = Schema::parse(&schema);
+            let parse_result = Schema::parse(&schema).await;
             assert!(
                 parse_result.is_ok(),
                 "parse result must be ok, got: {parse_result:?}"
@@ -5521,8 +5568,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3772_enum_default_wrong_type() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3772_enum_default_wrong_type() -> TestResult {
             let schema = r#"
         {
           "type": "record",
@@ -5543,7 +5590,7 @@ mod schema {
         }
         "#;
 
-            match Schema::parse_str(schema) {
+            match Schema::parse_str(schema).await {
                 Err(err) => {
                     assert_eq!(
                         err.to_string(),
@@ -5555,8 +5602,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3812_handle_null_namespace_properly() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3812_handle_null_namespace_properly() -> TestResult {
             let schema_str = r#"
         {
           "namespace": "",
@@ -5585,7 +5632,7 @@ mod schema {
          "#;
 
             let expected = r#"{"name":"my_schema","type":"record","fields":[{"name":"a","type":{"name":"my_enum","type":"enum","symbols":["a","b"]}},{"name":"b","type":{"name":"my_fixed","type":"fixed","size":10}}]}"#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let canonical_form = schema.canonical_form();
             assert_eq!(canonical_form, expected);
 
@@ -5598,8 +5645,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3818_inherit_enclosing_namespace() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3818_inherit_enclosing_namespace() -> TestResult {
             // Enclosing namespace is specified but inner namespaces are not.
             let schema_str = r#"
         {
@@ -5627,7 +5674,7 @@ mod schema {
         "#;
 
             let expected = r#"{"name":"my_ns.my_schema","type":"record","fields":[{"name":"f1","type":{"name":"my_ns.enum1","type":"enum","symbols":["a"]}},{"name":"f2","type":{"name":"my_ns.fixed1","type":"fixed","size":1}}]}"#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let canonical_form = schema.canonical_form();
             assert_eq!(canonical_form, expected);
 
@@ -5661,7 +5708,7 @@ mod schema {
         "#;
 
             let expected = r#"{"name":"my_ns.my_schema","type":"record","fields":[{"name":"f1","type":{"name":"enum1","type":"enum","symbols":["a"]}},{"name":"f2","type":{"name":"fixed1","type":"fixed","size":1}}]}"#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let canonical_form = schema.canonical_form();
             assert_eq!(canonical_form, expected);
 
@@ -5693,7 +5740,7 @@ mod schema {
         "#;
 
             let expected = r#"{"name":"my_schema","type":"record","fields":[{"name":"f1","type":{"name":"f1.ns.enum1","type":"enum","symbols":["a"]}},{"name":"f2","type":{"name":"f2.ns.fixed1","type":"fixed","size":1}}]}"#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let canonical_form = schema.canonical_form();
             assert_eq!(canonical_form, expected);
 
@@ -5742,15 +5789,15 @@ mod schema {
         "#;
 
             let expected = r#"{"name":"my_ns.my_schema","type":"record","fields":[{"name":"f1","type":{"name":"my_ns.inner_record1","type":"record","fields":[{"name":"f1_1","type":{"name":"my_ns.enum1","type":"enum","symbols":["a"]}}]}},{"name":"f2","type":{"name":"inner_ns.inner_record2","type":"record","fields":[{"name":"f2_1","type":{"name":"inner_ns.enum2","type":"enum","symbols":["a"]}}]}}]}"#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let canonical_form = schema.canonical_form();
             assert_eq!(canonical_form, expected);
 
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3779_bigdecimal_schema() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3779_bigdecimal_schema() -> TestResult {
             let schema = json!(
                 {
                     "name": "decimal",
@@ -5759,7 +5806,7 @@ mod schema {
                 }
             );
 
-            let parse_result = Schema::parse(&schema);
+            let parse_result = Schema::parse(&schema).await;
             assert!(
                 parse_result.is_ok(),
                 "parse result must be ok, got: {parse_result:?}"
@@ -5772,8 +5819,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3820_deny_invalid_field_names() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3820_deny_invalid_field_names() -> TestResult {
             let schema_str = r#"
         {
           "name": "my_record",
@@ -5798,14 +5845,17 @@ mod schema {
         }
         "#;
 
-            match Schema::parse_str(schema_str).map_err(Error::into_details) {
+            match Schema::parse_str(schema_str)
+                .await
+                .map_err(Error::into_details)
+            {
                 Err(Details::FieldName(x)) if x == "f1.x" => Ok(()),
                 other => Err(format!("Expected Details::FieldName, got {other:?}").into()),
             }
         }
 
-        #[test]
-        fn test_avro_3827_disallow_duplicate_field_names() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3827_disallow_duplicate_field_names() -> TestResult {
             let schema_str = r#"
         {
           "name": "my_schema",
@@ -5830,7 +5880,10 @@ mod schema {
         }
         "#;
 
-            match Schema::parse_str(schema_str).map_err(Error::into_details) {
+            match Schema::parse_str(schema_str)
+                .await
+                .map_err(Error::into_details)
+            {
                 Err(Details::FieldNameDuplicate(_)) => (),
                 other => {
                     return Err(
@@ -5866,15 +5919,15 @@ mod schema {
         "#;
 
             let expected = r#"{"name":"my_schema","type":"record","fields":[{"name":"f1","type":{"name":"a","type":"record","fields":[{"name":"f1","type":{"name":"b","type":"record","fields":[]}}]}}]}"#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let canonical_form = schema.canonical_form();
             assert_eq!(canonical_form, expected);
 
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3830_null_namespace_in_fully_qualified_names() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3830_null_namespace_in_fully_qualified_names() -> TestResult {
             // Check whether all the named types don't refer to the namespace field
             // if their name starts with a dot.
             let schema_str = r#"
@@ -5905,7 +5958,7 @@ mod schema {
         "#;
 
             let expected = r#"{"name":"record1","type":"record","fields":[{"name":"f1","type":{"name":"enum1","type":"enum","symbols":["a"]}},{"name":"f2","type":{"name":"fxed1","type":"fixed","size":1}}]}"#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let canonical_form = schema.canonical_form();
             assert_eq!(canonical_form, expected);
 
@@ -5936,7 +5989,7 @@ mod schema {
         "#;
 
             let expected = r#"{"name":"record1","type":"record","fields":[{"name":"f1","type":{"name":"enum1","type":"enum","symbols":["a"]}},{"name":"f2","type":{"name":"fxed1","type":"fixed","size":1}}]}"#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let canonical_form = schema.canonical_form();
             assert_eq!(canonical_form, expected);
 
@@ -5949,8 +6002,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3814_schema_resolution_failure() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3814_schema_resolution_failure() -> TestResult {
             // Define a reader schema: a nested record with an optional field.
             let reader_schema = json!(
                 {
@@ -6051,21 +6104,21 @@ mod schema {
             };
 
             // Serialize using the writer schema.
-            let writer_schema = Schema::parse(&writer_schema)?;
+            let writer_schema = Schema::parse(&writer_schema).await?;
             let avro_value = to_value(s)?;
             assert!(
-                avro_value.validate(&writer_schema),
+                avro_value.validate(&writer_schema).await,
                 "value is valid for schema",
             );
-            let datum = to_avro_datum(&writer_schema, avro_value)?;
+            let datum = to_avro_datum(&writer_schema, avro_value).await?;
 
             // Now, attempt to deserialize using the reader schema.
-            let reader_schema = Schema::parse(&reader_schema)?;
+            let reader_schema = Schema::parse(&reader_schema).await?;
             let mut x = &datum[..];
 
             // Deserialization should succeed and we should be able to resolve the schema.
-            let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
-            assert!(deser_value.validate(&reader_schema));
+            let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema)).await?;
+            assert!(deser_value.validate(&reader_schema).await);
 
             // Verify that we can read a field from the record.
             let d: MyRecordReader = from_value(&deser_value)?;
@@ -6073,8 +6126,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3837_disallow_invalid_namespace() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3837_disallow_invalid_namespace() -> TestResult {
             // Valid namespace #1 (Single name portion)
             let schema_str = r#"
         {
@@ -6086,7 +6139,7 @@ mod schema {
         "#;
 
             let expected = r#"{"name":"ns1.record1","type":"record","fields":[]}"#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let canonical_form = schema.canonical_form();
             assert_eq!(canonical_form, expected);
 
@@ -6101,7 +6154,7 @@ mod schema {
         "#;
 
             let expected = r#"{"name":"ns1.foo.bar.enum1","type":"enum","symbols":["a"]}"#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let canonical_form = schema.canonical_form();
             assert_eq!(canonical_form, expected);
 
@@ -6115,7 +6168,10 @@ mod schema {
         }
         "#;
 
-            match Schema::parse_str(schema_str).map_err(Error::into_details) {
+            match Schema::parse_str(schema_str)
+                .await
+                .map_err(Error::into_details)
+            {
                 Err(Details::InvalidNamespace(_, _)) => (),
                 other => {
                     return Err(format!("Expected Details::InvalidNamespace, got {other:?}").into());
@@ -6132,7 +6188,10 @@ mod schema {
         }
         "#;
 
-            match Schema::parse_str(schema_str).map_err(Error::into_details) {
+            match Schema::parse_str(schema_str)
+                .await
+                .map_err(Error::into_details)
+            {
                 Err(Details::InvalidNamespace(_, _)) => (),
                 other => {
                     return Err(format!("Expected Details::InvalidNamespace, got {other:?}").into());
@@ -6149,7 +6208,10 @@ mod schema {
         }
         "#;
 
-            match Schema::parse_str(schema_str).map_err(Error::into_details) {
+            match Schema::parse_str(schema_str)
+                .await
+                .map_err(Error::into_details)
+            {
                 Err(Details::InvalidNamespace(_, _)) => (),
                 other => {
                     return Err(format!("Expected Details::InvalidNamespace, got {other:?}").into());
@@ -6166,7 +6228,10 @@ mod schema {
         }
         "#;
 
-            match Schema::parse_str(schema_str).map_err(Error::into_details) {
+            match Schema::parse_str(schema_str)
+                .await
+                .map_err(Error::into_details)
+            {
                 Err(Details::InvalidNamespace(_, _)) => (),
                 other => {
                     return Err(format!("Expected Details::InvalidNamespace, got {other:?}").into());
@@ -6183,7 +6248,10 @@ mod schema {
         }
         "#;
 
-            match Schema::parse_str(schema_str).map_err(Error::into_details) {
+            match Schema::parse_str(schema_str)
+                .await
+                .map_err(Error::into_details)
+            {
                 Err(Details::InvalidNamespace(_, _)) => (),
                 other => {
                     return Err(format!("Expected Details::InvalidNamespace, got {other:?}").into());
@@ -6193,8 +6261,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3851_validate_default_value_of_simple_record_field() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3851_validate_default_value_of_simple_record_field() -> TestResult {
             let schema_str = r#"
         {
             "name": "record1",
@@ -6215,7 +6283,7 @@ mod schema {
                 r#""int""#.to_string(),
             )
             .to_string();
-            let result = Schema::parse_str(schema_str);
+            let result = Schema::parse_str(schema_str).await;
             assert!(result.is_err());
             let err = result
                 .map_err(|e| e.to_string())
@@ -6226,8 +6294,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3851_validate_default_value_of_nested_record_field() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3851_validate_default_value_of_nested_record_field() -> TestResult {
             let schema_str = r#"
         {
             "name": "record1",
@@ -6258,7 +6326,7 @@ mod schema {
                     .to_string(),
             )
             .to_string();
-            let result = Schema::parse_str(schema_str);
+            let result = Schema::parse_str(schema_str).await;
             assert!(result.is_err());
             let err = result
                 .map_err(|e| e.to_string())
@@ -6269,8 +6337,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3851_validate_default_value_of_enum_record_field() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3851_validate_default_value_of_enum_record_field() -> TestResult {
             let schema_str = r#"
         {
             "name": "record1",
@@ -6295,7 +6363,7 @@ mod schema {
                 r#"{"name":"ns.enum1","type":"enum","symbols":["a","b","c"]}"#.to_string(),
             )
             .to_string();
-            let result = Schema::parse_str(schema_str);
+            let result = Schema::parse_str(schema_str).await;
             assert!(result.is_err());
             let err = result
                 .map_err(|e| e.to_string())
@@ -6306,8 +6374,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3851_validate_default_value_of_fixed_record_field() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3851_validate_default_value_of_fixed_record_field() -> TestResult {
             let schema_str = r#"
         {
             "name": "record1",
@@ -6332,7 +6400,7 @@ mod schema {
                 r#"{"name":"ns.fixed1","type":"fixed","size":3}"#.to_string(),
             )
             .to_string();
-            let result = Schema::parse_str(schema_str);
+            let result = Schema::parse_str(schema_str).await;
             assert!(result.is_err());
             let err = result
                 .map_err(|e| e.to_string())
@@ -6343,8 +6411,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3851_validate_default_value_of_array_record_field() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3851_validate_default_value_of_array_record_field() -> TestResult {
             let schema_str = r#"
         {
             "name": "record1",
@@ -6366,7 +6434,7 @@ mod schema {
                 r#"{"type":"array","items":"int"}"#.to_string(),
             )
             .to_string();
-            let result = Schema::parse_str(schema_str);
+            let result = Schema::parse_str(schema_str).await;
             assert!(result.is_err());
             let err = result
                 .map_err(|e| e.to_string())
@@ -6377,8 +6445,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3851_validate_default_value_of_map_record_field() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3851_validate_default_value_of_map_record_field() -> TestResult {
             let schema_str = r#"
         {
             "name": "record1",
@@ -6400,7 +6468,7 @@ mod schema {
                 r#"{"type":"map","values":"string"}"#.to_string(),
             )
             .to_string();
-            let result = Schema::parse_str(schema_str);
+            let result = Schema::parse_str(schema_str).await;
             assert!(result.is_err());
             let err = result
                 .map_err(|e| e.to_string())
@@ -6411,8 +6479,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3851_validate_default_value_of_ref_record_field() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3851_validate_default_value_of_ref_record_field() -> TestResult {
             let schema_str = r#"
         {
             "name": "record1",
@@ -6445,7 +6513,7 @@ mod schema {
                 r#""ns.record2""#.to_string(),
             )
             .to_string();
-            let result = Schema::parse_str(schema_str);
+            let result = Schema::parse_str(schema_str).await;
             assert!(result.is_err());
             let err = result
                 .map_err(|e| e.to_string())
@@ -6456,8 +6524,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3851_validate_default_value_of_enum() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3851_validate_default_value_of_enum() -> TestResult {
             let schema_str = r#"
         {
             "name": "enum1",
@@ -6468,7 +6536,7 @@ mod schema {
         }
         "#;
             let expected = Details::EnumDefaultWrongType(100.into()).to_string();
-            let result = Schema::parse_str(schema_str);
+            let result = Schema::parse_str(schema_str).await;
             assert!(result.is_err());
             let err = result
                 .map_err(|e| e.to_string())
@@ -6490,7 +6558,7 @@ mod schema {
                 symbols: vec!["a".to_string(), "b".to_string(), "c".to_string()],
             }
             .to_string();
-            let result = Schema::parse_str(schema_str);
+            let result = Schema::parse_str(schema_str).await;
             assert!(result.is_err());
             let err = result
                 .map_err(|e| e.to_string())
@@ -6501,8 +6569,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3862_get_aliases() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3862_get_aliases() -> TestResult {
             // Test for Record
             let schema_str = r#"
         {
@@ -6516,7 +6584,7 @@ mod schema {
             ]
         }
         "#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let expected = vec![Alias::new("ns1.r1")?, Alias::new("ns2.r2")?];
             match schema.aliases() {
                 Some(aliases) => assert_eq!(aliases, &expected),
@@ -6534,7 +6602,7 @@ mod schema {
             ]
         }
         "#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             match schema.aliases() {
                 None => (),
                 some => panic!("Expected None, got {some:?}"),
@@ -6550,7 +6618,7 @@ mod schema {
             "symbols": ["a", "b", "c"]
         }
         "#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let expected = vec![Alias::new("ns1.en1")?, Alias::new("ns2.en2")?];
             match schema.aliases() {
                 Some(aliases) => assert_eq!(aliases, &expected),
@@ -6565,7 +6633,7 @@ mod schema {
             "symbols": ["a", "b", "c"]
         }
         "#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             match schema.aliases() {
                 None => (),
                 some => panic!("Expected None, got {some:?}"),
@@ -6581,7 +6649,7 @@ mod schema {
             "size": 10
         }
         "#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let expected = vec![Alias::new("ns1.fx1")?, Alias::new("ns2.fx2")?];
             match schema.aliases() {
                 Some(aliases) => assert_eq!(aliases, &expected),
@@ -6596,7 +6664,7 @@ mod schema {
             "size": 10
         }
         "#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             match schema.aliases() {
                 None => (),
                 some => panic!("Expected None, got {some:?}"),
@@ -6612,8 +6680,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3862_get_doc() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3862_get_doc() -> TestResult {
             // Test for Record
             let schema_str = r#"
         {
@@ -6626,7 +6694,7 @@ mod schema {
             ]
         }
         "#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let expected = "Record Document";
             match schema.doc() {
                 Some(doc) => assert_eq!(doc, expected),
@@ -6643,7 +6711,7 @@ mod schema {
             ]
         }
         "#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             match schema.doc() {
                 None => (),
                 some => panic!("Expected None, got {some:?}"),
@@ -6658,7 +6726,7 @@ mod schema {
             "symbols": ["a", "b", "c"]
         }
         "#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let expected = "Enum Document";
             match schema.doc() {
                 Some(doc) => assert_eq!(doc, expected),
@@ -6672,7 +6740,7 @@ mod schema {
             "symbols": ["a", "b", "c"]
         }
         "#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             match schema.doc() {
                 None => (),
                 some => panic!("Expected None, got {some:?}"),
@@ -6687,7 +6755,7 @@ mod schema {
             "size": 10
         }
         "#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let expected = "Fixed Document";
             match schema.doc() {
                 Some(doc) => assert_eq!(doc, expected),
@@ -6701,7 +6769,7 @@ mod schema {
             "size": 10
         }
         "#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             match schema.doc() {
                 None => (),
                 some => panic!("Expected None, got {some:?}"),
@@ -6717,17 +6785,20 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3886_serialize_attributes() -> TestResult {
+        #[tokio::test]
+        async fn avro_3886_serialize_attributes() -> TestResult {
             let attributes = BTreeMap::from([
                 ("string_key".into(), "value".into()),
                 ("number_key".into(), 1.23.into()),
-                ("null_key".into(), Value::Null),
+                ("null_key".into(), serde_json::Value::Null),
                 (
                     "array_key".into(),
-                    Value::Array(vec![1.into(), 2.into(), 3.into()]),
+                    serde_json::Value::Array(vec![1.into(), 2.into(), 3.into()]),
                 ),
-                ("object_key".into(), Value::Object(Map::default())),
+                (
+                    "object_key".into(),
+                    serde_json::Value::Object(serde_json::Map::default()),
+                ),
             ]);
 
             // Test serialize enum attributes
@@ -6780,8 +6851,8 @@ mod schema {
 
         /// A test cases showing that names and namespaces can be constructed
         /// entirely by underscores.
-        #[test]
-        fn test_avro_3897_funny_valid_names_and_namespaces() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3897_funny_valid_names_and_namespaces() -> TestResult {
             for funny_name in ["_", "_._", "__._", "_.__", "_._._"] {
                 let name = Name::new(funny_name);
                 assert!(name.is_ok());
@@ -6789,8 +6860,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3896_decimal_schema() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3896_decimal_schema() -> TestResult {
             // bytes decimal, represented as native logical type.
             let schema = json!(
             {
@@ -6801,7 +6872,7 @@ mod schema {
               "precision": 9,
               "scale": 2
             });
-            let parse_result = Schema::parse(&schema)?;
+            let parse_result = Schema::parse(&schema).await?;
             assert!(matches!(
                 parse_result,
                 Schema::Decimal(DecimalSchema {
@@ -6818,15 +6889,15 @@ mod schema {
               "name": "LongDecimal",
               "logicalType": "decimal"
             });
-            let parse_result = Schema::parse(&schema)?;
+            let parse_result = Schema::parse(&schema).await?;
             // assert!(matches!(parse_result, Schema::Long));
             assert_eq!(parse_result, Schema::Long);
 
             Ok(())
         }
 
-        #[test]
-        fn avro_3896_uuid_schema_for_string() -> TestResult {
+        #[tokio::test]
+        async fn avro_3896_uuid_schema_for_string() -> TestResult {
             // string uuid, represents as native logical type.
             let schema = json!(
             {
@@ -6834,22 +6905,22 @@ mod schema {
               "name": "StringUUID",
               "logicalType": "uuid"
             });
-            let parse_result = Schema::parse(&schema)?;
+            let parse_result = Schema::parse(&schema).await?;
             assert_eq!(parse_result, Schema::Uuid);
 
             Ok(())
         }
 
-        #[test]
+        #[tokio::test]
         #[serial(serde_is_human_readable)]
-        fn avro_rs_53_uuid_with_fixed() -> TestResult {
+        async fn avro_rs_53_uuid_with_fixed() -> TestResult {
             #[derive(Debug, Serialize, Deserialize)]
             struct Comment {
                 id: Uuid,
             }
 
             impl AvroSchema for Comment {
-                fn get_schema() -> Schema {
+                async fn get_schema() -> Schema {
                     Schema::parse_str(
                         r#"{
                         "type" : "record",
@@ -6865,6 +6936,7 @@ mod schema {
                         } ]
                      }"#,
                     )
+                    .await
                     .expect("Invalid Comment Avro schema")
                 }
             }
@@ -6875,22 +6947,24 @@ mod schema {
             let mut buffer = Vec::new();
 
             // serialize the Uuid as String
-            util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
-            let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)?
+            crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
+            let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)
+                .await?
                 .write_ref(&payload, &mut buffer)?;
             assert_eq!(bytes, 47);
 
             // serialize the Uuid as Bytes
-            util::SERDE_HUMAN_READABLE.store(false, Ordering::Release);
-            let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)?
+            crate::util::SERDE_HUMAN_READABLE.store(false, Ordering::Release);
+            let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)
+                .await?
                 .write_ref(&payload, &mut buffer)?;
             assert_eq!(bytes, 27);
 
             Ok(())
         }
 
-        #[test]
-        fn avro_3926_uuid_schema_for_fixed_with_size_16() -> TestResult {
+        #[tokio::test]
+        async fn avro_3926_uuid_schema_for_fixed_with_size_16() -> TestResult {
             let schema = json!(
             {
                 "type": "fixed",
@@ -6898,7 +6972,7 @@ mod schema {
                 "size": 16,
                 "logicalType": "uuid"
             });
-            let parse_result = Schema::parse(&schema)?;
+            let parse_result = Schema::parse(&schema).await?;
             assert_eq!(parse_result, Schema::Uuid);
             assert_not_logged(
                 r#"Ignoring uuid logical type for a Fixed schema because its size (6) is not 16! Schema: Fixed(FixedSchema { name: Name { name: "FixedUUID", namespace: None }, aliases: None, doc: None, size: 6, attributes: {"logicalType": String("uuid")} })"#,
@@ -6907,8 +6981,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3926_uuid_schema_for_fixed_with_size_different_than_16() -> TestResult {
+        #[tokio::test]
+        async fn avro_3926_uuid_schema_for_fixed_with_size_different_than_16() -> TestResult {
             let schema = json!(
             {
                 "type": "fixed",
@@ -6916,7 +6990,7 @@ mod schema {
                 "size": 6,
                 "logicalType": "uuid"
             });
-            let parse_result = Schema::parse(&schema)?;
+            let parse_result = Schema::parse(&schema).await?;
 
             assert_eq!(
                 parse_result,
@@ -6936,8 +7010,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3896_timestamp_millis_schema() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3896_timestamp_millis_schema() -> TestResult {
             // long timestamp-millis, represents as native logical type.
             let schema = json!(
             {
@@ -6945,7 +7019,7 @@ mod schema {
               "name": "LongTimestampMillis",
               "logicalType": "timestamp-millis"
             });
-            let parse_result = Schema::parse(&schema)?;
+            let parse_result = Schema::parse(&schema).await?;
             assert_eq!(parse_result, Schema::TimestampMillis);
 
             // int timestamp-millis, represents as native complex type.
@@ -6955,14 +7029,14 @@ mod schema {
                 "name": "IntTimestampMillis",
                 "logicalType": "timestamp-millis"
             });
-            let parse_result = Schema::parse(&schema)?;
+            let parse_result = Schema::parse(&schema).await?;
             assert_eq!(parse_result, Schema::Int);
 
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3896_custom_bytes_schema() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3896_custom_bytes_schema() -> TestResult {
             // log type, represents as complex type.
             let schema = json!(
             {
@@ -6970,15 +7044,15 @@ mod schema {
                 "name": "BytesLog",
                 "logicalType": "custom"
             });
-            let parse_result = Schema::parse(&schema)?;
+            let parse_result = Schema::parse(&schema).await?;
             assert_eq!(parse_result, Schema::Bytes);
             assert_eq!(parse_result.custom_attributes(), None);
 
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3899_parse_decimal_type() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3899_parse_decimal_type() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
              "name": "InvalidDecimal",
@@ -6988,7 +7062,8 @@ mod schema {
              "precision": 2,
              "scale": 3
          }"#,
-            )?;
+            )
+            .await?;
             match schema {
                 Schema::Fixed(fixed_schema) => {
                     let attrs = fixed_schema.attributes;
@@ -7013,7 +7088,8 @@ mod schema {
              "precision": 3,
              "scale": 2
          }"#,
-            )?;
+            )
+            .await?;
             match schema {
                 Schema::Decimal(_) => {
                     assert_not_logged(
@@ -7026,8 +7102,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3920_serialize_record_with_custom_attributes() -> TestResult {
+        #[tokio::test]
+        async fn avro_3920_serialize_record_with_custom_attributes() -> TestResult {
             let expected = {
                 let mut lookup = BTreeMap::new();
                 lookup.insert("value".to_owned(), 0);
@@ -7059,13 +7135,13 @@ mod schema {
                 r#"{"aliases":["LinkedLongs"],"custom-attribute":"value","fields":[{"field-id":1,"name":"value","type":"long"}],"name":"LongList","type":"record"}"#,
                 &serialized
             );
-            assert_eq!(expected, Schema::parse_str(&serialized)?);
+            assert_eq!(expected, Schema::parse_str(&serialized).await?);
 
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3925_serialize_decimal_inner_fixed() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3925_serialize_decimal_inner_fixed() -> TestResult {
             let schema = Schema::Decimal(DecimalSchema {
                 precision: 36,
                 scale: 10,
@@ -7095,8 +7171,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3925_serialize_decimal_inner_bytes() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3925_serialize_decimal_inner_bytes() -> TestResult {
             let schema = Schema::Decimal(DecimalSchema {
                 precision: 36,
                 scale: 10,
@@ -7117,8 +7193,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3925_serialize_decimal_inner_invalid() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3925_serialize_decimal_inner_invalid() -> TestResult {
             let schema = Schema::Decimal(DecimalSchema {
                 precision: 36,
                 scale: 10,
@@ -7132,8 +7208,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3927_serialize_array_with_custom_attributes() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3927_serialize_array_with_custom_attributes() -> TestResult {
             let expected = Schema::array_with_attributes(
                 Schema::Long,
                 BTreeMap::from([("field-id".to_string(), "1".into())]),
@@ -7145,7 +7221,7 @@ mod schema {
                 r#"{"field-id":"1","items":"long","type":"array"}"#,
                 &serialized
             );
-            let actual_schema = Schema::parse_str(&serialized)?;
+            let actual_schema = Schema::parse_str(&serialized).await?;
             assert_eq!(expected, actual_schema);
             assert_eq!(
                 expected.custom_attributes(),
@@ -7155,8 +7231,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3927_serialize_map_with_custom_attributes() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3927_serialize_map_with_custom_attributes() -> TestResult {
             let expected = Schema::map_with_attributes(
                 Schema::Long,
                 BTreeMap::from([("field-id".to_string(), "1".into())]),
@@ -7168,7 +7244,7 @@ mod schema {
                 r#"{"field-id":"1","type":"map","values":"long"}"#,
                 &serialized
             );
-            let actual_schema = Schema::parse_str(&serialized)?;
+            let actual_schema = Schema::parse_str(&serialized).await?;
             assert_eq!(expected, actual_schema);
             assert_eq!(
                 expected.custom_attributes(),
@@ -7178,8 +7254,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3928_parse_int_based_schema_with_default() -> TestResult {
+        #[tokio::test]
+        async fn avro_3928_parse_int_based_schema_with_default() -> TestResult {
             let schema = r#"
         {
           "type": "record",
@@ -7191,7 +7267,7 @@ mod schema {
           } ]
         }"#;
 
-            match Schema::parse_str(schema)? {
+            match Schema::parse_str(schema).await? {
                 Schema::Record(record_schema) => {
                     assert_eq!(record_schema.fields.len(), 1);
                     let field = record_schema.fields.first().unwrap();
@@ -7208,8 +7284,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3946_union_with_single_type() -> TestResult {
+        #[tokio::test]
+        async fn avro_3946_union_with_single_type() -> TestResult {
             let schema = r#"
         {
           "type": "record",
@@ -7223,7 +7299,7 @@ mod schema {
           ]
         }"#;
 
-            let _ = Schema::parse_str(schema)?;
+            let _ = Schema::parse_str(schema).await?;
 
             assert_logged(
                 "Union schema with just one member! Consider dropping the union! \
@@ -7234,8 +7310,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3946_union_without_any_types() -> TestResult {
+        #[tokio::test]
+        async fn avro_3946_union_without_any_types() -> TestResult {
             let schema = r#"
         {
           "type": "record",
@@ -7249,7 +7325,7 @@ mod schema {
           ]
         }"#;
 
-            let _ = Schema::parse_str(schema)?;
+            let _ = Schema::parse_str(schema).await?;
 
             assert_logged(
                 "Union schemas should have at least two members! \
@@ -7260,8 +7336,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_3965_fixed_schema_with_default_bigger_than_size() -> TestResult {
+        #[tokio::test]
+        async fn avro_3965_fixed_schema_with_default_bigger_than_size() -> TestResult {
             match Schema::parse_str(
                 r#"{
                 "type": "fixed",
@@ -7269,7 +7345,9 @@ mod schema {
                 "size": 1,
                 "default": "123456789"
                }"#,
-            ) {
+            )
+            .await
+            {
                 Ok(_schema) => panic!("Must fail!"),
                 Err(err) => {
                     assert_eq!(
@@ -7282,8 +7360,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_4004_canonical_form_strip_logical_types() -> TestResult {
+        #[tokio::test]
+        async fn avro_4004_canonical_form_strip_logical_types() -> TestResult {
             let schema_str = r#"
       {
         "type": "record",
@@ -7295,7 +7373,7 @@ mod schema {
         ]
     }"#;
 
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let canonical_form = schema.canonical_form();
             let fp_rabin = schema.fingerprint::<Rabin>();
             assert_eq!(
@@ -7306,8 +7384,8 @@ mod schema {
             Ok(())
         }
 
-        #[test]
-        fn avro_4055_should_fail_to_parse_invalid_schema() -> TestResult {
+        #[tokio::test]
+        async fn avro_4055_should_fail_to_parse_invalid_schema() -> TestResult {
             // This is invalid because the record type should be inside the type field.
             let invalid_schema_str = r#"
         {
@@ -7329,7 +7407,7 @@ mod schema {
         ]
         }"#;
 
-            let schema = Schema::parse_str(invalid_schema_str);
+            let schema = Schema::parse_str(invalid_schema_str).await;
             assert!(schema.is_err());
             assert_eq!(
                 schema.unwrap_err().to_string(),
@@ -7358,7 +7436,7 @@ mod schema {
                 }
             ]
         }"#;
-            let schema = Schema::parse_str(valid_schema);
+            let schema = Schema::parse_str(valid_schema).await;
             assert!(schema.is_ok());
 
             Ok(())

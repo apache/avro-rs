@@ -272,7 +272,7 @@ mod schema_equality {
     #[allow(non_snake_case)]
     mod tests {
         use super::*;
-        use crate::schema::{Name, RecordFieldOrder};
+        use crate::schema::tokio::{Name, RecordFieldOrder};
         use apache_avro_test_helper::TestResult;
         use serde_json::Value;
         use std::collections::BTreeMap;

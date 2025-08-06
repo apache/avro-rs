@@ -23,13 +23,16 @@
     sync!();
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
+      crate::codec::tokio => crate::codec::sync,
       crate::decimal::tokio => crate::decimal::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
       crate::schema::tokio => crate::schema::sync,
+      crate::reader::tokio => crate::reader::sync,
       crate::util::tokio => crate::util::sync,
       crate::types::tokio => crate::types::sync,
+      crate::writer::tokio => crate::writer::sync,
       #[tokio::test] => #[test]
     );
   }
@@ -125,7 +128,7 @@ mod bigdecimal {
                 result.extend_from_slice(as_slice);
 
                 let deserialize_big_decimal: Result<BigDecimal, Error> =
-                    deserialize_big_decimal(&result);
+                    deserialize_big_decimal(&result).await;
                 assert!(
                     deserialize_big_decimal.is_ok(),
                     "can't deserialize for iter {iter}"
@@ -142,7 +145,7 @@ mod bigdecimal {
             result.extend_from_slice(as_slice);
 
             let deserialize_big_decimal: Result<BigDecimal, Error> =
-                deserialize_big_decimal(&result);
+                deserialize_big_decimal(&result).await;
             assert!(
                 deserialize_big_decimal.is_ok(),
                 "can't deserialize for zero"
@@ -171,7 +174,7 @@ mod bigdecimal {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
 
             // build record with big decimal value
             let mut record = Record::new(&schema).unwrap();
@@ -186,12 +189,12 @@ mod bigdecimal {
                 .writer(Vec::new())
                 .build();
 
-            writer.append(record.clone())?;
+            writer.append(record.clone()).await?;
             writer.flush()?;
 
             // read record
             let wrote_data = writer.into_inner()?;
-            let mut reader = Reader::new(&wrote_data[..])?;
+            let mut reader = Reader::new(&wrote_data[..]).await?;
 
             let value = reader.next().await.unwrap()?;
 
@@ -215,7 +218,7 @@ mod bigdecimal {
             // Open file generated with Java code to ensure compatibility
             // with Java big decimal logical type.
             let file: File = File::open("./tests/bigdec.avro")?;
-            let mut reader = Reader::new(BufReader::new(&file))?;
+            let mut reader = Reader::new(BufReader::new(&file)).await?;
             let next_element = reader.next().await;
             assert!(next_element.is_some());
             let value = next_element.unwrap()?;

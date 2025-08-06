@@ -129,7 +129,7 @@
 //! "#;
 //!
 //! // if the schema is not valid, this function will return an error
-//! let schema = Schema::parse_str(raw_schema).unwrap();
+//! let schema = Schema::parse_str(raw_schema).await.unwrap();
 //!
 //! // schemas can be printed for debugging
 //! println!("{:?}", schema);
@@ -206,7 +206,7 @@
 //! #         ]
 //! #     }
 //! # "#;
-//! # let schema = Schema::parse_str(raw_schema).unwrap();
+//! # let schema = Schema::parse_str(raw_schema).await.unwrap();
 //! // a writer needs a schema and something to write to
 //! let mut writer = Writer::new(&schema, Vec::new());
 //!
@@ -261,7 +261,7 @@
 //! #         ]
 //! #     }
 //! # "#;
-//! # let schema = Schema::parse_str(raw_schema).unwrap();
+//! # let schema = Schema::parse_str(raw_schema).await.unwrap();
 //! // a writer needs a schema and something to write to
 //! let mut writer = Writer::new(&schema, Vec::new());
 //!
@@ -326,7 +326,7 @@
 //! #         ]
 //! #     }
 //! # "#;
-//! # let schema = Schema::parse_str(raw_schema).unwrap();
+//! # let schema = Schema::parse_str(raw_schema).await.unwrap();
 //! let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default()));
 //! ```
 //!
@@ -352,7 +352,7 @@
 //! #         ]
 //! #     }
 //! # "#;
-//! # let schema = Schema::parse_str(raw_schema).unwrap();
+//! # let schema = Schema::parse_str(raw_schema).await.unwrap();
 //! # let mut writer = Writer::new(&schema, Vec::new());
 //! # let mut record = Record::new(writer.schema()).unwrap();
 //! # record.put("a", 27i64);
@@ -381,7 +381,7 @@
 //! #         ]
 //! #     }
 //! # "#;
-//! # let writer_schema = Schema::parse_str(writer_raw_schema).unwrap();
+//! # let writer_schema = Schema::parse_str(writer_raw_schema).await.unwrap();
 //! # let mut writer = Writer::new(&writer_schema, Vec::new());
 //! # let mut record = Record::new(writer.schema()).unwrap();
 //! # record.put("a", 27i64);
@@ -401,7 +401,7 @@
 //!     }
 //! "#;
 //!
-//! let reader_schema = Schema::parse_str(reader_raw_schema).unwrap();
+//! let reader_schema = Schema::parse_str(reader_raw_schema).await.unwrap();
 //!
 //! // reader creation can fail in case the input to read from is not Avro-compatible or malformed
 //! let reader = Reader::with_schema(&reader_schema, &input[..]).unwrap();
@@ -440,8 +440,8 @@
 //! #         ]
 //! #     }
 //! # "#;
-//! # let schema = Schema::parse_str(raw_schema).unwrap();
-//! # let schema = Schema::parse_str(raw_schema).unwrap();
+//! # let schema = Schema::parse_str(raw_schema).await.unwrap();
+//! # let schema = Schema::parse_str(raw_schema).await.unwrap();
 //! # let mut writer = Writer::new(&schema, Vec::new());
 //! # let mut record = Record::new(writer.schema()).unwrap();
 //! # record.put("a", 27i64);
@@ -486,7 +486,7 @@
 //! #         ]
 //! #     }
 //! # "#;
-//! # let schema = Schema::parse_str(raw_schema).unwrap();
+//! # let schema = Schema::parse_str(raw_schema).await.unwrap();
 //! # let mut writer = Writer::new(&schema, Vec::new());
 //! # let test = Test {
 //! #     a: 27,
@@ -529,7 +529,7 @@
 //!         }
 //!     "#;
 //!
-//!     let schema = Schema::parse_str(raw_schema)?;
+//!     let schema = Schema::parse_str(raw_schema).await?;
 //!
 //!     println!("{:?}", schema);
 //!
@@ -655,7 +655,7 @@
 //!     }
 //!     "#;
 //!
-//!     let schema = Schema::parse_str(raw_schema)?;
+//!     let schema = Schema::parse_str(raw_schema).await?;
 //!
 //!     println!("{:?}", schema);
 //!
@@ -715,7 +715,7 @@
 //!             ]
 //!         }
 //!     "#;
-//!     let schema = Schema::parse_str(raw_schema)?;
+//!     let schema = Schema::parse_str(raw_schema).await?;
 //!     println!("{}", schema.fingerprint::<Sha256>());
 //!     println!("{}", schema.fingerprint::<Md5>());
 //!     println!("{}", schema.fingerprint::<Rabin>());
@@ -766,8 +766,8 @@
 //! ```rust
 //! use apache_avro::{Schema, schema_compatibility::SchemaCompatibility};
 //!
-//! let writers_schema = Schema::parse_str(r#"{"type": "array", "items":"int"}"#).unwrap();
-//! let readers_schema = Schema::parse_str(r#"{"type": "array", "items":"long"}"#).unwrap();
+//! let writers_schema = Schema::parse_str(r#"{"type": "array", "items":"int"}"#).await.unwrap();
+//! let readers_schema = Schema::parse_str(r#"{"type": "array", "items":"long"}"#).await.unwrap();
 //! assert!(SchemaCompatibility::can_read(&writers_schema, &readers_schema).is_ok());
 //! ```
 //!
@@ -779,8 +779,8 @@
 //! ```rust
 //! use apache_avro::{Schema, schema_compatibility::SchemaCompatibility};
 //!
-//! let writers_schema = Schema::parse_str(r#"{"type": "array", "items":"long"}"#).unwrap();
-//! let readers_schema = Schema::parse_str(r#"{"type": "array", "items":"int"}"#).unwrap();
+//! let writers_schema = Schema::parse_str(r#"{"type": "array", "items":"long"}"#).await.unwrap();
+//! let readers_schema = Schema::parse_str(r#"{"type": "array", "items":"int"}"#).await.unwrap();
 //! assert!(SchemaCompatibility::can_read(&writers_schema, &readers_schema).is_err());
 //! ```
 //! ## Custom names validators
@@ -959,11 +959,30 @@ pub type AsyncAvroResult<T> = Result<T, AsyncError>;
 #[cfg(feature = "sync")]
 pub type AvroResult<T> = Result<T, Error>;
 
+#[synca::synca(
+  #[cfg(feature = "tokio")]
+  pub mod tokio_tests { },
+  #[cfg(feature = "sync")]
+  pub mod sync_tests {
+    sync!();
+    replace!(
+      crate::codec::tokio => crate::codec::sync,
+      crate::reader::tokio => crate::reader::sync,
+      crate::schema::tokio => crate::schema::sync,
+      crate::types::tokio => crate::types::sync,
+      crate::writer::tokio => crate::writer::sync,
+      #[tokio::test] => #[test]
+    );
+  }
+)]
 #[cfg(test)]
 mod tests {
     use crate::{
-        Codec, Reader, Schema, Writer, from_avro_datum,
+        codec::tokio::Codec,
+        reader::tokio::{Reader, from_avro_datum},
+        schema::tokio::Schema,
         types::tokio::{Record, Value},
+        writer::tokio::Writer,
     };
     use pretty_assertions::assert_eq;
 
@@ -999,13 +1018,13 @@ mod tests {
             ]
         }
     "#;
-        let writer_schema = Schema::parse_str(writer_raw_schema).unwrap();
-        let reader_schema = Schema::parse_str(reader_raw_schema).unwrap();
+        let writer_schema = Schema::parse_str(writer_raw_schema).await.unwrap();
+        let reader_schema = Schema::parse_str(reader_raw_schema).await.unwrap();
         let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null);
         let mut record = Record::new(writer.schema()).unwrap();
         record.put("a", 27i64);
         record.put("b", "foo");
-        writer.append(record).unwrap();
+        writer.append(record).await.unwrap();
         let input = writer.into_inner().unwrap();
         let mut reader = Reader::with_schema(&reader_schema, &input[..])
             .await
@@ -1022,8 +1041,8 @@ mod tests {
     }
 
     //TODO: move where it fits better
-    #[test]
-    fn test_enum_string_value() {
+    #[tokio::test]
+    async fn test_enum_string_value() {
         let raw_schema = r#"
         {
             "type": "record",
@@ -1043,15 +1062,15 @@ mod tests {
             ]
         }
     "#;
-        let schema = Schema::parse_str(raw_schema).unwrap();
+        let schema = Schema::parse_str(raw_schema).await.unwrap();
         let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Null);
         let mut record = Record::new(writer.schema()).unwrap();
         record.put("a", 27i64);
         record.put("b", "foo");
         record.put("c", "clubs");
-        writer.append(record).unwrap();
+        writer.append(record).await.unwrap();
         let input = writer.into_inner().unwrap();
-        let mut reader = Reader::with_schema(&schema, &input[..]).unwrap();
+        let mut reader = Reader::with_schema(&schema, &input[..]).await.unwrap();
         assert_eq!(
             reader.next().unwrap().unwrap(),
             Value::Record(vec![
@@ -1085,15 +1104,15 @@ mod tests {
             ]
         }
     "#;
-        let writer_schema = Schema::parse_str(writer_raw_schema).unwrap();
+        let writer_schema = Schema::parse_str(writer_raw_schema).await.unwrap();
         let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null);
         let mut record = Record::new(writer.schema()).unwrap();
         record.put("a", 27i64);
         record.put("b", "foo");
         record.put("c", "clubs");
-        writer.append(record).unwrap();
+        writer.append(record).await.unwrap();
         let input = writer.into_inner().unwrap();
-        let mut reader = Reader::new(&input[..]).unwrap();
+        let mut reader = Reader::new(&input[..]).await.unwrap();
         assert_eq!(
             reader.next().await.unwrap().unwrap(),
             Value::Record(vec![
@@ -1104,8 +1123,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_illformed_length() {
+    #[tokio::test]
+    async fn test_illformed_length() {
         let raw_schema = r#"
         {
             "type": "record",
@@ -1117,12 +1136,12 @@ mod tests {
         }
     "#;
 
-        let schema = Schema::parse_str(raw_schema).unwrap();
+        let schema = Schema::parse_str(raw_schema).await.unwrap();
 
         // Would allocated 18446744073709551605 bytes
         let illformed: &[u8] = &[0x3e, 0x15, 0xff, 0x1f, 0x15, 0xff];
 
-        let value = from_avro_datum(&schema, &mut &*illformed, None);
+        let value = from_avro_datum(&schema, &mut &*illformed, None).await;
         assert!(value.is_err());
     }
 }

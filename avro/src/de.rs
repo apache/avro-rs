@@ -29,9 +29,12 @@
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
+      crate::ser::tokio => crate::ser::sync,
       crate::schema::tokio => crate::schema::sync,
+      crate::reader::tokio => crate::reader::sync,
       crate::util::tokio => crate::util::sync,
       crate::types::tokio => crate::types::sync,
+      crate::writer::tokio => crate::writer::sync,
       #[tokio::test] => #[test]
     );
   }
@@ -796,8 +799,8 @@ mod de {
 
     #[cfg(test)]
     mod tests {
-        use crate::ser::tokio::to_value;
         use crate::reader::tokio::from_avro_datum;
+        use crate::ser::tokio::to_value;
         use crate::writer::tokio::to_avro_datum;
         use num_bigint::BigInt;
         use pretty_assertions::assert_eq;
@@ -807,7 +810,6 @@ mod de {
         use uuid::Uuid;
 
         use apache_avro_test_helper::TestResult;
-        use crate::de::tokio::from_value;
 
         use crate::decimal::tokio::Decimal;
         use crate::schema::tokio::Schema;
