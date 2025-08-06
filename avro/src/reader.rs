@@ -381,7 +381,8 @@ mod reader {
         should_resolve_schema: bool,
     }
 
-    impl<'a, R: AvroRead + Unpin> Reader<'a, R> {
+    impl<'a, R> Reader<'a, R>
+        where R: AvroRead + Unpin {
         /// Creates a `Reader` given something implementing the `io::Read` trait to read from.
         /// No reader `Schema` will be set.
         ///
@@ -486,8 +487,8 @@ mod reader {
     //     }
     // }
 
-    #[cfg(feature = "sync")]
-    impl<R: std::io::Read> Iterator for Reader<'_, R> {
+    #[synca::cfg(sync)]
+    impl<R: AvroRead + Unpin> Iterator for Reader<'_, R> {
         type Item = AvroResult<Value>;
 
         fn next(&mut self) -> Option<Self::Item> {
