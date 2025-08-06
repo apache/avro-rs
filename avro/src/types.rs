@@ -771,15 +771,15 @@ mod types {
                     ..
                 }) => self.resolve_enum(symbols, default, field_default),
                 Schema::Array(ref inner) => {
-                    self.resolve_array(&inner.items, names, enclosing_namespace)
+                    Box::pin(self.resolve_array(&inner.items, names, enclosing_namespace))
                         .await
                 }
                 Schema::Map(ref inner) => {
-                    self.resolve_map(&inner.types, names, enclosing_namespace)
+                    Box::pin(self.resolve_map(&inner.types, names, enclosing_namespace))
                         .await
                 }
                 Schema::Record(RecordSchema { ref fields, .. }) => {
-                    self.resolve_record(fields, names, enclosing_namespace)
+                    Box::pin(self.resolve_record(fields, names, enclosing_namespace))
                         .await
                 }
                 Schema::Decimal(DecimalSchema {
@@ -1154,8 +1154,8 @@ mod types {
                 Value::Array(items) => {
                     let mut resolved_values = Vec::with_capacity(items.len());
                     for item in items.into_iter() {
-                        let resolved = item
-                            .resolve_internal(schema, names, enclosing_namespace, &None)
+                        let resolved = Box::pin(item
+                            .resolve_internal(schema, names, enclosing_namespace, &None))
                             .await?;
                         resolved_values.push(resolved);
                     }
@@ -1342,7 +1342,7 @@ mod types {
               }
             ]
           }"#,
-            )?;
+            ).await?;
             let value = Value::Record(vec![(
                 "outer_field_1".into(),
                 Value::Record(vec![
@@ -1498,13 +1498,11 @@ mod types {
 
             for (value, schema, valid, expected_err_message) in value_schema_valid.into_iter() {
                 let err_message =
-                    value.validate_internal::<Schema>(&schema, &HashMap::default(), &None);
+                    value.validate_internal::<Schema>(&schema, &HashMap::default(), &None).await;
                 assert_eq!(valid, err_message.is_none());
                 if !valid {
                     let full_err_message = format!(
-                        "Invalid value: {:?} for schema: {:?}. Reason: {}",
-                        value,
-                        schema,
+                        "Invalid value: {value:?} for schema: {schema:?}. Reason: {}",
                         err_message.unwrap()
                     );
                     assert_eq!(expected_err_message, full_err_message);

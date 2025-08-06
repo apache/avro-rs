@@ -176,19 +176,23 @@ mod decode {
                 encode_long(len as i64, &mut reader)?;
                 reader.extend_from_slice(&bytes);
 
-                let decode_from_string = async |reader| match decode_internal(
-                    &Schema::String,
-                    names,
-                    enclosing_namespace,
-                    reader,
-                )
-                .await?
-                {
-                    Value::String(ref s) => {
-                        Uuid::from_str(s).map_err(|e| Details::ConvertStrToUuid(e).into())
+                async fn decode_from_string<R, S>(reader: &mut R, names: &HashMap<Name, S>, enclosing_namespace: &Namespace) -> AvroResult<Uuid>
+                    where R: AvroRead + Unpin, S: Borrow<Schema> {
+
+                    match decode_internal(
+                        &Schema::String,
+                        names,
+                        enclosing_namespace,
+                        reader,
+                    )
+                        .await?
+                    {
+                        Value::String(ref s) => {
+                            Uuid::from_str(s).map_err(|e| Details::ConvertStrToUuid(e).into())
+                        }
+                        value => Err(Error::new(Details::GetUuidFromStringValue(value))),
                     }
-                    value => Err(Error::new(Details::GetUuidFromStringValue(value))),
-                };
+                }
 
                 let uuid: Uuid = if len == 16 {
                     // most probably a Fixed schema
@@ -214,15 +218,15 @@ mod decode {
                                 }
                                 Uuid::from_slice(bytes).map_err(Details::ConvertSliceToUuid)?
                             }
-                            _ => Box::pin(decode_from_string(&mut reader.as_slice())).await?,
+                            _ => Box::pin(decode_from_string(&mut reader.as_slice(), names, enclosing_namespace)).await?,
                         }
                     } else {
                         // try to decode as string
-                        Box::pin(decode_from_string(&mut reader.as_slice())).await?
+                        Box::pin(decode_from_string(&mut reader.as_slice(), names, enclosing_namespace)).await?
                     }
                 } else {
                     // definitely a string
-                    Box::pin(decode_from_string(&mut reader.as_slice())).await?
+                    Box::pin(decode_from_string(&mut reader.as_slice(), names, enclosing_namespace)).await?
                 };
                 Ok(Value::Uuid(uuid))
             }

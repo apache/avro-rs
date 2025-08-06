@@ -58,8 +58,6 @@ mod writer {
         ser_schema::tokio::SchemaAwareWriteSerializer,
         types::tokio::Value,
     };
-    #[cfg(feature = "tokio")]
-    use futures::TryFutureExt;
     use serde::Serialize;
     use std::{
         collections::HashMap, io::Write, marker::PhantomData, mem::ManuallyDrop,
