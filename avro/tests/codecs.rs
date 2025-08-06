@@ -17,7 +17,7 @@
 
 use apache_avro::{
     Codec, DeflateSettings, Reader, Schema, Writer,
-    types::{Record, Value},
+    types::sync::{Record, Value},
 };
 use apache_avro_test_helper::TestResult;
 use miniz_oxide::deflate::CompressionLevel;

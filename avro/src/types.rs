@@ -1617,7 +1617,7 @@ mod types {
             });
 
             let value = Value::Enum(0, "spades".to_string());
-            assert!(!value.validate(&other_schema));
+            assert!(!value.validate(&other_schema).await);
             assert_logged(
                 format!(
                     "Invalid value: {:?} for schema: {:?}. Reason: {}",

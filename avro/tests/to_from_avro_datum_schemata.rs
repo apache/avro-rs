@@ -17,7 +17,7 @@
 
 use apache_avro::{
     Codec, Reader, Schema, Writer, from_avro_datum_reader_schemata, from_avro_datum_schemata,
-    to_avro_datum_schemata, types::Value,
+    to_avro_datum_schemata, types::sync::Value,
 };
 use apache_avro_test_helper::{TestResult, init};
 

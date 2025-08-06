@@ -1514,6 +1514,7 @@ mod writer {
             c: Vec<String>,
         }
 
+        #[cfg_attr(feature = "tokio", async_trait::async_trait)]
         impl AvroSchema for TestSingleObjectWriter {
             async fn get_schema() -> Schema {
                 let schema = r#"
@@ -1565,7 +1566,7 @@ mod writer {
                 c: vec!["cat".into(), "dog".into()],
             };
             let mut writer = GenericSingleObjectWriter::new_with_capacity(
-                &TestSingleObjectWriter::get_schema(),
+                &TestSingleObjectWriter::get_schema().await,
                 1024,
             )
             .expect("Should resolve schema");
@@ -1581,14 +1582,14 @@ mod writer {
             assert_eq!(buf[1], 0x01);
             assert_eq!(
                 &buf[2..10],
-                &TestSingleObjectWriter::get_schema()
+                &TestSingleObjectWriter::get_schema().await
                     .fingerprint::<Rabin>()
                     .bytes[..]
             );
             let mut msg_binary = Vec::new();
             encode(
                 &value,
-                &TestSingleObjectWriter::get_schema(),
+                &TestSingleObjectWriter::get_schema().await,
                 &mut msg_binary,
             )
             .expect("encode should have failed by here as a dependency of any writing");
@@ -1608,7 +1609,7 @@ mod writer {
             let schema_uuid = Uuid::parse_str("b2f1cf00-0434-013e-439a-125eb8485a5f")?;
             let header_builder = GlueSchemaUuidHeader::from_uuid(schema_uuid);
             let mut writer = GenericSingleObjectWriter::new_with_capacity_and_header_builder(
-                &TestSingleObjectWriter::get_schema(),
+                &TestSingleObjectWriter::get_schema().await,
                 1024,
                 header_builder,
             )
@@ -1638,12 +1639,12 @@ mod writer {
             let mut buf3: Vec<u8> = Vec::new();
 
             let mut generic_writer = GenericSingleObjectWriter::new_with_capacity(
-                &TestSingleObjectWriter::get_schema(),
+                &TestSingleObjectWriter::get_schema().await,
                 1024,
             )
             .expect("Should resolve schema");
             let mut specific_writer =
-                SpecificSingleObjectWriter::<TestSingleObjectWriter>::with_capacity(1024)
+                SpecificSingleObjectWriter::<TestSingleObjectWriter>::with_capacity(1024).await
                     .expect("Resolved should pass");
             specific_writer
                 .write(obj1.clone(), &mut buf1)

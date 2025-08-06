@@ -104,3 +104,103 @@ rstest = { default-features = false, version = "0.26.1" }
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[[example]]
+name = "benchmark"
+path = "examples/benchmark.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "generate_interop_data"
+path = "examples/generate_interop_data.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "specific_single_object"
+path = "examples/specific_single_object.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "test_interop_data"
+path = "examples/test_interop_data.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "test_interop_single_object_encoding"
+path = "examples/test_interop_single_object_encoding.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "to_value"
+path = "examples/to_value.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "append_to_existing"
+path = "tests/append_to_existing.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "avro-3786"
+path = "tests/avro-3786.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "avro-3787"
+path = "tests/avro-3787.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "avro-rs-219"
+path = "tests/avro-rs-219.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "avro-rs-226"
+path = "tests/avro-rs-226.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "big_decimal"
+path = "tests/big_decimal.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "codecs"
+path = "tests/codecs.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "io"
+path = "tests/io.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "schema"
+path = "tests/schema.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "shared"
+path = "tests/shared.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "to_from_avro_datum_schemata"
+path = "tests/to_from_avro_datum_schemata.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "union_schema"
+path = "tests/union_schema.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "uuids"
+path = "tests/uuids.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "validatrs"
+path = "tests/validators.rs"
+required-features = ["sync"]
