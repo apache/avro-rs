@@ -141,11 +141,11 @@ mod headers {
     #[cfg(test)]
     mod test {
         use super::*;
-        use crate::{Error, error::tokio::Details};
+        use crate::error::tokio::{Error, Details};
         use apache_avro_test_helper::TestResult;
 
-        #[test]
-        fn test_rabin_fingerprint_header() -> TestResult {
+        #[tokio::test]
+        async fn test_rabin_fingerprint_header() -> TestResult {
             let schema_str = r#"
             {
             "type": "record",
@@ -163,7 +163,7 @@ mod headers {
             ]
             }
             "#;
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             let header_builder = RabinFingerprintHeader::from_schema(&schema);
             let computed_header = header_builder.build_header();
             let expected_header: Vec<u8> = vec![195, 1, 232, 198, 194, 12, 97, 95, 44, 71];

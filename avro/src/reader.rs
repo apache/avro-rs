@@ -32,6 +32,7 @@
       crate::schema::tokio => crate::schema::sync,
       crate::util::tokio => crate::util::sync,
       crate::types::tokio => crate::types::sync,
+      crate::writer::tokio => crate::writer::sync,
       #[tokio::test] => #[test]
     );
   }
@@ -382,7 +383,9 @@ mod reader {
     }
 
     impl<'a, R> Reader<'a, R>
-        where R: AvroRead + Unpin {
+    where
+        R: AvroRead + Unpin,
+    {
         /// Creates a `Reader` given something implementing the `io::Read` trait to read from.
         /// No reader `Schema` will be set.
         ///
@@ -634,9 +637,9 @@ mod reader {
     where
         T: AvroSchema,
     {
-        pub fn new() -> AvroResult<SpecificSingleObjectReader<T>> {
+        pub async fn new() -> AvroResult<SpecificSingleObjectReader<T>> {
             Ok(SpecificSingleObjectReader {
-                inner: GenericSingleObjectReader::new(T::get_schema())?,
+                inner: GenericSingleObjectReader::new(T::get_schema().await)?,
                 _model: PhantomData,
             })
         }
@@ -674,7 +677,10 @@ mod reader {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::{encode::encode, headers::GlueSchemaUuidHeader, rabin::Rabin, types::Record};
+        use crate::{
+            encode::tokio::encode, headers::tokio::GlueSchemaUuidHeader, rabin::Rabin,
+            types::tokio::Record,
+        };
         use apache_avro_test_helper::TestResult;
         use pretty_assertions::assert_eq;
         use serde::Deserialize;
@@ -719,7 +725,7 @@ mod reader {
 
         #[tokio::test]
         async fn test_from_avro_datum() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA)?;
+            let schema = Schema::parse_str(SCHEMA).await?;
             let mut encoded: &'static [u8] = &[54, 6, 102, 111, 111];
 
             let mut record = Record::new(&schema).unwrap();
@@ -727,7 +733,10 @@ mod reader {
             record.put("b", "foo");
             let expected = record.into();
 
-            assert_eq!(from_avro_datum(&schema, &mut encoded, None)?, expected);
+            assert_eq!(
+                from_avro_datum(&schema, &mut encoded, None).await?,
+                expected
+            );
 
             Ok(())
         }
@@ -776,7 +785,7 @@ mod reader {
                 a_nullable_string: Option<String>,
             }
 
-            let schema = Schema::parse_str(TEST_RECORD_SCHEMA_3240)?;
+            let schema = Schema::parse_str(TEST_RECORD_SCHEMA_3240).await?;
             let mut encoded: &'static [u8] = &[54, 6, 102, 111, 111];
 
             let expected_record: TestRecord3240 = TestRecord3240 {
@@ -786,7 +795,7 @@ mod reader {
                 a_nullable_string: None,
             };
 
-            let avro_datum = from_avro_datum(&schema, &mut encoded, None)?;
+            let avro_datum = from_avro_datum(&schema, &mut encoded, None).await?;
             let parsed_record: TestRecord3240 = match &avro_datum {
                 Value::Record(_) => from_value::<TestRecord3240>(&avro_datum)?,
                 unexpected => {
@@ -801,11 +810,11 @@ mod reader {
 
         #[tokio::test]
         async fn test_null_union() -> TestResult {
-            let schema = Schema::parse_str(UNION_SCHEMA)?;
+            let schema = Schema::parse_str(UNION_SCHEMA).await?;
             let mut encoded: &'static [u8] = &[2, 0];
 
             assert_eq!(
-                from_avro_datum(&schema, &mut encoded, None)?,
+                from_avro_datum(&schema, &mut encoded, None).await?,
                 Value::Union(1, Box::new(Value::Long(0)))
             );
 
@@ -814,8 +823,8 @@ mod reader {
 
         #[tokio::test]
         async fn test_reader_iterator() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA)?;
-            let reader = Reader::with_schema(&schema, ENCODED)?;
+            let schema = Schema::parse_str(SCHEMA).await?;
+            let reader = Reader::with_schema(&schema, ENCODED).await?;
 
             let mut record1 = Record::new(&schema).unwrap();
             record1.put("a", 27i64);
@@ -836,16 +845,16 @@ mod reader {
 
         #[tokio::test]
         async fn test_reader_invalid_header() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA)?;
+            let schema = Schema::parse_str(SCHEMA).await?;
             let invalid = ENCODED.iter().copied().skip(1).collect::<Vec<u8>>();
-            assert!(Reader::with_schema(&schema, &invalid[..]).is_err());
+            assert!(Reader::with_schema(&schema, &invalid[..]).await.is_err());
 
             Ok(())
         }
 
         #[tokio::test]
         async fn test_reader_invalid_block() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA)?;
+            let schema = Schema::parse_str(SCHEMA).await?;
             let invalid = ENCODED
                 .iter()
                 .copied()
@@ -855,7 +864,7 @@ mod reader {
                 .into_iter()
                 .rev()
                 .collect::<Vec<u8>>();
-            let reader = Reader::with_schema(&schema, &invalid[..])?;
+            let reader = Reader::with_schema(&schema, &invalid[..]).await?;
             for value in reader {
                 assert!(value.is_err());
             }
@@ -866,7 +875,7 @@ mod reader {
         #[tokio::test]
         async fn test_reader_empty_buffer() -> TestResult {
             let empty = Cursor::new(Vec::new());
-            assert!(Reader::new(empty).is_err());
+            assert!(Reader::new(empty).await.is_err());
 
             Ok(())
         }
@@ -874,7 +883,7 @@ mod reader {
         #[tokio::test]
         async fn test_reader_only_header() -> TestResult {
             let invalid = ENCODED.iter().copied().take(165).collect::<Vec<u8>>();
-            let reader = Reader::new(&invalid[..])?;
+            let reader = Reader::new(&invalid[..]).await?;
             for value in reader {
                 assert!(value.is_err());
             }
@@ -884,9 +893,9 @@ mod reader {
 
         #[tokio::test]
         async fn test_avro_3405_read_user_metadata_success() -> TestResult {
-            use crate::writer::Writer;
+            use crate::writer::tokio::Writer;
 
-            let schema = Schema::parse_str(SCHEMA)?;
+            let schema = Schema::parse_str(SCHEMA).await?;
             let mut writer = Writer::new(&schema, Vec::new());
 
             let mut user_meta_data: HashMap<String, Vec<u8>> = HashMap::new();
@@ -905,12 +914,12 @@ mod reader {
             record.put("a", 27i64);
             record.put("b", "foo");
 
-            writer.append(record.clone())?;
-            writer.append(record.clone())?;
+            writer.append(record.clone()).await?;
+            writer.append(record.clone()).await?;
             writer.flush()?;
             let result = writer.into_inner()?;
 
-            let reader = Reader::new(&result[..])?;
+            let reader = Reader::new(&result[..]).await?;
             assert_eq!(reader.user_metadata(), &user_meta_data);
 
             Ok(())
@@ -923,8 +932,11 @@ mod reader {
             c: Vec<String>,
         }
 
+        #[synca::cfg(tokio)]
+        use async_trait::async_trait;
+        #[cfg_attr(feature = "tokio", async_trait)]
         impl AvroSchema for TestSingleObjectReader {
-            fn get_schema() -> Schema {
+            async fn get_schema() -> Schema {
                 let schema = r#"
             {
                 "type":"record",
@@ -948,7 +960,7 @@ mod reader {
                 ]
             }
             "#;
-                Schema::parse_str(schema).unwrap()
+                Schema::parse_str(schema).await.unwrap()
             }
         }
 
@@ -1007,21 +1019,23 @@ mod reader {
             to_read.extend_from_slice(&[0xC3, 0x01]);
             to_read.extend_from_slice(
                 &TestSingleObjectReader::get_schema()
+                    .await
                     .fingerprint::<Rabin>()
                     .bytes[..],
             );
             encode(
                 &obj.clone().into(),
-                &TestSingleObjectReader::get_schema(),
+                &TestSingleObjectReader::get_schema().await,
                 &mut to_read,
             )
             .expect("Encode should succeed");
             let mut to_read = &to_read[..];
             let generic_reader =
-                GenericSingleObjectReader::new(TestSingleObjectReader::get_schema())
+                GenericSingleObjectReader::new(TestSingleObjectReader::get_schema().await)
                     .expect("Schema should resolve");
             let val = generic_reader
                 .read_value(&mut to_read)
+                .await
                 .expect("Should read");
             let expected_value: Value = obj.into();
             assert_eq!(expected_value, val);
@@ -1041,22 +1055,24 @@ mod reader {
             let mut to_read_2 = Vec::<u8>::new();
             to_read_2.extend_from_slice(
                 &TestSingleObjectReader::get_schema()
+                    .await
                     .fingerprint::<Rabin>()
                     .bytes[..],
             );
             let mut to_read_3 = Vec::<u8>::new();
             encode(
                 &obj.clone().into(),
-                &TestSingleObjectReader::get_schema(),
+                &TestSingleObjectReader::get_schema().await,
                 &mut to_read_3,
             )
             .expect("Encode should succeed");
             let mut to_read = (&to_read_1[..]).chain(&to_read_2[..]).chain(&to_read_3[..]);
             let generic_reader =
-                GenericSingleObjectReader::new(TestSingleObjectReader::get_schema())
+                GenericSingleObjectReader::new(TestSingleObjectReader::get_schema().await)
                     .expect("Schema should resolve");
             let val = generic_reader
                 .read_value(&mut to_read)
+                .await
                 .expect("Should read");
             let expected_value: Value = obj.into();
             assert_eq!(expected_value, val);
@@ -1076,19 +1092,21 @@ mod reader {
             to_read.extend_from_slice(&[0xC3, 0x01]);
             to_read.extend_from_slice(
                 &TestSingleObjectReader::get_schema()
+                    .await
                     .fingerprint::<Rabin>()
                     .bytes[..],
             );
             encode(
                 &obj.clone().into(),
-                &TestSingleObjectReader::get_schema(),
+                &TestSingleObjectReader::get_schema().await,
                 &mut to_read,
             )
             .expect("Encode should succeed");
             let generic_reader =
-                GenericSingleObjectReader::new(TestSingleObjectReader::get_schema())
+                GenericSingleObjectReader::new(TestSingleObjectReader::get_schema().await)
                     .expect("Schema should resolve");
             let specific_reader = SpecificSingleObjectReader::<TestSingleObjectReader>::new()
+                .await
                 .expect("schema should resolve");
             let mut to_read1 = &to_read[..];
             let mut to_read2 = &to_read[..];
@@ -1096,12 +1114,15 @@ mod reader {
 
             let val = generic_reader
                 .read_value(&mut to_read1)
+                .await
                 .expect("Should read");
             let read_obj1 = specific_reader
                 .read_from_value(&mut to_read2)
+                .await
                 .expect("Should read from value");
             let read_obj2 = specific_reader
                 .read(&mut to_read3)
+                .await
                 .expect("Should read from deserilize");
             let expected_value: Value = obj.clone().into();
             assert_eq!(obj, read_obj1);
@@ -1116,7 +1137,7 @@ mod reader {
             let schema_uuid = Uuid::parse_str("b2f1cf00-0434-013e-439a-125eb8485a5f")?;
             let header_builder = GlueSchemaUuidHeader::from_uuid(schema_uuid);
             let generic_reader = GenericSingleObjectReader::new_with_header_builder(
-                TestSingleObjectReader::get_schema(),
+                TestSingleObjectReader::get_schema().await,
                 header_builder,
             )
             .expect("failed to build reader");
@@ -1126,6 +1147,7 @@ mod reader {
             let mut to_read = &data_to_read[..];
             let read_result = generic_reader
                 .read_value(&mut to_read)
+                .await
                 .map_err(Error::into_details);
             matches!(read_result, Err(Details::ReadBytes(_)));
             Ok(())
@@ -1148,7 +1170,7 @@ mod reader {
                 235, 161, 167, 195, 177,
             ];
 
-            if let Err(err) = Reader::new(snappy_compressed_avro.as_slice()) {
+            if let Err(err) = Reader::new(snappy_compressed_avro.as_slice()).await {
                 assert_eq!("Codec 'snappy' is not supported/enabled", err.to_string());
             } else {
                 panic!("Expected an error in the reading of the codec!");

@@ -33,6 +33,7 @@
       crate::headers::tokio => crate::headers::sync,
       crate::schema::tokio => crate::schema::sync,
       crate::ser_schema::tokio => crate::ser_schema::sync,
+      crate::reader::tokio => crate::reader::sync,
       crate::util::tokio => crate::util::sync,
       crate::types::tokio => crate::types::sync,
       crate::schema_equality::tokio => crate::schema_equality::sync,
@@ -650,8 +651,8 @@ mod writer {
     where
         T: AvroSchema,
     {
-        pub fn with_capacity(buffer_cap: usize) -> AvroResult<SpecificSingleObjectWriter<T>> {
-            let schema = T::get_schema();
+        pub async fn with_capacity(buffer_cap: usize) -> AvroResult<SpecificSingleObjectWriter<T>> {
+            let schema = T::get_schema().await;
             Ok(SpecificSingleObjectWriter {
                 inner: GenericSingleObjectWriter::new_with_capacity(&schema, buffer_cap)?,
                 schema,
@@ -832,20 +833,20 @@ mod writer {
 
         use super::*;
         use crate::{
-            Reader,
-            decimal::Decimal,
+            decimal::tokio::Decimal,
             duration::{Days, Duration, Millis, Months},
-            headers::GlueSchemaUuidHeader,
+            headers::tokio::GlueSchemaUuidHeader,
             rabin::Rabin,
-            schema::{DecimalSchema, FixedSchema, Name},
-            types::Record,
-            util::zig_i64,
+            reader::tokio::{Reader, from_avro_datum},
+            schema::tokio::{DecimalSchema, FixedSchema, Name},
+            types::tokio::Record,
+            util::tokio::zig_i64,
         };
         use pretty_assertions::assert_eq;
         use serde::{Deserialize, Serialize};
         use uuid::Uuid;
 
-        use crate::{codec::DeflateSettings, error::Details};
+        use crate::{codec::tokio::DeflateSettings, error::tokio::Details};
         use apache_avro_test_helper::TestResult;
 
         const AVRO_OBJECT_HEADER_LEN: usize = AVRO_OBJECT_HEADER.len();
@@ -870,9 +871,9 @@ mod writer {
 
         const UNION_SCHEMA: &str = r#"["null", "long"]"#;
 
-        #[test]
-        fn test_to_avro_datum() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA)?;
+        #[tokio::test]
+        async fn test_to_avro_datum() -> TestResult {
+            let schema = Schema::parse_str(SCHEMA).await?;
             let mut record = Record::new(&schema).unwrap();
             record.put("a", 27i64);
             record.put("b", "foo");
@@ -882,20 +883,20 @@ mod writer {
             zig_i64(3, &mut expected)?;
             expected.extend([b'f', b'o', b'o']);
 
-            assert_eq!(to_avro_datum(&schema, record)?, expected);
+            assert_eq!(to_avro_datum(&schema, record).await?, expected);
 
             Ok(())
         }
 
-        #[test]
-        fn avro_rs_193_write_avro_datum_ref() -> TestResult {
+        #[tokio::test]
+        async fn avro_rs_193_write_avro_datum_ref() -> TestResult {
             #[derive(Serialize)]
             struct TestStruct {
                 a: i64,
                 b: String,
             }
 
-            let schema = Schema::parse_str(SCHEMA)?;
+            let schema = Schema::parse_str(SCHEMA).await?;
             let mut writer: Vec<u8> = Vec::new();
             let data = TestStruct {
                 a: 27,
@@ -915,9 +916,9 @@ mod writer {
             Ok(())
         }
 
-        #[test]
-        fn avro_rs_220_flush_write_header() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA)?;
+        #[tokio::test]
+        async fn avro_rs_220_flush_write_header() -> TestResult {
+            let schema = Schema::parse_str(SCHEMA).await?;
 
             // By default flush should write the header even if nothing was added yet
             let mut writer = Writer::new(&schema, Vec::new());
@@ -938,34 +939,34 @@ mod writer {
             Ok(())
         }
 
-        #[test]
-        fn test_union_not_null() -> TestResult {
-            let schema = Schema::parse_str(UNION_SCHEMA)?;
+        #[tokio::test]
+        async fn test_union_not_null() -> TestResult {
+            let schema = Schema::parse_str(UNION_SCHEMA).await?;
             let union = Value::Union(1, Box::new(Value::Long(3)));
 
             let mut expected = Vec::new();
             zig_i64(1, &mut expected)?;
             zig_i64(3, &mut expected)?;
 
-            assert_eq!(to_avro_datum(&schema, union)?, expected);
+            assert_eq!(to_avro_datum(&schema, union).await?, expected);
 
             Ok(())
         }
 
-        #[test]
-        fn test_union_null() -> TestResult {
-            let schema = Schema::parse_str(UNION_SCHEMA)?;
+        #[tokio::test]
+        async fn test_union_null() -> TestResult {
+            let schema = Schema::parse_str(UNION_SCHEMA).await?;
             let union = Value::Union(0, Box::new(Value::Null));
 
             let mut expected = Vec::new();
             zig_i64(0, &mut expected)?;
 
-            assert_eq!(to_avro_datum(&schema, union)?, expected);
+            assert_eq!(to_avro_datum(&schema, union).await?, expected);
 
             Ok(())
         }
 
-        fn logical_type_test<T: Into<Value> + Clone>(
+        async fn logical_type_test<T: Into<Value> + Clone>(
             schema_str: &'static str,
 
             expected_schema: &Schema,
@@ -974,22 +975,22 @@ mod writer {
             raw_schema: &Schema,
             raw_value: T,
         ) -> TestResult {
-            let schema = Schema::parse_str(schema_str)?;
+            let schema = Schema::parse_str(schema_str).await?;
             assert_eq!(&schema, expected_schema);
             // The serialized format should be the same as the schema.
-            let ser = to_avro_datum(&schema, value.clone())?;
-            let raw_ser = to_avro_datum(raw_schema, raw_value)?;
+            let ser = to_avro_datum(&schema, value.clone()).await?;
+            let raw_ser = to_avro_datum(raw_schema, raw_value).await?;
             assert_eq!(ser, raw_ser);
 
             // Should deserialize from the schema into the logical type.
             let mut r = ser.as_slice();
-            let de = crate::from_avro_datum(&schema, &mut r, None)?;
+            let de = from_avro_datum(&schema, &mut r, None).await?;
             assert_eq!(de, value);
             Ok(())
         }
 
-        #[test]
-        fn date() -> TestResult {
+        #[tokio::test]
+        async fn date() -> TestResult {
             logical_type_test(
                 r#"{"type": "int", "logicalType": "date"}"#,
                 &Schema::Date,
@@ -997,10 +998,11 @@ mod writer {
                 &Schema::Int,
                 1_i32,
             )
+            .await
         }
 
-        #[test]
-        fn time_millis() -> TestResult {
+        #[tokio::test]
+        async fn time_millis() -> TestResult {
             logical_type_test(
                 r#"{"type": "int", "logicalType": "time-millis"}"#,
                 &Schema::TimeMillis,
@@ -1008,10 +1010,11 @@ mod writer {
                 &Schema::Int,
                 1_i32,
             )
+            .await
         }
 
-        #[test]
-        fn time_micros() -> TestResult {
+        #[tokio::test]
+        async fn time_micros() -> TestResult {
             logical_type_test(
                 r#"{"type": "long", "logicalType": "time-micros"}"#,
                 &Schema::TimeMicros,
@@ -1019,10 +1022,11 @@ mod writer {
                 &Schema::Long,
                 1_i64,
             )
+            .await
         }
 
-        #[test]
-        fn timestamp_millis() -> TestResult {
+        #[tokio::test]
+        async fn timestamp_millis() -> TestResult {
             logical_type_test(
                 r#"{"type": "long", "logicalType": "timestamp-millis"}"#,
                 &Schema::TimestampMillis,
@@ -1030,10 +1034,11 @@ mod writer {
                 &Schema::Long,
                 1_i64,
             )
+            .await
         }
 
-        #[test]
-        fn timestamp_micros() -> TestResult {
+        #[tokio::test]
+        async fn timestamp_micros() -> TestResult {
             logical_type_test(
                 r#"{"type": "long", "logicalType": "timestamp-micros"}"#,
                 &Schema::TimestampMicros,
@@ -1041,10 +1046,11 @@ mod writer {
                 &Schema::Long,
                 1_i64,
             )
+            .await
         }
 
-        #[test]
-        fn decimal_fixed() -> TestResult {
+        #[tokio::test]
+        async fn decimal_fixed() -> TestResult {
             let size = 30;
             let inner = Schema::Fixed(FixedSchema {
                 name: Name::new("decimal")?,
@@ -1065,11 +1071,11 @@ mod writer {
                 Value::Decimal(Decimal::from(value.clone())),
                 &inner,
                 Value::Fixed(size, value),
-            )
+            ).await
         }
 
-        #[test]
-        fn decimal_bytes() -> TestResult {
+        #[tokio::test]
+        async fn decimal_bytes() -> TestResult {
             let inner = Schema::Bytes;
             let value = vec![0u8; 10];
             logical_type_test(
@@ -1083,10 +1089,11 @@ mod writer {
                 &inner,
                 value,
             )
+            .await
         }
 
-        #[test]
-        fn duration() -> TestResult {
+        #[tokio::test]
+        async fn duration() -> TestResult {
             let inner = Schema::Fixed(FixedSchema {
                 name: Name::new("duration")?,
                 aliases: None,
@@ -1106,20 +1113,20 @@ mod writer {
                 value,
                 &inner,
                 Value::Fixed(12, vec![0, 1, 0, 0, 0, 2, 0, 0, 0, 4, 0, 0]),
-            )
+            ).await
         }
 
-        #[test]
-        fn test_writer_append() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA)?;
+        #[tokio::test]
+        async fn test_writer_append() -> TestResult {
+            let schema = Schema::parse_str(SCHEMA).await?;
             let mut writer = Writer::new(&schema, Vec::new());
 
             let mut record = Record::new(&schema).unwrap();
             record.put("a", 27i64);
             record.put("b", "foo");
 
-            let n1 = writer.append(record.clone())?;
-            let n2 = writer.append(record.clone())?;
+            let n1 = writer.append(record.clone()).await?;
+            let n2 = writer.append(record.clone()).await?;
             let n3 = writer.flush()?;
             let result = writer.into_inner()?;
 
@@ -1143,9 +1150,9 @@ mod writer {
             Ok(())
         }
 
-        #[test]
-        fn test_writer_extend() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA)?;
+        #[tokio::test]
+        async fn test_writer_extend() -> TestResult {
+            let schema = Schema::parse_str(SCHEMA).await?;
             let mut writer = Writer::new(&schema, Vec::new());
 
             let mut record = Record::new(&schema).unwrap();
@@ -1154,7 +1161,7 @@ mod writer {
             let record_copy = record.clone();
             let records = vec![record, record_copy];
 
-            let n1 = writer.extend(records)?;
+            let n1 = writer.extend(records).await?;
             let n2 = writer.flush()?;
             let result = writer.into_inner()?;
 
@@ -1184,9 +1191,9 @@ mod writer {
             b: String,
         }
 
-        #[test]
-        fn test_writer_append_ser() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA)?;
+        #[tokio::test]
+        async fn test_writer_append_ser() -> TestResult {
+            let schema = Schema::parse_str(SCHEMA).await?;
             let mut writer = Writer::new(&schema, Vec::new());
 
             let record = TestSerdeSerialize {
@@ -1217,9 +1224,9 @@ mod writer {
             Ok(())
         }
 
-        #[test]
-        fn test_writer_extend_ser() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA)?;
+        #[tokio::test]
+        async fn test_writer_extend_ser() -> TestResult {
+            let schema = Schema::parse_str(SCHEMA).await?;
             let mut writer = Writer::new(&schema, Vec::new());
 
             let record = TestSerdeSerialize {
@@ -1270,13 +1277,13 @@ mod writer {
                 .build()
         }
 
-        fn check_writer(mut writer: Writer<'_, Vec<u8>>, schema: &Schema) -> TestResult {
+        async fn check_writer(mut writer: Writer<'_, Vec<u8>>, schema: &Schema) -> TestResult {
             let mut record = Record::new(schema).unwrap();
             record.put("a", 27i64);
             record.put("b", "foo");
 
-            let n1 = writer.append(record.clone())?;
-            let n2 = writer.append(record.clone())?;
+            let n1 = writer.append(record.clone()).await?;
+            let n2 = writer.append(record.clone()).await?;
             let n3 = writer.flush()?;
             let result = writer.into_inner()?;
 
@@ -1301,22 +1308,22 @@ mod writer {
             Ok(())
         }
 
-        #[test]
-        fn test_writer_with_codec() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA)?;
+        #[tokio::test]
+        async fn test_writer_with_codec() -> TestResult {
+            let schema = Schema::parse_str(SCHEMA).await?;
             let writer = make_writer_with_codec(&schema);
-            check_writer(writer, &schema)
+            check_writer(writer, &schema).await
         }
 
-        #[test]
-        fn test_writer_with_builder() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA)?;
+        #[tokio::test]
+        async fn test_writer_with_builder() -> TestResult {
+            let schema = Schema::parse_str(SCHEMA).await?;
             let writer = make_writer_with_builder(&schema);
-            check_writer(writer, &schema)
+            check_writer(writer, &schema).await
         }
 
-        #[test]
-        fn test_logical_writer() -> TestResult {
+        #[tokio::test]
+        async fn test_logical_writer() -> TestResult {
             const LOGICAL_TYPE_SCHEMA: &str = r#"
         {
           "type": "record",
@@ -1336,7 +1343,7 @@ mod writer {
         }
         "#;
             let codec = Codec::Deflate(DeflateSettings::default());
-            let schema = Schema::parse_str(LOGICAL_TYPE_SCHEMA)?;
+            let schema = Schema::parse_str(LOGICAL_TYPE_SCHEMA).await?;
             let mut writer = Writer::builder()
                 .schema(&schema)
                 .codec(codec)
@@ -1352,8 +1359,8 @@ mod writer {
             let mut record2 = Record::new(&schema).unwrap();
             record2.put("a", Value::Union(0, Box::new(Value::Null)));
 
-            let n1 = writer.append(record1)?;
-            let n2 = writer.append(record2)?;
+            let n1 = writer.append(record1).await?;
+            let n2 = writer.append(record2).await?;
             let n3 = writer.flush()?;
             let result = writer.into_inner()?;
 
@@ -1380,9 +1387,9 @@ mod writer {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3405_writer_add_metadata_success() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA)?;
+        #[tokio::test]
+        async fn test_avro_3405_writer_add_metadata_success() -> TestResult {
+            let schema = Schema::parse_str(SCHEMA).await?;
             let mut writer = Writer::new(&schema, Vec::new());
 
             writer.add_user_metadata("stringKey".to_string(), String::from("stringValue"))?;
@@ -1394,8 +1401,8 @@ mod writer {
             record.put("a", 27i64);
             record.put("b", "foo");
 
-            writer.append(record.clone())?;
-            writer.append(record.clone())?;
+            writer.append(record.clone()).await?;
+            writer.append(record.clone()).await?;
             writer.flush()?;
             let result = writer.into_inner()?;
 
@@ -1404,14 +1411,14 @@ mod writer {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3881_metadata_empty_body() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA)?;
+        #[tokio::test]
+        async fn test_avro_3881_metadata_empty_body() -> TestResult {
+            let schema = Schema::parse_str(SCHEMA).await?;
             let mut writer = Writer::new(&schema, Vec::new());
             writer.add_user_metadata("a".to_string(), "b")?;
             let result = writer.into_inner()?;
 
-            let reader = Reader::with_schema(&schema, &result[..])?;
+            let reader = Reader::with_schema(&schema, &result[..]).await?;
             let mut expected = HashMap::new();
             expected.insert("a".to_string(), vec![b'b']);
             assert_eq!(reader.user_metadata(), &expected);
@@ -1420,15 +1427,15 @@ mod writer {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3405_writer_add_metadata_failure() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA)?;
+        #[tokio::test]
+        async fn test_avro_3405_writer_add_metadata_failure() -> TestResult {
+            let schema = Schema::parse_str(SCHEMA).await?;
             let mut writer = Writer::new(&schema, Vec::new());
 
             let mut record = Record::new(&schema).unwrap();
             record.put("a", 27i64);
             record.put("b", "foo");
-            writer.append(record.clone())?;
+            writer.append(record.clone()).await?;
 
             match writer
                 .add_user_metadata("stringKey".to_string(), String::from("value2"))
@@ -1446,9 +1453,9 @@ mod writer {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3405_writer_add_metadata_reserved_prefix_failure() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA)?;
+        #[tokio::test]
+        async fn test_avro_3405_writer_add_metadata_reserved_prefix_failure() -> TestResult {
+            let schema = Schema::parse_str(SCHEMA).await?;
             let mut writer = Writer::new(&schema, Vec::new());
 
             let key = "avro.stringKey".to_string();
@@ -1477,9 +1484,9 @@ mod writer {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3405_writer_add_metadata_with_builder_api_success() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA)?;
+        #[tokio::test]
+        async fn test_avro_3405_writer_add_metadata_with_builder_api_success() -> TestResult {
+            let schema = Schema::parse_str(SCHEMA).await?;
 
             let mut user_meta_data: HashMap<String, Value> = HashMap::new();
             user_meta_data.insert(
@@ -1508,7 +1515,7 @@ mod writer {
         }
 
         impl AvroSchema for TestSingleObjectWriter {
-            fn get_schema() -> Schema {
+            async fn get_schema() -> Schema {
                 let schema = r#"
             {
                 "type":"record",
@@ -1532,7 +1539,7 @@ mod writer {
                 ]
             }
             "#;
-                Schema::parse_str(schema).unwrap()
+                Schema::parse_str(schema).await.unwrap()
             }
         }
 
@@ -1549,8 +1556,8 @@ mod writer {
             }
         }
 
-        #[test]
-        fn test_single_object_writer() -> TestResult {
+        #[tokio::test]
+        async fn test_single_object_writer() -> TestResult {
             let mut buf: Vec<u8> = Vec::new();
             let obj = TestSingleObjectWriter {
                 a: 300,
@@ -1565,6 +1572,7 @@ mod writer {
             let value = obj.into();
             let written_bytes = writer
                 .write_value_ref(&value, &mut buf)
+                .await
                 .expect("Error serializing properly");
 
             assert!(buf.len() > 10, "no bytes written");
@@ -1589,8 +1597,8 @@ mod writer {
             Ok(())
         }
 
-        #[test]
-        fn test_single_object_writer_with_header_builder() -> TestResult {
+        #[tokio::test]
+        async fn test_single_object_writer_with_header_builder() -> TestResult {
             let mut buf: Vec<u8> = Vec::new();
             let obj = TestSingleObjectWriter {
                 a: 300,
@@ -1608,6 +1616,7 @@ mod writer {
             let value = obj.into();
             writer
                 .write_value_ref(&value, &mut buf)
+                .await
                 .expect("Error serializing properly");
 
             assert_eq!(buf[0], 0x03);
@@ -1616,8 +1625,8 @@ mod writer {
             Ok(())
         }
 
-        #[test]
-        fn test_writer_parity() -> TestResult {
+        #[tokio::test]
+        async fn test_writer_parity() -> TestResult {
             let obj1 = TestSingleObjectWriter {
                 a: 300,
                 b: 34.555,
@@ -1641,9 +1650,11 @@ mod writer {
                 .expect("Serialization expected");
             specific_writer
                 .write_value(obj1.clone(), &mut buf2)
+                .await
                 .expect("Serialization expected");
             generic_writer
                 .write_value(obj1.into(), &mut buf3)
+                .await
                 .expect("Serialization expected");
             assert_eq!(buf1, buf2);
             assert_eq!(buf1, buf3);
@@ -1651,8 +1662,8 @@ mod writer {
             Ok(())
         }
 
-        #[test]
-        fn avro_3894_take_aliases_into_account_when_serializing() -> TestResult {
+        #[tokio::test]
+        async fn avro_3894_take_aliases_into_account_when_serializing() -> TestResult {
             const SCHEMA: &str = r#"
   {
       "type": "record",
@@ -1674,7 +1685,7 @@ mod writer {
                 time: Some(1234567890),
             };
 
-            let schema = Schema::parse_str(SCHEMA)?;
+            let schema = Schema::parse_str(SCHEMA).await?;
             let mut writer = Writer::new(&schema, Vec::new());
 
             let bytes = writer.append_ser(conf)?;
@@ -1684,8 +1695,8 @@ mod writer {
             Ok(())
         }
 
-        #[test]
-        fn avro_4014_validation_returns_a_detailed_error() -> TestResult {
+        #[tokio::test]
+        async fn avro_4014_validation_returns_a_detailed_error() -> TestResult {
             const SCHEMA: &str = r#"
   {
       "type": "record",
@@ -1707,7 +1718,7 @@ mod writer {
                 time: Some(12345678.90),
             };
 
-            let schema = Schema::parse_str(SCHEMA)?;
+            let schema = Schema::parse_str(SCHEMA).await?;
             let mut writer = Writer::new(&schema, Vec::new());
 
             match writer.append_ser(conf) {
@@ -1722,8 +1733,8 @@ mod writer {
             Ok(())
         }
 
-        #[test]
-        fn avro_4063_flush_applies_to_inner_writer() -> TestResult {
+        #[tokio::test]
+        async fn avro_4063_flush_applies_to_inner_writer() -> TestResult {
             const SCHEMA: &str = r#"
         {
             "type": "record",
@@ -1757,14 +1768,14 @@ mod writer {
 
             let buffered_writer = std::io::BufWriter::new(shared_buffer.clone());
 
-            let schema = Schema::parse_str(SCHEMA)?;
+            let schema = Schema::parse_str(SCHEMA).await?;
 
             let mut writer = Writer::new(&schema, buffered_writer);
 
             let mut record = Record::new(writer.schema()).unwrap();
             record.put("exampleField", "value");
 
-            writer.append(record)?;
+            writer.append(record).await?;
             writer.flush()?;
 
             assert_eq!(

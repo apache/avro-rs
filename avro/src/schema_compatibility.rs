@@ -25,16 +25,18 @@
     sync!();
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
+      crate::codec::tokio => crate::codec::sync,
       crate::decimal::tokio => crate::decimal::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
       crate::schema::tokio => crate::schema::sync,
-      crate::util::tokio => crate::util::sync,
+      crate::reader::tokio => crate::reader::sync,
       crate::types::tokio => crate::types::sync,
       crate::schema_equality::tokio => crate::schema_equality::sync,
       crate::util::tokio => crate::util::sync,
       crate::validator::tokio => crate::validator::sync,
+      crate::writer::tokio => crate::writer::sync,
       #[tokio::test] => #[test]
     );
   }
@@ -557,104 +559,131 @@ mod schema_compatibility {
     mod tests {
         use super::*;
         use crate::{
-            Codec, Reader, Writer,
-            types::{Record, Value},
+            codec::tokio::Codec,
+            reader::tokio::Reader,
+            types::tokio::{Record, Value},
+            writer::tokio::Writer,
         };
         use apache_avro_test_helper::TestResult;
         use rstest::*;
 
-        fn int_array_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"array", "items":"int"}"#).unwrap()
-        }
-
-        fn long_array_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"array", "items":"long"}"#).unwrap()
-        }
-
-        fn string_array_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"array", "items":"string"}"#).unwrap()
-        }
-
-        fn int_map_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"map", "values":"int"}"#).unwrap()
-        }
-
-        fn long_map_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"map", "values":"long"}"#).unwrap()
-        }
-
-        fn string_map_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"map", "values":"string"}"#).unwrap()
-        }
-
-        fn enum1_ab_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"enum", "name":"Enum1", "symbols":["A","B"]}"#).unwrap()
-        }
-
-        fn enum1_abc_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"enum", "name":"Enum1", "symbols":["A","B","C"]}"#)
+        async fn int_array_schema() -> Schema {
+            Schema::parse_str(r#"{"type":"array", "items":"int"}"#)
+                .await
                 .unwrap()
         }
 
-        fn enum1_bc_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"enum", "name":"Enum1", "symbols":["B","C"]}"#).unwrap()
+        async fn long_array_schema() -> Schema {
+            Schema::parse_str(r#"{"type":"array", "items":"long"}"#)
+                .await
+                .unwrap()
         }
 
-        fn enum2_ab_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"enum", "name":"Enum2", "symbols":["A","B"]}"#).unwrap()
+        async fn string_array_schema() -> Schema {
+            Schema::parse_str(r#"{"type":"array", "items":"string"}"#)
+                .await
+                .unwrap()
         }
 
-        fn empty_record1_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"record", "name":"Record1", "fields":[]}"#).unwrap()
+        async fn int_map_schema() -> Schema {
+            Schema::parse_str(r#"{"type":"map", "values":"int"}"#)
+                .await
+                .unwrap()
         }
 
-        fn empty_record2_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"record", "name":"Record2", "fields": []}"#).unwrap()
+        async fn long_map_schema() -> Schema {
+            Schema::parse_str(r#"{"type":"map", "values":"long"}"#)
+                .await
+                .unwrap()
         }
 
-        fn a_int_record1_schema() -> Schema {
+        async fn string_map_schema() -> Schema {
+            Schema::parse_str(r#"{"type":"map", "values":"string"}"#)
+                .await
+                .unwrap()
+        }
+
+        async fn enum1_ab_schema() -> Schema {
+            Schema::parse_str(r#"{"type":"enum", "name":"Enum1", "symbols":["A","B"]}"#)
+                .await
+                .unwrap()
+        }
+
+        async fn enum1_abc_schema() -> Schema {
+            Schema::parse_str(r#"{"type":"enum", "name":"Enum1", "symbols":["A","B","C"]}"#)
+                .await
+                .unwrap()
+        }
+
+        async fn enum1_bc_schema() -> Schema {
+            Schema::parse_str(r#"{"type":"enum", "name":"Enum1", "symbols":["B","C"]}"#)
+                .await
+                .unwrap()
+        }
+
+        async fn enum2_ab_schema() -> Schema {
+            Schema::parse_str(r#"{"type":"enum", "name":"Enum2", "symbols":["A","B"]}"#)
+                .await
+                .unwrap()
+        }
+
+        async fn empty_record1_schema() -> Schema {
+            Schema::parse_str(r#"{"type":"record", "name":"Record1", "fields":[]}"#)
+                .await
+                .unwrap()
+        }
+
+        async fn empty_record2_schema() -> Schema {
+            Schema::parse_str(r#"{"type":"record", "name":"Record2", "fields": []}"#)
+                .await
+                .unwrap()
+        }
+
+        async fn a_int_record1_schema() -> Schema {
             Schema::parse_str(
                 r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int"}]}"#,
             )
+            .await
             .unwrap()
         }
 
-        fn a_long_record1_schema() -> Schema {
+        async fn a_long_record1_schema() -> Schema {
             Schema::parse_str(
                 r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"long"}]}"#,
             )
+            .await
             .unwrap()
         }
 
-        fn a_int_b_int_record1_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int"}, {"name":"b", "type":"int"}]}"#).unwrap()
+        async fn a_int_b_int_record1_schema() -> Schema {
+            Schema::parse_str(r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int"}, {"name":"b", "type":"int"}]}"#).await.unwrap()
         }
 
-        fn a_dint_record1_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int", "default":0}]}"#).unwrap()
+        async fn a_dint_record1_schema() -> Schema {
+            Schema::parse_str(r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int", "default":0}]}"#).await.unwrap()
         }
 
-        fn a_int_b_dint_record1_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int"}, {"name":"b", "type":"int", "default":0}]}"#).unwrap()
+        async fn a_int_b_dint_record1_schema() -> Schema {
+            Schema::parse_str(r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int"}, {"name":"b", "type":"int", "default":0}]}"#).await.unwrap()
         }
 
-        fn a_dint_b_dint_record1_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int", "default":0}, {"name":"b", "type":"int", "default":0}]}"#).unwrap()
+        async fn a_dint_b_dint_record1_schema() -> Schema {
+            Schema::parse_str(r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int", "default":0}, {"name":"b", "type":"int", "default":0}]}"#).await.unwrap()
         }
 
-        fn nested_record() -> Schema {
-            Schema::parse_str(r#"{"type":"record","name":"parent","fields":[{"name":"attribute","type":{"type":"record","name":"child","fields":[{"name":"id","type":"string"}]}}]}"#).unwrap()
+        async fn nested_record() -> Schema {
+            Schema::parse_str(r#"{"type":"record","name":"parent","fields":[{"name":"attribute","type":{"type":"record","name":"child","fields":[{"name":"id","type":"string"}]}}]}"#).await.unwrap()
         }
 
-        fn nested_optional_record() -> Schema {
-            Schema::parse_str(r#"{"type":"record","name":"parent","fields":[{"name":"attribute","type":["null",{"type":"record","name":"child","fields":[{"name":"id","type":"string"}]}],"default":null}]}"#).unwrap()
+        async fn nested_optional_record() -> Schema {
+            Schema::parse_str(r#"{"type":"record","name":"parent","fields":[{"name":"attribute","type":["null",{"type":"record","name":"child","fields":[{"name":"id","type":"string"}]}],"default":null}]}"#).await.unwrap()
         }
 
-        fn int_list_record_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"record", "name":"List", "fields": [{"name": "head", "type": "int"},{"name": "tail", "type": "array", "items": "int"}]}"#).unwrap()
+        async fn int_list_record_schema() -> Schema {
+            Schema::parse_str(r#"{"type":"record", "name":"List", "fields": [{"name": "head", "type": "int"},{"name": "tail", "type": "array", "items": "int"}]}"#).await.unwrap()
         }
 
-        fn long_list_record_schema() -> Schema {
+        async fn long_list_record_schema() -> Schema {
             Schema::parse_str(
                 r#"
       {
@@ -664,56 +693,62 @@ mod schema_compatibility {
       ]}
 "#,
             )
+            .await
             .unwrap()
         }
 
-        fn union_schema(schemas: Vec<Schema>) -> Schema {
+        async fn union_schema(schemas: Vec<Schema>) -> Schema {
             let schema_string = schemas
                 .iter()
                 .map(|s| s.canonical_form())
                 .collect::<Vec<String>>()
                 .join(",");
-            Schema::parse_str(&format!("[{schema_string}]")).unwrap()
+            Schema::parse_str(&format!("[{schema_string}]"))
+                .await
+                .unwrap()
         }
 
-        fn empty_union_schema() -> Schema {
-            union_schema(vec![])
+        async fn empty_union_schema() -> Schema {
+            union_schema(vec![]).await
         }
 
         // unused
         // fn null_union_schema() -> Schema { union_schema(vec![Schema::Null]) }
 
-        fn int_union_schema() -> Schema {
-            union_schema(vec![Schema::Int])
+        async fn int_union_schema() -> Schema {
+            union_schema(vec![Schema::Int]).await
         }
 
-        fn long_union_schema() -> Schema {
-            union_schema(vec![Schema::Long])
+        async fn long_union_schema() -> Schema {
+            union_schema(vec![Schema::Long]).await
         }
 
-        fn string_union_schema() -> Schema {
-            union_schema(vec![Schema::String])
+        async fn string_union_schema() -> Schema {
+            union_schema(vec![Schema::String]).await
         }
 
-        fn int_string_union_schema() -> Schema {
-            union_schema(vec![Schema::Int, Schema::String])
+        async fn int_string_union_schema() -> Schema {
+            union_schema(vec![Schema::Int, Schema::String]).await
         }
 
-        fn string_int_union_schema() -> Schema {
-            union_schema(vec![Schema::String, Schema::Int])
+        async fn string_int_union_schema() -> Schema {
+            union_schema(vec![Schema::String, Schema::Int]).await
         }
 
-        #[test]
-        fn test_broken() {
+        #[tokio::test]
+        async fn test_broken() {
             assert_eq!(
                 CompatibilityError::MissingUnionElements,
-                SchemaCompatibility::can_read(&int_string_union_schema(), &int_union_schema())
-                    .unwrap_err()
+                SchemaCompatibility::can_read(
+                    &int_string_union_schema().await,
+                    &int_union_schema().await
+                )
+                .unwrap_err()
             )
         }
 
-        #[test]
-        fn test_incompatible_reader_writer_pairs() {
+        #[tokio::test]
+        async fn test_incompatible_reader_writer_pairs() {
             let incompatible_schemas = vec![
                 // null
                 (Schema::Null, Schema::Int),
@@ -748,25 +783,31 @@ mod schema_compatibility {
                 (Schema::Date, Schema::Long),
                 (Schema::TimeMillis, Schema::Long),
                 // array and maps
-                (int_array_schema(), long_array_schema()),
-                (int_map_schema(), int_array_schema()),
-                (int_array_schema(), int_map_schema()),
-                (int_map_schema(), long_map_schema()),
+                (int_array_schema().await, long_array_schema().await),
+                (int_map_schema().await, int_array_schema().await),
+                (int_array_schema().await, int_map_schema().await),
+                (int_map_schema().await, long_map_schema().await),
                 // enum
-                (enum1_ab_schema(), enum1_abc_schema()),
-                (enum1_bc_schema(), enum1_abc_schema()),
-                (enum1_ab_schema(), enum2_ab_schema()),
-                (Schema::Int, enum2_ab_schema()),
-                (enum2_ab_schema(), Schema::Int),
+                (enum1_ab_schema().await, enum1_abc_schema().await),
+                (enum1_bc_schema().await, enum1_abc_schema().await),
+                (enum1_ab_schema().await, enum2_ab_schema().await),
+                (Schema::Int, enum2_ab_schema().await),
+                (enum2_ab_schema().await, Schema::Int),
                 //union
-                (int_union_schema(), int_string_union_schema()),
-                (string_union_schema(), int_string_union_schema()),
+                (int_union_schema().await, int_string_union_schema().await),
+                (string_union_schema().await, int_string_union_schema().await),
                 //record
-                (empty_record2_schema(), empty_record1_schema()),
-                (a_int_record1_schema(), empty_record1_schema()),
-                (a_int_b_dint_record1_schema(), empty_record1_schema()),
-                (int_list_record_schema(), long_list_record_schema()),
-                (nested_record(), nested_optional_record()),
+                (empty_record2_schema().await, empty_record1_schema().await),
+                (a_int_record1_schema().await, empty_record1_schema().await),
+                (
+                    a_int_b_dint_record1_schema().await,
+                    empty_record1_schema().await,
+                ),
+                (
+                    int_list_record_schema().await,
+                    long_list_record_schema().await,
+                ),
+                (nested_record().await, nested_optional_record().await),
             ];
 
             assert!(
@@ -776,6 +817,7 @@ mod schema_compatibility {
             );
         }
 
+        #[cfg_attr(feature = "tokio", tokio::test)]
         #[rstest]
         // Record type test
         #[case(
@@ -844,16 +886,17 @@ mod schema_compatibility {
             r#"{"type": "array", "items": "int"}"#,
             r#"{"type": "array", "items": "long"}"#
         )]
-        fn test_avro_3950_match_schemas_ok(
+        async fn test_avro_3950_match_schemas_ok(
             #[case] writer_schema_str: &str,
             #[case] reader_schema_str: &str,
         ) {
-            let writer_schema = Schema::parse_str(writer_schema_str).unwrap();
-            let reader_schema = Schema::parse_str(reader_schema_str).unwrap();
+            let writer_schema = Schema::parse_str(writer_schema_str).await.unwrap();
+            let reader_schema = Schema::parse_str(reader_schema_str).await.unwrap();
 
             assert!(SchemaCompatibility::match_schemas(&writer_schema, &reader_schema).is_ok());
         }
 
+        #[cfg_attr(feature = "tokio", tokio::test)]
         #[rstest]
         // Record type test
         #[case(
@@ -1024,13 +1067,13 @@ mod schema_compatibility {
         r#"{"type": "fixed", "name": "EmployeeId", "size": 16}"#,
         CompatibilityError::Inconclusive(String::from("writers_schema"))
     )]
-        fn test_avro_3950_match_schemas_error(
+        async fn test_avro_3950_match_schemas_error(
             #[case] writer_schema_str: &str,
             #[case] reader_schema_str: &str,
             #[case] expected_error: CompatibilityError,
         ) {
-            let writer_schema = Schema::parse_str(writer_schema_str).unwrap();
-            let reader_schema = Schema::parse_str(reader_schema_str).unwrap();
+            let writer_schema = Schema::parse_str(writer_schema_str).await.unwrap();
+            let reader_schema = Schema::parse_str(reader_schema_str).await.unwrap();
 
             assert_eq!(
                 expected_error,
@@ -1038,8 +1081,8 @@ mod schema_compatibility {
             )
         }
 
-        #[test]
-        fn test_compatible_reader_writer_pairs() {
+        #[tokio::test]
+        async fn test_compatible_reader_writer_pairs() {
             let compatible_schemas = vec![
                 (Schema::Null, Schema::Null),
                 (Schema::Long, Schema::Int),
@@ -1072,36 +1115,66 @@ mod schema_compatibility {
                 (Schema::Long, Schema::LocalTimestampMillis),
                 (Schema::Long, Schema::LocalTimestampMicros),
                 (Schema::Long, Schema::LocalTimestampNanos),
-                (int_array_schema(), int_array_schema()),
-                (long_array_schema(), int_array_schema()),
-                (int_map_schema(), int_map_schema()),
-                (long_map_schema(), int_map_schema()),
-                (enum1_ab_schema(), enum1_ab_schema()),
-                (enum1_abc_schema(), enum1_ab_schema()),
-                (empty_union_schema(), empty_union_schema()),
-                (int_union_schema(), int_union_schema()),
-                (int_string_union_schema(), string_int_union_schema()),
-                (int_union_schema(), empty_union_schema()),
-                (long_union_schema(), int_union_schema()),
-                (int_union_schema(), Schema::Int),
-                (Schema::Int, int_union_schema()),
-                (empty_record1_schema(), empty_record1_schema()),
-                (empty_record1_schema(), a_int_record1_schema()),
-                (a_int_record1_schema(), a_int_record1_schema()),
-                (a_dint_record1_schema(), a_int_record1_schema()),
-                (a_dint_record1_schema(), a_dint_record1_schema()),
-                (a_int_record1_schema(), a_dint_record1_schema()),
-                (a_long_record1_schema(), a_int_record1_schema()),
-                (a_int_record1_schema(), a_int_b_int_record1_schema()),
-                (a_dint_record1_schema(), a_int_b_int_record1_schema()),
-                (a_int_b_dint_record1_schema(), a_int_record1_schema()),
-                (a_dint_b_dint_record1_schema(), empty_record1_schema()),
-                (a_dint_b_dint_record1_schema(), a_int_record1_schema()),
-                (a_int_b_int_record1_schema(), a_dint_b_dint_record1_schema()),
-                (int_list_record_schema(), int_list_record_schema()),
-                (long_list_record_schema(), long_list_record_schema()),
-                (long_list_record_schema(), int_list_record_schema()),
-                (nested_optional_record(), nested_record()),
+                (int_array_schema().await, int_array_schema().await),
+                (long_array_schema().await, int_array_schema().await),
+                (int_map_schema().await, int_map_schema().await),
+                (long_map_schema().await, int_map_schema().await),
+                (enum1_ab_schema().await, enum1_ab_schema().await),
+                (enum1_abc_schema().await, enum1_ab_schema().await),
+                (empty_union_schema().await, empty_union_schema().await),
+                (int_union_schema().await, int_union_schema().await),
+                (
+                    int_string_union_schema().await,
+                    string_int_union_schema().await,
+                ),
+                (int_union_schema().await, empty_union_schema().await),
+                (long_union_schema().await, int_union_schema().await),
+                (int_union_schema().await, Schema::Int),
+                (Schema::Int, int_union_schema().await),
+                (empty_record1_schema().await, empty_record1_schema().await),
+                (empty_record1_schema().await, a_int_record1_schema().await),
+                (a_int_record1_schema().await, a_int_record1_schema().await),
+                (a_dint_record1_schema().await, a_int_record1_schema().await),
+                (a_dint_record1_schema().await, a_dint_record1_schema().await),
+                (a_int_record1_schema().await, a_dint_record1_schema().await),
+                (a_long_record1_schema().await, a_int_record1_schema().await),
+                (
+                    a_int_record1_schema().await,
+                    a_int_b_int_record1_schema().await,
+                ),
+                (
+                    a_dint_record1_schema().await,
+                    a_int_b_int_record1_schema().await,
+                ),
+                (
+                    a_int_b_dint_record1_schema().await,
+                    a_int_record1_schema().await,
+                ),
+                (
+                    a_dint_b_dint_record1_schema().await,
+                    empty_record1_schema().await,
+                ),
+                (
+                    a_dint_b_dint_record1_schema().await,
+                    a_int_record1_schema().await,
+                ),
+                (
+                    a_int_b_int_record1_schema().await,
+                    a_dint_b_dint_record1_schema().await,
+                ),
+                (
+                    int_list_record_schema().await,
+                    int_list_record_schema().await,
+                ),
+                (
+                    long_list_record_schema().await,
+                    long_list_record_schema().await,
+                ),
+                (
+                    long_list_record_schema().await,
+                    int_list_record_schema().await,
+                ),
+                (nested_optional_record().await, nested_record().await),
             ];
 
             assert!(
@@ -1111,7 +1184,7 @@ mod schema_compatibility {
             );
         }
 
-        fn writer_schema() -> Schema {
+        async fn writer_schema() -> Schema {
             Schema::parse_str(
                 r#"
       {"type":"record", "name":"Record", "fields":[
@@ -1120,47 +1193,50 @@ mod schema_compatibility {
       ]}
 "#,
             )
+            .await
             .unwrap()
         }
 
-        #[test]
-        fn test_missing_field() -> TestResult {
+        #[tokio::test]
+        async fn test_missing_field() -> TestResult {
             let reader_schema = Schema::parse_str(
                 r#"
       {"type":"record", "name":"Record", "fields":[
         {"name":"oldfield1", "type":"int"}
       ]}
 "#,
-            )?;
-            assert!(SchemaCompatibility::can_read(&writer_schema(), &reader_schema,).is_ok());
+            )
+            .await?;
+            assert!(SchemaCompatibility::can_read(&writer_schema().await, &reader_schema,).is_ok());
             assert_eq!(
                 CompatibilityError::MissingDefaultValue(String::from("oldfield2")),
-                SchemaCompatibility::can_read(&reader_schema, &writer_schema()).unwrap_err()
+                SchemaCompatibility::can_read(&reader_schema, &writer_schema().await).unwrap_err()
             );
 
             Ok(())
         }
 
-        #[test]
-        fn test_missing_second_field() -> TestResult {
+        #[tokio::test]
+        async fn test_missing_second_field() -> TestResult {
             let reader_schema = Schema::parse_str(
                 r#"
         {"type":"record", "name":"Record", "fields":[
           {"name":"oldfield2", "type":"string"}
         ]}
 "#,
-            )?;
-            assert!(SchemaCompatibility::can_read(&writer_schema(), &reader_schema).is_ok());
+            )
+            .await?;
+            assert!(SchemaCompatibility::can_read(&writer_schema().await, &reader_schema).is_ok());
             assert_eq!(
                 CompatibilityError::MissingDefaultValue(String::from("oldfield1")),
-                SchemaCompatibility::can_read(&reader_schema, &writer_schema()).unwrap_err()
+                SchemaCompatibility::can_read(&reader_schema, &writer_schema().await).unwrap_err()
             );
 
             Ok(())
         }
 
-        #[test]
-        fn test_all_fields() -> TestResult {
+        #[tokio::test]
+        async fn test_all_fields() -> TestResult {
             let reader_schema = Schema::parse_str(
                 r#"
         {"type":"record", "name":"Record", "fields":[
@@ -1168,15 +1244,16 @@ mod schema_compatibility {
           {"name":"oldfield2", "type":"string"}
         ]}
 "#,
-            )?;
-            assert!(SchemaCompatibility::can_read(&writer_schema(), &reader_schema).is_ok());
-            assert!(SchemaCompatibility::can_read(&reader_schema, &writer_schema()).is_ok());
+            )
+            .await?;
+            assert!(SchemaCompatibility::can_read(&writer_schema().await, &reader_schema).is_ok());
+            assert!(SchemaCompatibility::can_read(&reader_schema, &writer_schema().await).is_ok());
 
             Ok(())
         }
 
-        #[test]
-        fn test_new_field_with_default() -> TestResult {
+        #[tokio::test]
+        async fn test_new_field_with_default() -> TestResult {
             let reader_schema = Schema::parse_str(
                 r#"
         {"type":"record", "name":"Record", "fields":[
@@ -1184,18 +1261,19 @@ mod schema_compatibility {
           {"name":"newfield1", "type":"int", "default":42}
         ]}
 "#,
-            )?;
-            assert!(SchemaCompatibility::can_read(&writer_schema(), &reader_schema).is_ok());
+            )
+            .await?;
+            assert!(SchemaCompatibility::can_read(&writer_schema().await, &reader_schema).is_ok());
             assert_eq!(
                 CompatibilityError::MissingDefaultValue(String::from("oldfield2")),
-                SchemaCompatibility::can_read(&reader_schema, &writer_schema()).unwrap_err()
+                SchemaCompatibility::can_read(&reader_schema, &writer_schema().await).unwrap_err()
             );
 
             Ok(())
         }
 
-        #[test]
-        fn test_new_field() -> TestResult {
+        #[tokio::test]
+        async fn test_new_field() -> TestResult {
             let reader_schema = Schema::parse_str(
                 r#"
         {"type":"record", "name":"Record", "fields":[
@@ -1203,33 +1281,37 @@ mod schema_compatibility {
           {"name":"newfield1", "type":"int"}
         ]}
 "#,
-            )?;
+            )
+            .await?;
             assert_eq!(
                 CompatibilityError::MissingDefaultValue(String::from("newfield1")),
-                SchemaCompatibility::can_read(&writer_schema(), &reader_schema).unwrap_err()
+                SchemaCompatibility::can_read(&writer_schema().await, &reader_schema).unwrap_err()
             );
             assert_eq!(
                 CompatibilityError::MissingDefaultValue(String::from("oldfield2")),
-                SchemaCompatibility::can_read(&reader_schema, &writer_schema()).unwrap_err()
+                SchemaCompatibility::can_read(&reader_schema, &writer_schema().await).unwrap_err()
             );
 
             Ok(())
         }
 
-        #[test]
-        fn test_array_writer_schema() {
-            let valid_reader = string_array_schema();
-            let invalid_reader = string_map_schema();
+        #[tokio::test]
+        async fn test_array_writer_schema() {
+            let valid_reader = string_array_schema().await;
+            let invalid_reader = string_map_schema().await;
 
-            assert!(SchemaCompatibility::can_read(&string_array_schema(), &valid_reader).is_ok());
+            assert!(
+                SchemaCompatibility::can_read(&string_array_schema().await, &valid_reader).is_ok()
+            );
             assert_eq!(
                 CompatibilityError::Inconclusive(String::from("writers_schema")),
-                SchemaCompatibility::can_read(&string_array_schema(), &invalid_reader).unwrap_err()
+                SchemaCompatibility::can_read(&string_array_schema().await, &invalid_reader)
+                    .unwrap_err()
             );
         }
 
-        #[test]
-        fn test_primitive_writer_schema() {
+        #[tokio::test]
+        async fn test_primitive_writer_schema() {
             let valid_reader = Schema::String;
             assert!(SchemaCompatibility::can_read(&Schema::String, &valid_reader).is_ok());
             assert_eq!(
@@ -1248,11 +1330,11 @@ mod schema_compatibility {
             );
         }
 
-        #[test]
-        fn test_union_reader_writer_subset_incompatibility() {
+        #[tokio::test]
+        async fn test_union_reader_writer_subset_incompatibility() {
             // reader union schema must contain all writer union branches
-            let union_writer = union_schema(vec![Schema::Int, Schema::String]);
-            let union_reader = union_schema(vec![Schema::String]);
+            let union_writer = union_schema(vec![Schema::Int, Schema::String]).await;
+            let union_reader = union_schema(vec![Schema::String]).await;
 
             assert_eq!(
                 CompatibilityError::MissingUnionElements,
@@ -1261,15 +1343,16 @@ mod schema_compatibility {
             assert!(SchemaCompatibility::can_read(&union_reader, &union_writer).is_ok());
         }
 
-        #[test]
-        fn test_incompatible_record_field() -> TestResult {
+        #[tokio::test]
+        async fn test_incompatible_record_field() -> TestResult {
             let string_schema = Schema::parse_str(
                 r#"
         {"type":"record", "name":"MyRecord", "namespace":"ns", "fields": [
             {"name":"field1", "type":"string"}
         ]}
         "#,
-            )?;
+            )
+            .await?;
 
             let int_schema = Schema::parse_str(
                 r#"
@@ -1277,7 +1360,8 @@ mod schema_compatibility {
                 {"name":"field1", "type":"int"}
               ]}
         "#,
-            )?;
+            )
+            .await?;
 
             assert_eq!(
                 CompatibilityError::FieldTypeMismatch(
@@ -1297,15 +1381,17 @@ mod schema_compatibility {
             Ok(())
         }
 
-        #[test]
-        fn test_enum_symbols() -> TestResult {
+        #[tokio::test]
+        async fn test_enum_symbols() -> TestResult {
             let enum_schema1 = Schema::parse_str(
                 r#"
       {"type":"enum", "name":"MyEnum", "symbols":["A","B"]}
 "#,
-            )?;
+            )
+            .await?;
             let enum_schema2 =
-                Schema::parse_str(r#"{"type":"enum", "name":"MyEnum", "symbols":["A","B","C"]}"#)?;
+                Schema::parse_str(r#"{"type":"enum", "name":"MyEnum", "symbols":["A","B","C"]}"#)
+                    .await?;
             assert_eq!(
                 CompatibilityError::MissingSymbols,
                 SchemaCompatibility::can_read(&enum_schema2, &enum_schema1).unwrap_err()
@@ -1315,7 +1401,7 @@ mod schema_compatibility {
             Ok(())
         }
 
-        fn point_2d_schema() -> Schema {
+        async fn point_2d_schema() -> Schema {
             Schema::parse_str(
                 r#"
       {"type":"record", "name":"Point2D", "fields":[
@@ -1324,10 +1410,11 @@ mod schema_compatibility {
       ]}
     "#,
             )
+            .await
             .unwrap()
         }
 
-        fn point_2d_fullname_schema() -> Schema {
+        async fn point_2d_fullname_schema() -> Schema {
             Schema::parse_str(
                 r#"
       {"type":"record", "name":"Point", "namespace":"written", "fields":[
@@ -1336,10 +1423,11 @@ mod schema_compatibility {
       ]}
     "#,
             )
+            .await
             .unwrap()
         }
 
-        fn point_3d_no_default_schema() -> Schema {
+        async fn point_3d_no_default_schema() -> Schema {
             Schema::parse_str(
                 r#"
       {"type":"record", "name":"Point", "fields":[
@@ -1349,10 +1437,11 @@ mod schema_compatibility {
       ]}
     "#,
             )
+            .await
             .unwrap()
         }
 
-        fn point_3d_schema() -> Schema {
+        async fn point_3d_schema() -> Schema {
             Schema::parse_str(
                 r#"
       {"type":"record", "name":"Point3D", "fields":[
@@ -1362,10 +1451,11 @@ mod schema_compatibility {
       ]}
     "#,
             )
+            .await
             .unwrap()
         }
 
-        fn point_3d_match_name_schema() -> Schema {
+        async fn point_3d_match_name_schema() -> Schema {
             Schema::parse_str(
                 r#"
       {"type":"record", "name":"Point", "fields":[
@@ -1375,85 +1465,92 @@ mod schema_compatibility {
       ]}
     "#,
             )
+            .await
             .unwrap()
         }
 
-        #[test]
-        fn test_union_resolution_no_structure_match() {
+        #[tokio::test]
+        async fn test_union_resolution_no_structure_match() {
             // short name match, but no structure match
-            let read_schema = union_schema(vec![Schema::Null, point_3d_no_default_schema()]);
+            let read_schema =
+                union_schema(vec![Schema::Null, point_3d_no_default_schema().await]).await;
             assert_eq!(
                 CompatibilityError::MissingUnionElements,
-                SchemaCompatibility::can_read(&point_2d_fullname_schema(), &read_schema)
+                SchemaCompatibility::can_read(&point_2d_fullname_schema().await, &read_schema)
                     .unwrap_err()
             );
         }
 
-        #[test]
-        fn test_union_resolution_first_structure_match_2d() {
+        #[tokio::test]
+        async fn test_union_resolution_first_structure_match_2d() {
             // multiple structure matches with no name matches
             let read_schema = union_schema(vec![
                 Schema::Null,
-                point_3d_no_default_schema(),
-                point_2d_schema(),
-                point_3d_schema(),
-            ]);
+                point_3d_no_default_schema().await,
+                point_2d_schema().await,
+                point_3d_schema().await,
+            ])
+            .await;
             assert_eq!(
                 CompatibilityError::MissingUnionElements,
-                SchemaCompatibility::can_read(&point_2d_fullname_schema(), &read_schema)
+                SchemaCompatibility::can_read(&point_2d_fullname_schema().await, &read_schema)
                     .unwrap_err()
             );
         }
 
-        #[test]
-        fn test_union_resolution_first_structure_match_3d() {
+        #[tokio::test]
+        async fn test_union_resolution_first_structure_match_3d() {
             // multiple structure matches with no name matches
             let read_schema = union_schema(vec![
                 Schema::Null,
-                point_3d_no_default_schema(),
-                point_3d_schema(),
-                point_2d_schema(),
-            ]);
+                point_3d_no_default_schema().await,
+                point_3d_schema().await,
+                point_2d_schema().await,
+            ])
+            .await;
             assert_eq!(
                 CompatibilityError::MissingUnionElements,
-                SchemaCompatibility::can_read(&point_2d_fullname_schema(), &read_schema)
+                SchemaCompatibility::can_read(&point_2d_fullname_schema().await, &read_schema)
                     .unwrap_err()
             );
         }
 
-        #[test]
-        fn test_union_resolution_named_structure_match() {
+        #[tokio::test]
+        async fn test_union_resolution_named_structure_match() {
             // multiple structure matches with a short name match
             let read_schema = union_schema(vec![
                 Schema::Null,
-                point_2d_schema(),
-                point_3d_match_name_schema(),
-                point_3d_schema(),
-            ]);
+                point_2d_schema().await,
+                point_3d_match_name_schema().await,
+                point_3d_schema().await,
+            ])
+            .await;
             assert_eq!(
                 CompatibilityError::MissingUnionElements,
-                SchemaCompatibility::can_read(&point_2d_fullname_schema(), &read_schema)
+                SchemaCompatibility::can_read(&point_2d_fullname_schema().await, &read_schema)
                     .unwrap_err()
             );
         }
 
-        #[test]
-        fn test_union_resolution_full_name_match() {
+        #[tokio::test]
+        async fn test_union_resolution_full_name_match() {
             // there is a full name match that should be chosen
             let read_schema = union_schema(vec![
                 Schema::Null,
-                point_2d_schema(),
-                point_3d_match_name_schema(),
-                point_3d_schema(),
-                point_2d_fullname_schema(),
-            ]);
+                point_2d_schema().await,
+                point_3d_match_name_schema().await,
+                point_3d_schema().await,
+                point_2d_fullname_schema().await,
+            ])
+            .await;
             assert!(
-                SchemaCompatibility::can_read(&point_2d_fullname_schema(), &read_schema).is_ok()
+                SchemaCompatibility::can_read(&point_2d_fullname_schema().await, &read_schema)
+                    .is_ok()
             );
         }
 
-        #[test]
-        fn test_avro_3772_enum_default() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3772_enum_default() -> TestResult {
             let writer_raw_schema = r#"
         {
           "type": "record",
@@ -1493,16 +1590,16 @@ mod schema_compatibility {
           ]
         }
       "#;
-            let writer_schema = Schema::parse_str(writer_raw_schema)?;
-            let reader_schema = Schema::parse_str(reader_raw_schema)?;
+            let writer_schema = Schema::parse_str(writer_raw_schema).await?;
+            let reader_schema = Schema::parse_str(reader_raw_schema).await?;
             let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null);
             let mut record = Record::new(writer.schema()).unwrap();
             record.put("a", 27i64);
             record.put("b", "foo");
             record.put("c", "clubs");
-            writer.append(record).unwrap();
+            writer.append(record).await.unwrap();
             let input = writer.into_inner()?;
-            let mut reader = Reader::with_schema(&reader_schema, &input[..])?;
+            let mut reader = Reader::with_schema(&reader_schema, &input[..]).await?;
             assert_eq!(
                 reader.next().unwrap().unwrap(),
                 Value::Record(vec![
@@ -1516,8 +1613,8 @@ mod schema_compatibility {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3772_enum_default_less_symbols() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3772_enum_default_less_symbols() -> TestResult {
             let writer_raw_schema = r#"
         {
           "type": "record",
@@ -1557,16 +1654,16 @@ mod schema_compatibility {
           ]
         }
       "#;
-            let writer_schema = Schema::parse_str(writer_raw_schema)?;
-            let reader_schema = Schema::parse_str(reader_raw_schema)?;
+            let writer_schema = Schema::parse_str(writer_raw_schema).await?;
+            let reader_schema = Schema::parse_str(reader_raw_schema).await?;
             let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null);
             let mut record = Record::new(writer.schema()).unwrap();
             record.put("a", 27i64);
             record.put("b", "foo");
             record.put("c", "hearts");
-            writer.append(record).unwrap();
+            writer.append(record).await.unwrap();
             let input = writer.into_inner()?;
-            let mut reader = Reader::with_schema(&reader_schema, &input[..])?;
+            let mut reader = Reader::with_schema(&reader_schema, &input[..]).await?;
             assert_eq!(
                 reader.next().unwrap().unwrap(),
                 Value::Record(vec![
@@ -1580,8 +1677,8 @@ mod schema_compatibility {
             Ok(())
         }
 
-        #[test]
-        fn avro_3894_take_aliases_into_account_when_serializing_for_schema_compatibility()
+        #[tokio::test]
+        async fn avro_3894_take_aliases_into_account_when_serializing_for_schema_compatibility()
         -> TestResult {
             let schema_v1 = Schema::parse_str(
                 r#"
@@ -1594,7 +1691,8 @@ mod schema_compatibility {
                 {"type": "long", "name": "date"}
             ]
         }"#,
-            )?;
+            )
+            .await?;
 
             let schema_v2 = Schema::parse_str(
                 r#"
@@ -1607,15 +1705,16 @@ mod schema_compatibility {
                 {"type": "long", "name": "date", "aliases" : [ "time" ]}
             ]
         }"#,
-            )?;
+            )
+            .await?;
 
             assert!(SchemaCompatibility::mutual_read(&schema_v1, &schema_v2).is_ok());
 
             Ok(())
         }
 
-        #[test]
-        fn avro_3917_take_aliases_into_account_for_schema_compatibility() -> TestResult {
+        #[tokio::test]
+        async fn avro_3917_take_aliases_into_account_for_schema_compatibility() -> TestResult {
             let schema_v1 = Schema::parse_str(
                 r#"
         {
@@ -1627,7 +1726,8 @@ mod schema_compatibility {
                 {"type": "long", "name": "date", "aliases" : [ "time" ]}
             ]
         }"#,
-            )?;
+            )
+            .await?;
 
             let schema_v2 = Schema::parse_str(
                 r#"
@@ -1640,7 +1740,8 @@ mod schema_compatibility {
                 {"type": "long", "name": "time"}
             ]
         }"#,
-            )?;
+            )
+            .await?;
 
             assert!(SchemaCompatibility::can_read(&schema_v2, &schema_v1).is_ok());
             assert_eq!(
@@ -1651,8 +1752,8 @@ mod schema_compatibility {
             Ok(())
         }
 
-        #[test]
-        fn test_avro_3898_record_schemas_match_by_unqualified_name() -> TestResult {
+        #[tokio::test]
+        async fn test_avro_3898_record_schemas_match_by_unqualified_name() -> TestResult {
             let schemas = [
                 // Record schemas
                 (
@@ -1667,7 +1768,8 @@ mod schema_compatibility {
                 { "name": "max", "type": "int", "default": 0 }
               ]
             }"#,
-                    )?,
+                    )
+                    .await?,
                     Schema::parse_str(
                         r#"{
               "type": "record",
@@ -1680,7 +1782,8 @@ mod schema_compatibility {
                 { "name": "average", "type": "int", "default": 0}
               ]
             }"#,
-                    )?,
+                    )
+                    .await?,
                 ),
                 // Enum schemas
                 (
@@ -1690,7 +1793,8 @@ mod schema_compatibility {
                     "name": "Suit",
                     "symbols": ["diamonds", "spades", "clubs"]
                 }"#,
-                    )?,
+                    )
+                    .await?,
                     Schema::parse_str(
                         r#"{
                     "type": "enum",
@@ -1698,7 +1802,8 @@ mod schema_compatibility {
                     "namespace": "my.namespace",
                     "symbols": ["diamonds", "spades", "clubs", "hearts"]
                 }"#,
-                    )?,
+                    )
+                    .await?,
                 ),
                 // Fixed schemas
                 (
@@ -1708,7 +1813,8 @@ mod schema_compatibility {
                     "name": "EmployeeId",
                     "size": 16
                 }"#,
-                    )?,
+                    )
+                    .await?,
                     Schema::parse_str(
                         r#"{
                     "type": "fixed",
@@ -1716,7 +1822,8 @@ mod schema_compatibility {
                     "namespace": "my.namespace",
                     "size": 16
                 }"#,
-                    )?,
+                    )
+                    .await?,
                 ),
             ];
 
@@ -1727,8 +1834,8 @@ mod schema_compatibility {
             Ok(())
         }
 
-        #[test]
-        fn test_can_read_compatibility_errors() -> TestResult {
+        #[tokio::test]
+        async fn test_can_read_compatibility_errors() -> TestResult {
             let schemas = [
                 (
                     Schema::parse_str(
@@ -1740,7 +1847,7 @@ mod schema_compatibility {
                         {"name": "success", "type": {"type": "map", "values": "int"}}
                     ]
                 }"#,
-                    )?,
+                    ).await?,
                     Schema::parse_str(
                         r#"{
                     "type": "record",
@@ -1750,7 +1857,7 @@ mod schema_compatibility {
                         {"name": "success", "type": ["null", {"type": "map", "values": "int"}], "default": null}
                     ]
                 }"#,
-                    )?,
+                    ).await?,
                     "Incompatible schemata! Field 'success' in reader schema does not match the type in the writer schema",
                 ),
                 (
@@ -1762,7 +1869,7 @@ mod schema_compatibility {
                             {"name": "max_values", "type": {"type": "array", "items": "int"}}
                         ]
                     }"#,
-                    )?,
+                    ).await?,
                     Schema::parse_str(
                         r#"{
                         "type": "record",
@@ -1771,7 +1878,7 @@ mod schema_compatibility {
                             {"name": "max_values", "type": ["null", {"type": "array", "items": "int"}], "default": null}
                         ]
                     }"#,
-                    )?,
+                    ).await?,
                     "Incompatible schemata! Field 'max_values' in reader schema does not match the type in the writer schema",
                 ),
             ];
@@ -1789,8 +1896,8 @@ mod schema_compatibility {
             Ok(())
         }
 
-        #[test]
-        fn avro_3974_can_read_schema_references() -> TestResult {
+        #[tokio::test]
+        async fn avro_3974_can_read_schema_references() -> TestResult {
             let schema_strs = vec![
                 r#"{
           "type": "record",
@@ -1818,7 +1925,7 @@ mod schema_compatibility {
         "#,
             ];
 
-            let schemas = Schema::parse_list(schema_strs).unwrap();
+            let schemas = Schema::parse_list(schema_strs).await.unwrap();
             SchemaCompatibility::can_read(&schemas[1], &schemas[1])?;
 
             Ok(())

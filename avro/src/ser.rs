@@ -513,7 +513,7 @@ mod ser {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::Decimal;
+        use crate::decimal::tokio::Decimal;
         use apache_avro_test_helper::TestResult;
         use pretty_assertions::assert_eq;
         use serde::{Deserialize, Serialize};

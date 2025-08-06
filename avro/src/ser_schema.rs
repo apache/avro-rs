@@ -1849,8 +1849,8 @@ mod bigdecimal {
     mod tests {
         use super::*;
         use crate::{
-            Days, Duration, Millis, Months, decimal::Decimal, error::Details,
-            schema::ResolvedSchema,
+            Days, Duration, Millis, Months, decimal::tokio::Decimal, error::tokio::Details,
+            schema::tokio::ResolvedSchema,
         };
         use apache_avro_test_helper::TestResult;
         use bigdecimal::BigDecimal;
@@ -2032,8 +2032,8 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
-        fn test_serialize_record() -> TestResult {
+        #[tokio::test]
+        async fn test_serialize_record() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
             "type": "record",
@@ -2043,7 +2043,7 @@ mod bigdecimal {
                 {"name": "intField", "type": "int"}
             ]
         }"#,
-            )?;
+            ).await?;
 
             #[derive(Serialize)]
             #[serde(rename_all = "camelCase")]
@@ -2084,15 +2084,15 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
-        fn test_serialize_empty_record() -> TestResult {
+        #[tokio::test]
+        async fn test_serialize_empty_record() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
             "type": "record",
             "name": "EmptyRecord",
             "fields": []
         }"#,
-            )?;
+            ).await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2136,15 +2136,15 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
-        fn test_serialize_enum() -> TestResult {
+        #[tokio::test]
+        async fn test_serialize_enum() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
             "type": "enum",
             "name": "Suit",
             "symbols": ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
         }"#,
-            )?;
+            ).await?;
 
             #[derive(Serialize)]
             enum Suit {
@@ -2184,14 +2184,14 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
-        fn test_serialize_array() -> TestResult {
+        #[tokio::test]
+        async fn test_serialize_array() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
             "type": "array",
             "items": "long"
         }"#,
-            )?;
+            ).await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2222,14 +2222,14 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
-        fn test_serialize_map() -> TestResult {
+        #[tokio::test]
+        async fn test_serialize_map() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
             "type": "map",
             "values": "long"
         }"#,
-            )?;
+            ).await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2268,13 +2268,13 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
-        fn test_serialize_nullable_union() -> TestResult {
+        #[tokio::test]
+        async fn test_serialize_nullable_union() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
             "type": ["null", "long"]
         }"#,
-            )?;
+            ).await?;
 
             #[derive(Serialize)]
             enum NullableLong {
@@ -2316,13 +2316,13 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
-        fn test_serialize_union() -> TestResult {
+        #[tokio::test]
+        async fn test_serialize_union() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
             "type": ["null", "long", "string"]
         }"#,
-            )?;
+            ).await?;
 
             #[derive(Serialize)]
             enum LongOrString {
@@ -2367,15 +2367,15 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
-        fn test_serialize_fixed() -> TestResult {
+        #[tokio::test]
+        async fn test_serialize_fixed() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
             "type": "fixed",
             "size": 8,
             "name": "LongVal"
         }"#,
-            )?;
+            ).await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2443,8 +2443,8 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
-        fn test_serialize_decimal_bytes() -> TestResult {
+        #[tokio::test]
+        async fn test_serialize_decimal_bytes() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
             "type": "bytes",
@@ -2452,7 +2452,7 @@ mod bigdecimal {
             "precision": 16,
             "scale": 2
         }"#,
-            )?;
+            ).await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2480,8 +2480,8 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
-        fn test_serialize_decimal_fixed() -> TestResult {
+        #[tokio::test]
+        async fn test_serialize_decimal_fixed() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
             "type": "fixed",
@@ -2491,7 +2491,7 @@ mod bigdecimal {
             "precision": 16,
             "scale": 2
         }"#,
-            )?;
+            ).await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2519,15 +2519,15 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
+        #[tokio::test]
         #[serial(serde_is_human_readable)]
-        fn test_serialize_bigdecimal() -> TestResult {
+        async fn test_serialize_bigdecimal() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
             "type": "bytes",
             "logicalType": "big-decimal"
         }"#,
-            )?;
+            ).await?;
 
             crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
             let mut buffer: Vec<u8> = Vec::new();
@@ -2543,15 +2543,15 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
+        #[tokio::test]
         #[serial(serde_is_human_readable)]
-        fn test_serialize_uuid() -> TestResult {
+        async fn test_serialize_uuid() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
             "type": "string",
             "logicalType": "uuid"
         }"#,
-            )?;
+            ).await?;
 
             crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
             let mut buffer: Vec<u8> = Vec::new();
@@ -2588,14 +2588,14 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
-        fn test_serialize_date() -> TestResult {
+        #[tokio::test]
+        async fn test_serialize_date() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
             "type": "int",
             "logicalType": "date"
         }"#,
-            )?;
+            ).await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2632,14 +2632,14 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
-        fn test_serialize_time_millis() -> TestResult {
+        #[tokio::test]
+        async fn test_serialize_time_millis() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
             "type": "int",
             "logicalType": "time-millis"
         }"#,
-            )?;
+            ).await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2676,14 +2676,14 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
-        fn test_serialize_time_micros() -> TestResult {
+        #[tokio::test]
+        async fn test_serialize_time_micros() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
             "type": "long",
             "logicalType": "time-micros"
         }"#,
-            )?;
+            ).await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2723,15 +2723,15 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
-        fn test_serialize_timestamp() -> TestResult {
+        #[tokio::test]
+        async fn test_serialize_timestamp() -> TestResult {
             for precision in ["millis", "micros", "nanos"] {
                 let schema = Schema::parse_str(&format!(
                     r#"{{
                 "type": "long",
                 "logicalType": "timestamp-{precision}"
             }}"#
-                ))?;
+                )).await?;
 
                 let mut buffer: Vec<u8> = Vec::new();
                 let names = HashMap::new();
@@ -2781,8 +2781,8 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
-        fn test_serialize_duration() -> TestResult {
+        #[tokio::test]
+        async fn test_serialize_duration() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
             "type": "fixed",
@@ -2790,7 +2790,7 @@ mod bigdecimal {
             "name": "duration",
             "logicalType": "duration"
         }"#,
-            )?;
+            ).await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2826,9 +2826,9 @@ mod bigdecimal {
             Ok(())
         }
 
-        #[test]
+        #[tokio::test]
         #[serial(serde_is_human_readable)] // for BigDecimal and Uuid
-        fn test_serialize_recursive_record() -> TestResult {
+        async fn test_serialize_recursive_record() -> TestResult {
             let schema = Schema::parse_str(
                 r#"{
             "type": "record",
@@ -2841,7 +2841,7 @@ mod bigdecimal {
                 {"name": "innerRecord", "type": ["null", "TestRecord"]}
             ]
         }"#,
-            )?;
+            ).await?;
 
             #[derive(Serialize)]
             #[serde(rename_all = "camelCase")]

@@ -270,7 +270,7 @@ mod validator {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::schema::Name;
+        use crate::schema::tokio::Name;
         use apache_avro_test_helper::TestResult;
 
         #[test]

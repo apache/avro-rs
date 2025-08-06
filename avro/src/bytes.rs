@@ -285,6 +285,21 @@ pub mod serde_avro_slice_opt {
     }
 }
 
+#[synca::synca(
+  #[cfg(feature = "tokio")]
+  pub mod tokio_tests { },
+  #[cfg(feature = "sync")]
+  pub mod sync_tests {
+    sync!();
+    replace!(
+      crate::de::tokio => crate::de::sync,
+      crate::schema::tokio => crate::schema::sync,
+      crate::ser::tokio => crate::ser::sync,
+      crate::types::tokio => crate::types::sync,
+      #[tokio::test] => #[test]
+    );
+  }
+)]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -292,8 +307,8 @@ mod tests {
     use crate::schema::tokio::Schema;
     use crate::ser::tokio::to_value;
     use crate::types::tokio::Value;
-    use serde::{Deserialize, Serialize};
     use apache_avro_test_helper::TestResult;
+    use serde::{Deserialize, Serialize};
 
     #[tokio::test]
     async fn avro_3631_validate_schema_for_struct_with_byte_types() -> TestResult {

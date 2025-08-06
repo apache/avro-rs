@@ -176,15 +176,16 @@ mod decode {
                 encode_long(len as i64, &mut reader)?;
                 reader.extend_from_slice(&bytes);
 
-                async fn decode_from_string<R, S>(reader: &mut R, names: &HashMap<Name, S>, enclosing_namespace: &Namespace) -> AvroResult<Uuid>
-                    where R: AvroRead + Unpin, S: Borrow<Schema> {
-
-                    match decode_internal(
-                        &Schema::String,
-                        names,
-                        enclosing_namespace,
-                        reader,
-                    )
+                async fn decode_from_string<R, S>(
+                    reader: &mut R,
+                    names: &HashMap<Name, S>,
+                    enclosing_namespace: &Namespace,
+                ) -> AvroResult<Uuid>
+                where
+                    R: AvroRead + Unpin,
+                    S: Borrow<Schema>,
+                {
+                    match decode_internal(&Schema::String, names, enclosing_namespace, reader)
                         .await?
                     {
                         Value::String(ref s) => {
@@ -218,15 +219,32 @@ mod decode {
                                 }
                                 Uuid::from_slice(bytes).map_err(Details::ConvertSliceToUuid)?
                             }
-                            _ => Box::pin(decode_from_string(&mut reader.as_slice(), names, enclosing_namespace)).await?,
+                            _ => {
+                                Box::pin(decode_from_string(
+                                    &mut reader.as_slice(),
+                                    names,
+                                    enclosing_namespace,
+                                ))
+                                .await?
+                            }
                         }
                     } else {
                         // try to decode as string
-                        Box::pin(decode_from_string(&mut reader.as_slice(), names, enclosing_namespace)).await?
+                        Box::pin(decode_from_string(
+                            &mut reader.as_slice(),
+                            names,
+                            enclosing_namespace,
+                        ))
+                        .await?
                     }
                 } else {
                     // definitely a string
-                    Box::pin(decode_from_string(&mut reader.as_slice(), names, enclosing_namespace)).await?
+                    Box::pin(decode_from_string(
+                        &mut reader.as_slice(),
+                        names,
+                        enclosing_namespace,
+                    ))
+                    .await?
                 };
                 Ok(Value::Uuid(uuid))
             }
@@ -450,11 +468,8 @@ mod decode {
             decimal::tokio::Decimal,
             decode::tokio::decode,
             encode::tokio::{encode, tests::success},
-            schema::tokio::{DecimalSchema, FixedSchema, Schema, Name},
-            types::tokio::{
-                Value,
-                Value::{Array, Int, Map},
-            },
+            schema::tokio::{DecimalSchema, FixedSchema, Name, Schema},
+            types::tokio::Value,
         };
         use apache_avro_test_helper::TestResult;
         use pretty_assertions::assert_eq;
@@ -465,7 +480,10 @@ mod decode {
         async fn test_decode_array_without_size() -> TestResult {
             let mut input: &[u8] = &[6, 2, 4, 6, 0];
             let result = decode(&Schema::array(Schema::Int), &mut input).await;
-            assert_eq!(Array(vec!(Int(1), Int(2), Int(3))), result?);
+            assert_eq!(
+                Value::Array(vec!(Value::Int(1), Value::Int(2), Value::Int(3))),
+                result?
+            );
 
             Ok(())
         }
@@ -474,7 +492,10 @@ mod decode {
         async fn test_decode_array_with_size() -> TestResult {
             let mut input: &[u8] = &[5, 6, 2, 4, 6, 0];
             let result = decode(&Schema::array(Schema::Int), &mut input).await;
-            assert_eq!(Array(vec!(Int(1), Int(2), Int(3))), result?);
+            assert_eq!(
+                Value::Array(vec!(Value::Int(1), Value::Int(2), Value::Int(3))),
+                result?
+            );
 
             Ok(())
         }
@@ -484,8 +505,8 @@ mod decode {
             let mut input: &[u8] = &[0x02, 0x08, 0x74, 0x65, 0x73, 0x74, 0x02, 0x00];
             let result = decode(&Schema::map(Schema::Int), &mut input).await;
             let mut expected = HashMap::new();
-            expected.insert(String::from("test"), Int(1));
-            assert_eq!(Map(expected), result?);
+            expected.insert(String::from("test"), Value::Int(1));
+            assert_eq!(Value::Map(expected), result?);
 
             Ok(())
         }
@@ -495,8 +516,8 @@ mod decode {
             let mut input: &[u8] = &[0x01, 0x0C, 0x08, 0x74, 0x65, 0x73, 0x74, 0x02, 0x00];
             let result = decode(&Schema::map(Schema::Int), &mut input).await;
             let mut expected = HashMap::new();
-            expected.insert(String::from("test"), Int(1));
-            assert_eq!(Map(expected), result?);
+            expected.insert(String::from("test"), Value::Int(1));
+            assert_eq!(Value::Map(expected), result?);
 
             Ok(())
         }
@@ -583,7 +604,8 @@ mod decode {
                 }
             ]
         }"#,
-            ).await?;
+            )
+            .await?;
 
             let inner_value1 = Value::Record(vec![("z".into(), Value::Int(3))]);
             let inner_value2 = Value::Record(vec![("z".into(), Value::Int(6))]);
@@ -649,7 +671,8 @@ mod decode {
                 }
             ]
         }"#,
-            ).await?;
+            )
+            .await?;
 
             let inner_value1 = Value::Record(vec![("z".into(), Value::Int(3))]);
             let inner_value2 = Value::Record(vec![("z".into(), Value::Int(6))]);
@@ -699,7 +722,8 @@ mod decode {
                 }
             ]
         }"#,
-            ).await?;
+            )
+            .await?;
 
             let inner_value1 = Value::Record(vec![("z".into(), Value::Int(3))]);
             let inner_value2 = Value::Record(vec![("z".into(), Value::Int(6))]);
