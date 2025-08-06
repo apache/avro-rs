@@ -17,8 +17,8 @@
 
 use apache_avro::{
     Reader, Writer,
-    schema::Schema,
-    types::{Record, Value},
+    Schema,
+    types::sync::{Record, Value},
 };
 use apache_avro_test_helper::TestResult;
 use std::{

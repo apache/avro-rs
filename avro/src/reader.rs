@@ -932,9 +932,7 @@ mod reader {
             c: Vec<String>,
         }
 
-        #[synca::cfg(tokio)]
-        use async_trait::async_trait;
-        #[cfg_attr(feature = "tokio", async_trait)]
+        #[cfg_attr(feature = "tokio", async_trait::async_trait)]
         impl AvroSchema for TestSingleObjectReader {
             async fn get_schema() -> Schema {
                 let schema = r#"

@@ -6919,6 +6919,7 @@ mod schema {
                 id: Uuid,
             }
 
+            #[cfg_attr(feature = "tokio", async_trait::async_trait)]
             impl AvroSchema for Comment {
                 async fn get_schema() -> Schema {
                     Schema::parse_str(

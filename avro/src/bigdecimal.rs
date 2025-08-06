@@ -106,11 +106,17 @@ mod bigdecimal {
         use bigdecimal::{One, Zero};
         use pretty_assertions::assert_eq;
         use std::{
-            fs::File,
-            io::BufReader,
             ops::{Div, Mul},
             str::FromStr,
         };
+        #[synca::cfg(sync)]
+        use std::fs::File;
+        #[synca::cfg(tokio)]
+        use tokio::fs::File;
+        #[synca::cfg(sync)]
+        use std::io::BufReader;
+        #[synca::cfg(tokio)]
+        use tokio::io::BufReader;
 
         #[tokio::test]
         async fn test_avro_3779_bigdecimal_serial() -> TestResult {
@@ -217,8 +223,8 @@ mod bigdecimal {
         async fn test_avro_3779_from_java_file() -> TestResult {
             // Open file generated with Java code to ensure compatibility
             // with Java big decimal logical type.
-            let file: File = File::open("./tests/bigdec.avro")?;
-            let mut reader = Reader::new(BufReader::new(&file)).await?;
+            let file = File::open("./tests/bigdec.avro").await?;
+            let mut reader = Reader::new(BufReader::new(file)).await?;
             let next_element = reader.next().await;
             assert!(next_element.is_some());
             let value = next_element.unwrap()?;

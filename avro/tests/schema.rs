@@ -22,11 +22,11 @@ use std::{
 
 use apache_avro::{
     Codec, Reader, Writer,
-    error::tokio::{Details, Error},
+    error::sync::{Details, Error},
     from_avro_datum, from_value,
-    schema::tokio::{EnumSchema, FixedSchema, Name, RecordField, RecordSchema, Schema},
+    schema::sync::{EnumSchema, FixedSchema, Name, RecordField, RecordSchema, Schema},
     to_avro_datum, to_value,
-    types::tokio::{Record, Value},
+    types::sync::{Record, Value},
 };
 use apache_avro_test_helper::{
     TestResult,
@@ -885,7 +885,6 @@ fn avro_old_issue_47() -> TestResult {
 #[test]
 fn test_avro_3785_deserialize_namespace_with_nullable_type_containing_reference_type() -> TestResult
 {
-    use apache_avro::{from_avro_datum, to_avro_datum, types::tokio::Value};
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
