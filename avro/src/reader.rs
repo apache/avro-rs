@@ -360,7 +360,7 @@ mod reader {
 
     /// Main interface for reading Avro formatted values.
     ///
-    /// To be used as an iterator:
+    /// To be used as an iterator/Stream:
     ///
     /// ```no_run
     /// use apache_avro::Reader;
@@ -380,6 +380,8 @@ mod reader {
         reader_schema: Option<&'a Schema>,
         errored: bool,
         should_resolve_schema: bool,
+        #[synca::cfg(tokio)]
+        pending_future: Option<Pin<Box<dyn Future<Output = AvroResult<Value>> + Send>>>,
     }
 
     impl<'a, R> Reader<'a, R>
@@ -397,6 +399,8 @@ mod reader {
                 reader_schema: None,
                 errored: false,
                 should_resolve_schema: false,
+                #[synca::cfg(tokio)]
+                pending_future: None,
             };
             Ok(reader)
         }
@@ -412,6 +416,8 @@ mod reader {
                 reader_schema: Some(schema),
                 errored: false,
                 should_resolve_schema: false,
+                #[synca::cfg(tokio)]
+                pending_future: None,
             };
             // Check if the reader and writer schemas disagree.
             reader.should_resolve_schema = reader.writer_schema() != schema;
@@ -433,6 +439,8 @@ mod reader {
                 reader_schema: Some(schema),
                 errored: false,
                 should_resolve_schema: false,
+                #[synca::cfg(tokio)]
+                pending_future: None,
             };
             // Check if the reader and writer schemas disagree.
             reader.should_resolve_schema = reader.writer_schema() != schema;
@@ -469,27 +477,6 @@ mod reader {
         }
     }
 
-    // #[cfg(feature = "tokio")]
-    // impl<R: AvroRead + Unpin> Stream for Reader<'_, R> {
-    //     type Item = AvroResult<Value>;
-    //     fn poll_next(
-    //         mut self: Pin<&mut Self>,
-    //         _cx: &mut futures::task::Context<'_>,
-    //     ) -> Poll<Option<Self::Item>> {
-    //         // to prevent keep on reading after the first error occurs
-    //         if self.errored {
-    //             return Poll::Ready(None);
-    //         };
-    //             match self.read_next().await {
-    //                 Ok(opt) => Poll::Ready(opt.map(Ok)),
-    //                 Err(e) => {
-    //                     self.errored = true;
-    //                     Poll::Ready(Some(Err(e)))
-    //                 }
-    //             }
-    //     }
-    // }
-
     #[synca::cfg(sync)]
     impl<R: AvroRead + Unpin> Iterator for Reader<'_, R> {
         type Item = AvroResult<Value>;
@@ -505,6 +492,44 @@ mod reader {
                     self.errored = true;
                     Some(Err(e))
                 }
+            }
+        }
+    }
+
+    #[synca::cfg(tokio)]
+    use std::pin::Pin;
+    #[synca::cfg(tokio)]
+    use std::task::{Context, Poll};
+
+    #[synca::cfg(tokio)]
+    impl<R: AvroRead + Unpin> futures::Stream for Reader<'_, R> {
+        type Item = AvroResult<Value>;
+
+        fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            // to prevent keep on reading after the first error occurs
+            if self.errored {
+                return Poll::Ready(None);
+            };
+            if let Some(mut future) = self.pending_future.take() {
+                match future.as_mut().poll(cx) {
+                    Poll::Ready(result) => {
+                        // Future completed, return the result
+                        if result.is_err() {
+                            self.errored = true;
+                        }
+                        Poll::Ready(Some(result))
+                    }
+                    Poll::Pending => {
+                        // Restore the pending future
+                        self.pending_future = Some(future);
+                        Poll::Pending
+                    }
+                }
+            } else {
+                // TODO: mgrigorov: This breaks rustc !!!
+                // let future = self.read_next();
+                // self.pending_future = Some(future);
+                Poll::Pending
             }
         }
     }
@@ -682,6 +707,8 @@ mod reader {
             types::tokio::Record,
         };
         use apache_avro_test_helper::TestResult;
+        #[synca::cfg(tokio)]
+        use futures::StreamExt;
         use pretty_assertions::assert_eq;
         use serde::Deserialize;
         use std::io::Cursor;
@@ -824,7 +851,7 @@ mod reader {
         #[tokio::test]
         async fn test_reader_iterator() -> TestResult {
             let schema = Schema::parse_str(SCHEMA).await?;
-            let reader = Reader::with_schema(&schema, ENCODED).await?;
+            let mut reader = Reader::with_schema(&schema, ENCODED).await?;
 
             let mut record1 = Record::new(&schema).unwrap();
             record1.put("a", 27i64);
@@ -836,8 +863,10 @@ mod reader {
 
             let expected = [record1.into(), record2.into()];
 
-            for (i, value) in reader.enumerate() {
+            let mut i = 0;
+            while let Some(value) = reader.next().await {
                 assert_eq!(value?, expected[i]);
+                i += 1;
             }
 
             Ok(())
@@ -864,8 +893,8 @@ mod reader {
                 .into_iter()
                 .rev()
                 .collect::<Vec<u8>>();
-            let reader = Reader::with_schema(&schema, &invalid[..]).await?;
-            for value in reader {
+            let mut reader = Reader::with_schema(&schema, &invalid[..]).await?;
+            while let Some(value) = reader.next().await {
                 assert!(value.is_err());
             }
 
@@ -883,8 +912,8 @@ mod reader {
         #[tokio::test]
         async fn test_reader_only_header() -> TestResult {
             let invalid = ENCODED.iter().copied().take(165).collect::<Vec<u8>>();
-            let reader = Reader::new(&invalid[..]).await?;
-            for value in reader {
+            let mut reader = Reader::new(&invalid[..]).await?;
+            while let Some(value) = reader.next().await {
                 assert!(value.is_err());
             }
 

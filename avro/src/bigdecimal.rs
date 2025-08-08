@@ -104,17 +104,19 @@ mod bigdecimal {
         };
         use apache_avro_test_helper::TestResult;
         use bigdecimal::{One, Zero};
+        #[synca::cfg(tokio)]
+        use futures::StreamExt;
         use pretty_assertions::assert_eq;
+        #[synca::cfg(sync)]
+        use std::fs::File;
+        #[synca::cfg(sync)]
+        use std::io::BufReader;
         use std::{
             ops::{Div, Mul},
             str::FromStr,
         };
-        #[synca::cfg(sync)]
-        use std::fs::File;
         #[synca::cfg(tokio)]
         use tokio::fs::File;
-        #[synca::cfg(sync)]
-        use std::io::BufReader;
         #[synca::cfg(tokio)]
         use tokio::io::BufReader;
 

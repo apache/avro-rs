@@ -842,6 +842,8 @@ mod writer {
             types::tokio::Record,
             util::tokio::zig_i64,
         };
+        #[synca::cfg(tokio)]
+        use futures::StreamExt;
         use pretty_assertions::assert_eq;
         use serde::{Deserialize, Serialize};
         use uuid::Uuid;
@@ -1418,11 +1420,11 @@ mod writer {
             writer.add_user_metadata("a".to_string(), "b")?;
             let result = writer.into_inner()?;
 
-            let reader = Reader::with_schema(&schema, &result[..]).await?;
+            let mut reader = Reader::with_schema(&schema, &result[..]).await?;
             let mut expected = HashMap::new();
             expected.insert("a".to_string(), vec![b'b']);
             assert_eq!(reader.user_metadata(), &expected);
-            assert_eq!(reader.into_iter().count(), 0);
+            assert!(reader.next().await.is_none());
 
             Ok(())
         }
@@ -1582,7 +1584,8 @@ mod writer {
             assert_eq!(buf[1], 0x01);
             assert_eq!(
                 &buf[2..10],
-                &TestSingleObjectWriter::get_schema().await
+                &TestSingleObjectWriter::get_schema()
+                    .await
                     .fingerprint::<Rabin>()
                     .bytes[..]
             );
@@ -1644,7 +1647,8 @@ mod writer {
             )
             .expect("Should resolve schema");
             let mut specific_writer =
-                SpecificSingleObjectWriter::<TestSingleObjectWriter>::with_capacity(1024).await
+                SpecificSingleObjectWriter::<TestSingleObjectWriter>::with_capacity(1024)
+                    .await
                     .expect("Resolved should pass");
             specific_writer
                 .write(obj1.clone(), &mut buf1)

@@ -961,9 +961,9 @@ pub type AvroResult<T> = Result<T, Error>;
 
 #[synca::synca(
   #[cfg(feature = "tokio")]
-  pub mod tokio_tests { },
+  pub mod tokio { },
   #[cfg(feature = "sync")]
-  pub mod sync_tests {
+  pub mod sync {
     sync!();
     replace!(
       crate::codec::tokio => crate::codec::sync,
@@ -984,6 +984,8 @@ mod tests {
         types::tokio::{Record, Value},
         writer::tokio::Writer,
     };
+    // #[synca::cfg(tokio)]
+    use futures::StreamExt;
     use pretty_assertions::assert_eq;
 
     //TODO: move where it fits better
@@ -1072,14 +1074,14 @@ mod tests {
         let input = writer.into_inner().unwrap();
         let mut reader = Reader::with_schema(&schema, &input[..]).await.unwrap();
         assert_eq!(
-            reader.next().unwrap().unwrap(),
+            reader.next().await.unwrap().unwrap(),
             Value::Record(vec![
                 ("a".to_string(), Value::Long(27)),
                 ("b".to_string(), Value::String("foo".to_string())),
                 ("c".to_string(), Value::Enum(2, "clubs".to_string())),
             ])
         );
-        assert!(reader.next().is_none());
+        assert!(reader.next().await.is_none());
     }
 
     //TODO: move where it fits better

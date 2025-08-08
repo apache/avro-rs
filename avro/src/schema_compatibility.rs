@@ -565,6 +565,8 @@ mod schema_compatibility {
             writer::tokio::Writer,
         };
         use apache_avro_test_helper::TestResult;
+        #[synca::cfg(tokio)]
+        use futures::StreamExt;
         use rstest::*;
 
         async fn int_array_schema() -> Schema {
@@ -1601,14 +1603,14 @@ mod schema_compatibility {
             let input = writer.into_inner()?;
             let mut reader = Reader::with_schema(&reader_schema, &input[..]).await?;
             assert_eq!(
-                reader.next().unwrap().unwrap(),
+                reader.next().await.unwrap().unwrap(),
                 Value::Record(vec![
                     ("a".to_string(), Value::Long(27)),
                     ("b".to_string(), Value::String("foo".to_string())),
                     ("c".to_string(), Value::Enum(1, "spades".to_string())),
                 ])
             );
-            assert!(reader.next().is_none());
+            assert!(reader.next().await.is_none());
 
             Ok(())
         }
@@ -1665,14 +1667,14 @@ mod schema_compatibility {
             let input = writer.into_inner()?;
             let mut reader = Reader::with_schema(&reader_schema, &input[..]).await?;
             assert_eq!(
-                reader.next().unwrap().unwrap(),
+                reader.next().await.unwrap().unwrap(),
                 Value::Record(vec![
                     ("a".to_string(), Value::Long(27)),
                     ("b".to_string(), Value::String("foo".to_string())),
                     ("c".to_string(), Value::Enum(0, "hearts".to_string())),
                 ])
             );
-            assert!(reader.next().is_none());
+            assert!(reader.next().await.is_none());
 
             Ok(())
         }
