@@ -36,13 +36,24 @@ darling = { default-features = false, version = "0.21.1" }
 proc-macro2 = { default-features = false, version = "1.0.96" }
 quote = { default-features = false, version = "1.0.40" }
 serde_json = { workspace = true }
-syn = { default-features = false, version = "2.0.104", features = ["full", "fold"] }
+syn = { default-features = false, version = "2.0.104", features = [
+    "full",
+    "fold",
+] }
 
 [dev-dependencies]
-apache-avro = { default-features = false, path = "../avro", features = ["derive"] }
+apache-avro = { default-features = false, path = "../avro", features = [
+    "derive",
+] }
 proptest = { default-features = false, version = "1.7.0", features = ["std"] }
 serde = { workspace = true }
 
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
+
+
+[[test]]
+name = "derive"
+path = "tests/derive.rs"
+required-features = ["sync"]

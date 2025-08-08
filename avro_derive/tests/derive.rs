@@ -15,18 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{
-    Reader, Schema, Writer, from_value,
-    schema::{AvroSchema, derive::AvroSchemaComponent},
-};
-use apache_avro_derive::*;
-use proptest::prelude::*;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use std::collections::HashMap;
-
 #[cfg(test)]
 mod test_derive {
-    use apache_avro::schema::{Alias, EnumSchema, RecordSchema};
+
+    use apache_avro::{
+        AsyncReader, AsyncSchema, AsyncWriter, AvroSchema, async_from_value,
+        derive::AvroSchemaComponent,
+    };
+    use apache_avro_derive::*;
+    use proptest::prelude::*;
+    use serde::{Deserialize, Serialize, de::DeserializeOwned};
+    use std::collections::HashMap;
+
+    use apache_avro::schema::tokio::{Alias, EnumSchema, RecordSchema};
     use std::{borrow::Cow, sync::Mutex};
 
     use super::*;

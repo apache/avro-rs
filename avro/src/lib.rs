@@ -984,7 +984,7 @@ mod tests {
         types::tokio::{Record, Value},
         writer::tokio::Writer,
     };
-    // #[synca::cfg(tokio)]
+    #[synca::cfg(tokio)]
     use futures::StreamExt;
     use pretty_assertions::assert_eq;
 
