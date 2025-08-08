@@ -786,7 +786,7 @@ mod writer {
         data: &T,
         writer: &mut W,
     ) -> AvroResult<usize> {
-        let names: HashMap<Name, &Schema> = HashMap::new();
+        let names: HashMap<Name, Schema> = HashMap::new();
         let mut serializer = SchemaAwareWriteSerializer::new(writer, schema, &names, None);
         let bytes_written = data.serialize(&mut serializer)?;
         Ok(bytes_written)

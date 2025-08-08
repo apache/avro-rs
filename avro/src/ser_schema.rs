@@ -46,7 +46,7 @@ mod bigdecimal {
         bigdecimal::tokio::big_decimal_as_bytes,
         encode::tokio::{encode_int, encode_long},
         error::tokio::{Details, Error},
-        schema::tokio::{Name, NamesRef, Namespace, RecordField, RecordSchema, Schema},
+        schema::tokio::{Name, Names, Namespace, RecordField, RecordSchema, Schema},
     };
     use bigdecimal::BigDecimal;
     use serde::{Serialize, ser};
@@ -455,7 +455,7 @@ mod bigdecimal {
     pub struct SchemaAwareWriteSerializer<'s, W: Write> {
         writer: &'s mut W,
         root_schema: &'s Schema,
-        names: &'s NamesRef<'s>,
+        names: &'s Names,
         enclosing_namespace: Namespace,
     }
 
@@ -472,7 +472,7 @@ mod bigdecimal {
         pub fn new(
             writer: &'s mut W,
             schema: &'s Schema,
-            names: &'s NamesRef<'s>,
+            names: &'s Names,
             enclosing_namespace: Namespace,
         ) -> SchemaAwareWriteSerializer<'s, W> {
             SchemaAwareWriteSerializer {
@@ -492,7 +492,7 @@ mod bigdecimal {
                 }),
             };
 
-            let ref_schema = self.names.get(full_name.as_ref()).copied();
+            let ref_schema = self.names.get(full_name.as_ref()).clone();
 
             ref_schema
                 .ok_or_else(|| Details::SchemaResolutionError(full_name.as_ref().clone()).into())
@@ -2043,7 +2043,8 @@ mod bigdecimal {
                 {"name": "intField", "type": "int"}
             ]
         }"#,
-            ).await?;
+            )
+            .await?;
 
             #[derive(Serialize)]
             #[serde(rename_all = "camelCase")]
@@ -2092,7 +2093,8 @@ mod bigdecimal {
             "name": "EmptyRecord",
             "fields": []
         }"#,
-            ).await?;
+            )
+            .await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2144,7 +2146,8 @@ mod bigdecimal {
             "name": "Suit",
             "symbols": ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
         }"#,
-            ).await?;
+            )
+            .await?;
 
             #[derive(Serialize)]
             enum Suit {
@@ -2191,7 +2194,8 @@ mod bigdecimal {
             "type": "array",
             "items": "long"
         }"#,
-            ).await?;
+            )
+            .await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2229,7 +2233,8 @@ mod bigdecimal {
             "type": "map",
             "values": "long"
         }"#,
-            ).await?;
+            )
+            .await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2274,7 +2279,8 @@ mod bigdecimal {
                 r#"{
             "type": ["null", "long"]
         }"#,
-            ).await?;
+            )
+            .await?;
 
             #[derive(Serialize)]
             enum NullableLong {
@@ -2322,7 +2328,8 @@ mod bigdecimal {
                 r#"{
             "type": ["null", "long", "string"]
         }"#,
-            ).await?;
+            )
+            .await?;
 
             #[derive(Serialize)]
             enum LongOrString {
@@ -2375,7 +2382,8 @@ mod bigdecimal {
             "size": 8,
             "name": "LongVal"
         }"#,
-            ).await?;
+            )
+            .await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2452,7 +2460,8 @@ mod bigdecimal {
             "precision": 16,
             "scale": 2
         }"#,
-            ).await?;
+            )
+            .await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2491,7 +2500,8 @@ mod bigdecimal {
             "precision": 16,
             "scale": 2
         }"#,
-            ).await?;
+            )
+            .await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2527,7 +2537,8 @@ mod bigdecimal {
             "type": "bytes",
             "logicalType": "big-decimal"
         }"#,
-            ).await?;
+            )
+            .await?;
 
             crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
             let mut buffer: Vec<u8> = Vec::new();
@@ -2551,7 +2562,8 @@ mod bigdecimal {
             "type": "string",
             "logicalType": "uuid"
         }"#,
-            ).await?;
+            )
+            .await?;
 
             crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
             let mut buffer: Vec<u8> = Vec::new();
@@ -2595,7 +2607,8 @@ mod bigdecimal {
             "type": "int",
             "logicalType": "date"
         }"#,
-            ).await?;
+            )
+            .await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2639,7 +2652,8 @@ mod bigdecimal {
             "type": "int",
             "logicalType": "time-millis"
         }"#,
-            ).await?;
+            )
+            .await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2683,7 +2697,8 @@ mod bigdecimal {
             "type": "long",
             "logicalType": "time-micros"
         }"#,
-            ).await?;
+            )
+            .await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2731,7 +2746,8 @@ mod bigdecimal {
                 "type": "long",
                 "logicalType": "timestamp-{precision}"
             }}"#
-                )).await?;
+                ))
+                .await?;
 
                 let mut buffer: Vec<u8> = Vec::new();
                 let names = HashMap::new();
@@ -2790,7 +2806,8 @@ mod bigdecimal {
             "name": "duration",
             "logicalType": "duration"
         }"#,
-            ).await?;
+            )
+            .await?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();

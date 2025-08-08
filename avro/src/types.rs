@@ -60,7 +60,6 @@ mod types {
     use bigdecimal::BigDecimal;
     use log::{debug, error};
     use std::{
-        borrow::Borrow,
         collections::{BTreeMap, HashMap},
         fmt::Debug,
         hash::BuildHasher,
@@ -436,17 +435,17 @@ mod types {
         }
 
         /// Validates the value against the provided schema.
-        pub(crate) async fn validate_internal<S: Borrow<Schema> + Debug>(
+        pub(crate) async fn validate_internal(
             &self,
             schema: &Schema,
-            names: &HashMap<Name, S>,
+            names: &HashMap<Name, Schema>,
             enclosing_namespace: &Namespace,
         ) -> Option<String> {
             match (self, schema) {
                 (_, Schema::Ref { name }) => {
                     let name = name.fully_qualified_name(enclosing_namespace);
                     if let Some(s) = names.get(&name) {
-                        Box::pin(self.validate_internal(s.borrow(), names, &name.namespace)).await
+                        Box::pin(self.validate_internal(s, names, &name.namespace)).await
                     } else {
                         Some(format!(
                             "Unresolved schema reference: '{:?}'. Parsed names: {:?}",
@@ -553,7 +552,7 @@ mod types {
                 }
                 (v, Schema::Union(inner)) => {
                     match inner
-                        .find_schema_with_known_schemata(v, Some(names), enclosing_namespace)
+                        .find_schema_with_known_schemata(v, names, enclosing_namespace)
                         .await
                     {
                         Some(_) => None,
@@ -717,10 +716,10 @@ mod types {
                 .await
         }
 
-        pub(crate) async fn resolve_internal<S: Borrow<Schema> + Debug>(
+        pub(crate) async fn resolve_internal(
             mut self,
             schema: &Schema,
-            names: &HashMap<Name, S>,
+            names: &HashMap<Name, Schema>,
             enclosing_namespace: &Namespace,
             field_default: &Option<serde_json::Value>,
         ) -> AvroResult<Self> {
@@ -742,7 +741,7 @@ mod types {
                     if let Some(resolved) = names.get(&name) {
                         debug!("Resolved {name:?}");
                         Box::pin(self.resolve_internal(
-                            resolved.borrow(),
+                            resolved,
                             names,
                             &name.namespace,
                             field_default,
@@ -1112,10 +1111,10 @@ mod types {
             }
         }
 
-        async fn resolve_union<S: Borrow<Schema> + Debug>(
+        async fn resolve_union(
             self,
             schema: &UnionSchema,
-            names: &HashMap<Name, S>,
+            names: &HashMap<Name, Schema>,
             enclosing_namespace: &Namespace,
             field_default: &Option<serde_json::Value>,
         ) -> Result<Self, Error> {
@@ -1126,7 +1125,7 @@ mod types {
                 v => v,
             };
             let (i, inner) = schema
-                .find_schema_with_known_schemata(&v, Some(names), enclosing_namespace)
+                .find_schema_with_known_schemata(&v, names, enclosing_namespace)
                 .await
                 .ok_or_else(|| Details::FindUnionVariant {
                     schema: schema.clone(),
@@ -1142,10 +1141,10 @@ mod types {
             ))
         }
 
-        async fn resolve_array<S: Borrow<Schema> + Debug>(
+        async fn resolve_array(
             self,
             schema: &Schema,
-            names: &HashMap<Name, S>,
+            names: &HashMap<Name, Schema>,
             enclosing_namespace: &Namespace,
         ) -> Result<Self, Error> {
             match self {
@@ -1171,10 +1170,10 @@ mod types {
             }
         }
 
-        async fn resolve_map<S: Borrow<Schema> + Debug>(
+        async fn resolve_map(
             self,
             schema: &Schema,
-            names: &HashMap<Name, S>,
+            names: &HashMap<Name, Schema>,
             enclosing_namespace: &Namespace,
         ) -> Result<Self, Error> {
             match self {
@@ -1211,10 +1210,10 @@ mod types {
             }
         }
 
-        async fn resolve_record<S: Borrow<Schema> + Debug>(
+        async fn resolve_record(
             self,
             fields: &[RecordField],
-            names: &HashMap<Name, S>,
+            names: &HashMap<Name, Schema>,
             enclosing_namespace: &Namespace,
         ) -> Result<Self, Error> {
             let mut items = match self {
@@ -1502,7 +1501,7 @@ mod types {
 
             for (value, schema, valid, expected_err_message) in value_schema_valid.into_iter() {
                 let err_message = value
-                    .validate_internal::<Schema>(&schema, &HashMap::default(), &None)
+                    .validate_internal(&schema, &HashMap::default(), &None)
                     .await;
                 assert_eq!(valid, err_message.is_none());
                 if !valid {

@@ -65,7 +65,6 @@ mod schema {
         ser::{SerializeMap, SerializeSeq},
     };
     use std::{
-        borrow::Borrow,
         collections::{BTreeMap, HashMap, HashSet},
         fmt::Debug,
         hash::Hash,
@@ -272,7 +271,7 @@ mod schema {
     /// Represents Schema lookup within a schema env
     pub(crate) type Names = HashMap<Name, Schema>;
     /// Represents Schema lookup within a schema
-    pub type NamesRef<'a> = HashMap<Name, &'a Schema>;
+    // pub type NamesRef<'a> = HashMap<Name, &'a Schema>;
     /// Represents the namespace for Named Schema
     pub type Namespace = Option<String>;
 
@@ -440,7 +439,7 @@ mod schema {
 
     #[derive(Debug)]
     pub struct ResolvedSchema<'s> {
-        names_ref: NamesRef<'s>,
+        names_ref: Names,
         schemata: Vec<&'s Schema>,
     }
 
@@ -448,9 +447,8 @@ mod schema {
         type Error = Error;
 
         fn try_from(schema: &'s Schema) -> AvroResult<Self> {
-            let names = HashMap::new();
             let mut rs = ResolvedSchema {
-                names_ref: names,
+                names_ref: Default::default(),
                 schemata: vec![schema],
             };
             rs.resolve(rs.get_schemata(), &None, None)?;
@@ -462,9 +460,8 @@ mod schema {
         type Error = Error;
 
         fn try_from(schemata: Vec<&'s Schema>) -> AvroResult<Self> {
-            let names = HashMap::new();
             let mut rs = ResolvedSchema {
-                names_ref: names,
+                names_ref: Default::default(),
                 schemata,
             };
             rs.resolve(rs.get_schemata(), &None, None)?;
@@ -477,7 +474,7 @@ mod schema {
             self.schemata.clone()
         }
 
-        pub fn get_names(&self) -> &NamesRef<'s> {
+        pub fn get_names(&self) -> &Names {
             &self.names_ref
         }
 
@@ -487,7 +484,7 @@ mod schema {
         pub fn new_with_known_schemata<'n>(
             schemata_to_resolve: Vec<&'s Schema>,
             enclosing_namespace: &Namespace,
-            known_schemata: &'n NamesRef<'n>,
+            known_schemata: &Names,
         ) -> AvroResult<Self> {
             let names = HashMap::new();
             let mut rs = ResolvedSchema {
@@ -502,7 +499,7 @@ mod schema {
             &mut self,
             schemata: Vec<&'s Schema>,
             enclosing_namespace: &Namespace,
-            known_schemata: Option<&'n NamesRef<'n>>,
+            known_schemata: Option<&Names>,
         ) -> AvroResult<()> {
             for schema in schemata {
                 match schema {
@@ -522,7 +519,7 @@ mod schema {
                         let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
                         if self
                             .names_ref
-                            .insert(fully_qualified_name.clone(), schema)
+                            .insert(fully_qualified_name.clone(), schema.clone())
                             .is_some()
                         {
                             return Err(
@@ -534,7 +531,7 @@ mod schema {
                         let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
                         if self
                             .names_ref
-                            .insert(fully_qualified_name.clone(), schema)
+                            .insert(fully_qualified_name.clone(), schema.clone())
                             .is_some()
                         {
                             return Err(
@@ -993,10 +990,10 @@ mod schema {
         ///
         /// Extra arguments:
         /// - `known_schemata` - mapping between `Name` and `Schema` - if passed, additional external schemas would be used to resolve references.
-        pub async fn find_schema_with_known_schemata<S: Borrow<Schema> + Debug>(
+        pub async fn find_schema_with_known_schemata(
             &self,
             value: &Value,
-            known_schemata: Option<&HashMap<Name, S>>,
+            known_schemata: &HashMap<Name, Schema>,
             enclosing_namespace: &Namespace,
         ) -> Option<(usize, &Schema)> {
             let schema_kind = SchemaKind::from(value);
@@ -1007,14 +1004,10 @@ mod schema {
                 // slow path (required for matching logical or named types)
 
                 // first collect what schemas we already know
-                let mut collected_names: HashMap<Name, &Schema> = known_schemata
-                    .map(|names| {
-                        names
-                            .iter()
-                            .map(|(name, schema)| (name.clone(), schema.borrow()))
-                            .collect()
-                    })
-                    .unwrap_or_default();
+                let mut collected_names: HashMap<Name, Schema> = known_schemata
+                    .iter()
+                    .map(|(name, schema)| (name.clone(), schema.clone()))
+                    .collect();
 
                 let mut i: usize = 0;
                 for schema in self.schemas.iter() {
@@ -1027,7 +1020,7 @@ mod schema {
                     let resolved_names = resolved_schema.names_ref;
 
                     // extend known schemas with just resolved names
-                    collected_names.extend(resolved_names);
+                    collected_names.extend(resolved_names.clone());
                     let namespace = &schema.namespace().or_else(|| enclosing_namespace.clone());
 
                     if value
