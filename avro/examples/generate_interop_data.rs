@@ -17,8 +17,8 @@
 
 use apache_avro::{
     Codec, Writer,
-    schema::Schema,
-    types::{Record, Value},
+    Schema,
+    types::sync::{Record, Value},
 };
 use std::{
     collections::HashMap,

@@ -17,7 +17,7 @@
 
 use apache_avro::{
     AvroResult, Reader, Schema, Writer, read_marker,
-    types::{Record, Value},
+    types::sync::{Record, Value},
 };
 use apache_avro_test_helper::TestResult;
 

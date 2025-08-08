@@ -129,7 +129,7 @@
 //! "#;
 //!
 //! // if the schema is not valid, this function will return an error
-//! let schema = Schema::parse_str(raw_schema).unwrap();
+//! let schema = Schema::parse_str(raw_schema).await.unwrap();
 //!
 //! // schemas can be printed for debugging
 //! println!("{:?}", schema);
@@ -206,7 +206,7 @@
 //! #         ]
 //! #     }
 //! # "#;
-//! # let schema = Schema::parse_str(raw_schema).unwrap();
+//! # let schema = Schema::parse_str(raw_schema).await.unwrap();
 //! // a writer needs a schema and something to write to
 //! let mut writer = Writer::new(&schema, Vec::new());
 //!
@@ -261,7 +261,7 @@
 //! #         ]
 //! #     }
 //! # "#;
-//! # let schema = Schema::parse_str(raw_schema).unwrap();
+//! # let schema = Schema::parse_str(raw_schema).await.unwrap();
 //! // a writer needs a schema and something to write to
 //! let mut writer = Writer::new(&schema, Vec::new());
 //!
@@ -326,7 +326,7 @@
 //! #         ]
 //! #     }
 //! # "#;
-//! # let schema = Schema::parse_str(raw_schema).unwrap();
+//! # let schema = Schema::parse_str(raw_schema).await.unwrap();
 //! let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default()));
 //! ```
 //!
@@ -352,7 +352,7 @@
 //! #         ]
 //! #     }
 //! # "#;
-//! # let schema = Schema::parse_str(raw_schema).unwrap();
+//! # let schema = Schema::parse_str(raw_schema).await.unwrap();
 //! # let mut writer = Writer::new(&schema, Vec::new());
 //! # let mut record = Record::new(writer.schema()).unwrap();
 //! # record.put("a", 27i64);
@@ -381,7 +381,7 @@
 //! #         ]
 //! #     }
 //! # "#;
-//! # let writer_schema = Schema::parse_str(writer_raw_schema).unwrap();
+//! # let writer_schema = Schema::parse_str(writer_raw_schema).await.unwrap();
 //! # let mut writer = Writer::new(&writer_schema, Vec::new());
 //! # let mut record = Record::new(writer.schema()).unwrap();
 //! # record.put("a", 27i64);
@@ -401,7 +401,7 @@
 //!     }
 //! "#;
 //!
-//! let reader_schema = Schema::parse_str(reader_raw_schema).unwrap();
+//! let reader_schema = Schema::parse_str(reader_raw_schema).await.unwrap();
 //!
 //! // reader creation can fail in case the input to read from is not Avro-compatible or malformed
 //! let reader = Reader::with_schema(&reader_schema, &input[..]).unwrap();
@@ -440,8 +440,8 @@
 //! #         ]
 //! #     }
 //! # "#;
-//! # let schema = Schema::parse_str(raw_schema).unwrap();
-//! # let schema = Schema::parse_str(raw_schema).unwrap();
+//! # let schema = Schema::parse_str(raw_schema).await.unwrap();
+//! # let schema = Schema::parse_str(raw_schema).await.unwrap();
 //! # let mut writer = Writer::new(&schema, Vec::new());
 //! # let mut record = Record::new(writer.schema()).unwrap();
 //! # record.put("a", 27i64);
@@ -486,7 +486,7 @@
 //! #         ]
 //! #     }
 //! # "#;
-//! # let schema = Schema::parse_str(raw_schema).unwrap();
+//! # let schema = Schema::parse_str(raw_schema).await.unwrap();
 //! # let mut writer = Writer::new(&schema, Vec::new());
 //! # let test = Test {
 //! #     a: 27,
@@ -529,7 +529,7 @@
 //!         }
 //!     "#;
 //!
-//!     let schema = Schema::parse_str(raw_schema)?;
+//!     let schema = Schema::parse_str(raw_schema).await?;
 //!
 //!     println!("{:?}", schema);
 //!
@@ -655,7 +655,7 @@
 //!     }
 //!     "#;
 //!
-//!     let schema = Schema::parse_str(raw_schema)?;
+//!     let schema = Schema::parse_str(raw_schema).await?;
 //!
 //!     println!("{:?}", schema);
 //!
@@ -715,7 +715,7 @@
 //!             ]
 //!         }
 //!     "#;
-//!     let schema = Schema::parse_str(raw_schema)?;
+//!     let schema = Schema::parse_str(raw_schema).await?;
 //!     println!("{}", schema.fingerprint::<Sha256>());
 //!     println!("{}", schema.fingerprint::<Md5>());
 //!     println!("{}", schema.fingerprint::<Rabin>());
@@ -766,8 +766,8 @@
 //! ```rust
 //! use apache_avro::{Schema, schema_compatibility::SchemaCompatibility};
 //!
-//! let writers_schema = Schema::parse_str(r#"{"type": "array", "items":"int"}"#).unwrap();
-//! let readers_schema = Schema::parse_str(r#"{"type": "array", "items":"long"}"#).unwrap();
+//! let writers_schema = Schema::parse_str(r#"{"type": "array", "items":"int"}"#).await.unwrap();
+//! let readers_schema = Schema::parse_str(r#"{"type": "array", "items":"long"}"#).await.unwrap();
 //! assert!(SchemaCompatibility::can_read(&writers_schema, &readers_schema).is_ok());
 //! ```
 //!
@@ -779,8 +779,8 @@
 //! ```rust
 //! use apache_avro::{Schema, schema_compatibility::SchemaCompatibility};
 //!
-//! let writers_schema = Schema::parse_str(r#"{"type": "array", "items":"long"}"#).unwrap();
-//! let readers_schema = Schema::parse_str(r#"{"type": "array", "items":"int"}"#).unwrap();
+//! let writers_schema = Schema::parse_str(r#"{"type": "array", "items":"long"}"#).await.unwrap();
+//! let readers_schema = Schema::parse_str(r#"{"type": "array", "items":"int"}"#).await.unwrap();
 //! assert!(SchemaCompatibility::can_read(&writers_schema, &readers_schema).is_err());
 //! ```
 //! ## Custom names validators
@@ -882,178 +882,241 @@ pub mod schema_equality;
 pub mod types;
 pub mod validator;
 
-pub use crate::{
-    bigdecimal::BigDecimal,
-    bytes::{
-        serde_avro_bytes, serde_avro_bytes_opt, serde_avro_fixed, serde_avro_fixed_opt,
-        serde_avro_slice, serde_avro_slice_opt,
-    },
+#[cfg(feature = "sync")]
+pub use crate::bigdecimal::sync::BigDecimal;
+#[cfg(feature = "tokio")]
+pub use crate::bigdecimal::tokio::BigDecimal as AsyncBigDecimal;
+pub use crate::bytes::{
+    serde_avro_bytes, serde_avro_bytes_opt, serde_avro_fixed, serde_avro_fixed_opt,
+    serde_avro_slice, serde_avro_slice_opt,
 };
 #[cfg(feature = "bzip")]
 pub use codec::bzip::Bzip2Settings;
+#[cfg(feature = "sync")]
+pub use codec::sync::{Codec, DeflateSettings};
+#[cfg(feature = "tokio")]
+pub use codec::tokio::{Codec as AsyncCodec, DeflateSettings as AsyncDeflateSettings};
 #[cfg(feature = "xz")]
 pub use codec::xz::XzSettings;
 #[cfg(feature = "zstandard")]
 pub use codec::zstandard::ZstandardSettings;
-pub use codec::{Codec, DeflateSettings};
-pub use de::from_value;
-pub use decimal::Decimal;
+#[cfg(feature = "sync")]
+pub use de::sync::from_value;
+#[cfg(feature = "tokio")]
+pub use de::tokio::from_value as async_from_value;
+#[cfg(feature = "sync")]
+pub use decimal::sync::Decimal;
+#[cfg(feature = "tokio")]
+pub use decimal::tokio::Decimal as AsyncDecimal;
 pub use duration::{Days, Duration, Millis, Months};
-pub use error::Error;
-pub use reader::{
+#[cfg(feature = "sync")]
+pub use error::sync::Error;
+#[cfg(feature = "tokio")]
+pub use error::tokio::Error as AsyncError;
+#[cfg(feature = "sync")]
+pub use reader::sync::{
     GenericSingleObjectReader, Reader, SpecificSingleObjectReader, from_avro_datum,
     from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
 };
-pub use schema::{AvroSchema, Schema};
-pub use ser::to_value;
+#[cfg(feature = "tokio")]
+pub use reader::tokio::{
+    GenericSingleObjectReader as AsyncGenericSingleObjectReader, Reader as AsyncReader,
+    SpecificSingleObjectReader as AsyncSpecificSingleObjectReader,
+    from_avro_datum as async_from_avro_datum,
+    from_avro_datum_reader_schemata as async_from_avro_datum_reader_schemata,
+    from_avro_datum_schemata as async_from_avro_datum_schemata, read_marker as async_read_marker,
+};
+#[cfg(feature = "sync")]
+pub use schema::sync::{AvroSchema, Schema};
+#[cfg(feature = "tokio")]
+pub use schema::tokio::{AvroSchema as AsyncAvroSchema, Schema as AsyncSchema};
+#[cfg(feature = "sync")]
+pub use ser::sync::to_value;
+#[cfg(feature = "tokio")]
+pub use ser::tokio::to_value as async_to_value;
 pub use util::{max_allocation_bytes, set_serde_human_readable};
 pub use uuid::Uuid;
-pub use writer::{
+#[cfg(feature = "sync")]
+pub use writer::sync::{
     GenericSingleObjectWriter, SpecificSingleObjectWriter, Writer, WriterBuilder, to_avro_datum,
     to_avro_datum_schemata, write_avro_datum_ref,
+};
+#[cfg(feature = "tokio")]
+pub use writer::tokio::{
+    GenericSingleObjectWriter as AsyncGenericSingleObjectWriter,
+    SpecificSingleObjectWriter as AsyncSpecificSingleObjectWriter, Writer as AsyncWriter,
+    WriterBuilder as AsyncWriterBuilder, to_avro_datum as async_to_avro_datum,
+    to_avro_datum_schemata as async_to_avro_datum_schemata,
+    write_avro_datum_ref as async_write_avro_datum_ref,
 };
 
 #[cfg(feature = "derive")]
 pub use apache_avro_derive::*;
 
 /// A convenience type alias for `Result`s with `Error`s.
+#[cfg(feature = "tokio")]
+pub type AsyncAvroResult<T> = Result<T, AsyncError>;
+#[cfg(feature = "sync")]
 pub type AvroResult<T> = Result<T, Error>;
 
+#[synca::synca(
+  #[cfg(feature = "tokio")]
+  pub mod tokio { },
+  #[cfg(feature = "sync")]
+  pub mod sync {
+    sync!();
+    replace!(
+      crate::codec::tokio => crate::codec::sync,
+      crate::reader::tokio => crate::reader::sync,
+      crate::schema::tokio => crate::schema::sync,
+      crate::types::tokio => crate::types::sync,
+      crate::writer::tokio => crate::writer::sync,
+      #[tokio::test] => #[test]
+    );
+  }
+)]
 #[cfg(test)]
 mod tests {
     use crate::{
-        Codec, Reader, Schema, Writer, from_avro_datum,
-        types::{Record, Value},
+        codec::tokio::Codec,
+        reader::tokio::{Reader, from_avro_datum},
+        schema::tokio::Schema,
+        types::tokio::{Record, Value},
+        writer::tokio::Writer,
     };
+    #[synca::cfg(tokio)]
+    use futures::StreamExt;
     use pretty_assertions::assert_eq;
 
     //TODO: move where it fits better
-    #[test]
-    fn test_enum_default() {
+    #[tokio::test]
+    async fn test_enum_default() {
         let writer_raw_schema = r#"
-            {
-                "type": "record",
-                "name": "test",
-                "fields": [
-                    {"name": "a", "type": "long", "default": 42},
-                    {"name": "b", "type": "string"}
-                ]
-            }
-        "#;
+        {
+            "type": "record",
+            "name": "test",
+            "fields": [
+                {"name": "a", "type": "long", "default": 42},
+                {"name": "b", "type": "string"}
+            ]
+        }
+    "#;
         let reader_raw_schema = r#"
-            {
-                "type": "record",
-                "name": "test",
-                "fields": [
-                    {"name": "a", "type": "long", "default": 42},
-                    {"name": "b", "type": "string"},
-                    {
-                        "name": "c",
-                        "type": {
-                            "type": "enum",
-                            "name": "suit",
-                            "symbols": ["diamonds", "spades", "clubs", "hearts"]
-                        },
-                        "default": "spades"
-                    }
-                ]
-            }
-        "#;
-        let writer_schema = Schema::parse_str(writer_raw_schema).unwrap();
-        let reader_schema = Schema::parse_str(reader_raw_schema).unwrap();
+        {
+            "type": "record",
+            "name": "test",
+            "fields": [
+                {"name": "a", "type": "long", "default": 42},
+                {"name": "b", "type": "string"},
+                {
+                    "name": "c",
+                    "type": {
+                        "type": "enum",
+                        "name": "suit",
+                        "symbols": ["diamonds", "spades", "clubs", "hearts"]
+                    },
+                    "default": "spades"
+                }
+            ]
+        }
+    "#;
+        let writer_schema = Schema::parse_str(writer_raw_schema).await.unwrap();
+        let reader_schema = Schema::parse_str(reader_raw_schema).await.unwrap();
         let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null);
         let mut record = Record::new(writer.schema()).unwrap();
         record.put("a", 27i64);
         record.put("b", "foo");
-        writer.append(record).unwrap();
+        writer.append(record).await.unwrap();
         let input = writer.into_inner().unwrap();
-        let mut reader = Reader::with_schema(&reader_schema, &input[..]).unwrap();
+        let mut reader = Reader::with_schema(&reader_schema, &input[..])
+            .await
+            .unwrap();
         assert_eq!(
-            reader.next().unwrap().unwrap(),
+            reader.next().await.unwrap().unwrap(),
             Value::Record(vec![
                 ("a".to_string(), Value::Long(27)),
                 ("b".to_string(), Value::String("foo".to_string())),
                 ("c".to_string(), Value::Enum(1, "spades".to_string())),
             ])
         );
-        assert!(reader.next().is_none());
+        assert!(reader.next().await.is_none());
     }
 
     //TODO: move where it fits better
-    #[test]
-    fn test_enum_string_value() {
+    #[tokio::test]
+    async fn test_enum_string_value() {
         let raw_schema = r#"
-            {
-                "type": "record",
-                "name": "test",
-                "fields": [
-                    {"name": "a", "type": "long", "default": 42},
-                    {"name": "b", "type": "string"},
-                    {
-                        "name": "c",
-                        "type": {
-                            "type": "enum",
-                            "name": "suit",
-                            "symbols": ["diamonds", "spades", "clubs", "hearts"]
-                        },
-                        "default": "spades"
-                    }
-                ]
-            }
-        "#;
-        let schema = Schema::parse_str(raw_schema).unwrap();
+        {
+            "type": "record",
+            "name": "test",
+            "fields": [
+                {"name": "a", "type": "long", "default": 42},
+                {"name": "b", "type": "string"},
+                {
+                    "name": "c",
+                    "type": {
+                        "type": "enum",
+                        "name": "suit",
+                        "symbols": ["diamonds", "spades", "clubs", "hearts"]
+                    },
+                    "default": "spades"
+                }
+            ]
+        }
+    "#;
+        let schema = Schema::parse_str(raw_schema).await.unwrap();
         let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Null);
         let mut record = Record::new(writer.schema()).unwrap();
         record.put("a", 27i64);
         record.put("b", "foo");
         record.put("c", "clubs");
-        writer.append(record).unwrap();
+        writer.append(record).await.unwrap();
         let input = writer.into_inner().unwrap();
-        let mut reader = Reader::with_schema(&schema, &input[..]).unwrap();
+        let mut reader = Reader::with_schema(&schema, &input[..]).await.unwrap();
         assert_eq!(
-            reader.next().unwrap().unwrap(),
+            reader.next().await.unwrap().unwrap(),
             Value::Record(vec![
                 ("a".to_string(), Value::Long(27)),
                 ("b".to_string(), Value::String("foo".to_string())),
                 ("c".to_string(), Value::Enum(2, "clubs".to_string())),
             ])
         );
-        assert!(reader.next().is_none());
+        assert!(reader.next().await.is_none());
     }
 
     //TODO: move where it fits better
-    #[test]
-    fn test_enum_no_reader_schema() {
+    #[tokio::test]
+    async fn test_enum_no_reader_schema() {
         let writer_raw_schema = r#"
-            {
-                "type": "record",
-                "name": "test",
-                "fields": [
-                    {"name": "a", "type": "long", "default": 42},
-                    {"name": "b", "type": "string"},
-                    {
-                        "name": "c",
-                        "type": {
-                            "type": "enum",
-                            "name": "suit",
-                            "symbols": ["diamonds", "spades", "clubs", "hearts"]
-                        },
-                        "default": "spades"
-                    }
-                ]
-            }
-        "#;
-        let writer_schema = Schema::parse_str(writer_raw_schema).unwrap();
+        {
+            "type": "record",
+            "name": "test",
+            "fields": [
+                {"name": "a", "type": "long", "default": 42},
+                {"name": "b", "type": "string"},
+                {
+                    "name": "c",
+                    "type": {
+                        "type": "enum",
+                        "name": "suit",
+                        "symbols": ["diamonds", "spades", "clubs", "hearts"]
+                    },
+                    "default": "spades"
+                }
+            ]
+        }
+    "#;
+        let writer_schema = Schema::parse_str(writer_raw_schema).await.unwrap();
         let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null);
         let mut record = Record::new(writer.schema()).unwrap();
         record.put("a", 27i64);
         record.put("b", "foo");
         record.put("c", "clubs");
-        writer.append(record).unwrap();
+        writer.append(record).await.unwrap();
         let input = writer.into_inner().unwrap();
-        let mut reader = Reader::new(&input[..]).unwrap();
+        let mut reader = Reader::new(&input[..]).await.unwrap();
         assert_eq!(
-            reader.next().unwrap().unwrap(),
+            reader.next().await.unwrap().unwrap(),
             Value::Record(vec![
                 ("a".to_string(), Value::Long(27)),
                 ("b".to_string(), Value::String("foo".to_string())),
@@ -1062,25 +1125,25 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_illformed_length() {
+    #[tokio::test]
+    async fn test_illformed_length() {
         let raw_schema = r#"
-            {
-                "type": "record",
-                "name": "test",
-                "fields": [
-                    {"name": "a", "type": "long", "default": 42},
-                    {"name": "b", "type": "string"}
-                ]
-            }
-        "#;
+        {
+            "type": "record",
+            "name": "test",
+            "fields": [
+                {"name": "a", "type": "long", "default": 42},
+                {"name": "b", "type": "string"}
+            ]
+        }
+    "#;
 
-        let schema = Schema::parse_str(raw_schema).unwrap();
+        let schema = Schema::parse_str(raw_schema).await.unwrap();
 
         // Would allocated 18446744073709551605 bytes
         let illformed: &[u8] = &[0x3e, 0x15, 0xff, 0x1f, 0x15, 0xff];
 
-        let value = from_avro_datum(&schema, &mut &*illformed, None);
+        let value = from_avro_datum(&schema, &mut &*illformed, None).await;
         assert!(value.is_err());
     }
 }
