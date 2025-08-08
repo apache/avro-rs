@@ -2556,9 +2556,7 @@ mod schema {
     /// through `derive` feature. Do not implement directly!
     /// Implement `apache_avro::schema::derive::AvroSchemaComponent` to get this trait
     /// through a blanket implementation.
-    #[synca::cfg(tokio)]
-    use async_trait::async_trait;
-    #[cfg_attr(feature = "tokio", async_trait)]
+    #[cfg_attr(feature = "tokio", async_trait::async_trait)]
     pub trait AvroSchema {
         async fn get_schema() -> Schema;
     }
@@ -2623,11 +2621,12 @@ mod schema {
             ) -> Schema;
         }
 
+        #[cfg_attr(feature = "tokio", async_trait::async_trait)]
         impl<T> AvroSchema for T
         where
             T: AvroSchemaComponent,
         {
-            fn get_schema() -> Schema {
+            async fn get_schema() -> Schema {
                 T::get_schema_in_ctxt(&mut HashMap::default(), &None)
             }
         }
