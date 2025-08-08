@@ -324,18 +324,18 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                         }
                     }
                 }
-                return Err(Details::EncodeValueAsSchemaError {
+                Err(Details::EncodeValueAsSchemaError {
                     value_kind: ValueKind::Record,
                     supported_schema: vec![SchemaKind::Record, SchemaKind::Union],
                 }
-                .into());
+                .into())
             } else {
                 error!("invalid schema type for Record: {schema:?}");
-                return Err(Details::EncodeValueAsSchemaError {
+                Err(Details::EncodeValueAsSchemaError {
                     value_kind: ValueKind::Record,
                     supported_schema: vec![SchemaKind::Record, SchemaKind::Union],
                 }
-                .into());
+                .into())
             }
         }
     }
