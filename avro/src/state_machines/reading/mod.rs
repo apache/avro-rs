@@ -1,21 +1,30 @@
-use std::{ops::RangeInclusive, sync::Arc};
-
-use oval::Buffer;
-use serde::Deserialize;
-
 use crate::{
-    Error, Schema,
+    Decimal, Duration, Error, Schema,
+    bigdecimal::deserialize_big_decimal,
+    decode::decode_internal,
     error::Details,
+    schema::{
+        ArraySchema, DecimalSchema, EnumSchema, FixedSchema, MapSchema, Name, Namespace,
+        RecordSchema, UnionSchema,
+    },
     state_machines::reading::{
-        block::{ArrayStateMachine, MapStateMachine},
+        block::BlockStateMachine,
         bytes::BytesStateMachine,
+        commands::{CommandTape, UnionVariants},
         object::ObjectStateMachine,
     },
     types::Value,
 };
+use oval::Buffer;
+use serde::Deserialize;
+use std::{borrow::Borrow, collections::HashMap, ops::Deref, str::FromStr};
+use uuid::Uuid;
+
 pub mod async_impl;
 pub mod block;
 pub mod bytes;
+pub mod codec;
+mod commands;
 pub mod object;
 mod object_container_file;
 pub mod sync;
@@ -59,23 +68,23 @@ pub enum SubStateMachine {
     Bytes(BytesStateMachine),
     String(BytesStateMachine),
     Fixed(BytesStateMachine),
-    Array(ArrayStateMachine),
-    Map(MapStateMachine),
+    Block(BlockStateMachine),
     Object(ObjectStateMachine),
-    Union(Box<[CommandTape]>),
+    Union(UnionVariants),
 }
 
 /// A item that was read from the document.
 #[must_use]
 pub enum ItemRead {
-    // TODO: This is probably not useful to have
     Null,
     Boolean(bool),
     Int(i32),
     Long(i64),
     Float(f32),
     Double(f64),
+    // TODO: Maybe just make this a Vec
     Bytes(Box<[u8]>),
+    // TODO: Maybe just make this a String
     String(Box<str>),
     // TODO: Maybe this can just be a bytes
     Fixed(Box<[u8]>),
@@ -89,196 +98,26 @@ pub enum ItemRead {
     Block(usize),
 }
 
-/// The next item type that should be read.
-#[must_use]
-pub enum ToRead {
-    Null,
-    Boolean,
-    Int,
-    Long,
-    Float,
-    Double,
-    Bytes,
-    String,
-    Enum,
-    Fixed(usize),
-    Array(CommandTape),
-    Map(CommandTape),
-    Union(Box<[CommandTape]>),
-}
-
-/// A section of a tape of commands.
-///
-/// This has a reference to the entire tape, so that references to types (for Union,Map,Array) can be resolved.
-#[derive(Debug, Clone)]
-#[must_use]
-pub struct CommandTape {
-    inner: Arc<[u8]>,
-    read_range: RangeInclusive<usize>,
-}
-
-impl CommandTape {
-    pub const NULL: u8 = 0;
-    pub const BOOLEAN: u8 = 1;
-    pub const INT: u8 = 2;
-    pub const LONG: u8 = 3;
-    pub const FLOAT: u8 = 4;
-    pub const DOUBLE: u8 = 5;
-    pub const BYTES: u8 = 6;
-    pub const STRING: u8 = 7;
-    pub const ENUM: u8 = 8;
-    pub const FIXED: u8 = 9;
-    // TODO: Maybe combine Array and Map into Block
-    // TODO: Add a type reference type, so that if a Block has a single type no reference is needed
-    pub const ARRAY: u8 = 10;
-    pub const MAP: u8 = 11;
-    pub const UNION: u8 = 12;
-
-    /// Create a new tape that will be read from start to end.
-    pub fn new(command_tape: Arc<[u8]>) -> Self {
-        let length = command_tape.len();
-        Self {
-            inner: command_tape,
-            read_range: 0..=length,
-        }
-    }
-
-    /// Check if the section of the tape we're reading is finished.
-    pub fn is_finished(&self) -> bool {
-        self.read_range.is_empty()
-    }
-
-    /// Extract a part from the tape to give to a sub state machine.
-    ///
-    /// The tape will run from start to end (inclusive).
-    pub fn extract(&self, start: usize, end: usize) -> Self {
-        assert!(
-            end < self.inner.len(),
-            "Reference is (partly) outside the tape"
-        );
-        Self {
-            inner: self.inner.clone(),
-            read_range: start..=end,
-        }
-    }
-
-    /// Extract many parts from the tape to give to the Union state machine.
-    ///
-    /// The tapes will run from start to end (inclusive).
-    pub fn extract_many(&self, parts: &[(usize, usize)]) -> Box<[Self]> {
-        let mut vec = Vec::with_capacity(parts.len());
-        for &(start, end) in parts {
-            vec.push(self.extract(start, end));
-        }
-        vec.into_boxed_slice()
-    }
-
-    /// Read an array of bytes from the tape.
-    fn read_array<const N: usize>(&mut self) -> [u8; N] {
-        let start = self.read_range.next().expect("Read past the limit");
-        let end = self.read_range.nth(N - 1).expect("Read past the limit");
-        self.inner[start..=end].try_into().expect("Unreachable!")
-    }
-
-    /// Get the next command from the tape.
-    ///
-    /// # Panics
-    /// Will panic if the commands are already finished, see [`Self::is_finished`].
-    pub fn command(&mut self) -> ToRead {
-        let position = self
-            .read_range
-            .next()
-            .expect("The caller read past the tape");
-        let byte = self.inner[position];
-        match byte & 0xF {
-            Self::NULL => ToRead::Null,
-            Self::BOOLEAN => ToRead::Boolean,
-            Self::INT => ToRead::Int,
-            Self::LONG => ToRead::Long,
-            Self::FLOAT => ToRead::Float,
-            Self::DOUBLE => ToRead::Double,
-            Self::BYTES => ToRead::Bytes,
-            Self::STRING => ToRead::String,
-            Self::ENUM => ToRead::Enum,
-            Self::FIXED => {
-                // ToRead::Fixed
-                if byte >> 4 != 0 {
-                    // Length is stored inine
-                    ToRead::Fixed((byte >> 4) as usize)
-                } else {
-                    let length = usize::from_ne_bytes(self.read_array());
-                    ToRead::Fixed(length)
-                }
-            }
-            Self::ARRAY => {
-                // ToRead::Array
-                // TODO: If the length of the type is less than 16 we can store the length inline
-                // TODO: Change end to length
-                // TODO: Use varint for start and length
-                let start = usize::from_ne_bytes(self.read_array());
-                let end = usize::from_ne_bytes(self.read_array());
-                ToRead::Array(self.extract(start, end))
-            }
-            Self::MAP => {
-                // ToRead::Map
-                // TODO: If the length of the type is less than 16 we can store the length inline
-                // TODO: Change end to length
-                // TODO: Use varint for start and length
-                let start = usize::from_ne_bytes(self.read_array());
-                let end = usize::from_ne_bytes(self.read_array());
-                ToRead::Map(self.extract(start, end))
-            }
-            Self::UNION => {
-                // ToRead::Union
-                // How many variants are there?
-                let number_of_options = if byte >> 4 != 0 {
-                    (byte >> 4) as usize
-                } else {
-                    // TODO: Use varint
-                    let number_of_options = u32::from_ne_bytes(self.read_array());
-                    number_of_options as usize
-                };
-
-                // Where are the references to the variants? Every reference is a pair of usizes.
-                // TODO: Use varint
-                let position_of_options = usize::from_ne_bytes(self.read_array());
-
-                // Assert that the references are inside the tape.
-                assert!(
-                    position_of_options + number_of_options * size_of::<(usize, usize)>()
-                        < self.inner.len(),
-                    "Options are (partly) outside the tape"
-                );
-                // TODO: Change options from start-end to start-length
-                // TODO: Use varint for start and length
-                // TODO: Find a safe way to do this
-                // SAFETY: As asserted above, the references are entirely inside the slice. The ptr is not null as we've
-                //         just read from the slice. We check that the options are aligned before creating the new slice.
-                //         The lifetime of the slice is set to the same lifetime as the parent slice.
-                let options = unsafe {
-                    let options: *const (usize, usize) =
-                        self.inner.as_ptr().add(position_of_options).cast();
-                    assert!(options.is_aligned());
-                    std::slice::from_raw_parts(options, number_of_options)
-                };
-                ToRead::Union(self.extract_many(options))
-            }
-            _ => unreachable!(), // TODO: There is room here to specialize certain types, like a Union of Null and some other type
-        }
-    }
-}
-
 /// Read a zigzagged varint from the buffer.
 ///
 /// Will only consume the buffer if a whole number has been read.
 /// If insufficient bytes are available it will return `Ok(None)` to
 /// indicate it needs more bytes.
-pub fn decode_zigzag(buffer: &mut Buffer) -> Result<Option<i64>, Error> {
+pub fn decode_zigzag_buffer(buffer: &mut Buffer) -> Result<Option<i64>, Error> {
+    if let Some((decoded, consumed)) = decode_zigzag_slice(buffer.data())? {
+        buffer.consume(consumed);
+        Ok(Some(decoded))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn decode_zigzag_slice(buffer: &[u8]) -> Result<Option<(i64, usize)>, Error> {
     let mut decoded = 0;
     let mut loops_done = 0;
     let mut last_byte = 0;
 
-    for (counter, &byte) in buffer.data().iter().take(9).enumerate() {
+    for (counter, &byte) in buffer.iter().take(9).enumerate() {
         let byte = u64::from(byte);
         decoded |= (byte & 0x7F) << (counter * 7);
         loops_done = counter;
@@ -294,13 +133,10 @@ pub fn decode_zigzag(buffer: &mut Buffer) -> Result<Option<i64>, Error> {
         } else {
             Ok(None)
         }
+    } else if decoded & 0x1 == 0 {
+        Ok(Some(((decoded >> 1) as i64, loops_done)))
     } else {
-        buffer.consume(loops_done);
-        if decoded & 0x1 == 0 {
-            Ok(Some((decoded >> 1) as i64))
-        } else {
-            Ok(Some(!(decoded >> 1) as i64))
-        }
+        Ok(Some((!(decoded >> 1) as i64, loops_done)))
     }
 }
 
@@ -313,26 +149,258 @@ pub fn replace_drop<T>(dest: &mut T, src: T) {
 ///
 /// The schema must be compatible with the schema used by the original writer.
 ///
-/// The tape is completely drained in the process.
-pub fn value_from_tape(tape: &mut Vec<ItemRead>, _schema: &Schema) -> Result<Value, Error> {
-    tape.clear();
-    todo!();
+/// # Panics
+/// Can panic if the provided schema does not exactly match the schema used to create the tape. To
+/// convert between the writer and reader schema use [`Value::resolve`] instead.
+pub fn value_from_tape<S: Borrow<Schema>>(
+    tape: &mut Vec<ItemRead>,
+    schema: &Schema,
+    names: &HashMap<Name, S>,
+    enclosing_namespace: &Namespace,
+) -> Result<Value, Error> {
+    match schema {
+        Schema::Null => {
+            if let ItemRead::Null = tape.pop().unwrap() {
+                Ok(Value::Null)
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::Boolean => {
+            if let ItemRead::Boolean(bool) = tape.pop().unwrap() {
+                Ok(Value::Boolean(bool))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::Int => {
+            if let ItemRead::Int(bool) = tape.pop().unwrap() {
+                Ok(Value::Int(bool))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::Long => {
+            if let ItemRead::Long(long) = tape.pop().unwrap() {
+                Ok(Value::Long(long))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::Float => {
+            if let ItemRead::Float(float) = tape.pop().unwrap() {
+                Ok(Value::Float(float))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::Double => {
+            if let ItemRead::Double(double) = tape.pop().unwrap() {
+                Ok(Value::Double(double))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::Bytes => {
+            if let ItemRead::Bytes(bytes) = tape.pop().unwrap() {
+                Ok(Value::Bytes(Vec::from(bytes)))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::String => {
+            if let ItemRead::String(string) = tape.pop().unwrap() {
+                Ok(Value::String(String::from(string)))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::Array(ArraySchema { items, .. }) => {
+            let mut collected = Vec::new();
+            loop {
+                let ItemRead::Block(n) = tape.pop().unwrap() else {
+                    todo!("Error")
+                };
+                if n == 0 {
+                    break;
+                }
+                collected.reserve(n);
+                for _ in 0..n {
+                    collected.push(value_from_tape(tape, items, names, enclosing_namespace)?);
+                }
+            }
+            Ok(Value::Array(collected))
+        }
+        Schema::Map(MapSchema { types, .. }) => {
+            let mut collected = HashMap::new();
+            loop {
+                let ItemRead::Block(n) = tape.pop().unwrap() else {
+                    todo!("Error")
+                };
+                if n == 0 {
+                    break;
+                }
+                collected.reserve(n);
+                for _ in 0..n {
+                    let ItemRead::String(key) = tape.pop().unwrap() else {
+                        todo!("Error")
+                    };
+                    let val = value_from_tape(tape, types, names, enclosing_namespace)?;
+                    collected.insert(String::from(key), val);
+                }
+            }
+            Ok(Value::Map(collected))
+        }
+        Schema::Union(UnionSchema { schemas, .. }) => {
+            if let ItemRead::Union(variant) = tape.pop().unwrap() {
+                let schema = schemas.get(usize::try_from(variant).unwrap()).unwrap();
+                let value = Box::new(value_from_tape(tape, schema, names, enclosing_namespace)?);
+                Ok(Value::Union(variant, value))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::Record(RecordSchema { name, fields, .. }) => {
+            let fqn = name.fully_qualified_name(enclosing_namespace);
+            let mut collected = Vec::with_capacity(fields.len());
+            for field in fields {
+                let collect = value_from_tape(tape, &field.schema, names, &fqn.namespace)?;
+                collected.push((field.name.clone(), collect));
+            }
+            Ok(Value::Record(collected))
+        }
+        Schema::Enum(EnumSchema { symbols, .. }) => {
+            if let ItemRead::Enum(val) = tape.pop().unwrap() {
+                Ok(Value::Enum(
+                    val,
+                    symbols.get(usize::try_from(val).unwrap()).unwrap().clone(),
+                ))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::Fixed(FixedSchema { size, .. }) => {
+            if let ItemRead::Fixed(fixed) = tape.pop().unwrap() {
+                // TODO: make error
+                assert_eq!(*size, fixed.len());
+                Ok(Value::Fixed(fixed.len(), Vec::from(fixed)))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::Decimal(_) => match tape.pop().unwrap() {
+            ItemRead::Fixed(bytes) | ItemRead::Bytes(bytes) => {
+                Ok(Value::Decimal(Decimal::from(&bytes)))
+            }
+            _ => todo!("Error"),
+        },
+        Schema::BigDecimal => {
+            if let ItemRead::Bytes(bytes) = tape.pop().unwrap() {
+                deserialize_big_decimal(&bytes).map(Value::BigDecimal)
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::Uuid => {
+            if let ItemRead::String(string) = tape.pop().unwrap() {
+                Uuid::from_str(&string)
+                    .map(Value::Uuid)
+                    .map_err(|e| Details::ConvertStrToUuid(e).into())
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::Date => {
+            if let ItemRead::Int(int) = tape.pop().unwrap() {
+                Ok(Value::Date(int))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::TimeMillis => {
+            if let ItemRead::Int(int) = tape.pop().unwrap() {
+                Ok(Value::TimeMillis(int))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::TimeMicros => {
+            if let ItemRead::Long(long) = tape.pop().unwrap() {
+                Ok(Value::TimeMicros(long))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::TimestampMillis => {
+            if let ItemRead::Long(long) = tape.pop().unwrap() {
+                Ok(Value::TimestampMillis(long))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::TimestampMicros => {
+            if let ItemRead::Long(long) = tape.pop().unwrap() {
+                Ok(Value::TimestampMicros(long))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::TimestampNanos => {
+            if let ItemRead::Long(long) = tape.pop().unwrap() {
+                Ok(Value::TimestampNanos(long))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::LocalTimestampMillis => {
+            if let ItemRead::Long(long) = tape.pop().unwrap() {
+                Ok(Value::LocalTimestampMillis(long))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::LocalTimestampMicros => {
+            if let ItemRead::Long(long) = tape.pop().unwrap() {
+                Ok(Value::LocalTimestampMicros(long))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::LocalTimestampNanos => {
+            if let ItemRead::Long(long) = tape.pop().unwrap() {
+                Ok(Value::LocalTimestampNanos(long))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::Duration => {
+            if let ItemRead::Fixed(bytes) = tape.pop().unwrap() {
+                let array: [u8; 12] = bytes.deref().try_into().unwrap();
+                Ok(Value::Duration(Duration::from(array)))
+            } else {
+                todo!("Error")
+            }
+        }
+        Schema::Ref { name } => {
+            let fqn = name.fully_qualified_name(enclosing_namespace);
+            if let Some(resolved) = names.get(&fqn) {
+                value_from_tape(tape, resolved.borrow(), names, &fqn.namespace)
+            } else {
+                Err(Details::SchemaResolutionError(fqn).into())
+            }
+        }
+    }
 }
 
 /// Deserialize a tape to `T` using the provided [`Schema`].
 ///
 /// The schema must be compatible with the schema used by the original writer.
-///
-/// The tape is completely drained in the process.
-pub fn deserialize_from_tape<'a, T: Deserialize<'a>>(
+pub fn deserialize_from_tape<'a, T: Deserialize<'a>, S: Borrow<Schema>>(
     tape: &mut Vec<ItemRead>,
     _schema: &Schema,
+    _names: &HashMap<Name, S>,
+    _enclosing_namespace: &Namespace,
 ) -> Result<T, Error> {
     tape.clear();
-    todo!()
-}
-
-/// Convert a schema to a tape that can be used by the state machines.
-pub fn schema_to_command_tape(_schema: &Schema) -> CommandTape {
     todo!()
 }

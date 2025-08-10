@@ -2,7 +2,7 @@ use oval::Buffer;
 
 use crate::{
     error::Details,
-    state_machines::reading::{StateMachine, StateMachineControlFlow, decode_zigzag},
+    state_machines::reading::{StateMachine, StateMachineControlFlow, decode_zigzag_buffer},
 };
 
 use super::StateMachineResult;
@@ -41,7 +41,7 @@ impl StateMachine for BytesStateMachine {
 
     fn parse(mut self, buffer: &mut Buffer) -> StateMachineResult<Self, Self::Output> {
         if self.length.is_none() {
-            let Some(length) = decode_zigzag(buffer)? else {
+            let Some(length) = decode_zigzag_buffer(buffer)? else {
                 // Not enough data left in the buffer varint byte plus we know
                 // there at least 127 bytes in the buffer now (as otherwise we wouldn't need one more varint byte).
                 return Ok(StateMachineControlFlow::NeedMore(self));

@@ -9,12 +9,14 @@ use crate::{
     Error, Schema,
     error::Details,
     state_machines::reading::{
-        ItemRead, StateMachine, StateMachineControlFlow, deserialize_from_tape,
+        ItemRead, StateMachine, StateMachineControlFlow,
+        commands::CommandTape,
+        deserialize_from_tape,
         object_container_file::{
             ObjectContainerFileBodyStateMachine, ObjectContainerFileHeader,
             ObjectContainerFileHeaderStateMachine,
         },
-        schema_to_command_tape, value_from_tape,
+        value_from_tape,
     },
     types::Value,
 };
@@ -57,11 +59,15 @@ impl<'a, R: AsyncRead> ObjectContainerFileReader<'a, R> {
             }
         };
 
-        let tape = schema_to_command_tape(&header.schema);
+        let tape = CommandTape::build_from_schema(&header.schema)?;
 
         Ok(Self {
             reader_schema: None,
-            fsm: Some(ObjectContainerFileBodyStateMachine::new(tape, header.sync)),
+            fsm: Some(ObjectContainerFileBodyStateMachine::new(
+                tape,
+                header.sync,
+                header.codec,
+            )),
             header,
             reader,
             buffer,
@@ -112,8 +118,9 @@ impl<'a, R: AsyncRead> ObjectContainerFileReader<'a, R> {
     ) -> impl Stream<Item = Result<T, Error>> {
         try_stream! {
             while let Some(object) = self.next_object().await {
-                let mut tape = object?;
-                yield deserialize_from_tape(&mut tape, self.reader_schema.unwrap_or(&self.header.schema))?;
+                let _tape = object?;
+                yield todo!();
+                // yield deserialize_from_tape(&mut tape, self.reader_schema.unwrap_or(&self.header.schema))?;
             }
         }
     }
@@ -121,8 +128,9 @@ impl<'a, R: AsyncRead> ObjectContainerFileReader<'a, R> {
     pub async fn stream(&mut self) -> impl Stream<Item = Result<Value, Error>> {
         try_stream! {
             while let Some(object) = self.next_object().await {
-                let mut tape = object?;
-                yield value_from_tape(&mut tape, self.reader_schema.unwrap_or(&self.header.schema))?;
+                let _tape = object?;
+                yield todo!();
+                // yield value_from_tape(&mut tape, self.reader_schema.unwrap_or(&self.header.schema))?;
             }
         }
     }

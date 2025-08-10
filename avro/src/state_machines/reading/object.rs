@@ -2,17 +2,15 @@ use std::{io::Read, ops::DerefMut as _};
 
 use oval::Buffer;
 
+use super::StateMachineResult;
 use crate::{
     error::Details,
     state_machines::reading::{
-        CommandTape, ItemRead, StateMachine, StateMachineControlFlow, SubStateMachine, ToRead,
-        block::{ArrayStateMachine, MapStateMachine},
-        bytes::BytesStateMachine,
-        decode_zigzag, replace_drop,
+        CommandTape, ItemRead, StateMachine, StateMachineControlFlow, SubStateMachine,
+        block::BlockStateMachine, bytes::BytesStateMachine, commands::ToRead, decode_zigzag_buffer,
+        replace_drop,
     },
 };
-
-use super::StateMachineResult;
 
 pub struct ObjectStateMachine {
     command_tape: CommandTape,
@@ -44,8 +42,13 @@ impl StateMachine for ObjectStateMachine {
             // Only continue reading the tape if we're not currently driving a sub state machine.
             match std::mem::take(self.current_sub_machine.deref_mut()) {
                 SubStateMachine::None => {
-                    match self.command_tape.command() {
-                        ToRead::Null => self.tape.push(ItemRead::Null),
+                    let Some(command) = self.command_tape.command() else {
+                        break;
+                    };
+                    match command {
+                        ToRead::Null => {
+                            self.tape.push(ItemRead::Null);
+                        }
                         ToRead::Boolean => {
                             let mut byte = [0; 1];
                             buffer
@@ -58,7 +61,7 @@ impl StateMachine for ObjectStateMachine {
                             }
                         }
                         ToRead::Int => {
-                            let Some(n) = decode_zigzag(buffer)? else {
+                            let Some(n) = decode_zigzag_buffer(buffer)? else {
                                 // Not enough data left in the buffer
                                 replace_drop(
                                     self.current_sub_machine.deref_mut(),
@@ -70,7 +73,7 @@ impl StateMachine for ObjectStateMachine {
                             self.tape.push(ItemRead::Int(n));
                         }
                         ToRead::Long => {
-                            let Some(n) = decode_zigzag(buffer)? else {
+                            let Some(n) = decode_zigzag_buffer(buffer)? else {
                                 // Not enough data left in the buffer
                                 replace_drop(
                                     self.current_sub_machine.deref_mut(),
@@ -137,7 +140,7 @@ impl StateMachine for ObjectStateMachine {
                             }
                         }
                         ToRead::Enum => {
-                            let Some(n) = decode_zigzag(buffer)? else {
+                            let Some(n) = decode_zigzag_buffer(buffer)? else {
                                 // Not enough data left in the buffer
                                 replace_drop(
                                     self.current_sub_machine.deref_mut(),
@@ -165,8 +168,8 @@ impl StateMachine for ObjectStateMachine {
                                 }
                             }
                         }
-                        ToRead::Array(command_tape) => {
-                            let fsm = ArrayStateMachine::new(
+                        ToRead::Block(command_tape) => {
+                            let fsm = BlockStateMachine::new(
                                 command_tape,
                                 std::mem::take(&mut self.tape),
                             );
@@ -175,24 +178,7 @@ impl StateMachine for ObjectStateMachine {
                                 StateMachineControlFlow::NeedMore(fsm) => {
                                     replace_drop(
                                         self.current_sub_machine.deref_mut(),
-                                        SubStateMachine::Array(fsm),
-                                    );
-                                    return Ok(StateMachineControlFlow::NeedMore(self));
-                                }
-                                StateMachineControlFlow::Done(tape) => {
-                                    self.tape = tape;
-                                }
-                            }
-                        }
-                        ToRead::Map(command_tape) => {
-                            let fsm =
-                                MapStateMachine::new(command_tape, std::mem::take(&mut self.tape));
-                            // Optimistically run the state machine
-                            match fsm.parse(buffer)? {
-                                StateMachineControlFlow::NeedMore(fsm) => {
-                                    replace_drop(
-                                        self.current_sub_machine.deref_mut(),
-                                        SubStateMachine::Map(fsm),
+                                        SubStateMachine::Block(fsm),
                                     );
                                     return Ok(StateMachineControlFlow::NeedMore(self));
                                 }
@@ -203,7 +189,7 @@ impl StateMachine for ObjectStateMachine {
                         }
                         ToRead::Union(variants) => {
                             // Optimistically try to get the variant
-                            let Some(index) = decode_zigzag(buffer)? else {
+                            let Some(index) = decode_zigzag_buffer(buffer)? else {
                                 // Not enough data left in the buffer
                                 replace_drop(
                                     self.current_sub_machine.deref_mut(),
@@ -213,10 +199,7 @@ impl StateMachine for ObjectStateMachine {
                             };
                             let option = usize::try_from(index)
                                 .map_err(|e| Details::ConvertI64ToUsize(e, index))?;
-                            let variant = variants.get(option).ok_or(Details::GetUnionVariant {
-                                index,
-                                num_variants: variants.len(),
-                            })?;
+                            let variant = variants.get(option)?;
                             let fsm = ObjectStateMachine::new_with_tape(
                                 variant.clone(),
                                 std::mem::take(&mut self.tape),
@@ -236,10 +219,29 @@ impl StateMachine for ObjectStateMachine {
                                 }
                             }
                         }
+                        ToRead::Ref(command_tape) => {
+                            let fsm = ObjectStateMachine::new_with_tape(
+                                command_tape,
+                                std::mem::take(&mut self.tape),
+                            );
+                            // Optimistically run the state machine
+                            match fsm.parse(buffer)? {
+                                StateMachineControlFlow::NeedMore(fsm) => {
+                                    replace_drop(
+                                        self.current_sub_machine.deref_mut(),
+                                        SubStateMachine::Object(fsm),
+                                    );
+                                    return Ok(StateMachineControlFlow::NeedMore(self));
+                                }
+                                StateMachineControlFlow::Done(tape) => {
+                                    self.tape = tape;
+                                }
+                            }
+                        }
                     }
                 }
                 SubStateMachine::Int => {
-                    let Some(n) = decode_zigzag(buffer)? else {
+                    let Some(n) = decode_zigzag_buffer(buffer)? else {
                         // Not enough data left in the buffer
                         return Ok(StateMachineControlFlow::NeedMore(self));
                     };
@@ -247,7 +249,7 @@ impl StateMachine for ObjectStateMachine {
                     self.tape.push(ItemRead::Int(n));
                 }
                 SubStateMachine::Long => {
-                    let Some(n) = decode_zigzag(buffer)? else {
+                    let Some(n) = decode_zigzag_buffer(buffer)? else {
                         // Not enough data left in the buffer
                         return Ok(StateMachineControlFlow::NeedMore(self));
                     };
@@ -268,7 +270,7 @@ impl StateMachine for ObjectStateMachine {
                     self.tape.push(ItemRead::Double(f64::from_le_bytes(bytes)))
                 }
                 SubStateMachine::Enum => {
-                    let Some(n) = decode_zigzag(buffer)? else {
+                    let Some(n) = decode_zigzag_buffer(buffer)? else {
                         // Not enough data left in the buffer
                         return Ok(StateMachineControlFlow::NeedMore(self));
                     };
@@ -313,23 +315,11 @@ impl StateMachine for ObjectStateMachine {
                         self.tape.push(ItemRead::Bytes(bytes.into_boxed_slice()))
                     }
                 },
-                SubStateMachine::Array(fsm) => match fsm.parse(buffer)? {
+                SubStateMachine::Block(fsm) => match fsm.parse(buffer)? {
                     StateMachineControlFlow::NeedMore(fsm) => {
                         replace_drop(
                             self.current_sub_machine.deref_mut(),
-                            SubStateMachine::Array(fsm),
-                        );
-                        return Ok(StateMachineControlFlow::NeedMore(self));
-                    }
-                    StateMachineControlFlow::Done(tape) => {
-                        self.tape = tape;
-                    }
-                },
-                SubStateMachine::Map(fsm) => match fsm.parse(buffer)? {
-                    StateMachineControlFlow::NeedMore(fsm) => {
-                        replace_drop(
-                            self.current_sub_machine.deref_mut(),
-                            SubStateMachine::Map(fsm),
+                            SubStateMachine::Block(fsm),
                         );
                         return Ok(StateMachineControlFlow::NeedMore(self));
                     }
@@ -338,16 +328,13 @@ impl StateMachine for ObjectStateMachine {
                     }
                 },
                 SubStateMachine::Union(variants) => {
-                    let Some(index) = decode_zigzag(buffer)? else {
+                    let Some(index) = decode_zigzag_buffer(buffer)? else {
                         // Not enough data left in the buffer
                         return Ok(StateMachineControlFlow::NeedMore(self));
                     };
                     let option =
                         usize::try_from(index).map_err(|e| Details::ConvertI64ToUsize(e, index))?;
-                    let variant = variants.get(option).ok_or(Details::GetUnionVariant {
-                        index,
-                        num_variants: variants.len(),
-                    })?;
+                    let variant = variants.get(option)?;
                     let fsm = ObjectStateMachine::new_with_tape(
                         variant.clone(),
                         std::mem::take(&mut self.tape),

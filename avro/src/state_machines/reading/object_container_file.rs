@@ -7,7 +7,7 @@ use crate::{
     error::Details,
     state_machines::reading::{
         CommandTape, ItemRead, StateMachine, StateMachineControlFlow, StateMachineResult,
-        decode_zigzag, object::ObjectStateMachine,
+        codec::CodecStateMachine, decode_zigzag_buffer, object::ObjectStateMachine,
     },
 };
 
@@ -26,12 +26,11 @@ use crate::{
 /// ```
 #[rustfmt::skip]
 const HEADER_TAPE: &[u8] = &[
-    CommandTape::MAP,                               // Starts with a map
-    0x1A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // The type description starts at 0x1A
-    0x1A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // The type description ends at 0x1A (inclusive)
+    CommandTape::BLOCK | 2 << 4,                    // Starts with a map
+    CommandTape::STRING,                            // The keys are strings
+    CommandTape::BYTES,                             // The values are bytes
     CommandTape::FIXED,                             // After the map there is a Fixed amount of bytes
-    0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // The amount of bytes is 0x0F
-    CommandTape::BYTES,                             // The type of the values in the map
+    0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // The amount of bytes is 0x0F
 ];
 const HEADER_JSON: &str = r#"{"type": "record","name": "org.apache.avro.file.HeaderNoMagic","fields": [{"name": "meta", "type": {"type": "map", "values": "bytes"}},{"name": "sync", "type": {"type": "fixed", "name": "Sync", "size": 16}}]}"#;
 
@@ -177,17 +176,15 @@ impl StateMachine for ObjectContainerFileHeaderStateMachine {
                 let _ = self.fsm.insert(fsm);
                 Ok(StateMachineControlFlow::NeedMore(self))
             }
-            StateMachineControlFlow::Done(tape) => {
-                Ok(StateMachineControlFlow::Done(
-                    ObjectContainerFileHeader::from_tape(tape)?,
-                ))
-            }
+            StateMachineControlFlow::Done(tape) => Ok(StateMachineControlFlow::Done(
+                ObjectContainerFileHeader::from_tape(tape)?,
+            )),
         }
     }
 }
 
 pub struct ObjectContainerFileBodyStateMachine {
-    fsm: Option<ObjectStateMachine>,
+    fsm: Option<CodecStateMachine<ObjectStateMachine>>,
     tape: CommandTape,
     sync: [u8; 16],
     left_in_block: usize,
@@ -196,9 +193,12 @@ pub struct ObjectContainerFileBodyStateMachine {
 }
 
 impl ObjectContainerFileBodyStateMachine {
-    pub fn new(tape: CommandTape, sync: [u8; 16]) -> Self {
+    pub fn new(tape: CommandTape, sync: [u8; 16], codec: Codec) -> Self {
         Self {
-            fsm: Some(ObjectStateMachine::new(tape.clone())),
+            fsm: Some(CodecStateMachine::new(
+                ObjectStateMachine::new(tape.clone()),
+                codec,
+            )),
             tape,
             sync,
             left_in_block: 0,
@@ -228,7 +228,7 @@ impl StateMachine for ObjectContainerFileBodyStateMachine {
                 }
                 self.need_to_read_sync = false;
             }
-            let Some(block) = decode_zigzag(buffer)? else {
+            let Some(block) = decode_zigzag_buffer(buffer)? else {
                 // Not enough data left in the buffer
                 return Ok(StateMachineControlFlow::NeedMore(self));
             };
@@ -245,7 +245,7 @@ impl StateMachine for ObjectContainerFileBodyStateMachine {
             self.left_in_block = abs_block;
         }
         if self.need_to_read_block_byte_size {
-            let Some(block) = decode_zigzag(buffer)? else {
+            let Some(block) = decode_zigzag_buffer(buffer)? else {
                 // Not enough data left in the buffer
                 return Ok(StateMachineControlFlow::NeedMore(self));
             };
@@ -259,10 +259,32 @@ impl StateMachine for ObjectContainerFileBodyStateMachine {
                 self.fsm.replace(fsm);
                 Ok(StateMachineControlFlow::NeedMore(self))
             }
-            StateMachineControlFlow::Done(result) => {
-                self.fsm.replace(ObjectStateMachine::new(self.tape.clone()));
+            StateMachineControlFlow::Done((result, mut codec)) => {
+                codec.reset(ObjectStateMachine::new(self.tape.clone()));
+                self.fsm.replace(codec);
+                self.left_in_block -= 1;
                 Ok(StateMachineControlFlow::Done(Some((result, self))))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use crate::{
+        Schema,
+        state_machines::reading::{
+            commands::CommandTape,
+            object_container_file::{HEADER_JSON, HEADER_TAPE},
+        },
+    };
+
+    #[test]
+    pub fn header_tape() {
+        let schema = Schema::parse_str(HEADER_JSON).unwrap();
+        let tape = CommandTape::build_from_schema(&schema).unwrap();
+        assert_eq!(tape, CommandTape::new(Arc::from(HEADER_TAPE)));
     }
 }

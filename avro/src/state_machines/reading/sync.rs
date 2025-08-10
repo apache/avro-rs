@@ -7,18 +7,18 @@ use crate::{
     Error, Schema,
     error::Details,
     state_machines::reading::{
-        ItemRead, StateMachine, StateMachineControlFlow, deserialize_from_tape,
+        ItemRead, StateMachine, StateMachineControlFlow,
+        commands::CommandTape,
+        deserialize_from_tape,
         object_container_file::{
             ObjectContainerFileBodyStateMachine, ObjectContainerFileHeader,
             ObjectContainerFileHeaderStateMachine,
         },
-        schema_to_command_tape, value_from_tape,
+        value_from_tape,
     },
     types::Value,
 };
 
-// This should probably also be a state machine and be wrapped in sync and async versions.
-// But this suffices for the demonstration.
 pub struct ObjectContainerFileReader<'a, R> {
     reader_schema: Option<&'a Schema>,
     header: ObjectContainerFileHeader,
@@ -50,11 +50,15 @@ impl<'a, R: Read> ObjectContainerFileReader<'a, R> {
             }
         };
 
-        let tape = schema_to_command_tape(&header.schema);
+        let tape = CommandTape::build_from_schema(&header.schema)?;
 
         Ok(Self {
             reader_schema: None,
-            fsm: Some(ObjectContainerFileBodyStateMachine::new(tape, header.sync)),
+            fsm: Some(ObjectContainerFileBodyStateMachine::new(
+                tape,
+                header.sync,
+                header.codec,
+            )),
             header,
             reader,
             buffer,
@@ -66,9 +70,6 @@ impl<'a, R: Read> ObjectContainerFileReader<'a, R> {
     }
 
     /// Get the next object in the file
-    ///
-    /// # Panics
-    /// Will panic if the file is already finished.
     fn next_object(&mut self) -> Option<Result<Vec<ItemRead>, Error>> {
         if let Some(mut fsm) = self.fsm.take() {
             loop {
@@ -105,8 +106,9 @@ impl<'a, R: Read> ObjectContainerFileReader<'a, R> {
 
     pub fn next_serde<'b, T: Deserialize<'b>>(&mut self) -> Option<Result<T, Error>> {
         self.next_object().map(|r| {
-            r.and_then(|mut tape| {
-                deserialize_from_tape(&mut tape, self.reader_schema.unwrap_or(&self.header.schema))
+            r.and_then(|_tape| {
+                todo!()
+                // deserialize_from_tape(&mut tape, self.reader_schema.unwrap_or(&self.header.schema), todo!(), todo!())
             })
         })
     }
@@ -117,8 +119,9 @@ impl<R: Read> Iterator for ObjectContainerFileReader<'_, R> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.next_object().map(|r| {
-            r.and_then(|mut tape| {
-                value_from_tape(&mut tape, self.reader_schema.unwrap_or(&self.header.schema))
+            r.and_then(|_tape| {
+                todo!()
+                // value_from_tape(&mut tape, self.reader_schema.unwrap_or(&self.header.schema), todo!(), todo!())
             })
         })
     }
