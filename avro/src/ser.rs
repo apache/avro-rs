@@ -492,8 +492,6 @@ mod tests {
     use apache_avro_test_helper::TestResult;
     use pretty_assertions::assert_eq;
     use serde::{Deserialize, Serialize};
-    use serial_test::serial;
-    use std::sync::atomic::Ordering;
 
     #[derive(Debug, Deserialize, Serialize, Clone)]
     struct Test {
@@ -1021,23 +1019,10 @@ mod tests {
     }
 
     #[test]
-    #[serial(serde_is_human_readable)]
-    fn avro_3747_human_readable_false() {
-        use serde::ser::Serializer as SerdeSerializer;
-
-        crate::util::SERDE_HUMAN_READABLE.store(false, Ordering::Release);
-
-        let ser = &mut Serializer {};
-
-        assert_eq!(ser.is_human_readable(), false);
-    }
-
-    #[test]
-    #[serial(serde_is_human_readable)]
     fn avro_3747_human_readable_true() {
         use serde::ser::Serializer as SerdeSerializer;
 
-        crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
+        assert!(crate::util::is_human_readable());
 
         let ser = &mut Serializer {};
 
