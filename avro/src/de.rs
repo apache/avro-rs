@@ -766,15 +766,12 @@ mod tests {
     use num_bigint::BigInt;
     use pretty_assertions::assert_eq;
     use serde::{Deserialize, Serialize};
-    use serial_test::serial;
-    use std::sync::atomic::Ordering;
     use uuid::Uuid;
 
     use apache_avro_test_helper::TestResult;
 
-    use crate::Decimal;
-
     use super::*;
+    use crate::Decimal;
 
     #[derive(PartialEq, Eq, Serialize, Deserialize, Debug)]
     pub struct StringEnum {
@@ -1541,26 +1538,10 @@ mod tests {
     }
 
     #[test]
-    #[serial(serde_is_human_readable)]
-    fn avro_3747_human_readable_false() -> TestResult {
-        use serde::de::Deserializer as SerdeDeserializer;
-
-        let is_human_readable = false;
-        crate::util::SERDE_HUMAN_READABLE.store(is_human_readable, Ordering::Release);
-
-        let deser = &Deserializer::new(&Value::Null);
-
-        assert_eq!(deser.is_human_readable(), is_human_readable);
-
-        Ok(())
-    }
-
-    #[test]
-    #[serial(serde_is_human_readable)]
     fn avro_3747_human_readable_true() -> TestResult {
         use serde::de::Deserializer as SerdeDeserializer;
 
-        crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
+        assert!(crate::util::is_human_readable());
 
         let deser = &Deserializer::new(&Value::Null);
 

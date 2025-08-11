@@ -19,10 +19,7 @@ use crate::{AvroResult, error::Details, schema::Documentation};
 use serde_json::{Map, Value};
 use std::{
     io::{Read, Write},
-    sync::{
-        Once,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-    },
+    sync::OnceLock,
 };
 
 /// Maximum number of bytes that can be allocated when decoding
@@ -30,15 +27,15 @@ use std::{
 /// data, whose length field might be interpreted as enormous.
 /// See max_allocation_bytes to change this limit.
 pub const DEFAULT_MAX_ALLOCATION_BYTES: usize = 512 * 1024 * 1024;
-static MAX_ALLOCATION_BYTES: AtomicUsize = AtomicUsize::new(DEFAULT_MAX_ALLOCATION_BYTES);
-static MAX_ALLOCATION_BYTES_ONCE: Once = Once::new();
+static MAX_ALLOCATION_BYTES: OnceLock<usize> = OnceLock::new();
 
 /// Whether to set serialization & deserialization traits
 /// as `human_readable` or not.
 /// See [set_serde_human_readable] to change this value.
 // crate-visible for testing
-pub(crate) static SERDE_HUMAN_READABLE: AtomicBool = AtomicBool::new(true);
-static SERDE_HUMAN_READABLE_ONCE: Once = Once::new();
+pub(crate) static SERDE_HUMAN_READABLE: OnceLock<bool> = OnceLock::new();
+/// Whether the serializer and deserializer should indicate to types that the format is human-readable.
+pub const DEFAULT_SERDE_HUMAN_READABLE: bool = true;
 
 pub trait MapHelper {
     fn string(&self, key: &str) -> Option<String>;
@@ -144,18 +141,13 @@ fn decode_variable<R: Read>(reader: &mut R) -> AvroResult<u64> {
     Ok(i)
 }
 
-/// Set a new maximum number of bytes that can be allocated when decoding data.
-/// Once called, the limit cannot be changed.
+/// Set the maximum number of bytes that can be allocated when decoding data.
 ///
-/// **NOTE** This function must be called before decoding **any** data. The
-/// library leverages [`std::sync::Once`](https://doc.rust-lang.org/std/sync/struct.Once.html)
-/// to set the limit either when calling this method, or when decoding for
-/// the first time.
+/// This function only changes the setting once. On subsequent calls the value will stay the same
+/// as the first time it is called. It is automatically called on first allocation and defaults to
+/// [`DEFAULT_MAX_ALLOCATION_BYTES`].
 pub fn max_allocation_bytes(num_bytes: usize) -> usize {
-    MAX_ALLOCATION_BYTES_ONCE.call_once(|| {
-        MAX_ALLOCATION_BYTES.store(num_bytes, Ordering::Release);
-    });
-    MAX_ALLOCATION_BYTES.load(Ordering::Acquire)
+    *MAX_ALLOCATION_BYTES.get_or_init(|| num_bytes)
 }
 
 pub fn safe_len(len: usize) -> AvroResult<usize> {
@@ -172,22 +164,20 @@ pub fn safe_len(len: usize) -> AvroResult<usize> {
     }
 }
 
-/// Set whether serializing/deserializing is marked as human readable in serde traits.
-/// This will adjust the return value of `is_human_readable()` for both.
-/// Once called, the value cannot be changed.
+/// Set whether the serializer and deserializer should indicate to types that the format is human-readable.
 ///
-/// **NOTE** This function must be called before serializing/deserializing **any** data. The
-/// library leverages [`std::sync::Once`](https://doc.rust-lang.org/std/sync/struct.Once.html)
-/// to set the limit either when calling this method, or when decoding for
-/// the first time.
-pub fn set_serde_human_readable(human_readable: bool) {
-    SERDE_HUMAN_READABLE_ONCE.call_once(|| {
-        SERDE_HUMAN_READABLE.store(human_readable, Ordering::Release);
-    });
+/// This function only changes the setting once. On subsequent calls the value will stay the same
+/// as the first time it is called. It is automatically called on first allocation and defaults to
+/// [`DEFAULT_SERDE_HUMAN_READABLE`].
+///
+/// *NOTE*: Changing this setting can change the output of [`from_value`](crate::from_value) and the
+/// accepted input of [`to_value`].
+pub fn set_serde_human_readable(human_readable: bool) -> bool {
+    *SERDE_HUMAN_READABLE.get_or_init(|| human_readable)
 }
 
 pub(crate) fn is_human_readable() -> bool {
-    SERDE_HUMAN_READABLE.load(Ordering::Acquire)
+    *SERDE_HUMAN_READABLE.get_or_init(|| DEFAULT_SERDE_HUMAN_READABLE)
 }
 
 #[cfg(test)]
