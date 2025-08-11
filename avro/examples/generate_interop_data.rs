@@ -16,9 +16,8 @@
 // under the License.
 
 use apache_avro::{
-    Codec, Writer,
-    Schema,
-    types::sync::{Record, Value},
+    Codec, Schema, Writer,
+    types::{Record, Value},
 };
 use std::{
     collections::HashMap,
@@ -82,7 +81,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         &interop_root_folder
     ))
     .expect("Unable to read the interop Avro schema");
-    let schema = Schema::parse_str(schema_str.as_str())?;
+    let schema = SchemaExt::parse_str(schema_str.as_str())?;
     let data_folder = format!("{interop_root_folder}/build/interop/data");
     std::fs::create_dir_all(&data_folder)?;
 

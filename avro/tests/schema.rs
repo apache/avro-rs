@@ -22,11 +22,11 @@ use std::{
 
 use apache_avro::{
     Codec, Reader, Writer,
-    error::sync::{Details, Error},
+    error::{Details, Error},
     from_avro_datum, from_value,
-    schema::sync::{EnumSchema, FixedSchema, Name, RecordField, RecordSchema, Schema},
+    schema::{EnumSchema, FixedSchema, Name, RecordField, RecordSchema, Schema},
     to_avro_datum, to_value,
-    types::sync::{Record, Value},
+    types::{Record, Value},
 };
 use apache_avro_test_helper::{
     TestResult,
@@ -56,7 +56,7 @@ fn test_correct_recursive_extraction() -> TestResult {
             }
         ]
     }"#;
-    let outer_schema = Schema::parse_str(raw_outer_schema)?;
+    let outer_schema = SchemaExt::parse_str(raw_outer_schema)?;
     if let Schema::Record(RecordSchema {
         fields: outer_fields,
         ..
@@ -89,7 +89,7 @@ fn test_correct_recursive_extraction() -> TestResult {
 fn test_parse() -> TestResult {
     init();
     for (raw_schema, valid) in examples().iter() {
-        let schema = Schema::parse_str(raw_schema);
+        let schema = SchemaExt::parse_str(raw_schema);
         if *valid {
             assert!(
                 schema.is_ok(),
@@ -109,7 +109,7 @@ fn test_parse() -> TestResult {
 fn test_3799_parse_reader() -> TestResult {
     init();
     for (raw_schema, valid) in examples().iter() {
-        let schema = Schema::parse_reader(&mut Cursor::new(raw_schema));
+        let schema = SchemaExt::parse_reader(&mut Cursor::new(raw_schema));
         if *valid {
             assert!(
                 schema.is_ok(),
@@ -126,7 +126,7 @@ fn test_3799_parse_reader() -> TestResult {
     // Ensure it works for trait objects too.
     for (raw_schema, valid) in examples().iter() {
         let reader: &mut dyn Read = &mut Cursor::new(raw_schema);
-        let schema = Schema::parse_reader(reader);
+        let schema = SchemaExt::parse_reader(reader);
         if *valid {
             assert!(
                 schema.is_ok(),
@@ -147,7 +147,7 @@ fn test_3799_raise_io_error_from_parse_read() -> Result<(), String> {
     // 0xDF is invalid for UTF-8.
     let mut invalid_data = Cursor::new([0xDF]);
 
-    let error = Schema::parse_reader(&mut invalid_data)
+    let error = SchemaExt::parse_reader(&mut invalid_data)
         .unwrap_err()
         .into_details();
 
@@ -167,8 +167,8 @@ fn test_3799_raise_io_error_from_parse_read() -> Result<(), String> {
 fn test_valid_cast_to_string_after_parse() -> TestResult {
     init();
     for (raw_schema, _) in valid_examples().iter() {
-        let schema = Schema::parse_str(raw_schema)?;
-        Schema::parse_str(schema.canonical_form().as_str())?;
+        let schema = SchemaExt::parse_str(raw_schema)?;
+        SchemaExt::parse_str(schema.canonical_form().as_str())?;
     }
     Ok(())
 }
@@ -191,10 +191,10 @@ fn test_parse_list_without_cross_deps() -> TestResult {
         "size": 16
     }"#;
     let schema_strs = [schema_str_1, schema_str_2];
-    let schemas = Schema::parse_list(schema_strs)?;
+    let schemas = SchemaExt::parse_list(schema_strs)?;
 
     for schema_str in &schema_strs {
-        let parsed = Schema::parse_str(schema_str)?;
+        let parsed = SchemaExt::parse_str(schema_str)?;
         assert!(schemas.contains(&parsed));
     }
     Ok(())
@@ -224,8 +224,8 @@ fn test_parse_list_with_cross_deps_basic() -> TestResult {
 
     let schema_strs_first = [schema_a_str, schema_b_str];
     let schema_strs_second = [schema_b_str, schema_a_str];
-    let schemas_first = Schema::parse_list(schema_strs_first)?;
-    let schemas_second = Schema::parse_list(schema_strs_second)?;
+    let schemas_first = SchemaExt::parse_list(schema_strs_first)?;
+    let schemas_second = SchemaExt::parse_list(schema_strs_second)?;
 
     assert_eq!(schemas_first[0], schemas_second[1]);
     assert_eq!(schemas_first[1], schemas_second[0]);
@@ -253,8 +253,8 @@ fn test_parse_list_recursive_type() -> TestResult {
     }"#;
     let schema_strs_first = [schema_str_1, schema_str_2];
     let schema_strs_second = [schema_str_2, schema_str_1];
-    let _ = Schema::parse_list(schema_strs_first)?;
-    let _ = Schema::parse_list(schema_strs_second)?;
+    let _ = SchemaExt::parse_list(schema_strs_first)?;
+    let _ = SchemaExt::parse_list(schema_strs_second)?;
     Ok(())
 }
 
@@ -278,8 +278,8 @@ fn test_parse_list_with_cross_deps_and_namespaces() -> TestResult {
         ]
     }"#;
 
-    let schemas_first = Schema::parse_list([schema_a_str, schema_b_str])?;
-    let schemas_second = Schema::parse_list([schema_b_str, schema_a_str])?;
+    let schemas_first = SchemaExt::parse_list([schema_a_str, schema_b_str])?;
+    let schemas_second = SchemaExt::parse_list([schema_b_str, schema_a_str])?;
 
     assert_eq!(schemas_first[0], schemas_second[1]);
     assert_eq!(schemas_first[1], schemas_second[0]);
@@ -309,8 +309,8 @@ fn test_parse_list_with_cross_deps_and_namespaces_error() -> TestResult {
 
     let schema_strs_first = [schema_str_1, schema_str_2];
     let schema_strs_second = [schema_str_2, schema_str_1];
-    let _ = Schema::parse_list(schema_strs_first).expect_err("Test failed");
-    let _ = Schema::parse_list(schema_strs_second).expect_err("Test failed");
+    let _ = SchemaExt::parse_list(schema_strs_first).expect_err("Test failed");
+    let _ = SchemaExt::parse_list(schema_strs_second).expect_err("Test failed");
 
     Ok(())
 }
@@ -354,7 +354,7 @@ fn test_parse_reused_record_schema_by_fullname() -> TestResult {
        }
     "#;
 
-    let schema = Schema::parse_str(schema_str);
+    let schema = SchemaExt::parse_str(schema_str);
     assert!(schema.is_ok());
     match schema? {
         Schema::Record(RecordSchema {
@@ -457,11 +457,11 @@ fn test_parse_list_multiple_dependencies() -> TestResult {
         ]
     }"#;
 
-    let parsed = Schema::parse_list([schema_a_str, schema_b_str, schema_c_str])?;
+    let parsed = SchemaExt::parse_list([schema_a_str, schema_b_str, schema_c_str])?;
     let schema_strs = vec![schema_a_str, schema_b_str, schema_c_str];
     for schema_str_perm in permutations(&schema_strs) {
         let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
-        let schemas = Schema::parse_list(&schema_str_perm)?;
+        let schemas = SchemaExt::parse_list(&schema_str_perm)?;
         assert_eq!(schemas.len(), 3);
         for parsed_schema in &parsed {
             assert!(schemas.contains(parsed_schema));
@@ -497,11 +497,11 @@ fn test_parse_list_shared_dependency() -> TestResult {
         ]
     }"#;
 
-    let parsed = Schema::parse_list([schema_a_str, schema_b_str, schema_c_str])?;
+    let parsed = SchemaExt::parse_list([schema_a_str, schema_b_str, schema_c_str])?;
     let schema_strs = vec![schema_a_str, schema_b_str, schema_c_str];
     for schema_str_perm in permutations(&schema_strs) {
         let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
-        let schemas = Schema::parse_list(&schema_str_perm)?;
+        let schemas = SchemaExt::parse_list(&schema_str_perm)?;
         assert_eq!(schemas.len(), 3);
         for parsed_schema in &parsed {
             assert!(schemas.contains(parsed_schema));
@@ -530,7 +530,7 @@ fn test_name_collision_error() -> TestResult {
         ]
     }"#;
 
-    let _ = Schema::parse_list([schema_str_1, schema_str_2]).expect_err("Test failed");
+    let _ = SchemaExt::parse_list([schema_str_1, schema_str_2]).expect_err("Test failed");
     Ok(())
 }
 
@@ -554,9 +554,9 @@ fn test_namespace_prevents_collisions() -> TestResult {
         ]
     }"#;
 
-    let parsed = Schema::parse_list([schema_str_1, schema_str_2])?;
-    let parsed_1 = Schema::parse_str(schema_str_1)?;
-    let parsed_2 = Schema::parse_str(schema_str_2)?;
+    let parsed = SchemaExt::parse_list([schema_str_1, schema_str_2])?;
+    let parsed_1 = SchemaExt::parse_str(schema_str_1)?;
+    let parsed_2 = SchemaExt::parse_str(schema_str_2)?;
     assert_eq!(parsed, vec!(parsed_1, parsed_2));
     Ok(())
 }
@@ -697,7 +697,7 @@ fn test_doc_attributes() -> TestResult {
     }
 
     for (raw_schema, _) in DOC_EXAMPLES.iter() {
-        let original_schema = Schema::parse_str(raw_schema)?;
+        let original_schema = SchemaExt::parse_str(raw_schema)?;
         assert_doc(&original_schema);
         if let Schema::Record(RecordSchema { fields, .. }) = original_schema {
             for f in fields {
@@ -723,7 +723,7 @@ fn test_other_attributes() {
     }
 
     for (raw_schema, _) in OTHER_ATTRIBUTES_EXAMPLES.iter() {
-        let schema = Schema::parse_str(raw_schema)?;
+        let schema = SchemaExt::parse_str(raw_schema)?;
         // all inputs have at least some user-defined attributes
         assert!(schema.other_attributes.is_some());
         for prop in schema.other_attributes?.iter() {
@@ -746,7 +746,7 @@ fn test_other_attributes() {
 fn test_root_error_is_not_swallowed_on_parse_error() -> Result<(), String> {
     init();
     let raw_schema = r#"/not/a/real/file"#;
-    let error = Schema::parse_str(raw_schema).unwrap_err().into_details();
+    let error = SchemaExt::parse_str(raw_schema).unwrap_err().into_details();
 
     if let Details::ParseSchemaJson(e) = error {
         assert!(
@@ -764,7 +764,7 @@ fn test_root_error_is_not_swallowed_on_parse_error() -> Result<(), String> {
 #[test]
 fn test_record_schema_with_cyclic_references() -> TestResult {
     init();
-    let schema = Schema::parse_str(
+    let schema = SchemaExt::parse_str(
         r#"
             {
                 "type": "record",
@@ -833,12 +833,12 @@ fn test_record_schema_with_cyclic_references() -> TestResult {
 #[test]
 fn test_decimal_valid_type_attributes() {
     init();
-    let fixed_decimal = Schema::parse_str(DECIMAL_LOGICAL_TYPE_ATTRIBUTES[0])?;
+    let fixed_decimal = SchemaExt::parse_str(DECIMAL_LOGICAL_TYPE_ATTRIBUTES[0])?;
     assert_eq!(4, fixed_decimal.get_attribute("precision"));
     assert_eq!(2, fixed_decimal.get_attribute("scale"));
     assert_eq!(2, fixed_decimal.get_attribute("size"));
 
-    let bytes_decimal = Schema::parse_str(DECIMAL_LOGICAL_TYPE_ATTRIBUTES[1])?;
+    let bytes_decimal = SchemaExt::parse_str(DECIMAL_LOGICAL_TYPE_ATTRIBUTES[1])?;
     assert_eq!(4, bytes_decimal.get_attribute("precision"));
     assert_eq!(0, bytes_decimal.get_attribute("scale"));
 }
@@ -857,7 +857,7 @@ fn avro_old_issue_47() -> TestResult {
         {"name": "b", "type": "string"}
       ]
     }"#;
-    let schema = Schema::parse_str(schema_str)?;
+    let schema = SchemaExt::parse_str(schema_str)?;
 
     use serde::{Deserialize, Serialize};
 
@@ -988,7 +988,7 @@ fn test_avro_3785_deserialize_namespace_with_nullable_type_containing_reference_
             ]
             }"#;
 
-    let writer_schema = Schema::parse_str(writer_schema)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema)?;
     let foo1 = Foo {
         bar_init: Bar::Bar0,
         bar_use_parent: Some(BarUseParent { bar_use: Bar::Bar1 }),
@@ -1000,7 +1000,7 @@ fn test_avro_3785_deserialize_namespace_with_nullable_type_containing_reference_
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;
     let mut x = &datum[..];
-    let reader_schema = Schema::parse_str(reader_schema)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema)?;
     let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
     match deser_value {
         Value::Record(fields) => {
@@ -1036,7 +1036,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref() -> TestResult {
         ]
     }
     "#;
-    let writer_schema = Schema::parse_str(writer_schema_str)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema_str)?;
     let mut writer = Writer::new(&writer_schema, Vec::new());
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Record(vec![("f1_1".to_string(), 10.into())]));
@@ -1069,7 +1069,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref() -> TestResult {
         ]
     }
     "#;
-    let reader_schema = Schema::parse_str(reader_schema_str)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
     let reader = Reader::with_schema(&reader_schema, &input[..])?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
@@ -1109,7 +1109,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref() -> TestResult {
         ]
     }
     "#;
-    let writer_schema = Schema::parse_str(writer_schema_str)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema_str)?;
     let mut writer = Writer::new(&writer_schema, Vec::new());
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Enum(1, "b".to_string()));
@@ -1135,7 +1135,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref() -> TestResult {
         ]
     }
     "#;
-    let reader_schema = Schema::parse_str(reader_schema_str)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
     let reader = Reader::with_schema(&reader_schema, &input[..])?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
@@ -1169,7 +1169,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref() -> TestResult {
         ]
     }
     "#;
-    let writer_schema = Schema::parse_str(writer_schema_str)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema_str)?;
     let mut writer = Writer::new(&writer_schema, Vec::new());
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Fixed(3, vec![0, 1, 2]));
@@ -1195,7 +1195,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref() -> TestResult {
         ]
     }
     "#;
-    let reader_schema = Schema::parse_str(reader_schema_str)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
     let reader = Reader::with_schema(&reader_schema, &input[..])?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
@@ -1240,7 +1240,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_namespace() -> Test
         ]
     }
     "#;
-    let writer_schema = Schema::parse_str(writer_schema_str)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema_str)?;
     let mut writer = Writer::new(&writer_schema, Vec::new());
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Record(vec![("f1_1".to_string(), 10.into())]));
@@ -1274,7 +1274,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_namespace() -> Test
         ]
     }
     "#;
-    let reader_schema = Schema::parse_str(reader_schema_str)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
     let reader = Reader::with_schema(&reader_schema, &input[..])?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
@@ -1315,7 +1315,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_namespace() -> Test
         ]
     }
     "#;
-    let writer_schema = Schema::parse_str(writer_schema_str)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema_str)?;
     let mut writer = Writer::new(&writer_schema, Vec::new());
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Enum(1, "b".to_string()));
@@ -1342,7 +1342,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_namespace() -> Test
         ]
     }
     "#;
-    let reader_schema = Schema::parse_str(reader_schema_str)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
     let reader = Reader::with_schema(&reader_schema, &input[..])?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
@@ -1377,7 +1377,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_namespace() -> Test
         ]
     }
     "#;
-    let writer_schema = Schema::parse_str(writer_schema_str)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema_str)?;
     let mut writer = Writer::new(&writer_schema, Vec::new());
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Fixed(3, vec![0, 1, 2]));
@@ -1404,7 +1404,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_namespace() -> Test
         ]
     }
     "#;
-    let reader_schema = Schema::parse_str(reader_schema_str)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
     let reader = Reader::with_schema(&reader_schema, &input[..])?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
@@ -1449,7 +1449,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_enclosing_namespace
         ]
     }
     "#;
-    let writer_schema = Schema::parse_str(writer_schema_str)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema_str)?;
     let mut writer = Writer::new(&writer_schema, Vec::new());
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Record(vec![("f1_1".to_string(), 10.into())]));
@@ -1483,7 +1483,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_enclosing_namespace
         ]
     }
     "#;
-    let reader_schema = Schema::parse_str(reader_schema_str)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
     let reader = Reader::with_schema(&reader_schema, &input[..])?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
@@ -1524,7 +1524,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_enclosing_namespace
         ]
     }
     "#;
-    let writer_schema = Schema::parse_str(writer_schema_str)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema_str)?;
     let mut writer = Writer::new(&writer_schema, Vec::new());
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Enum(1, "b".to_string()));
@@ -1551,7 +1551,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_enclosing_namespace
         ]
     }
     "#;
-    let reader_schema = Schema::parse_str(reader_schema_str)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
     let reader = Reader::with_schema(&reader_schema, &input[..])?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
@@ -1586,7 +1586,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_enclosing_namespace
         ]
     }
     "#;
-    let writer_schema = Schema::parse_str(writer_schema_str)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema_str)?;
     let mut writer = Writer::new(&writer_schema, Vec::new());
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Fixed(3, vec![0, 1, 2]));
@@ -1613,7 +1613,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_enclosing_namespace
         ]
     }
     "#;
-    let reader_schema = Schema::parse_str(reader_schema_str)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
     let reader = Reader::with_schema(&reader_schema, &input[..])?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
@@ -1647,7 +1647,7 @@ fn write_schema_for_default_value_test() -> apache_avro::AvroResult<Vec<u8>> {
         ]
     }
     "#;
-    let writer_schema = Schema::parse_str(writer_schema_str)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema_str)?;
     let mut writer = Writer::new(&writer_schema, Vec::new());
     let mut record = Record::new(writer.schema())
         .ok_or("Expected Some(Record), but got None")
@@ -1677,7 +1677,7 @@ fn test_avro_3851_read_default_value_for_simple_record_field() -> TestResult {
         ]
     }
     "#;
-    let reader_schema = Schema::parse_str(reader_schema_str)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema_str)?;
     let input = write_schema_for_default_value_test()?;
     let reader = Reader::with_schema(&reader_schema, &input[..])?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
@@ -1724,7 +1724,7 @@ fn test_avro_3851_read_default_value_for_nested_record_field() -> TestResult {
         ]
     }
     "#;
-    let reader_schema = Schema::parse_str(reader_schema_str)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema_str)?;
     let input = write_schema_for_default_value_test()?;
     let reader = Reader::with_schema(&reader_schema, &input[..])?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
@@ -1767,7 +1767,7 @@ fn test_avro_3851_read_default_value_for_enum_record_field() -> TestResult {
         ]
     }
     "#;
-    let reader_schema = Schema::parse_str(reader_schema_str)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema_str)?;
     let input = write_schema_for_default_value_test()?;
     let reader = Reader::with_schema(&reader_schema, &input[..])?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
@@ -1807,7 +1807,7 @@ fn test_avro_3851_read_default_value_for_fixed_record_field() -> TestResult {
         ]
     }
     "#;
-    let reader_schema = Schema::parse_str(reader_schema_str)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema_str)?;
     let input = write_schema_for_default_value_test()?;
     let reader = Reader::with_schema(&reader_schema, &input[..])?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
@@ -1844,7 +1844,7 @@ fn test_avro_3851_read_default_value_for_array_record_field() -> TestResult {
         ]
     }
     "#;
-    let reader_schema = Schema::parse_str(reader_schema_str)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema_str)?;
     let input = write_schema_for_default_value_test()?;
     let reader = Reader::with_schema(&reader_schema, &input[..])?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
@@ -1884,7 +1884,7 @@ fn test_avro_3851_read_default_value_for_map_record_field() -> TestResult {
         ]
     }
     "#;
-    let reader_schema = Schema::parse_str(reader_schema_str)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema_str)?;
     let input = write_schema_for_default_value_test()?;
     let reader = Reader::with_schema(&reader_schema, &input[..])?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
@@ -1930,7 +1930,7 @@ fn test_avro_3851_read_default_value_for_ref_record_field() -> TestResult {
         ]
     }
     "#;
-    let writer_schema = Schema::parse_str(writer_schema_str)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema_str)?;
     let mut writer = Writer::new(&writer_schema, Vec::new());
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Record(vec![("f1_1".to_string(), 10.into())]));
@@ -1962,7 +1962,7 @@ fn test_avro_3851_read_default_value_for_ref_record_field() -> TestResult {
         ]
     }
     "#;
-    let reader_schema = Schema::parse_str(reader_schema_str)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
     let reader = Reader::with_schema(&reader_schema, &input[..])?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
@@ -1995,7 +1995,7 @@ fn test_avro_3851_read_default_value_for_enum() -> TestResult {
         "symbols": ["a", "b", "c"]
     }
     "#;
-    let writer_schema = Schema::parse_str(writer_schema_str)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema_str)?;
     let mut writer = Writer::new(&writer_schema, Vec::new());
     writer.append("c")?;
 
@@ -2008,7 +2008,7 @@ fn test_avro_3851_read_default_value_for_enum() -> TestResult {
         "default": "a"
     }
     "#;
-    let reader_schema = Schema::parse_str(reader_schema_str)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
     let reader = Reader::with_schema(&reader_schema, &input[..])?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
@@ -2092,7 +2092,7 @@ fn avro_rs_66_test_independent_canonical_form_primitives() -> TestResult {
         ]
     }"#;
 
-    let independent_schema = Schema::parse_str(record_with_no_dependencies)?;
+    let independent_schema = SchemaExt::parse_str(record_with_no_dependencies)?;
     let schema_strs = [
         fixed_primitive,
         enum_primitive,
@@ -2102,7 +2102,7 @@ fn avro_rs_66_test_independent_canonical_form_primitives() -> TestResult {
 
     for schema_str_perm in permutations(&schema_strs) {
         let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
-        let schemata = Schema::parse_list(&schema_str_perm)?;
+        let schemata = SchemaExt::parse_list(&schema_str_perm)?;
         assert_eq!(schemata.len(), schema_strs.len());
         let test_schema = schemata
             .iter()
@@ -2220,31 +2220,31 @@ fn avro_rs_66_test_independent_canonical_form_usages() -> TestResult {
 
     for schema_str_perm in permutations(&schema_strs) {
         let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
-        let schemata = Schema::parse_list(&schema_str_perm)?;
+        let schemata = SchemaExt::parse_list(&schema_str_perm)?;
         for schema in &schemata {
             match schema.name().unwrap().to_string().as_str() {
                 "RecUsage" => {
                     assert_eq!(
                         schema.independent_canonical_form(&schemata)?,
-                        Schema::parse_str(record_usage_independent)?.canonical_form()
+                        SchemaExt::parse_str(record_usage_independent)?.canonical_form()
                     );
                 }
                 "ArrayUsage" => {
                     assert_eq!(
                         schema.independent_canonical_form(&schemata)?,
-                        Schema::parse_str(array_usage_independent)?.canonical_form()
+                        SchemaExt::parse_str(array_usage_independent)?.canonical_form()
                     );
                 }
                 "UnionUsage" => {
                     assert_eq!(
                         schema.independent_canonical_form(&schemata)?,
-                        Schema::parse_str(union_usage_independent)?.canonical_form()
+                        SchemaExt::parse_str(union_usage_independent)?.canonical_form()
                     );
                 }
                 "MapUsage" => {
                     assert_eq!(
                         schema.independent_canonical_form(&schemata)?,
-                        Schema::parse_str(map_usage_independent)?.canonical_form()
+                        SchemaExt::parse_str(map_usage_independent)?.canonical_form()
                     );
                 }
                 "ns.Rec" => {
@@ -2315,14 +2315,14 @@ fn avro_rs_66_test_independent_canonical_form_deep_recursion() -> TestResult {
 
     for schema_str_perm in permutations(&schema_strs) {
         let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
-        let schemata = Schema::parse_list(&schema_str_perm)?;
+        let schemata = SchemaExt::parse_list(&schema_str_perm)?;
         let ruu = schemata
             .iter()
             .find(|s| s.name().unwrap().to_string().as_str() == "RecUsageUsage")
             .unwrap();
         assert_eq!(
             ruu.independent_canonical_form(&schemata)?,
-            Schema::parse_str(record_usage_usage_independent)?.canonical_form()
+            SchemaExt::parse_str(record_usage_usage_independent)?.canonical_form()
         );
     }
     Ok(())
@@ -2349,7 +2349,7 @@ fn avro_rs_66_test_independent_canonical_form_missing_ref() -> TestResult {
     }"#;
 
     let schema_strs = [record_primitive, record_usage];
-    let schemata = Schema::parse_list(schema_strs)?;
+    let schemata = SchemaExt::parse_list(schema_strs)?;
     assert!(matches!(
         schemata[1]
             .independent_canonical_form(&Vec::with_capacity(0))
@@ -2362,7 +2362,7 @@ fn avro_rs_66_test_independent_canonical_form_missing_ref() -> TestResult {
 #[test]
 fn avro_rs_181_single_null_record() -> TestResult {
     let mut buff = Cursor::new(Vec::new());
-    let schema = Schema::parse_str(r#""null""#)?;
+    let schema = SchemaExt::parse_str(r#""null""#)?;
     let mut writer = Writer::new(&schema, &mut buff);
     writer.append(serde_json::Value::Null)?;
     writer.into_inner()?;

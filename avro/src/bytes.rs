@@ -304,9 +304,10 @@ pub mod serde_avro_slice_opt {
 mod tests {
     use super::*;
     use crate::de::tokio::from_value;
-    use crate::schema::tokio::Schema;
+    use crate::schema::Schema;
+    use crate::schema::tokio::SchemaExt;
     use crate::ser::tokio::to_value;
-    use crate::types::tokio::Value;
+    use crate::types::Value;
     use apache_avro_test_helper::TestResult;
     use serde::{Deserialize, Serialize};
 
@@ -339,7 +340,7 @@ mod tests {
             slice_field_opt: Some(&[1, 2, 3]),
         };
         let value: Value = to_value(test).unwrap();
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"
             {
               "type": "record",

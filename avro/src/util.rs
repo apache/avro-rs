@@ -15,6 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::schema::Documentation;
+use serde_json::{Map, Value};
 use std::sync::atomic::Ordering;
 use std::sync::{
     Once,
@@ -68,6 +70,41 @@ pub fn set_serde_human_readable(human_readable: bool) {
     });
 }
 
+pub trait MapHelper {
+    fn string(&self, key: &str) -> Option<String>;
+
+    fn name(&self) -> Option<String> {
+        self.string("name")
+    }
+
+    fn doc(&self) -> Documentation {
+        self.string("doc")
+    }
+
+    fn aliases(&self) -> Option<Vec<String>>;
+}
+
+impl MapHelper for Map<String, Value> {
+    fn string(&self, key: &str) -> Option<String> {
+        self.get(key)
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string())
+    }
+
+    fn aliases(&self) -> Option<Vec<String>> {
+        // FIXME no warning when aliases aren't a json array of json strings
+        self.get("aliases")
+            .and_then(|aliases| aliases.as_array())
+            .and_then(|aliases| {
+                aliases
+                    .iter()
+                    .map(|alias| alias.as_str())
+                    .map(|alias| alias.map(|a| a.to_string()))
+                    .collect::<Option<_>>()
+            })
+    }
+}
+
 #[synca::synca(
   #[cfg(feature = "tokio")]
   pub mod tokio { },
@@ -76,16 +113,13 @@ pub fn set_serde_human_readable(human_readable: bool) {
     sync!();
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::decimal::tokio => crate::decimal::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
       crate::schema::tokio => crate::schema::sync,
       crate::util::tokio => crate::util::sync,
       crate::types::tokio => crate::types::sync,
-      crate::schema_equality::tokio => crate::schema_equality::sync,
       crate::util::tokio => crate::util::sync,
-      crate::validator::tokio => crate::validator::sync,
       #[tokio::test] => #[test]
     );
   }
@@ -95,64 +129,30 @@ mod util {
     use futures::future::TryFutureExt;
     #[synca::cfg(sync)]
     use std::io::Read as AvroRead;
+    #[synca::cfg(sync)]
+    use std::io::Write as AvroWrite;
     #[synca::cfg(tokio)]
     use tokio::io::AsyncRead as AvroRead;
     #[cfg(feature = "tokio")]
     use tokio::io::AsyncReadExt;
-
     #[synca::cfg(tokio)]
-    use crate::AsyncAvroResult as AvroResult;
-    #[synca::cfg(sync)]
+    use tokio::io::AsyncWrite as AvroWrite;
+    #[cfg(feature = "tokio")]
+    use tokio::io::AsyncWriteExt;
+
     use crate::AvroResult;
-    use crate::error::tokio::Details;
-    use crate::schema::tokio::Documentation;
-    use serde_json::{Map, Value};
+    use crate::error::Details;
     use std::io::Write;
-
-    pub trait MapHelper {
-        fn string(&self, key: &str) -> Option<String>;
-
-        fn name(&self) -> Option<String> {
-            self.string("name")
-        }
-
-        fn doc(&self) -> Documentation {
-            self.string("doc")
-        }
-
-        fn aliases(&self) -> Option<Vec<String>>;
-    }
-
-    impl MapHelper for Map<String, Value> {
-        fn string(&self, key: &str) -> Option<String> {
-            self.get(key)
-                .and_then(|v| v.as_str())
-                .map(|v| v.to_string())
-        }
-
-        fn aliases(&self) -> Option<Vec<String>> {
-            // FIXME no warning when aliases aren't a json array of json strings
-            self.get("aliases")
-                .and_then(|aliases| aliases.as_array())
-                .and_then(|aliases| {
-                    aliases
-                        .iter()
-                        .map(|alias| alias.as_str())
-                        .map(|alias| alias.map(|a| a.to_string()))
-                        .collect::<Option<_>>()
-                })
-        }
-    }
 
     pub async fn read_long<R: AvroRead + Unpin>(reader: &mut R) -> AvroResult<i64> {
         zag_i64(reader).await
     }
 
-    pub fn zig_i32<W: Write>(n: i32, buffer: W) -> AvroResult<usize> {
+    pub async fn zig_i32<W: AvroWrite>(n: i32, buffer: W) -> AvroResult<usize> {
         zig_i64(n as i64, buffer)
     }
 
-    pub fn zig_i64<W: Write>(n: i64, writer: W) -> AvroResult<usize> {
+    pub async fn zig_i64<W: AvroWrite>(n: i64, writer: W) -> AvroResult<usize> {
         encode_variable(((n << 1) ^ (n >> 63)) as u64, writer)
     }
 
@@ -170,7 +170,7 @@ mod util {
         })
     }
 
-    fn encode_variable<W: Write>(mut z: u64, mut writer: W) -> AvroResult<usize> {
+    async fn encode_variable<W: AvroWrite>(mut z: u64, mut writer: W) -> AvroResult<usize> {
         let mut buffer = [0u8; 10];
         let mut i: usize = 0;
         loop {

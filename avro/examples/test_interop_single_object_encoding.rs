@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{AvroSchema, types::sync::Value};
+use apache_avro::{AvroSchema, types::Value};
 use std::error::Error;
 
 struct InteropMessage;
@@ -28,7 +28,7 @@ impl AvroSchema for InteropMessage {
 
         let schema = std::fs::read_to_string(format!("{resource_folder}/test_schema.avsc"))
             .expect("File should exist with schema inside");
-        apache_avro::Schema::parse_str(schema.as_str())
+        apache_avro::SchemaExt::parse_str(schema.as_str())
             .expect("File should exist with schema inside")
     }
 }

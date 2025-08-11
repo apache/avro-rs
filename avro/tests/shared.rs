@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{Codec, Reader, Schema, Writer, types::sync::Value};
+use apache_avro::{Codec, Reader, Schema, Writer, types::Value};
 use apache_avro_test_helper::TestResult;
 use std::{
     fmt,
@@ -100,7 +100,7 @@ fn test_folder(folder: &str) -> Result<(), ErrorsDesc> {
     let file_name = folder.to_owned() + "/schema.json";
     let content = std::fs::read_to_string(file_name).expect("Unable to find schema.json file");
 
-    let schema: Schema = Schema::parse_str(content.as_str()).expect("Can't read schema");
+    let schema: Schema = SchemaExt::parse_str(content.as_str()).expect("Can't read schema");
 
     let data_file_name = folder.to_owned() + "/data.avro";
     let data_path: &Path = Path::new(data_file_name.as_str());

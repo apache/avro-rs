@@ -17,7 +17,7 @@
 
 use apache_avro::{
     AvroResult, Reader, Schema, Writer, read_marker,
-    types::sync::{Record, Value},
+    types::{Record, Value},
 };
 use apache_avro_test_helper::TestResult;
 
@@ -31,7 +31,7 @@ const SCHEMA: &str = r#"{
 
 #[test]
 fn avro_3630_append_to_an_existing_file() -> TestResult {
-    let schema = Schema::parse_str(SCHEMA).expect("Cannot parse the schema");
+    let schema = SchemaExt::parse_str(SCHEMA).expect("Cannot parse the schema");
 
     let bytes = get_avro_bytes(&schema);
 
@@ -57,7 +57,7 @@ fn avro_3630_append_to_an_existing_file() -> TestResult {
 
 #[test]
 fn avro_4031_append_to_file_using_multiple_writers() -> TestResult {
-    let schema = Schema::parse_str(SCHEMA).expect("Cannot parse the schema");
+    let schema = SchemaExt::parse_str(SCHEMA).expect("Cannot parse the schema");
 
     let mut first_writer = Writer::builder().schema(&schema).writer(Vec::new()).build();
     first_writer.append(create_datum(&schema, -42))?;

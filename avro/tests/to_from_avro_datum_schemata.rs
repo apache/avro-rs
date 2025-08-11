@@ -17,7 +17,7 @@
 
 use apache_avro::{
     Codec, Reader, Schema, Writer, from_avro_datum_reader_schemata, from_avro_datum_schemata,
-    to_avro_datum_schemata, types::sync::Value,
+    to_avro_datum_schemata, types::Value,
 };
 use apache_avro_test_helper::{TestResult, init};
 
@@ -46,7 +46,7 @@ fn test_avro_3683_multiple_schemata_to_from_avro_datum() -> TestResult {
         Value::Record(vec![(String::from("field_a"), Value::Float(1.0))]),
     )]);
 
-    let schemata: Vec<Schema> = Schema::parse_list([SCHEMA_A_STR, SCHEMA_B_STR])?;
+    let schemata: Vec<Schema> = SchemaExt::parse_list([SCHEMA_A_STR, SCHEMA_B_STR])?;
     let schemata: Vec<&Schema> = schemata.iter().collect();
 
     // this is the Schema we want to use for write/read
@@ -70,7 +70,7 @@ fn avro_rs_106_test_multiple_schemata_to_from_avro_datum_with_resolution() -> Te
         Value::Record(vec![(String::from("field_a"), Value::Float(1.0))]),
     )]);
 
-    let schemata: Vec<Schema> = Schema::parse_list([SCHEMA_A_STR, SCHEMA_B_STR])?;
+    let schemata: Vec<Schema> = SchemaExt::parse_list([SCHEMA_A_STR, SCHEMA_B_STR])?;
     let schemata: Vec<&Schema> = schemata.iter().collect();
 
     // this is the Schema we want to use for write/read
@@ -100,7 +100,7 @@ fn test_avro_3683_multiple_schemata_writer_reader() -> TestResult {
         Value::Record(vec![(String::from("field_a"), Value::Float(1.0))]),
     )]);
 
-    let schemata: Vec<Schema> = Schema::parse_list([SCHEMA_A_STR, SCHEMA_B_STR])?;
+    let schemata: Vec<Schema> = SchemaExt::parse_list([SCHEMA_A_STR, SCHEMA_B_STR])?;
     let schemata: Vec<&Schema> = schemata.iter().collect();
 
     // this is the Schema we want to use for write/read

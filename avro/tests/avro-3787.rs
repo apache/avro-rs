@@ -16,7 +16,7 @@
 // under the License.
 
 use apache_avro::Schema;
-use apache_avro::types::sync::Value;
+use apache_avro::types::Value;
 use apache_avro::{from_avro_datum, to_avro_datum, to_value};
 use apache_avro_test_helper::TestResult;
 
@@ -125,7 +125,7 @@ fn avro_3787_deserialize_union_with_unknown_symbol() -> TestResult {
       ]
       }"#;
 
-    let writer_schema = Schema::parse_str(writer_schema)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema)?;
     let foo1 = Foo {
         bar_init: Bar::Bar1,
         bar_use_parent: Some(BarUseParent { bar_use: Bar::Bar2 }),
@@ -137,7 +137,7 @@ fn avro_3787_deserialize_union_with_unknown_symbol() -> TestResult {
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;
     let mut x = &datum[..];
-    let reader_schema = Schema::parse_str(reader_schema)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema)?;
     let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
     match deser_value {
         Value::Record(fields) => {
@@ -253,7 +253,7 @@ fn avro_3787_deserialize_union_with_unknown_symbol_no_ref() -> TestResult {
             ]
         }"#;
 
-    let writer_schema = Schema::parse_str(writer_schema)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema)?;
     let foo2 = Foo {
         bar_parent: Some(BarParent { bar: Bar::Bar2 }),
     };
@@ -264,7 +264,7 @@ fn avro_3787_deserialize_union_with_unknown_symbol_no_ref() -> TestResult {
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;
     let mut x = &datum[..];
-    let reader_schema = Schema::parse_str(reader_schema)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema)?;
     let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
     match deser_value {
         Value::Record(fields) => {

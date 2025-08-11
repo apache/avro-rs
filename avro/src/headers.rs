@@ -25,7 +25,6 @@
     sync!();
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::decimal::tokio => crate::decimal::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
@@ -39,14 +38,8 @@
 mod headers {
     use uuid::Uuid;
 
-    #[synca::cfg(tokio)]
-    use crate::AsyncAvroResult as AvroResult;
-    #[synca::cfg(sync)]
     use crate::AvroResult;
-    use crate::{
-        error::tokio::Details, rabin::Rabin, schema::tokio::Schema,
-        schema::tokio::SchemaFingerprint,
-    };
+    use crate::{error::Details, rabin::Rabin, schema::Schema, schema::SchemaFingerprint};
 
     /// This trait represents that an object is able to construct an Avro message header. It is
     /// implemented for some known header types already. If you need a header type that is not already
@@ -141,7 +134,7 @@ mod headers {
     #[cfg(test)]
     mod test {
         use super::*;
-        use crate::error::tokio::{Error, Details};
+        use crate::error::{Details, Error};
         use apache_avro_test_helper::TestResult;
 
         #[tokio::test]
@@ -163,7 +156,7 @@ mod headers {
             ]
             }
             "#;
-            let schema = Schema::parse_str(schema_str).await?;
+            let schema = SchemaExt::parse_str(schema_str).await?;
             let header_builder = RabinFingerprintHeader::from_schema(&schema);
             let computed_header = header_builder.build_header();
             let expected_header: Vec<u8> = vec![195, 1, 232, 198, 194, 12, 97, 95, 44, 71];

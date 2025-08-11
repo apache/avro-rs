@@ -17,7 +17,7 @@
 
 use apache_avro::{
     Codec, DeflateSettings, Reader, Schema, Writer,
-    types::sync::{Record, Value},
+    types::{Record, Value},
 };
 use apache_avro_test_helper::TestResult;
 use miniz_oxide::deflate::CompressionLevel;
@@ -60,7 +60,7 @@ fn avro_4032_zstandard_codec_settings() -> TestResult {
 }
 
 fn avro_4032_codec_settings(codec: Codec) -> TestResult {
-    let schema = Schema::parse_str(
+    let schema = SchemaExt::parse_str(
         r#"
         {
             "type": "record",

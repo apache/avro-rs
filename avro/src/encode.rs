@@ -23,7 +23,6 @@
     sync!();
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::decimal::tokio => crate::decimal::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
@@ -38,34 +37,42 @@ mod encode {
 
     use crate::util::tokio::{zig_i32, zig_i64};
 
-    #[synca::cfg(tokio)]
-    use crate::AsyncAvroResult as AvroResult;
-    #[synca::cfg(sync)]
     use crate::AvroResult;
     use crate::{
         bigdecimal::tokio::serialize_big_decimal,
-        error::tokio::Details,
-        schema::tokio::{
+        error::Details,
+        schema::tokio::SchemaExt,
+        schema::{
             DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, RecordSchema, ResolvedSchema,
             Schema, SchemaKind, UnionSchema,
         },
-        types::tokio::{Value, ValueKind},
+        types::{Value, ValueKind},
     };
+    #[synca::cfg(sync)]
+    use std::io::Write as AvroWrite;
+    #[synca::cfg(tokio)]
+    use tokio::io::AsyncWrite as AvroWrite;
+    #[cfg(feature = "tokio")]
+    use tokio::io::AsyncWriteExt;
 
     use log::error;
-    use std::{borrow::Borrow, collections::HashMap, io::Write};
+    use std::{borrow::Borrow, collections::HashMap};
 
     /// Encode a `Value` into avro format.
     ///
     /// **NOTE** This will not perform schema validation. The value is assumed to
     /// be valid with regards to the schema. Schema are needed only to guide the
     /// encoding for complex type values.
-    pub fn encode<W: Write>(value: &Value, schema: &Schema, writer: &mut W) -> AvroResult<usize> {
+    pub async fn encode<W: AvroWrite>(
+        value: &Value,
+        schema: &Schema,
+        writer: &mut W,
+    ) -> AvroResult<usize> {
         let rs = ResolvedSchema::try_from(schema)?;
-        encode_internal(value, schema, rs.get_names(), &None, writer)
+        encode_internal(value, schema, rs.get_names(), &None, writer).await
     }
 
-    pub(crate) fn encode_bytes<B: AsRef<[u8]> + ?Sized, W: Write>(
+    pub(crate) async fn encode_bytes<B: AsRef<[u8]> + ?Sized, W: AvroWrite>(
         s: &B,
         mut writer: W,
     ) -> AvroResult<usize> {
@@ -73,18 +80,19 @@ mod encode {
         encode_long(bytes.len() as i64, &mut writer)?;
         writer
             .write(bytes)
+            .await
             .map_err(|e| Details::WriteBytes(e).into())
     }
 
-    pub(crate) fn encode_long<W: Write>(i: i64, writer: W) -> AvroResult<usize> {
-        zig_i64(i, writer)
+    pub(crate) async fn encode_long<W: AvroWrite>(i: i64, writer: W) -> AvroResult<usize> {
+        zig_i64(i, writer).await
     }
 
-    pub(crate) fn encode_int<W: Write>(i: i32, writer: W) -> AvroResult<usize> {
-        zig_i32(i, writer)
+    pub(crate) async fn encode_int<W: AvroWrite>(i: i32, writer: W) -> AvroResult<usize> {
+        zig_i32(i, writer).await
     }
 
-    pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
+    pub(crate) async fn encode_internal<W: AvroWrite, S: Borrow<Schema>>(
         value: &Value,
         schema: &Schema,
         names: &HashMap<Name, S>,
@@ -96,7 +104,14 @@ mod encode {
             let resolved = names
                 .get(&fully_qualified_name)
                 .ok_or(Details::SchemaResolutionError(fully_qualified_name))?;
-            return encode_internal(value, resolved.borrow(), names, enclosing_namespace, writer);
+            return Box::pin(encode_internal(
+                value,
+                resolved.borrow(),
+                names,
+                enclosing_namespace,
+                writer,
+            ))
+            .await;
         }
 
         match value {
@@ -108,7 +123,7 @@ mod encode {
                             supported_schema: vec![SchemaKind::Null, SchemaKind::Union],
                         }
                         .into()),
-                        Some(p) => encode_long(p as i64, writer),
+                        Some(p) => encode_long(p as i64, writer).await,
                     }
                 } else {
                     Ok(0)
@@ -118,7 +133,7 @@ mod encode {
                 .write(&[u8::from(*b)])
                 .map_err(|e| Details::WriteBytes(e).into()),
             // Pattern | Pattern here to signify that these _must_ have the same encoding.
-            Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => encode_int(*i, writer),
+            Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => encode_int(*i, writer).await,
             Value::Long(i)
             | Value::TimestampMillis(i)
             | Value::TimestampMicros(i)
@@ -126,7 +141,7 @@ mod encode {
             | Value::LocalTimestampMillis(i)
             | Value::LocalTimestampMicros(i)
             | Value::LocalTimestampNanos(i)
-            | Value::TimeMicros(i) => encode_long(*i, writer),
+            | Value::TimeMicros(i) => encode_long(*i, writer).await,
             Value::Float(x) => writer
                 .write(&x.to_le_bytes())
                 .map_err(|e| Details::WriteBytes(e).into()),
@@ -161,19 +176,22 @@ mod encode {
                     .map_err(|e| Details::WriteBytes(e).into())
             }
             Value::Uuid(uuid) => match *schema {
-                Schema::Uuid | Schema::String => encode_bytes(
-                    // we need the call .to_string() to properly convert ASCII to UTF-8
-                    #[allow(clippy::unnecessary_to_owned)]
-                    &uuid.to_string(),
-                    writer,
-                ),
+                Schema::Uuid | Schema::String => {
+                    encode_bytes(
+                        // we need the call .to_string() to properly convert ASCII to UTF-8
+                        #[allow(clippy::unnecessary_to_owned)]
+                        &uuid.to_string(),
+                        writer,
+                    )
+                    .await
+                }
                 Schema::Fixed(FixedSchema { size, .. }) => {
                     if size != 16 {
                         return Err(Details::ConvertFixedToUuid(size).into());
                     }
 
                     let bytes = uuid.as_bytes();
-                    encode_bytes(bytes, writer)
+                    encode_bytes(bytes, writer).await
                 }
                 _ => Err(Details::EncodeValueAsSchemaError {
                     value_kind: ValueKind::Uuid,
@@ -188,7 +206,7 @@ mod encode {
                     .map_err(|e| Details::WriteBytes(e).into())
             }
             Value::Bytes(bytes) => match *schema {
-                Schema::Bytes => encode_bytes(bytes, writer),
+                Schema::Bytes => encode_bytes(bytes, writer).await,
                 Schema::Fixed { .. } => writer
                     .write(bytes.as_slice())
                     .map_err(|e| Details::WriteBytes(e).into()),
@@ -199,10 +217,10 @@ mod encode {
                 .into()),
             },
             Value::String(s) => match *schema {
-                Schema::String | Schema::Uuid => encode_bytes(s, writer),
+                Schema::String | Schema::Uuid => encode_bytes(s, writer).await,
                 Schema::Enum(EnumSchema { ref symbols, .. }) => {
                     if let Some(index) = symbols.iter().position(|item| item == s) {
-                        encode_int(index as i32, writer)
+                        encode_int(index as i32, writer).await
                     } else {
                         error!("Invalid symbol string {:?}.", &s[..]);
                         Err(Details::GetEnumSymbol(s.clone()).into())
@@ -217,15 +235,22 @@ mod encode {
             Value::Fixed(_, bytes) => writer
                 .write(bytes.as_slice())
                 .map_err(|e| Details::WriteBytes(e).into()),
-            Value::Enum(i, _) => encode_int(*i as i32, writer),
+            Value::Enum(i, _) => encode_int(*i as i32, writer).await,
             Value::Union(idx, item) => {
                 if let Schema::Union(ref inner) = *schema {
                     let inner_schema = inner
                         .schemas
                         .get(*idx as usize)
                         .expect("Invalid Union validation occurred");
-                    encode_long(*idx as i64, &mut *writer)?;
-                    encode_internal(item, inner_schema, names, enclosing_namespace, &mut *writer)
+                    encode_long(*idx as i64, &mut *writer).await?;
+                    Box::pin(encode_internal(
+                        item,
+                        inner_schema,
+                        names,
+                        enclosing_namespace,
+                        &mut *writer,
+                    ))
+                    .await
                 } else {
                     error!("invalid schema type for Union: {schema:?}");
                     Err(Details::EncodeValueAsSchemaError {
@@ -238,19 +263,21 @@ mod encode {
             Value::Array(items) => {
                 if let Schema::Array(ref inner) = *schema {
                     if !items.is_empty() {
-                        encode_long(items.len() as i64, &mut *writer)?;
+                        Box::pin(encode_long(items.len() as i64, &mut *writer)).await?;
                         for item in items.iter() {
-                            encode_internal(
+                            Box::pin(encode_internal(
                                 item,
                                 &inner.items,
                                 names,
                                 enclosing_namespace,
                                 &mut *writer,
-                            )?;
+                            ))
+                            .await?;
                         }
                     }
                     writer
                         .write(&[0u8])
+                        .await
                         .map_err(|e| Details::WriteBytes(e).into())
                 } else {
                     error!("invalid schema type for Array: {schema:?}");
@@ -264,20 +291,22 @@ mod encode {
             Value::Map(items) => {
                 if let Schema::Map(ref inner) = *schema {
                     if !items.is_empty() {
-                        encode_long(items.len() as i64, &mut *writer)?;
+                        Box::pin(encode_long(items.len() as i64, &mut *writer)).await?;
                         for (key, value) in items {
-                            encode_bytes(key, &mut *writer)?;
-                            encode_internal(
+                            Box::pin(encode_bytes(key, &mut *writer)).await?;
+                            Box::pin(encode_internal(
                                 value,
                                 &inner.types,
                                 names,
                                 enclosing_namespace,
                                 &mut *writer,
-                            )?;
+                            ))
+                            .await?;
                         }
                     }
                     writer
                         .write(&[0u8])
+                        .await
                         .map_err(|e| Details::WriteBytes(e).into())
                 } else {
                     error!("invalid schema type for Map: {schema:?}");
@@ -314,13 +343,14 @@ mod encode {
                         });
 
                         if let Some(value) = value_opt {
-                            written_bytes += encode_internal(
+                            written_bytes += Box::pin(encode_internal(
                                 value,
                                 &schema_field.schema,
                                 names,
                                 &record_namespace,
                                 writer,
-                            )?;
+                            ))
+                            .await?;
                         } else {
                             return Err(Details::NoEntryInLookupTable(
                                 name.clone(),
@@ -345,6 +375,7 @@ mod encode {
                             Ok(_) => {
                                 return writer
                                     .write(union_buffer.as_slice())
+                                    .await
                                     .map_err(|e| Details::WriteBytes(e).into());
                             }
                             Err(_) => {
@@ -369,9 +400,9 @@ mod encode {
         }
     }
 
-    pub fn encode_to_vec(value: &Value, schema: &Schema) -> AvroResult<Vec<u8>> {
+    pub async fn encode_to_vec(value: &Value, schema: &Schema) -> AvroResult<Vec<u8>> {
         let mut buffer = Vec::new();
-        encode(value, schema, &mut buffer)?;
+        encode(value, schema, &mut buffer).await?;
         Ok(buffer)
     }
 
@@ -379,7 +410,7 @@ mod encode {
     #[allow(clippy::expect_fun_call)]
     pub(crate) mod tests {
         use super::*;
-        use crate::error::tokio::{Details, Error};
+        use crate::error::{Details, Error};
         use apache_avro_test_helper::TestResult;
         use pretty_assertions::assert_eq;
         use uuid::Uuid;
@@ -400,6 +431,7 @@ mod encode {
                 &Schema::array(Schema::Int),
                 &mut buf,
             )
+            .await
             .expect(&success(&Value::Array(empty), &Schema::array(Schema::Int)));
             assert_eq!(vec![0u8], buf);
         }
@@ -413,6 +445,7 @@ mod encode {
                 &Schema::map(Schema::Int),
                 &mut buf,
             )
+            .await
             .expect(&success(&Value::Map(empty), &Schema::map(Schema::Int)));
             assert_eq!(vec![0u8], buf);
         }
@@ -420,7 +453,7 @@ mod encode {
         #[tokio::test]
         async fn test_avro_3433_recursive_definition_encode_record() -> TestResult {
             let mut buf = Vec::new();
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"
             {
                 "type":"record",
@@ -443,13 +476,16 @@ mod encode {
                     }
                 ]
             }"#,
-            ).await?;
+            )
+            .await?;
 
             let inner_value1 = Value::Record(vec![("z".into(), Value::Int(3))]);
             let inner_value2 = Value::Record(vec![("z".into(), Value::Int(6))]);
             let outer_value =
                 Value::Record(vec![("a".into(), inner_value1), ("b".into(), inner_value2)]);
-            encode(&outer_value, &schema, &mut buf).expect(&success(&outer_value, &schema));
+            encode(&outer_value, &schema, &mut buf)
+                .await
+                .expect(&success(&outer_value, &schema));
             assert!(!buf.is_empty());
             Ok(())
         }
@@ -457,7 +493,7 @@ mod encode {
         #[tokio::test]
         async fn test_avro_3433_recursive_definition_encode_array() -> TestResult {
             let mut buf = Vec::new();
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"
             {
                 "type":"record",
@@ -498,7 +534,9 @@ mod encode {
                     Value::Map(vec![("akey".into(), inner_value2)].into_iter().collect()),
                 ),
             ]);
-            encode(&outer_value, &schema, &mut buf).expect(&success(&outer_value, &schema));
+            encode(&outer_value, &schema, &mut buf)
+                .await
+                .expect(&success(&outer_value, &schema));
             assert!(!buf.is_empty());
             Ok(())
         }
@@ -506,7 +544,7 @@ mod encode {
         #[tokio::test]
         async fn test_avro_3433_recursive_definition_encode_map() -> TestResult {
             let mut buf = Vec::new();
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"
             {
                 "type":"record",
@@ -544,7 +582,9 @@ mod encode {
                     Value::Map(vec![("akey".into(), inner_value2)].into_iter().collect()),
                 ),
             ]);
-            encode(&outer_value, &schema, &mut buf).expect(&success(&outer_value, &schema));
+            encode(&outer_value, &schema, &mut buf)
+                .await
+                .expect(&success(&outer_value, &schema));
             assert!(!buf.is_empty());
             Ok(())
         }
@@ -552,7 +592,7 @@ mod encode {
         #[tokio::test]
         async fn test_avro_3433_recursive_definition_encode_record_wrapper() -> TestResult {
             let mut buf = Vec::new();
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"
         {
             "type":"record",
@@ -592,7 +632,9 @@ mod encode {
             )]);
             let outer_value =
                 Value::Record(vec![("a".into(), inner_value1), ("b".into(), inner_value2)]);
-            encode(&outer_value, &schema, &mut buf).expect(&success(&outer_value, &schema));
+            encode(&outer_value, &schema, &mut buf)
+                .await
+                .expect(&success(&outer_value, &schema));
             assert!(!buf.is_empty());
             Ok(())
         }
@@ -600,7 +642,7 @@ mod encode {
         #[tokio::test]
         async fn test_avro_3433_recursive_definition_encode_map_and_array() -> TestResult {
             let mut buf = Vec::new();
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"
         {
             "type":"record",
@@ -641,7 +683,9 @@ mod encode {
                 ),
                 ("b".into(), Value::Array(vec![inner_value1])),
             ]);
-            encode(&outer_value, &schema, &mut buf).expect(&success(&outer_value, &schema));
+            encode(&outer_value, &schema, &mut buf)
+                .await
+                .expect(&success(&outer_value, &schema));
             assert!(!buf.is_empty());
             Ok(())
         }
@@ -649,7 +693,7 @@ mod encode {
         #[tokio::test]
         async fn test_avro_3433_recursive_definition_encode_union() -> TestResult {
             let mut buf = Vec::new();
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"
         {
             "type":"record",
@@ -681,7 +725,9 @@ mod encode {
                 ("a".into(), Value::Union(1, Box::new(inner_value1))),
                 ("b".into(), inner_value2.clone()),
             ]);
-            encode(&outer_value1, &schema, &mut buf).expect(&success(&outer_value1, &schema));
+            encode(&outer_value1, &schema, &mut buf)
+                .await
+                .expect(&success(&outer_value1, &schema));
             assert!(!buf.is_empty());
 
             buf.drain(..);
@@ -689,7 +735,9 @@ mod encode {
                 ("a".into(), Value::Union(0, Box::new(Value::Null))),
                 ("b".into(), inner_value2),
             ]);
-            encode(&outer_value2, &schema, &mut buf).expect(&success(&outer_value1, &schema));
+            encode(&outer_value2, &schema, &mut buf)
+                .await
+                .expect(&success(&outer_value1, &schema));
             assert!(!buf.is_empty());
             Ok(())
         }
@@ -737,7 +785,7 @@ mod encode {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema).await?;
+            let schema = SchemaExt::parse_str(schema).await?;
             let inner_record = Value::Record(vec![("inner_field_1".into(), Value::Double(5.4))]);
             let middle_record_variation_1 = Value::Record(vec![(
                 "middle_field_1".into(),
@@ -771,14 +819,17 @@ mod encode {
 
             let mut buf = Vec::new();
             encode(&outer_record_variation_1, &schema, &mut buf)
+                .await
                 .expect(&success(&outer_record_variation_1, &schema));
             assert!(!buf.is_empty());
             buf.drain(..);
             encode(&outer_record_variation_2, &schema, &mut buf)
+                .await
                 .expect(&success(&outer_record_variation_2, &schema));
             assert!(!buf.is_empty());
             buf.drain(..);
             encode(&outer_record_variation_3, &schema, &mut buf)
+                .await
                 .expect(&success(&outer_record_variation_3, &schema));
             assert!(!buf.is_empty());
             Ok(())
@@ -828,7 +879,7 @@ mod encode {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema).await?;
+            let schema = SchemaExt::parse_str(schema).await?;
             let inner_record = Value::Record(vec![("inner_field_1".into(), Value::Double(5.4))]);
             let middle_record_variation_1 = Value::Record(vec![(
                 "middle_field_1".into(),
@@ -862,14 +913,17 @@ mod encode {
 
             let mut buf = Vec::new();
             encode(&outer_record_variation_1, &schema, &mut buf)
+                .await
                 .expect(&success(&outer_record_variation_1, &schema));
             assert!(!buf.is_empty());
             buf.drain(..);
             encode(&outer_record_variation_2, &schema, &mut buf)
+                .await
                 .expect(&success(&outer_record_variation_2, &schema));
             assert!(!buf.is_empty());
             buf.drain(..);
             encode(&outer_record_variation_3, &schema, &mut buf)
+                .await
                 .expect(&success(&outer_record_variation_3, &schema));
             assert!(!buf.is_empty());
             Ok(())
@@ -920,7 +974,7 @@ mod encode {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema).await?;
+            let schema = SchemaExt::parse_str(schema).await?;
             let inner_record = Value::Record(vec![("inner_field_1".into(), Value::Double(5.4))]);
             let middle_record_variation_1 = Value::Record(vec![(
                 "middle_field_1".into(),
@@ -954,14 +1008,17 @@ mod encode {
 
             let mut buf = Vec::new();
             encode(&outer_record_variation_1, &schema, &mut buf)
+                .await
                 .expect(&success(&outer_record_variation_1, &schema));
             assert!(!buf.is_empty());
             buf.drain(..);
             encode(&outer_record_variation_2, &schema, &mut buf)
+                .await
                 .expect(&success(&outer_record_variation_2, &schema));
             assert!(!buf.is_empty());
             buf.drain(..);
             encode(&outer_record_variation_3, &schema, &mut buf)
+                .await
                 .expect(&success(&outer_record_variation_3, &schema));
             assert!(!buf.is_empty());
             Ok(())
@@ -990,7 +1047,10 @@ mod encode {
             let value = Value::Uuid(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")?);
 
             let mut buffer = Vec::new();
-            match encode(&value, &schema, &mut buffer).map_err(Error::into_details) {
+            match encode(&value, &schema, &mut buffer)
+                .map_err(Error::into_details)
+                .await
+            {
                 Err(Details::ConvertFixedToUuid(actual)) => {
                     assert_eq!(actual, 15);
                 }

@@ -102,7 +102,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         assert_eq!(schema, TestBasic::get_schema());
         let test = TestBasic {
             a,
@@ -136,7 +136,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         assert_eq!(schema, TestBasicNamespace::get_schema());
         if let Schema::Record(RecordSchema { name, .. }) = TestBasicNamespace::get_schema() {
             assert_eq!("com.testing.namespace".to_owned(), name.namespace.unwrap())
@@ -183,7 +183,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         assert_eq!(schema, TestComplexNamespace::get_schema());
         if let Schema::Record(RecordSchema { name, fields, .. }) =
             TestComplexNamespace::get_schema()
@@ -235,7 +235,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         assert_eq!(schema, TestNamedRecord::get_schema());
         if let Schema::Record(RecordSchema { name, .. }) = TestNamedRecord::get_schema() {
             assert_eq!("Other", name.name.as_str());
@@ -311,7 +311,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         assert_eq!(schema, TestAllSupportedBaseTypes::get_schema());
         let all_basic = TestAllSupportedBaseTypes {
             a,
@@ -398,7 +398,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         assert_eq!(schema, TestNested::get_schema());
         let all_basic = TestAllSupportedBaseTypes {
             a,
@@ -439,7 +439,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         assert_eq!(schema, TestOptional::get_schema());
         let optional_field = TestOptional { a: Some(a) };
         serde_assert(optional_field);
@@ -488,7 +488,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         assert_eq!(schema, TestGeneric::<i32>::get_schema());
         let test_generic = TestGeneric::<i32> {
             a,
@@ -572,7 +572,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         assert_eq!(
             schema,
             TestGeneric::<TestAllSupportedBaseTypes>::get_schema()
@@ -648,7 +648,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         assert_eq!(schema, TestAllowedEnumNested::get_schema());
         let enum_included = TestAllowedEnumNested {
             a: TestAllowedEnum::B,
@@ -697,7 +697,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         assert_eq!(schema, TestNamedEnumNested::get_schema());
         let enum_included = TestNamedEnumNested {
             a: TestNamedEnum::B,
@@ -730,7 +730,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         assert_eq!(schema, ConsList::get_schema());
         let list = ConsList {
             value: 34,
@@ -783,7 +783,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         assert_eq!(
             schema,
             ConsListGeneric::<TestAllowedEnumNested>::get_schema()
@@ -827,7 +827,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         assert_eq!(schema, TestSimpleArray::get_schema());
         let test = TestSimpleArray { a };
         serde_assert(test)
@@ -868,7 +868,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         assert_eq!(schema, TestComplexArray::<TestBasic>::get_schema());
         let test = TestComplexArray::<TestBasic> {
             a: [
@@ -934,7 +934,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         assert_eq!(schema, TestSmartPointers::get_schema());
         let test = TestSmartPointers {
             a: "hey".into(),
@@ -981,7 +981,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         assert_eq!(schema, TestReference::get_schema());
         // let a = vec![34];
         // let c = 4.55555555_f64;
@@ -1023,7 +1023,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         if let Schema::Record(RecordSchema { name, doc, .. }) =
             TestBasicWithAttributes::get_schema()
         {
@@ -1066,7 +1066,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         let derived_schema = TestBasicWithOuterDocAttributes::get_schema();
         assert_eq!(&schema, &derived_schema);
         if let Schema::Record(RecordSchema { name, doc, .. }) = derived_schema {
@@ -1110,7 +1110,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         if let Schema::Record(RecordSchema { name, doc, .. }) = TestBasicWithLargeDoc::get_schema()
         {
             assert_eq!("com.testing.namespace".to_owned(), name.namespace.unwrap());
@@ -1149,7 +1149,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         let derived_schema = TestBasicWithBool::get_schema();
 
         if let Schema::Record(RecordSchema { name, .. }) = derived_schema {
@@ -1182,7 +1182,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         if let Schema::Record(RecordSchema { name, .. }) = TestBasicWithU32::get_schema() {
             assert_eq!("TestBasicWithU32", name.fullname(None))
         } else {
@@ -1214,7 +1214,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         if let Schema::Record(RecordSchema { name, aliases, .. }) =
             TestBasicStructWithAliases::get_schema()
         {
@@ -1258,7 +1258,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         if let Schema::Record(RecordSchema { name, aliases, .. }) =
             TestBasicStructWithAliases2::get_schema()
         {
@@ -1299,7 +1299,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         if let Schema::Enum(EnumSchema { name, aliases, .. }) =
             TestBasicEnumWithAliases::get_schema()
         {
@@ -1342,7 +1342,7 @@ mod test_derive {
             ]
         }
         "#;
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         if let Schema::Enum(EnumSchema { name, aliases, .. }) =
             TestBasicEnumWithAliases2::get_schema()
         {
@@ -1448,7 +1448,7 @@ mod test_derive {
         }
         "#;
 
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         if let Schema::Record(RecordSchema { name, fields, .. }) =
             TestBasicStructWithDefaultValues::get_schema()
         {
@@ -1545,7 +1545,7 @@ mod test_derive {
         }
         "#;
 
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         let derived_schema = TestBasicStructWithSkipAttribute::get_schema();
         if let Schema::Record(RecordSchema { name, fields, .. }) = &derived_schema {
             assert_eq!("TestBasicStructWithSkipAttribute", name.fullname(None));
@@ -1612,7 +1612,7 @@ mod test_derive {
         }
         "#;
 
-        let schema = Schema::parse_str(schema).unwrap();
+        let schema = SchemaExt::parse_str(schema).unwrap();
         let derived_schema = TestBasicStructWithRenameAttribute::get_schema();
         if let Schema::Record(RecordSchema { name, fields, .. }) = &derived_schema {
             assert_eq!("TestBasicStructWithRenameAttribute", name.fullname(None));

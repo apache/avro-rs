@@ -16,7 +16,7 @@
 // under the License.
 
 //! Port of https://github.com/apache/avro/blob/release-1.9.1/lang/py/test/test_io.py
-use apache_avro::{Error, Schema, error::sync::Details, from_avro_datum, to_avro_datum, types::sync::Value};
+use apache_avro::{Error, Schema, error::Details, from_avro_datum, to_avro_datum, types::Value};
 use apache_avro_test_helper::TestResult;
 use pretty_assertions::assert_eq;
 use std::{io::Cursor, sync::OnceLock};
@@ -178,7 +178,7 @@ fn default_value_examples() -> &'static Vec<(&'static str, &'static str, Value)>
 fn long_record_schema() -> &'static Schema {
     static LONG_RECORD_SCHEMA_ONCE: OnceLock<Schema> = OnceLock::new();
     LONG_RECORD_SCHEMA_ONCE.get_or_init(|| {
-        Schema::parse_str(
+        SchemaExt::parse_str(
             r#"
 {
     "type": "record",
@@ -217,7 +217,7 @@ fn long_record_datum() -> &'static Value {
 #[test]
 fn test_validate() -> TestResult {
     for (raw_schema, value) in schemas_to_validate().iter() {
-        let schema = Schema::parse_str(raw_schema)?;
+        let schema = SchemaExt::parse_str(raw_schema)?;
         assert!(
             value.validate(&schema),
             "value {value:?} does not validate schema: {raw_schema}"
@@ -230,7 +230,7 @@ fn test_validate() -> TestResult {
 #[test]
 fn test_round_trip() -> TestResult {
     for (raw_schema, value) in schemas_to_validate().iter() {
-        let schema = Schema::parse_str(raw_schema)?;
+        let schema = SchemaExt::parse_str(raw_schema)?;
         let encoded = to_avro_datum(&schema, value.clone()).unwrap();
         let decoded = from_avro_datum(&schema, &mut Cursor::new(encoded), None).unwrap();
         assert_eq!(value, &decoded);
@@ -271,10 +271,10 @@ fn test_schema_promotion() -> TestResult {
         Value::Double(219.0),
     ];
     for (i, writer_raw_schema) in promotable_schemas.iter().enumerate() {
-        let writer_schema = Schema::parse_str(writer_raw_schema)?;
+        let writer_schema = SchemaExt::parse_str(writer_raw_schema)?;
         let original_value = &promotable_values[i];
         for (j, reader_raw_schema) in promotable_schemas.iter().enumerate().skip(i + 1) {
-            let reader_schema = Schema::parse_str(reader_raw_schema)?;
+            let reader_schema = SchemaExt::parse_str(reader_raw_schema)?;
             let encoded = to_avro_datum(&writer_schema, original_value.clone())?;
             let decoded = from_avro_datum(
                 &writer_schema,
@@ -294,9 +294,9 @@ fn test_schema_promotion() -> TestResult {
 #[test]
 fn test_unknown_symbol() -> TestResult {
     let writer_schema =
-        Schema::parse_str(r#"{"type": "enum", "name": "Test", "symbols": ["FOO", "BAR"]}"#)?;
+        SchemaExt::parse_str(r#"{"type": "enum", "name": "Test", "symbols": ["FOO", "BAR"]}"#)?;
     let reader_schema =
-        Schema::parse_str(r#"{"type": "enum", "name": "Test", "symbols": ["BAR", "BAZ"]}"#)?;
+        SchemaExt::parse_str(r#"{"type": "enum", "name": "Test", "symbols": ["BAR", "BAZ"]}"#)?;
     let original_value = Value::Enum(0, "FOO".to_string());
     let encoded = to_avro_datum(&writer_schema, original_value)?;
     let decoded = from_avro_datum(
@@ -312,7 +312,7 @@ fn test_unknown_symbol() -> TestResult {
 #[test]
 fn test_default_value() -> TestResult {
     for (field_type, default_json, default_datum) in default_value_examples().iter() {
-        let reader_schema = Schema::parse_str(&format!(
+        let reader_schema = SchemaExt::parse_str(&format!(
             r#"{{
                 "type": "record",
                 "name": "Test",
@@ -370,7 +370,7 @@ fn test_default_value() -> TestResult {
 
 #[test]
 fn test_no_default_value() -> TestResult {
-    let reader_schema = Schema::parse_str(
+    let reader_schema = SchemaExt::parse_str(
         r#"{
             "type": "record",
             "name": "Test",
@@ -392,7 +392,7 @@ fn test_no_default_value() -> TestResult {
 
 #[test]
 fn test_projection() -> TestResult {
-    let reader_schema = Schema::parse_str(
+    let reader_schema = SchemaExt::parse_str(
         r#"
         {
             "type": "record",
@@ -421,7 +421,7 @@ fn test_projection() -> TestResult {
 
 #[test]
 fn test_field_order() -> TestResult {
-    let reader_schema = Schema::parse_str(
+    let reader_schema = SchemaExt::parse_str(
         r#"
         {
             "type": "record",
@@ -450,7 +450,7 @@ fn test_field_order() -> TestResult {
 
 #[test]
 fn test_type_exception() -> Result<(), String> {
-    let writer_schema = Schema::parse_str(
+    let writer_schema = SchemaExt::parse_str(
         r#"
         {
              "type": "record",

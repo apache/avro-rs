@@ -26,16 +26,13 @@
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
       crate::codec::tokio => crate::codec::sync,
-      crate::decimal::tokio => crate::decimal::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
       crate::schema::tokio => crate::schema::sync,
       crate::reader::tokio => crate::reader::sync,
       crate::types::tokio => crate::types::sync,
-      crate::schema_equality::tokio => crate::schema_equality::sync,
       crate::util::tokio => crate::util::sync,
-      crate::validator::tokio => crate::validator::sync,
       crate::writer::tokio => crate::writer::sync,
       #[tokio::test] => #[test]
     );
@@ -44,8 +41,8 @@
 mod schema_compatibility {
 
     use crate::{
-        error::tokio::CompatibilityError,
-        schema::tokio::{EnumSchema, FixedSchema, RecordSchema, Schema, SchemaKind},
+        error::CompatibilityError,
+        schema::{EnumSchema, FixedSchema, RecordSchema, Schema, SchemaKind},
     };
     use std::{
         collections::{HashSet, hash_map::DefaultHasher},
@@ -561,7 +558,8 @@ mod schema_compatibility {
         use crate::{
             codec::tokio::Codec,
             reader::tokio::Reader,
-            types::tokio::{Record, Value},
+            schema::tokio::SchemaExt,
+            types::{Record, Value},
             writer::tokio::Writer,
         };
         use apache_avro_test_helper::TestResult;
@@ -570,79 +568,79 @@ mod schema_compatibility {
         use rstest::*;
 
         async fn int_array_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"array", "items":"int"}"#)
+            SchemaExt::parse_str(r#"{"type":"array", "items":"int"}"#)
                 .await
                 .unwrap()
         }
 
         async fn long_array_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"array", "items":"long"}"#)
+            SchemaExt::parse_str(r#"{"type":"array", "items":"long"}"#)
                 .await
                 .unwrap()
         }
 
         async fn string_array_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"array", "items":"string"}"#)
+            SchemaExt::parse_str(r#"{"type":"array", "items":"string"}"#)
                 .await
                 .unwrap()
         }
 
         async fn int_map_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"map", "values":"int"}"#)
+            SchemaExt::parse_str(r#"{"type":"map", "values":"int"}"#)
                 .await
                 .unwrap()
         }
 
         async fn long_map_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"map", "values":"long"}"#)
+            SchemaExt::parse_str(r#"{"type":"map", "values":"long"}"#)
                 .await
                 .unwrap()
         }
 
         async fn string_map_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"map", "values":"string"}"#)
+            SchemaExt::parse_str(r#"{"type":"map", "values":"string"}"#)
                 .await
                 .unwrap()
         }
 
         async fn enum1_ab_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"enum", "name":"Enum1", "symbols":["A","B"]}"#)
+            SchemaExt::parse_str(r#"{"type":"enum", "name":"Enum1", "symbols":["A","B"]}"#)
                 .await
                 .unwrap()
         }
 
         async fn enum1_abc_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"enum", "name":"Enum1", "symbols":["A","B","C"]}"#)
+            SchemaExt::parse_str(r#"{"type":"enum", "name":"Enum1", "symbols":["A","B","C"]}"#)
                 .await
                 .unwrap()
         }
 
         async fn enum1_bc_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"enum", "name":"Enum1", "symbols":["B","C"]}"#)
+            SchemaExt::parse_str(r#"{"type":"enum", "name":"Enum1", "symbols":["B","C"]}"#)
                 .await
                 .unwrap()
         }
 
         async fn enum2_ab_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"enum", "name":"Enum2", "symbols":["A","B"]}"#)
+            SchemaExt::parse_str(r#"{"type":"enum", "name":"Enum2", "symbols":["A","B"]}"#)
                 .await
                 .unwrap()
         }
 
         async fn empty_record1_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"record", "name":"Record1", "fields":[]}"#)
+            SchemaExt::parse_str(r#"{"type":"record", "name":"Record1", "fields":[]}"#)
                 .await
                 .unwrap()
         }
 
         async fn empty_record2_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"record", "name":"Record2", "fields": []}"#)
+            SchemaExt::parse_str(r#"{"type":"record", "name":"Record2", "fields": []}"#)
                 .await
                 .unwrap()
         }
 
         async fn a_int_record1_schema() -> Schema {
-            Schema::parse_str(
+            SchemaExt::parse_str(
                 r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int"}]}"#,
             )
             .await
@@ -650,7 +648,7 @@ mod schema_compatibility {
         }
 
         async fn a_long_record1_schema() -> Schema {
-            Schema::parse_str(
+            SchemaExt::parse_str(
                 r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"long"}]}"#,
             )
             .await
@@ -658,35 +656,35 @@ mod schema_compatibility {
         }
 
         async fn a_int_b_int_record1_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int"}, {"name":"b", "type":"int"}]}"#).await.unwrap()
+            SchemaExt::parse_str(r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int"}, {"name":"b", "type":"int"}]}"#).await.unwrap()
         }
 
         async fn a_dint_record1_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int", "default":0}]}"#).await.unwrap()
+            SchemaExt::parse_str(r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int", "default":0}]}"#).await.unwrap()
         }
 
         async fn a_int_b_dint_record1_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int"}, {"name":"b", "type":"int", "default":0}]}"#).await.unwrap()
+            SchemaExt::parse_str(r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int"}, {"name":"b", "type":"int", "default":0}]}"#).await.unwrap()
         }
 
         async fn a_dint_b_dint_record1_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int", "default":0}, {"name":"b", "type":"int", "default":0}]}"#).await.unwrap()
+            SchemaExt::parse_str(r#"{"type":"record", "name":"Record1", "fields":[{"name":"a", "type":"int", "default":0}, {"name":"b", "type":"int", "default":0}]}"#).await.unwrap()
         }
 
         async fn nested_record() -> Schema {
-            Schema::parse_str(r#"{"type":"record","name":"parent","fields":[{"name":"attribute","type":{"type":"record","name":"child","fields":[{"name":"id","type":"string"}]}}]}"#).await.unwrap()
+            SchemaExt::parse_str(r#"{"type":"record","name":"parent","fields":[{"name":"attribute","type":{"type":"record","name":"child","fields":[{"name":"id","type":"string"}]}}]}"#).await.unwrap()
         }
 
         async fn nested_optional_record() -> Schema {
-            Schema::parse_str(r#"{"type":"record","name":"parent","fields":[{"name":"attribute","type":["null",{"type":"record","name":"child","fields":[{"name":"id","type":"string"}]}],"default":null}]}"#).await.unwrap()
+            SchemaExt::parse_str(r#"{"type":"record","name":"parent","fields":[{"name":"attribute","type":["null",{"type":"record","name":"child","fields":[{"name":"id","type":"string"}]}],"default":null}]}"#).await.unwrap()
         }
 
         async fn int_list_record_schema() -> Schema {
-            Schema::parse_str(r#"{"type":"record", "name":"List", "fields": [{"name": "head", "type": "int"},{"name": "tail", "type": "array", "items": "int"}]}"#).await.unwrap()
+            SchemaExt::parse_str(r#"{"type":"record", "name":"List", "fields": [{"name": "head", "type": "int"},{"name": "tail", "type": "array", "items": "int"}]}"#).await.unwrap()
         }
 
         async fn long_list_record_schema() -> Schema {
-            Schema::parse_str(
+            SchemaExt::parse_str(
                 r#"
       {
         "type":"record", "name":"List", "fields": [
@@ -705,7 +703,7 @@ mod schema_compatibility {
                 .map(|s| s.canonical_form())
                 .collect::<Vec<String>>()
                 .join(",");
-            Schema::parse_str(&format!("[{schema_string}]"))
+            SchemaExt::parse_str(&format!("[{schema_string}]"))
                 .await
                 .unwrap()
         }
@@ -892,8 +890,8 @@ mod schema_compatibility {
             #[case] writer_schema_str: &str,
             #[case] reader_schema_str: &str,
         ) {
-            let writer_schema = Schema::parse_str(writer_schema_str).await.unwrap();
-            let reader_schema = Schema::parse_str(reader_schema_str).await.unwrap();
+            let writer_schema = SchemaExt::parse_str(writer_schema_str).await.unwrap();
+            let reader_schema = SchemaExt::parse_str(reader_schema_str).await.unwrap();
 
             assert!(SchemaCompatibility::match_schemas(&writer_schema, &reader_schema).is_ok());
         }
@@ -1074,8 +1072,8 @@ mod schema_compatibility {
             #[case] reader_schema_str: &str,
             #[case] expected_error: CompatibilityError,
         ) {
-            let writer_schema = Schema::parse_str(writer_schema_str).await.unwrap();
-            let reader_schema = Schema::parse_str(reader_schema_str).await.unwrap();
+            let writer_schema = SchemaExt::parse_str(writer_schema_str).await.unwrap();
+            let reader_schema = SchemaExt::parse_str(reader_schema_str).await.unwrap();
 
             assert_eq!(
                 expected_error,
@@ -1187,7 +1185,7 @@ mod schema_compatibility {
         }
 
         async fn writer_schema() -> Schema {
-            Schema::parse_str(
+            SchemaExt::parse_str(
                 r#"
       {"type":"record", "name":"Record", "fields":[
         {"name":"oldfield1", "type":"int"},
@@ -1201,7 +1199,7 @@ mod schema_compatibility {
 
         #[tokio::test]
         async fn test_missing_field() -> TestResult {
-            let reader_schema = Schema::parse_str(
+            let reader_schema = SchemaExt::parse_str(
                 r#"
       {"type":"record", "name":"Record", "fields":[
         {"name":"oldfield1", "type":"int"}
@@ -1220,7 +1218,7 @@ mod schema_compatibility {
 
         #[tokio::test]
         async fn test_missing_second_field() -> TestResult {
-            let reader_schema = Schema::parse_str(
+            let reader_schema = SchemaExt::parse_str(
                 r#"
         {"type":"record", "name":"Record", "fields":[
           {"name":"oldfield2", "type":"string"}
@@ -1239,7 +1237,7 @@ mod schema_compatibility {
 
         #[tokio::test]
         async fn test_all_fields() -> TestResult {
-            let reader_schema = Schema::parse_str(
+            let reader_schema = SchemaExt::parse_str(
                 r#"
         {"type":"record", "name":"Record", "fields":[
           {"name":"oldfield1", "type":"int"},
@@ -1256,7 +1254,7 @@ mod schema_compatibility {
 
         #[tokio::test]
         async fn test_new_field_with_default() -> TestResult {
-            let reader_schema = Schema::parse_str(
+            let reader_schema = SchemaExt::parse_str(
                 r#"
         {"type":"record", "name":"Record", "fields":[
           {"name":"oldfield1", "type":"int"},
@@ -1276,7 +1274,7 @@ mod schema_compatibility {
 
         #[tokio::test]
         async fn test_new_field() -> TestResult {
-            let reader_schema = Schema::parse_str(
+            let reader_schema = SchemaExt::parse_str(
                 r#"
         {"type":"record", "name":"Record", "fields":[
           {"name":"oldfield1", "type":"int"},
@@ -1347,7 +1345,7 @@ mod schema_compatibility {
 
         #[tokio::test]
         async fn test_incompatible_record_field() -> TestResult {
-            let string_schema = Schema::parse_str(
+            let string_schema = SchemaExt::parse_str(
                 r#"
         {"type":"record", "name":"MyRecord", "namespace":"ns", "fields": [
             {"name":"field1", "type":"string"}
@@ -1356,7 +1354,7 @@ mod schema_compatibility {
             )
             .await?;
 
-            let int_schema = Schema::parse_str(
+            let int_schema = SchemaExt::parse_str(
                 r#"
               {"type":"record", "name":"MyRecord", "namespace":"ns", "fields": [
                 {"name":"field1", "type":"int"}
@@ -1385,15 +1383,16 @@ mod schema_compatibility {
 
         #[tokio::test]
         async fn test_enum_symbols() -> TestResult {
-            let enum_schema1 = Schema::parse_str(
+            let enum_schema1 = SchemaExt::parse_str(
                 r#"
       {"type":"enum", "name":"MyEnum", "symbols":["A","B"]}
 "#,
             )
             .await?;
-            let enum_schema2 =
-                Schema::parse_str(r#"{"type":"enum", "name":"MyEnum", "symbols":["A","B","C"]}"#)
-                    .await?;
+            let enum_schema2 = SchemaExt::parse_str(
+                r#"{"type":"enum", "name":"MyEnum", "symbols":["A","B","C"]}"#,
+            )
+            .await?;
             assert_eq!(
                 CompatibilityError::MissingSymbols,
                 SchemaCompatibility::can_read(&enum_schema2, &enum_schema1).unwrap_err()
@@ -1404,7 +1403,7 @@ mod schema_compatibility {
         }
 
         async fn point_2d_schema() -> Schema {
-            Schema::parse_str(
+            SchemaExt::parse_str(
                 r#"
       {"type":"record", "name":"Point2D", "fields":[
         {"name":"x", "type":"double"},
@@ -1417,7 +1416,7 @@ mod schema_compatibility {
         }
 
         async fn point_2d_fullname_schema() -> Schema {
-            Schema::parse_str(
+            SchemaExt::parse_str(
                 r#"
       {"type":"record", "name":"Point", "namespace":"written", "fields":[
         {"name":"x", "type":"double"},
@@ -1430,7 +1429,7 @@ mod schema_compatibility {
         }
 
         async fn point_3d_no_default_schema() -> Schema {
-            Schema::parse_str(
+            SchemaExt::parse_str(
                 r#"
       {"type":"record", "name":"Point", "fields":[
         {"name":"x", "type":"double"},
@@ -1444,7 +1443,7 @@ mod schema_compatibility {
         }
 
         async fn point_3d_schema() -> Schema {
-            Schema::parse_str(
+            SchemaExt::parse_str(
                 r#"
       {"type":"record", "name":"Point3D", "fields":[
         {"name":"x", "type":"double"},
@@ -1458,7 +1457,7 @@ mod schema_compatibility {
         }
 
         async fn point_3d_match_name_schema() -> Schema {
-            Schema::parse_str(
+            SchemaExt::parse_str(
                 r#"
       {"type":"record", "name":"Point", "fields":[
         {"name":"x", "type":"double"},
@@ -1592,8 +1591,8 @@ mod schema_compatibility {
           ]
         }
       "#;
-            let writer_schema = Schema::parse_str(writer_raw_schema).await?;
-            let reader_schema = Schema::parse_str(reader_raw_schema).await?;
+            let writer_schema = SchemaExt::parse_str(writer_raw_schema).await?;
+            let reader_schema = SchemaExt::parse_str(reader_raw_schema).await?;
             let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null);
             let mut record = Record::new(writer.schema()).unwrap();
             record.put("a", 27i64);
@@ -1656,8 +1655,8 @@ mod schema_compatibility {
           ]
         }
       "#;
-            let writer_schema = Schema::parse_str(writer_raw_schema).await?;
-            let reader_schema = Schema::parse_str(reader_raw_schema).await?;
+            let writer_schema = SchemaExt::parse_str(writer_raw_schema).await?;
+            let reader_schema = SchemaExt::parse_str(reader_raw_schema).await?;
             let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null);
             let mut record = Record::new(writer.schema()).unwrap();
             record.put("a", 27i64);
@@ -1682,7 +1681,7 @@ mod schema_compatibility {
         #[tokio::test]
         async fn avro_3894_take_aliases_into_account_when_serializing_for_schema_compatibility()
         -> TestResult {
-            let schema_v1 = Schema::parse_str(
+            let schema_v1 = SchemaExt::parse_str(
                 r#"
         {
             "type": "record",
@@ -1696,7 +1695,7 @@ mod schema_compatibility {
             )
             .await?;
 
-            let schema_v2 = Schema::parse_str(
+            let schema_v2 = SchemaExt::parse_str(
                 r#"
         {
             "type": "record",
@@ -1717,7 +1716,7 @@ mod schema_compatibility {
 
         #[tokio::test]
         async fn avro_3917_take_aliases_into_account_for_schema_compatibility() -> TestResult {
-            let schema_v1 = Schema::parse_str(
+            let schema_v1 = SchemaExt::parse_str(
                 r#"
         {
             "type": "record",
@@ -1731,7 +1730,7 @@ mod schema_compatibility {
             )
             .await?;
 
-            let schema_v2 = Schema::parse_str(
+            let schema_v2 = SchemaExt::parse_str(
                 r#"
         {
             "type": "record",
@@ -1759,7 +1758,7 @@ mod schema_compatibility {
             let schemas = [
                 // Record schemas
                 (
-                    Schema::parse_str(
+                    SchemaExt::parse_str(
                         r#"{
               "type": "record",
               "name": "Statistics",
@@ -1772,7 +1771,7 @@ mod schema_compatibility {
             }"#,
                     )
                     .await?,
-                    Schema::parse_str(
+                    SchemaExt::parse_str(
                         r#"{
               "type": "record",
               "name": "Statistics",
@@ -1789,7 +1788,7 @@ mod schema_compatibility {
                 ),
                 // Enum schemas
                 (
-                    Schema::parse_str(
+                    SchemaExt::parse_str(
                         r#"{
                     "type": "enum",
                     "name": "Suit",
@@ -1797,7 +1796,7 @@ mod schema_compatibility {
                 }"#,
                     )
                     .await?,
-                    Schema::parse_str(
+                    SchemaExt::parse_str(
                         r#"{
                     "type": "enum",
                     "name": "Suit",
@@ -1809,7 +1808,7 @@ mod schema_compatibility {
                 ),
                 // Fixed schemas
                 (
-                    Schema::parse_str(
+                    SchemaExt::parse_str(
                         r#"{
                     "type": "fixed",
                     "name": "EmployeeId",
@@ -1817,7 +1816,7 @@ mod schema_compatibility {
                 }"#,
                     )
                     .await?,
-                    Schema::parse_str(
+                    SchemaExt::parse_str(
                         r#"{
                     "type": "fixed",
                     "name": "EmployeeId",
@@ -1840,7 +1839,7 @@ mod schema_compatibility {
         async fn test_can_read_compatibility_errors() -> TestResult {
             let schemas = [
                 (
-                    Schema::parse_str(
+                    SchemaExt::parse_str(
                         r#"{
                     "type": "record",
                     "name": "StatisticsMap",
@@ -1850,7 +1849,7 @@ mod schema_compatibility {
                     ]
                 }"#,
                     ).await?,
-                    Schema::parse_str(
+                    SchemaExt::parse_str(
                         r#"{
                     "type": "record",
                     "name": "StatisticsMap",
@@ -1863,7 +1862,7 @@ mod schema_compatibility {
                     "Incompatible schemata! Field 'success' in reader schema does not match the type in the writer schema",
                 ),
                 (
-                    Schema::parse_str(
+                    SchemaExt::parse_str(
                         r#"{
                         "type": "record",
                         "name": "StatisticsArray",
@@ -1872,7 +1871,7 @@ mod schema_compatibility {
                         ]
                     }"#,
                     ).await?,
-                    Schema::parse_str(
+                    SchemaExt::parse_str(
                         r#"{
                         "type": "record",
                         "name": "StatisticsArray",
@@ -1927,7 +1926,7 @@ mod schema_compatibility {
         "#,
             ];
 
-            let schemas = Schema::parse_list(schema_strs).await.unwrap();
+            let schemas = SchemaExt::parse_list(schema_strs).await.unwrap();
             SchemaCompatibility::can_read(&schemas[1], &schemas[1])?;
 
             Ok(())

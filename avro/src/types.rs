@@ -17,6 +17,247 @@
 
 //! Logic handling the intermediate representation of Avro values.
 
+use crate::Decimal;
+use crate::Duration;
+use crate::Uuid;
+use crate::bigdecimal::BigDecimal;
+use crate::schema::{RecordSchema, Schema};
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt::Debug,
+    hash::BuildHasher,
+};
+
+/// A valid Avro value.
+///
+/// More information about Avro values can be found in the [Avro
+/// Specification](https://avro.apache.org/docs/current/specification/#schema-declaration)
+#[derive(Clone, Debug, PartialEq, strum_macros::EnumDiscriminants)]
+#[strum_discriminants(name(ValueKind))]
+pub enum Value {
+    /// A `null` Avro value.
+    Null,
+    /// A `boolean` Avro value.
+    Boolean(bool),
+    /// A `int` Avro value.
+    Int(i32),
+    /// A `long` Avro value.
+    Long(i64),
+    /// A `float` Avro value.
+    Float(f32),
+    /// A `double` Avro value.
+    Double(f64),
+    /// A `bytes` Avro value.
+    Bytes(Vec<u8>),
+    /// A `string` Avro value.
+    String(String),
+    /// A `fixed` Avro value.
+    /// The size of the fixed value is represented as a `usize`.
+    Fixed(usize, Vec<u8>),
+    /// An `enum` Avro value.
+    ///
+    /// An Enum is represented by a symbol and its position in the symbols list
+    /// of its corresponding schema.
+    /// This allows schema-less encoding, as well as schema resolution while
+    /// reading values.
+    Enum(u32, String),
+    /// An `union` Avro value.
+    ///
+    /// A Union is represented by the value it holds and its position in the type list
+    /// of its corresponding schema
+    /// This allows schema-less encoding, as well as schema resolution while
+    /// reading values.
+    Union(u32, Box<Value>),
+    /// An `array` Avro value.
+    Array(Vec<Value>),
+    /// A `map` Avro value.
+    Map(HashMap<String, Value>),
+    /// A `record` Avro value.
+    ///
+    /// A Record is represented by a vector of (`<record name>`, `value`).
+    /// This allows schema-less encoding.
+    ///
+    /// See [Record](types.Record) for a more user-friendly support.
+    Record(Vec<(String, Value)>),
+    /// A date value.
+    ///
+    /// Serialized and deserialized as `i32` directly. Can only be deserialized properly with a
+    /// schema.
+    Date(i32),
+    /// An Avro Decimal value. Bytes are in big-endian order, per the Avro spec.
+    Decimal(Decimal),
+    /// An Avro Decimal value.
+    BigDecimal(BigDecimal),
+    /// Time in milliseconds.
+    TimeMillis(i32),
+    /// Time in microseconds.
+    TimeMicros(i64),
+    /// Timestamp in milliseconds.
+    TimestampMillis(i64),
+    /// Timestamp in microseconds.
+    TimestampMicros(i64),
+    /// Timestamp in nanoseconds.
+    TimestampNanos(i64),
+    /// Local timestamp in milliseconds.
+    LocalTimestampMillis(i64),
+    /// Local timestamp in microseconds.
+    LocalTimestampMicros(i64),
+    /// Local timestamp in nanoseconds.
+    LocalTimestampNanos(i64),
+    /// Avro Duration. An amount of time defined by months, days and milliseconds.
+    Duration(Duration),
+    /// Universally unique identifier.
+    Uuid(Uuid),
+}
+
+impl From<()> for Value {
+    fn from(_: ()) -> Self {
+        Self::Null
+    }
+}
+
+impl From<usize> for Value {
+    fn from(value: usize) -> Self {
+        i64::try_from(value)
+            .expect("cannot convert usize to i64")
+            .into()
+    }
+}
+
+impl From<&str> for Value {
+    fn from(value: &str) -> Self {
+        Self::String(value.to_owned())
+    }
+}
+
+impl From<&[u8]> for Value {
+    fn from(value: &[u8]) -> Self {
+        Self::Bytes(value.to_owned())
+    }
+}
+
+impl<T> From<Option<T>> for Value
+where
+    T: Into<Self>,
+{
+    fn from(value: Option<T>) -> Self {
+        // FIXME: this is incorrect in case first type in union is not "none"
+        Self::Union(
+            value.is_some() as u32,
+            Box::new(value.map_or_else(|| Self::Null, Into::into)),
+        )
+    }
+}
+
+impl<K, V, S> From<HashMap<K, V, S>> for Value
+where
+    K: Into<String>,
+    V: Into<Self>,
+    S: BuildHasher,
+{
+    fn from(value: HashMap<K, V, S>) -> Self {
+        Self::Map(
+            value
+                .into_iter()
+                .map(|(key, value)| (key.into(), value.into()))
+                .collect(),
+        )
+    }
+}
+
+/// Utility interface to build `Value::Record` objects.
+#[derive(Debug, Clone)]
+pub struct Record<'a> {
+    /// List of fields contained in the record.
+    /// Ordered according to the fields in the schema given to create this
+    /// `Record` object. Any unset field defaults to `Value::Null`.
+    pub fields: Vec<(String, Value)>,
+    schema_lookup: &'a BTreeMap<String, usize>,
+}
+
+impl Record<'_> {
+    /// Create a `Record` given a `Schema`.
+    ///
+    /// If the `Schema` is not a `Schema::Record` variant, `None` will be returned.
+    pub fn new(schema: &Schema) -> Option<Record<'_>> {
+        match *schema {
+            Schema::Record(RecordSchema {
+                fields: ref schema_fields,
+                lookup: ref schema_lookup,
+                ..
+            }) => {
+                let mut fields = Vec::with_capacity(schema_fields.len());
+                for schema_field in schema_fields.iter() {
+                    fields.push((schema_field.name.clone(), Value::Null));
+                }
+
+                Some(Record {
+                    fields,
+                    schema_lookup,
+                })
+            }
+            _ => None,
+        }
+    }
+
+    /// Put a compatible value (implementing the `ToAvro` trait) in the
+    /// `Record` for a given `field` name.
+    ///
+    /// **NOTE** Only ensure that the field name is present in the `Schema` given when creating
+    /// this `Record`. Does not perform any schema validation.
+    pub fn put<V>(&mut self, field: &str, value: V)
+    where
+        V: Into<Value>,
+    {
+        if let Some(&position) = self.schema_lookup.get(field) {
+            self.fields[position].1 = value.into()
+        }
+    }
+
+    /// Get the value for a given field name.
+    /// Returns `None` if the field is not present in the schema
+    pub fn get(&self, field: &str) -> Option<&Value> {
+        self.schema_lookup
+            .get(field)
+            .map(|&position| &self.fields[position].1)
+    }
+}
+
+impl<'a> From<Record<'a>> for Value {
+    fn from(value: Record<'a>) -> Self {
+        Self::Record(value.fields)
+    }
+}
+
+impl From<serde_json::Value> for Value {
+    fn from(value: serde_json::Value) -> Self {
+        match value {
+            serde_json::Value::Null => Self::Null,
+            serde_json::Value::Bool(b) => b.into(),
+            serde_json::Value::Number(ref n) if n.is_i64() => {
+                let n = n.as_i64().unwrap();
+                if n >= i32::MIN as i64 && n <= i32::MAX as i64 {
+                    Value::Int(n as i32)
+                } else {
+                    Value::Long(n)
+                }
+            }
+            serde_json::Value::Number(ref n) if n.is_f64() => Value::Double(n.as_f64().unwrap()),
+            serde_json::Value::Number(n) => Value::Long(n.as_u64().unwrap() as i64), // TODO: Not so great
+            serde_json::Value::String(s) => s.into(),
+            serde_json::Value::Array(items) => {
+                Value::Array(items.into_iter().map(Value::from).collect())
+            }
+            serde_json::Value::Object(items) => Value::Map(
+                items
+                    .into_iter()
+                    .map(|(key, value)| (key, value.into()))
+                    .collect(),
+            ),
+        }
+    }
+}
+
 #[synca::synca(
   #[cfg(feature = "tokio")]
   pub mod tokio { },
@@ -25,307 +266,40 @@
     sync!();
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::decimal::tokio => crate::decimal::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
       crate::schema::tokio => crate::schema::sync,
       crate::util::tokio => crate::util::sync,
       crate::types::tokio => crate::types::sync,
-      crate::schema_equality::tokio => crate::schema_equality::sync,
       crate::ser::tokio => crate::ser::sync,
       crate::util::tokio => crate::util::sync,
-      crate::validator::tokio => crate::validator::sync,
       #[tokio::test] => #[test]
     );
   }
 )]
 mod types {
 
-    #[synca::cfg(tokio)]
-    use crate::AsyncAvroResult as AvroResult;
-    #[synca::cfg(sync)]
     use crate::AvroResult;
     use crate::{
-        bigdecimal::tokio::{deserialize_big_decimal, serialize_big_decimal},
-        decimal::tokio::Decimal,
+        Uuid,
+        bigdecimal::{
+            BigDecimal,
+            tokio::{deserialize_big_decimal, serialize_big_decimal},
+        },
+        decimal::Decimal,
         duration::Duration,
-        error::tokio::Details,
-        error::tokio::Error,
-        schema::tokio::{
+        error::Details,
+        error::Error,
+        schema::{
             DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, Precision, RecordField,
             RecordSchema, ResolvedSchema, Scale, Schema, SchemaKind, UnionSchema,
         },
+        types::Value,
     };
-    use bigdecimal::BigDecimal;
     use log::{debug, error};
-    use std::{
-        collections::{BTreeMap, HashMap},
-        fmt::Debug,
-        hash::BuildHasher,
-        str::FromStr,
-    };
-    use uuid::Uuid;
-
-    /// Compute the maximum decimal value precision of a byte array of length `len` could hold.
-    fn max_prec_for_len(len: usize) -> Result<usize, Error> {
-        let len = i32::try_from(len).map_err(|e| Details::ConvertLengthToI32(e, len))?;
-        Ok((2.0_f64.powi(8 * len - 1) - 1.0).log10().floor() as usize)
-    }
-
-    /// A valid Avro value.
-    ///
-    /// More information about Avro values can be found in the [Avro
-    /// Specification](https://avro.apache.org/docs/current/specification/#schema-declaration)
-    #[derive(Clone, Debug, PartialEq, strum_macros::EnumDiscriminants)]
-    #[strum_discriminants(name(ValueKind))]
-    pub enum Value {
-        /// A `null` Avro value.
-        Null,
-        /// A `boolean` Avro value.
-        Boolean(bool),
-        /// A `int` Avro value.
-        Int(i32),
-        /// A `long` Avro value.
-        Long(i64),
-        /// A `float` Avro value.
-        Float(f32),
-        /// A `double` Avro value.
-        Double(f64),
-        /// A `bytes` Avro value.
-        Bytes(Vec<u8>),
-        /// A `string` Avro value.
-        String(String),
-        /// A `fixed` Avro value.
-        /// The size of the fixed value is represented as a `usize`.
-        Fixed(usize, Vec<u8>),
-        /// An `enum` Avro value.
-        ///
-        /// An Enum is represented by a symbol and its position in the symbols list
-        /// of its corresponding schema.
-        /// This allows schema-less encoding, as well as schema resolution while
-        /// reading values.
-        Enum(u32, String),
-        /// An `union` Avro value.
-        ///
-        /// A Union is represented by the value it holds and its position in the type list
-        /// of its corresponding schema
-        /// This allows schema-less encoding, as well as schema resolution while
-        /// reading values.
-        Union(u32, Box<Value>),
-        /// An `array` Avro value.
-        Array(Vec<Value>),
-        /// A `map` Avro value.
-        Map(HashMap<String, Value>),
-        /// A `record` Avro value.
-        ///
-        /// A Record is represented by a vector of (`<record name>`, `value`).
-        /// This allows schema-less encoding.
-        ///
-        /// See [Record](types.Record) for a more user-friendly support.
-        Record(Vec<(String, Value)>),
-        /// A date value.
-        ///
-        /// Serialized and deserialized as `i32` directly. Can only be deserialized properly with a
-        /// schema.
-        Date(i32),
-        /// An Avro Decimal value. Bytes are in big-endian order, per the Avro spec.
-        Decimal(Decimal),
-        /// An Avro Decimal value.
-        BigDecimal(BigDecimal),
-        /// Time in milliseconds.
-        TimeMillis(i32),
-        /// Time in microseconds.
-        TimeMicros(i64),
-        /// Timestamp in milliseconds.
-        TimestampMillis(i64),
-        /// Timestamp in microseconds.
-        TimestampMicros(i64),
-        /// Timestamp in nanoseconds.
-        TimestampNanos(i64),
-        /// Local timestamp in milliseconds.
-        LocalTimestampMillis(i64),
-        /// Local timestamp in microseconds.
-        LocalTimestampMicros(i64),
-        /// Local timestamp in nanoseconds.
-        LocalTimestampNanos(i64),
-        /// Avro Duration. An amount of time defined by months, days and milliseconds.
-        Duration(Duration),
-        /// Universally unique identifier.
-        Uuid(Uuid),
-    }
-
-    macro_rules! to_value(
-    ($type:ty, $variant_constructor:expr) => (
-        impl From<$type> for Value {
-            fn from(value: $type) -> Self {
-                $variant_constructor(value)
-            }
-        }
-    );
-);
-
-    to_value!(bool, Value::Boolean);
-    to_value!(i32, Value::Int);
-    to_value!(i64, Value::Long);
-    to_value!(f32, Value::Float);
-    to_value!(f64, Value::Double);
-    to_value!(String, Value::String);
-    to_value!(Vec<u8>, Value::Bytes);
-    to_value!(uuid::Uuid, Value::Uuid);
-    to_value!(Decimal, Value::Decimal);
-    to_value!(BigDecimal, Value::BigDecimal);
-    to_value!(Duration, Value::Duration);
-
-    impl From<()> for Value {
-        fn from(_: ()) -> Self {
-            Self::Null
-        }
-    }
-
-    impl From<usize> for Value {
-        fn from(value: usize) -> Self {
-            i64::try_from(value)
-                .expect("cannot convert usize to i64")
-                .into()
-        }
-    }
-
-    impl From<&str> for Value {
-        fn from(value: &str) -> Self {
-            Self::String(value.to_owned())
-        }
-    }
-
-    impl From<&[u8]> for Value {
-        fn from(value: &[u8]) -> Self {
-            Self::Bytes(value.to_owned())
-        }
-    }
-
-    impl<T> From<Option<T>> for Value
-    where
-        T: Into<Self>,
-    {
-        fn from(value: Option<T>) -> Self {
-            // FIXME: this is incorrect in case first type in union is not "none"
-            Self::Union(
-                value.is_some() as u32,
-                Box::new(value.map_or_else(|| Self::Null, Into::into)),
-            )
-        }
-    }
-
-    impl<K, V, S> From<HashMap<K, V, S>> for Value
-    where
-        K: Into<String>,
-        V: Into<Self>,
-        S: BuildHasher,
-    {
-        fn from(value: HashMap<K, V, S>) -> Self {
-            Self::Map(
-                value
-                    .into_iter()
-                    .map(|(key, value)| (key.into(), value.into()))
-                    .collect(),
-            )
-        }
-    }
-
-    /// Utility interface to build `Value::Record` objects.
-    #[derive(Debug, Clone)]
-    pub struct Record<'a> {
-        /// List of fields contained in the record.
-        /// Ordered according to the fields in the schema given to create this
-        /// `Record` object. Any unset field defaults to `Value::Null`.
-        pub fields: Vec<(String, Value)>,
-        schema_lookup: &'a BTreeMap<String, usize>,
-    }
-
-    impl Record<'_> {
-        /// Create a `Record` given a `Schema`.
-        ///
-        /// If the `Schema` is not a `Schema::Record` variant, `None` will be returned.
-        pub fn new(schema: &Schema) -> Option<Record<'_>> {
-            match *schema {
-                Schema::Record(RecordSchema {
-                    fields: ref schema_fields,
-                    lookup: ref schema_lookup,
-                    ..
-                }) => {
-                    let mut fields = Vec::with_capacity(schema_fields.len());
-                    for schema_field in schema_fields.iter() {
-                        fields.push((schema_field.name.clone(), Value::Null));
-                    }
-
-                    Some(Record {
-                        fields,
-                        schema_lookup,
-                    })
-                }
-                _ => None,
-            }
-        }
-
-        /// Put a compatible value (implementing the `ToAvro` trait) in the
-        /// `Record` for a given `field` name.
-        ///
-        /// **NOTE** Only ensure that the field name is present in the `Schema` given when creating
-        /// this `Record`. Does not perform any schema validation.
-        pub fn put<V>(&mut self, field: &str, value: V)
-        where
-            V: Into<Value>,
-        {
-            if let Some(&position) = self.schema_lookup.get(field) {
-                self.fields[position].1 = value.into()
-            }
-        }
-
-        /// Get the value for a given field name.
-        /// Returns `None` if the field is not present in the schema
-        pub fn get(&self, field: &str) -> Option<&Value> {
-            self.schema_lookup
-                .get(field)
-                .map(|&position| &self.fields[position].1)
-        }
-    }
-
-    impl<'a> From<Record<'a>> for Value {
-        fn from(value: Record<'a>) -> Self {
-            Self::Record(value.fields)
-        }
-    }
-
-    impl From<serde_json::Value> for Value {
-        fn from(value: serde_json::Value) -> Self {
-            match value {
-                serde_json::Value::Null => Self::Null,
-                serde_json::Value::Bool(b) => b.into(),
-                serde_json::Value::Number(ref n) if n.is_i64() => {
-                    let n = n.as_i64().unwrap();
-                    if n >= i32::MIN as i64 && n <= i32::MAX as i64 {
-                        Value::Int(n as i32)
-                    } else {
-                        Value::Long(n)
-                    }
-                }
-                serde_json::Value::Number(ref n) if n.is_f64() => {
-                    Value::Double(n.as_f64().unwrap())
-                }
-                serde_json::Value::Number(n) => Value::Long(n.as_u64().unwrap() as i64), // TODO: Not so great
-                serde_json::Value::String(s) => s.into(),
-                serde_json::Value::Array(items) => {
-                    Value::Array(items.into_iter().map(Value::from).collect())
-                }
-                serde_json::Value::Object(items) => Value::Map(
-                    items
-                        .into_iter()
-                        .map(|(key, value)| (key, value.into()))
-                        .collect(),
-                ),
-            }
-        }
-    }
+    use std::collections::HashMap;
+    use std::str::FromStr;
 
     /// Convert Avro values to Json values
     impl TryFrom<Value> for serde_json::Value {
@@ -389,24 +363,53 @@ mod types {
         }
     }
 
-    impl Value {
+    /// Compute the maximum decimal value precision of a byte array of length `len` could hold.
+    fn max_prec_for_len(len: usize) -> Result<usize, Error> {
+        let len = i32::try_from(len).map_err(|e| Details::ConvertLengthToI32(e, len))?;
+        Ok((2.0_f64.powi(8 * len - 1) - 1.0).log10().floor() as usize)
+    }
+
+    macro_rules! to_value(
+    ($type:ty, $variant_constructor:expr) => (
+        impl From<$type> for Value {
+            fn from(value: $type) -> Self {
+                $variant_constructor(value)
+            }
+        }
+    );
+);
+
+    to_value!(bool, Value::Boolean);
+    to_value!(i32, Value::Int);
+    to_value!(i64, Value::Long);
+    to_value!(f32, Value::Float);
+    to_value!(f64, Value::Double);
+    to_value!(String, Value::String);
+    to_value!(Vec<u8>, Value::Bytes);
+    to_value!(uuid::Uuid, Value::Uuid);
+    to_value!(Decimal, Value::Decimal);
+    to_value!(BigDecimal, Value::BigDecimal);
+    to_value!(Duration, Value::Duration);
+
+    pub struct ValueExt;
+
+    impl ValueExt {
         /// Validate the value against the given [Schema](../schema/enum.Schema.html).
         ///
         /// See the [Avro specification](https://avro.apache.org/docs/current/specification)
         /// for the full set of rules of schema validation.
-        pub async fn validate(&self, schema: &Schema) -> bool {
-            self.validate_schemata(vec![schema]).await
+        pub async fn validate(value: &Value, schema: &Schema) -> bool {
+            Self::validate_schemata(value, vec![schema]).await
         }
 
-        pub async fn validate_schemata(&self, schemata: Vec<&Schema>) -> bool {
+        pub async fn validate_schemata(value: &Value, schemata: Vec<&Schema>) -> bool {
             let rs = ResolvedSchema::try_from(schemata.clone())
                 .expect("Schemata didn't successfully resolve");
             let schemata_len = schemata.len();
             for schema in schemata {
                 let enclosing_namespace = schema.namespace();
 
-                match self
-                    .validate_internal(schema, rs.get_names(), &enclosing_namespace)
+                match Self::validate_internal(value, schema, rs.get_names(), &enclosing_namespace)
                     .await
                 {
                     Some(reason) => {
@@ -436,16 +439,16 @@ mod types {
 
         /// Validates the value against the provided schema.
         pub(crate) async fn validate_internal(
-            &self,
+            value: &Value,
             schema: &Schema,
             names: &HashMap<Name, Schema>,
             enclosing_namespace: &Namespace,
         ) -> Option<String> {
-            match (self, schema) {
+            match (value, schema) {
                 (_, Schema::Ref { name }) => {
                     let name = name.fully_qualified_name(enclosing_namespace);
                     if let Some(s) = names.get(&name) {
-                        Box::pin(self.validate_internal(s, names, &name.namespace)).await
+                        Box::pin(Self::validate_internal(value, s, names, &name.namespace)).await
                     } else {
                         Some(format!(
                             "Unresolved schema reference: '{:?}'. Parsed names: {:?}",
@@ -691,8 +694,8 @@ mod types {
         /// See [Schema Resolution](https://avro.apache.org/docs/current/specification/#schema-resolution)
         /// in the Avro specification for the full set of rules of schema
         /// resolution.
-        pub async fn resolve(self, schema: &Schema) -> AvroResult<Self> {
-            self.resolve_schemata(schema, Vec::with_capacity(0)).await
+        pub async fn resolve(value: Value, schema: &Schema) -> AvroResult<Self> {
+            Self::resolve_schemata(value, schema, Vec::with_capacity(0)).await
         }
 
         /// Attempt to perform schema resolution on the value, with the given
@@ -702,7 +705,7 @@ mod types {
         /// in the Avro specification for the full set of rules of schema
         /// resolution.
         pub async fn resolve_schemata(
-            self,
+            value: Value,
             schema: &Schema,
             schemata: Vec<&Schema>,
         ) -> AvroResult<Self> {
@@ -712,27 +715,26 @@ mod types {
             } else {
                 ResolvedSchema::try_from(schemata)?
             };
-            self.resolve_internal(schema, rs.get_names(), &enclosing_namespace, &None)
-                .await
+            Self::resolve_internal(value, schema, rs.get_names(), &enclosing_namespace, &None).await
         }
 
         pub(crate) async fn resolve_internal(
-            mut self,
+            value: &mut Value,
             schema: &Schema,
             names: &HashMap<Name, Schema>,
             enclosing_namespace: &Namespace,
             field_default: &Option<serde_json::Value>,
         ) -> AvroResult<Self> {
             // Check if this schema is a union, and if the reader schema is not.
-            if SchemaKind::from(&self) == SchemaKind::Union
+            if SchemaKind::from(value) == SchemaKind::Union
                 && SchemaKind::from(schema) != SchemaKind::Union
             {
                 // Pull out the Union, and attempt to resolve against it.
-                let v = match self {
+                let v = match *value {
                     Value::Union(_i, b) => *b,
                     _ => unreachable!(),
                 };
-                self = v;
+                value = v;
             }
             match *schema {
                 Schema::Ref { ref name } => {
@@ -1301,9 +1303,11 @@ mod types {
         use super::*;
         use crate::{
             duration::{Days, Millis, Months},
-            error::tokio::Details,
-            schema::tokio::RecordFieldOrder,
+            error::Details,
+            schema::RecordFieldOrder,
+            schema::tokio::SchemaExt,
             ser::tokio::Serializer,
+            types::{Record, Value},
         };
         use apache_avro_test_helper::{
             TestResult,
@@ -1315,7 +1319,7 @@ mod types {
 
         #[tokio::test]
         async fn avro_3809_validate_nested_records_with_implicit_namespace() -> TestResult {
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"{
             "name": "record_name",
             "namespace": "space",
@@ -2054,7 +2058,7 @@ Field with name '"b"' is not a member of the map items"#,
 
         #[tokio::test]
         async fn test_avro_3621_resolve_to_nullable_union() -> TestResult {
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"{
             "type": "record",
             "name": "root",
@@ -2287,7 +2291,7 @@ Field with name '"b"' is not a member of the map items"#,
 
         #[tokio::test]
         async fn test_avro_3433_recursive_resolves_record() -> TestResult {
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"
         {
             "type":"record",
@@ -2326,7 +2330,7 @@ Field with name '"b"' is not a member of the map items"#,
 
         #[tokio::test]
         async fn test_avro_3433_recursive_resolves_array() -> TestResult {
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"
         {
             "type":"record",
@@ -2377,7 +2381,7 @@ Field with name '"b"' is not a member of the map items"#,
 
         #[tokio::test]
         async fn test_avro_3433_recursive_resolves_map() -> TestResult {
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"
         {
             "type":"record",
@@ -2425,7 +2429,7 @@ Field with name '"b"' is not a member of the map items"#,
 
         #[tokio::test]
         async fn test_avro_3433_recursive_resolves_record_wrapper() -> TestResult {
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"
         {
             "type":"record",
@@ -2472,7 +2476,7 @@ Field with name '"b"' is not a member of the map items"#,
 
         #[tokio::test]
         async fn test_avro_3433_recursive_resolves_map_and_array() -> TestResult {
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"
         {
             "type":"record",
@@ -2523,7 +2527,7 @@ Field with name '"b"' is not a member of the map items"#,
 
         #[tokio::test]
         async fn test_avro_3433_recursive_resolves_union() -> TestResult {
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"
         {
             "type":"record",
@@ -2611,7 +2615,7 @@ Field with name '"b"' is not a member of the map items"#,
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema).await?;
+            let schema = SchemaExt::parse_str(schema).await?;
             let inner_record = Value::Record(vec![("inner_field_1".into(), Value::Double(5.4))]);
             let middle_record_variation_1 = Value::Record(vec![(
                 "middle_field_1".into(),
@@ -2703,7 +2707,7 @@ Field with name '"b"' is not a member of the map items"#,
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema).await?;
+            let schema = SchemaExt::parse_str(schema).await?;
             let inner_record = Value::Record(vec![("inner_field_1".into(), Value::Double(5.4))]);
             let middle_record_variation_1 = Value::Record(vec![(
                 "middle_field_1".into(),
@@ -2796,7 +2800,7 @@ Field with name '"b"' is not a member of the map items"#,
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema).await?;
+            let schema = SchemaExt::parse_str(schema).await?;
 
             let inner_record = Value::Record(vec![("inner_field_1".into(), Value::Double(5.4))]);
             let middle_record_variation_1 = Value::Record(vec![(
@@ -2847,7 +2851,7 @@ Field with name '"b"' is not a member of the map items"#,
 
         #[tokio::test]
         async fn test_avro_3460_validation_with_refs() -> TestResult {
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"
         {
             "type":"record",
@@ -2927,7 +2931,7 @@ Field with name '"b"' is not a member of the map items"#,
                 b: Option<TestInner>, // could be literally anything
             }
 
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"
         {
             "type":"record",
@@ -3034,7 +3038,7 @@ Field with name '"b"' is not a member of the map items"#,
                 },
             );
 
-            let schema = Schema::parse_str(&schema_str).await?;
+            let schema = SchemaExt::parse_str(&schema_str).await?;
 
             #[derive(Serialize)]
             enum EnumType {
@@ -3132,7 +3136,7 @@ Field with name '"b"' is not a member of the map items"#,
                 field_b: Option<Inner>,
             }
 
-            let schema = Schema::parse_str(schema_str).await?;
+            let schema = SchemaExt::parse_str(schema_str).await?;
 
             let msg = Message {
                 field_a: Some(Inner {
@@ -3187,7 +3191,7 @@ Field with name '"b"' is not a member of the map items"#,
 
             let avro_value = Value::from(value);
 
-            let schemas = Schema::parse_list([main_schema, referenced_schema]).await?;
+            let schemas = SchemaExt::parse_list([main_schema, referenced_schema]).await?;
 
             let main_schema = schemas.first().unwrap();
             let schemata: Vec<_> = schemas.iter().skip(1).collect();
@@ -3231,7 +3235,7 @@ Field with name '"b"' is not a member of the map items"#,
             let avro_value = Value::from(value);
 
             let schemata =
-                Schema::parse_list([referenced_enum, referenced_record, main_schema]).await?;
+                SchemaExt::parse_list([referenced_enum, referenced_record, main_schema]).await?;
 
             let main_schema = schemata.last().unwrap();
             let other_schemata: Vec<&Schema> = schemata.iter().take(2).collect();
@@ -3262,7 +3266,7 @@ Field with name '"b"' is not a member of the map items"#,
             let avro_value = Value::Decimal(Decimal::from(
                 BigInt::from(12345678u32).to_signed_bytes_be(),
             ));
-            let schema = Schema::parse_str(schema).await?;
+            let schema = SchemaExt::parse_str(schema).await?;
             let resolve_result = avro_value.resolve(&schema).await;
             assert!(
                 resolve_result.is_ok(),
@@ -3278,7 +3282,7 @@ Field with name '"b"' is not a member of the map items"#,
                 r#"{"name": "bigDecimalSchema", "logicalType": "big-decimal", "type": "bytes" }"#;
 
             let avro_value = Value::BigDecimal(BigDecimal::from(12345678u32));
-            let schema = Schema::parse_str(schema).await?;
+            let schema = SchemaExt::parse_str(schema).await?;
             let resolve_result: AvroResult<Value> = avro_value.resolve(&schema).await;
             assert!(
                 resolve_result.is_ok(),
@@ -3385,7 +3389,7 @@ Field with name '"b"' is not a member of the map items"#,
 
         #[tokio::test]
         async fn avro_4024_resolve_double_from_unknown_string_err() -> TestResult {
-            let schema = Schema::parse_str(r#"{"type": "double"}"#).await?;
+            let schema = SchemaExt::parse_str(r#"{"type": "double"}"#).await?;
             let value = Value::String("unknown".to_owned());
             match value.resolve(&schema).await.map_err(Error::into_details) {
                 Err(err @ Details::GetDouble(_)) => {
@@ -3403,7 +3407,7 @@ Field with name '"b"' is not a member of the map items"#,
 
         #[tokio::test]
         async fn avro_4024_resolve_float_from_unknown_string_err() -> TestResult {
-            let schema = Schema::parse_str(r#"{"type": "float"}"#).await?;
+            let schema = SchemaExt::parse_str(r#"{"type": "float"}"#).await?;
             let value = Value::String("unknown".to_owned());
             match value.resolve(&schema).await.map_err(Error::into_details) {
                 Err(err @ Details::GetFloat(_)) => {
@@ -3555,7 +3559,7 @@ Field with name '"b"' is not a member of the map items"#,
             ];
 
             for (schema_str, value, expected_error) in data {
-                let schema = Schema::parse_str(schema_str).await?;
+                let schema = SchemaExt::parse_str(schema_str).await?;
                 match value.resolve(&schema).await {
                     Err(error) => {
                         assert_eq!(format!("{error}"), expected_error);
@@ -3588,7 +3592,7 @@ Field with name '"b"' is not a member of the map items"#,
         }
         "#;
 
-            let schema = Schema::parse_str(schema).await?;
+            let schema = SchemaExt::parse_str(schema).await?;
             let mut record = Record::new(&schema).unwrap();
             record.put("foo", "hello");
             record.put("bar", 123_i64);

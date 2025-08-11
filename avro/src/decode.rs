@@ -23,7 +23,6 @@
     sync!();
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::decimal::tokio => crate::decimal::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
@@ -42,26 +41,24 @@ mod decode {
     #[cfg(feature = "tokio")]
     use tokio::io::AsyncReadExt;
 
-    #[synca::cfg(tokio)]
-    use crate::AsyncAvroResult as AvroResult;
-    #[synca::cfg(sync)]
     use crate::AvroResult;
+    use crate::Uuid;
     use crate::util::tokio::{safe_len, zag_i32, zag_i64};
     use crate::{
         bigdecimal::tokio::deserialize_big_decimal,
-        decimal::tokio::Decimal,
+        decimal::Decimal,
         duration::Duration,
         encode::tokio::encode_long,
-        error::tokio::Details,
-        error::tokio::Error,
-        schema::tokio::{
+        error::Details,
+        error::Error,
+        schema::tokio::SchemaExt,
+        schema::{
             DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, RecordSchema, ResolvedSchema,
             Schema,
         },
-        types::tokio::Value,
+        types::Value,
     };
     use std::{borrow::Borrow, collections::HashMap, io::ErrorKind, str::FromStr};
-    use uuid::Uuid;
 
     #[inline]
     pub(crate) async fn decode_long<R: AvroRead + Unpin>(reader: &mut R) -> AvroResult<Value> {
@@ -465,11 +462,11 @@ mod decode {
     #[allow(clippy::expect_fun_call)]
     mod tests {
         use crate::{
-            decimal::tokio::Decimal,
+            decimal::Decimal,
             decode::tokio::decode,
             encode::tokio::{encode, tests::success},
-            schema::tokio::{DecimalSchema, FixedSchema, Name, Schema},
-            types::tokio::Value,
+            schema::{DecimalSchema, FixedSchema, Name, Schema},
+            types::Value,
         };
         use apache_avro_test_helper::TestResult;
         use pretty_assertions::assert_eq;
@@ -581,7 +578,7 @@ mod decode {
         #[tokio::test]
         async fn test_avro_3448_recursive_definition_decode_union() -> TestResult {
             // if encoding fails in this test check the corresponding test in encode
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"
         {
             "type":"record",
@@ -645,7 +642,7 @@ mod decode {
 
         #[tokio::test]
         async fn test_avro_3448_recursive_definition_decode_array() -> TestResult {
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"
         {
             "type":"record",
@@ -696,7 +693,7 @@ mod decode {
 
         #[tokio::test]
         async fn test_avro_3448_recursive_definition_decode_map() -> TestResult {
-            let schema = Schema::parse_str(
+            let schema = SchemaExt::parse_str(
                 r#"
         {
             "type":"record",
@@ -793,7 +790,7 @@ mod decode {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema).await?;
+            let schema = SchemaExt::parse_str(schema).await?;
             let inner_record = Value::Record(vec![("inner_field_1".into(), Value::Double(5.4))]);
             let middle_record_variation_1 = Value::Record(vec![(
                 "middle_field_1".into(),
@@ -910,7 +907,7 @@ mod decode {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema).await?;
+            let schema = SchemaExt::parse_str(schema).await?;
             let inner_record = Value::Record(vec![("inner_field_1".into(), Value::Double(5.4))]);
             let middle_record_variation_1 = Value::Record(vec![(
                 "middle_field_1".into(),

@@ -163,7 +163,7 @@ const RAW_ADDRESS_SCHEMA: &str = r#"
 "#;
 
 fn make_small_record() -> anyhow::Result<(Schema, Value)> {
-    let small_schema = Schema::parse_str(RAW_SMALL_SCHEMA)?;
+    let small_schema = SchemaExt::parse_str(RAW_SMALL_SCHEMA)?;
     let small_record = {
         let mut small_record = Record::new(&small_schema).unwrap();
         small_record.put("field", "foo");
@@ -173,7 +173,7 @@ fn make_small_record() -> anyhow::Result<(Schema, Value)> {
 }
 
 fn make_small_record_ser() -> anyhow::Result<(Schema, SmallRecord)> {
-    let small_schema = Schema::parse_str(RAW_SMALL_SCHEMA)?;
+    let small_schema = SchemaExt::parse_str(RAW_SMALL_SCHEMA)?;
     let small_record = SmallRecord {
         field: String::from("foo"),
     };
@@ -181,8 +181,8 @@ fn make_small_record_ser() -> anyhow::Result<(Schema, SmallRecord)> {
 }
 
 fn make_big_record() -> anyhow::Result<(Schema, Value)> {
-    let big_schema = Schema::parse_str(RAW_BIG_SCHEMA)?;
-    let address_schema = Schema::parse_str(RAW_ADDRESS_SCHEMA)?;
+    let big_schema = SchemaExt::parse_str(RAW_BIG_SCHEMA)?;
+    let address_schema = SchemaExt::parse_str(RAW_ADDRESS_SCHEMA)?;
     let mut address = Record::new(&address_schema).unwrap();
     address.put("street", "street");
     address.put("city", "city");
@@ -213,7 +213,7 @@ fn make_big_record() -> anyhow::Result<(Schema, Value)> {
 }
 
 fn make_big_record_ser() -> anyhow::Result<(Schema, BigRecord)> {
-    let big_schema = Schema::parse_str(RAW_BIG_SCHEMA)?;
+    let big_schema = SchemaExt::parse_str(RAW_BIG_SCHEMA)?;
     let big_record = BigRecord {
         username: Some(String::from("username")),
         age: 10,

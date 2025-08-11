@@ -82,8 +82,8 @@ where
 
 #[test]
 fn test_avro_3901_union_schema_round_trip_no_null() -> AvroResult<()> {
-    let schemata: Vec<Schema> =
-        Schema::parse_list([SCHEMA_A_STR, SCHEMA_B_STR, SCHEMA_C_STR]).expect("parsing schemata");
+    let schemata: Vec<Schema> = SchemaExt::parse_list([SCHEMA_A_STR, SCHEMA_B_STR, SCHEMA_C_STR])
+        .expect("parsing schemata");
 
     let input = C {
         field_union: (UnionAB::A(A { field_a: 45.5 })),
@@ -126,8 +126,8 @@ struct D {
 
 #[test]
 fn test_avro_3901_union_schema_round_trip_null_at_start() -> AvroResult<()> {
-    let schemata: Vec<Schema> =
-        Schema::parse_list([SCHEMA_A_STR, SCHEMA_B_STR, SCHEMA_D_STR]).expect("parsing schemata");
+    let schemata: Vec<Schema> = SchemaExt::parse_list([SCHEMA_A_STR, SCHEMA_B_STR, SCHEMA_D_STR])
+        .expect("parsing schemata");
 
     let input = D {
         field_union: UnionNoneAB::A(A { field_a: 54.25 }),
@@ -177,8 +177,8 @@ struct E {
 
 #[test]
 fn test_avro_3901_union_schema_round_trip_with_out_of_order_null() -> AvroResult<()> {
-    let schemata: Vec<Schema> =
-        Schema::parse_list([SCHEMA_A_STR, SCHEMA_B_STR, SCHEMA_E_STR]).expect("parsing schemata");
+    let schemata: Vec<Schema> = SchemaExt::parse_list([SCHEMA_A_STR, SCHEMA_B_STR, SCHEMA_E_STR])
+        .expect("parsing schemata");
 
     let input = E {
         field_union: UnionANoneB::A(A { field_a: 23.75 }),
@@ -228,8 +228,8 @@ struct F {
 
 #[test]
 fn test_avro_3901_union_schema_round_trip_with_end_null() -> AvroResult<()> {
-    let schemata: Vec<Schema> =
-        Schema::parse_list([SCHEMA_A_STR, SCHEMA_B_STR, SCHEMA_F_STR]).expect("parsing schemata");
+    let schemata: Vec<Schema> = SchemaExt::parse_list([SCHEMA_A_STR, SCHEMA_B_STR, SCHEMA_F_STR])
+        .expect("parsing schemata");
 
     let input = F {
         field_union: UnionABNone::A(A { field_a: 23.75 }),
@@ -276,7 +276,7 @@ struct G {
 #[test]
 fn test_avro_3901_union_schema_as_optional_2() -> AvroResult<()> {
     let schemata: Vec<Schema> =
-        Schema::parse_list(&[SCHEMA_A_STR, SCHEMA_B_STR, SCHEMA_G_STR]).expect("parsing schemata");
+        SchemaExt::parse_list(&[SCHEMA_A_STR, SCHEMA_B_STR, SCHEMA_G_STR]).expect("parsing schemata");
 
     let input = G {
         field_union: Some(UnionAB::A(A { field_a: 32.25 })),
@@ -319,7 +319,7 @@ struct H {
 
 #[test]
 fn test_avro_3901_union_schema_as_optional() -> AvroResult<()> {
-    let schemata: Vec<Schema> = Schema::parse_list([SCHEMA_H_STR]).expect("parsing schemata");
+    let schemata: Vec<Schema> = SchemaExt::parse_list([SCHEMA_H_STR]).expect("parsing schemata");
 
     let input = H {
         field_union: Some(23),

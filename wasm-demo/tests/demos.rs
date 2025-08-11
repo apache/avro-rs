@@ -58,7 +58,7 @@ fn write_read() {
         {"name": "b", "type": "string"}
       ]
     }"#;
-    let schema = Schema::parse_str(schema_str).unwrap();
+    let schema = SchemaExt::parse_str(schema_str).unwrap();
 
     let mut record = Record::new(&schema).unwrap();
     record.put("a", 12_i32);

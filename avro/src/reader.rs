@@ -24,7 +24,6 @@
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
       crate::codec::tokio => crate::codec::sync,
-      crate::decimal::tokio => crate::decimal::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
@@ -38,9 +37,7 @@
   }
 )]
 mod reader {
-    #[synca::cfg(tokio)]
-    use crate::AsyncAvroResult as AvroResult;
-    #[synca::cfg(sync)]
+
     use crate::AvroResult;
     #[synca::cfg(tokio)]
     use crate::async_from_value as from_value;
@@ -58,14 +55,15 @@ mod reader {
     use crate::util::tokio::safe_len;
     use crate::{
         codec::tokio::Codec,
-        error::tokio::Details,
-        error::tokio::Error,
+        error::Details,
+        error::Error,
         headers::tokio::{HeaderBuilder, RabinFingerprintHeader},
-        schema::tokio::{
-            AvroSchema, Names, ResolvedOwnedSchema, ResolvedSchema, Schema, resolve_names,
+        schema::tokio::{AvroSchema, SchemaExt},
+        schema::{
+            Names, ResolvedOwnedSchema, ResolvedSchema, Schema, resolve_names,
             resolve_names_with_schemata,
         },
-        types::tokio::Value,
+        types::Value,
         util::tokio::read_long,
     };
     use log::warn;
@@ -278,10 +276,10 @@ mod reader {
                     .iter()
                     .map(|(name, schema)| (name.clone(), (*schema).clone()))
                     .collect();
-                self.writer_schema = Schema::parse_with_names(&json, names).await?;
+                self.writer_schema = SchemaExt::parse_with_names(&json, names).await?;
                 resolve_names_with_schemata(&self.schemata, &mut self.names_refs, &None)?;
             } else {
-                self.writer_schema = Schema::parse(&json).await?;
+                self.writer_schema = SchemaExt::parse(&json).await?;
                 resolve_names(&self.writer_schema, &mut self.names_refs, &None)?;
             }
             Ok(())
@@ -704,7 +702,7 @@ mod reader {
         use super::*;
         use crate::{
             encode::tokio::encode, headers::tokio::GlueSchemaUuidHeader, rabin::Rabin,
-            types::tokio::Record,
+            types::Record,
         };
         use apache_avro_test_helper::TestResult;
         #[synca::cfg(tokio)]
@@ -752,7 +750,7 @@ mod reader {
 
         #[tokio::test]
         async fn test_from_avro_datum() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA).await?;
+            let schema = SchemaExt::parse_str(SCHEMA).await?;
             let mut encoded: &'static [u8] = &[54, 6, 102, 111, 111];
 
             let mut record = Record::new(&schema).unwrap();
@@ -812,7 +810,7 @@ mod reader {
                 a_nullable_string: Option<String>,
             }
 
-            let schema = Schema::parse_str(TEST_RECORD_SCHEMA_3240).await?;
+            let schema = SchemaExt::parse_str(TEST_RECORD_SCHEMA_3240).await?;
             let mut encoded: &'static [u8] = &[54, 6, 102, 111, 111];
 
             let expected_record: TestRecord3240 = TestRecord3240 {
@@ -837,7 +835,7 @@ mod reader {
 
         #[tokio::test]
         async fn test_null_union() -> TestResult {
-            let schema = Schema::parse_str(UNION_SCHEMA).await?;
+            let schema = SchemaExt::parse_str(UNION_SCHEMA).await?;
             let mut encoded: &'static [u8] = &[2, 0];
 
             assert_eq!(
@@ -850,7 +848,7 @@ mod reader {
 
         #[tokio::test]
         async fn test_reader_iterator() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA).await?;
+            let schema = SchemaExt::parse_str(SCHEMA).await?;
             let mut reader = Reader::with_schema(&schema, ENCODED).await?;
 
             let mut record1 = Record::new(&schema).unwrap();
@@ -874,7 +872,7 @@ mod reader {
 
         #[tokio::test]
         async fn test_reader_invalid_header() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA).await?;
+            let schema = SchemaExt::parse_str(SCHEMA).await?;
             let invalid = ENCODED.iter().copied().skip(1).collect::<Vec<u8>>();
             assert!(Reader::with_schema(&schema, &invalid[..]).await.is_err());
 
@@ -883,7 +881,7 @@ mod reader {
 
         #[tokio::test]
         async fn test_reader_invalid_block() -> TestResult {
-            let schema = Schema::parse_str(SCHEMA).await?;
+            let schema = SchemaExt::parse_str(SCHEMA).await?;
             let invalid = ENCODED
                 .iter()
                 .copied()
@@ -924,7 +922,7 @@ mod reader {
         async fn test_avro_3405_read_user_metadata_success() -> TestResult {
             use crate::writer::tokio::Writer;
 
-            let schema = Schema::parse_str(SCHEMA).await?;
+            let schema = SchemaExt::parse_str(SCHEMA).await?;
             let mut writer = Writer::new(&schema, Vec::new());
 
             let mut user_meta_data: HashMap<String, Vec<u8>> = HashMap::new();
@@ -987,7 +985,7 @@ mod reader {
                 ]
             }
             "#;
-                Schema::parse_str(schema).await.unwrap()
+                SchemaExt::parse_str(schema).await.unwrap()
             }
         }
 

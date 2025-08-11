@@ -25,7 +25,6 @@
     sync!();
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::decimal::tokio => crate::decimal::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
@@ -41,9 +40,9 @@
 )]
 mod de {
 
+    use crate::schema::tokio::SchemaExt;
     use crate::{
-        bytes::DE_BYTES_BORROWED, error::tokio::Details, error::tokio::Error,
-        schema::tokio::SchemaKind, types::tokio::Value,
+        bytes::DE_BYTES_BORROWED, error::Details, error::Error, schema::SchemaKind, types::Value,
     };
     use serde::{
         Deserialize,
@@ -811,8 +810,8 @@ mod de {
 
         use apache_avro_test_helper::TestResult;
 
-        use crate::decimal::tokio::Decimal;
-        use crate::schema::tokio::Schema;
+        use crate::decimal::Decimal;
+        use crate::schema::Schema;
 
         use super::*;
 
@@ -842,7 +841,7 @@ mod de {
 }
 "#;
 
-            let schema = Schema::parse_str(schema_content).await?;
+            let schema = SchemaExt::parse_str(schema_content).await?;
             let data = StringEnum {
                 source: "SOZU".to_string(),
             };
@@ -883,7 +882,7 @@ mod de {
 }
 "#;
 
-            let schema = Schema::parse_str(schema_content).await?;
+            let schema = SchemaExt::parse_str(schema_content).await?;
             let data = StringEnum {
                 source: "WRONG_ITEM".to_string(),
             };

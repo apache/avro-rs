@@ -15,8 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::schema::sync::Schema;
-use apache_avro::types::sync::Value;
+use apache_avro::schema::Schema;
+use apache_avro::types::Value;
 use apache_avro::{from_avro_datum, to_avro_datum, to_value};
 use apache_avro_test_helper::TestResult;
 
@@ -124,7 +124,7 @@ fn avro_3786_deserialize_union_with_different_enum_order() -> TestResult {
             ]
             }"#;
 
-    let writer_schema = Schema::parse_str(writer_schema)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema)?;
     let foo1 = Foo {
         bar_init: Bar::Bar1,
         bar_use_parent: Some(BarUseParent { bar_use: Bar::Bar1 }),
@@ -136,7 +136,7 @@ fn avro_3786_deserialize_union_with_different_enum_order() -> TestResult {
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;
     let mut x = &datum[..];
-    let reader_schema = Schema::parse_str(reader_schema)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema)?;
     let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
     match deser_value {
         Value::Record(fields) => {
@@ -249,7 +249,7 @@ fn avro_3786_deserialize_union_with_different_enum_order_defined_in_record() -> 
             }
         ]
     }"#;
-    let writer_schema = Schema::parse_str(writer_schema)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema)?;
     let foo1 = Foo {
         bar_parent: Some(BarParent { bar: Bar::Bar0 }),
     };
@@ -260,7 +260,7 @@ fn avro_3786_deserialize_union_with_different_enum_order_defined_in_record() -> 
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;
     let mut x = &datum[..];
-    let reader_schema = Schema::parse_str(reader_schema)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema)?;
     let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
     match deser_value {
         Value::Record(fields) => {
@@ -362,7 +362,7 @@ fn test_avro_3786_deserialize_union_with_different_enum_order_defined_in_record_
                 }
             ]
         }"#;
-    let writer_schema = Schema::parse_str(writer_schema)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema)?;
     let foo1 = Foo {
         bar_parent: Some(BarParent { bar: Bar::Bar1 }),
     };
@@ -373,7 +373,7 @@ fn test_avro_3786_deserialize_union_with_different_enum_order_defined_in_record_
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;
     let mut x = &datum[..];
-    let reader_schema = Schema::parse_str(reader_schema)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema)?;
     let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
     match deser_value {
         Value::Record(fields) => {
@@ -475,7 +475,7 @@ fn test_avro_3786_deserialize_union_with_different_enum_order_defined_in_record_
                 }
             ]
         }"#;
-    let writer_schema = Schema::parse_str(writer_schema)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema)?;
     let foo1 = Foo {
         bar_parent: Some(BarParent { bar: Bar::Bar1 }),
     };
@@ -486,7 +486,7 @@ fn test_avro_3786_deserialize_union_with_different_enum_order_defined_in_record_
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;
     let mut x = &datum[..];
-    let reader_schema = Schema::parse_str(reader_schema)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema)?;
     let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
     match deser_value {
         Value::Record(fields) => {
@@ -588,7 +588,7 @@ fn deserialize_union_with_different_enum_order_defined_in_record() -> TestResult
                 }
             ]
         }"#;
-    let writer_schema = Schema::parse_str(writer_schema)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema)?;
     let foo1 = Foo {
         bar_parent: Some(BarParent { bar: Bar::Bar2 }),
     };
@@ -599,7 +599,7 @@ fn deserialize_union_with_different_enum_order_defined_in_record() -> TestResult
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;
     let mut x = &datum[..];
-    let reader_schema = Schema::parse_str(reader_schema)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema)?;
     let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
     match deser_value {
         Value::Record(fields) => {
@@ -854,7 +854,7 @@ fn deserialize_union_with_record_with_enum_defined_inline_reader_has_different_i
                 }
             ]
         }"#;
-    let writer_schema = Schema::parse_str(writer_schema)?;
+    let writer_schema = SchemaExt::parse_str(writer_schema)?;
     let foo1 = Foo {
         bar_init: Bar::Bar0,
         baz: Baz::Baz0,
@@ -873,7 +873,7 @@ fn deserialize_union_with_record_with_enum_defined_inline_reader_has_different_i
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;
     let mut x = &datum[..];
-    let reader_schema = Schema::parse_str(reader_schema)?;
+    let reader_schema = SchemaExt::parse_str(reader_schema)?;
     let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
     match deser_value {
         Value::Record(fields) => {

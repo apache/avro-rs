@@ -25,16 +25,13 @@
     sync!();
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::decimal::tokio => crate::decimal::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
       crate::schema::tokio => crate::schema::sync,
       crate::util::tokio => crate::util::sync,
       crate::types::tokio => crate::types::sync,
-      crate::schema_equality::tokio => crate::schema_equality::sync,
       crate::util::tokio => crate::util::sync,
-      crate::validator::tokio => crate::validator::sync,
       #[tokio::test] => #[test]
     );
   }
@@ -43,8 +40,8 @@ mod ser {
 
     use crate::{
         bytes::{BytesType, SER_BYTES_TYPE},
-        error::tokio::Error,
-        types::tokio::Value,
+        error::Error,
+        types::Value,
     };
     use serde::{Serialize, ser};
     use std::{collections::HashMap, iter::once};
@@ -513,7 +510,7 @@ mod ser {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::decimal::tokio::Decimal;
+        use crate::decimal::Decimal;
         use apache_avro_test_helper::TestResult;
         use pretty_assertions::assert_eq;
         use serde::{Deserialize, Serialize};

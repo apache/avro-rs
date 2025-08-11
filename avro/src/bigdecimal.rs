@@ -15,6 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+pub use bigdecimal::BigDecimal;
+
 #[synca::synca(
   #[cfg(feature = "tokio")]
   pub mod tokio { },
@@ -24,7 +26,6 @@
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
       crate::codec::tokio => crate::codec::sync,
-      crate::decimal::tokio => crate::decimal::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
@@ -38,22 +39,17 @@
   }
 )]
 mod bigdecimal {
+    use crate::AvroResult;
     use crate::{
         decode::tokio::{decode_len, decode_long},
         encode::tokio::{encode_bytes, encode_long},
-        error::tokio::Details,
-        types::tokio::Value,
+        error::Details,
+        types::Value,
     };
-    pub use bigdecimal::BigDecimal;
+    use bigdecimal::BigDecimal;
     use num_bigint::BigInt;
-    use std::io::Read;
 
-    #[synca::cfg(tokio)]
-    use crate::AsyncAvroResult as AvroResult;
-    #[synca::cfg(sync)]
-    use crate::AvroResult;
-
-    pub(crate) fn big_decimal_as_bytes(decimal: &BigDecimal) -> AvroResult<Vec<u8>> {
+    pub(crate) async fn big_decimal_as_bytes(decimal: &BigDecimal) -> AvroResult<Vec<u8>> {
         let mut buffer: Vec<u8> = Vec::new();
         let (big_int, exponent): (BigInt, i64) = decimal.as_bigint_and_exponent();
         let big_endian_value: Vec<u8> = big_int.to_signed_bytes_be();
@@ -63,7 +59,7 @@ mod bigdecimal {
         Ok(buffer)
     }
 
-    pub(crate) fn serialize_big_decimal(decimal: &BigDecimal) -> AvroResult<Vec<u8>> {
+    pub(crate) async fn serialize_big_decimal(decimal: &BigDecimal) -> AvroResult<Vec<u8>> {
         // encode big decimal, without global size
         let buffer = big_decimal_as_bytes(decimal)?;
 
@@ -80,6 +76,13 @@ mod bigdecimal {
             Ok(size) => vec![0u8; size],
             Err(err) => return Err(Details::BigDecimalLen(Box::new(err)).into()),
         };
+
+        #[synca::cfg(sync)]
+        use std::io::Read;
+        #[synca::cfg(tokio)]
+        use tokio::io::AsyncRead;
+        #[synca::cfg(tokio)]
+        use tokio::io::AsyncReadExt;
 
         bytes
             .read_exact(&mut big_decimal_buffer[..])
@@ -99,8 +102,8 @@ mod bigdecimal {
     mod tests {
         use super::*;
         use crate::{
-            codec::tokio::Codec, error::tokio::Error, reader::tokio::Reader, schema::tokio::Schema,
-            types::tokio::Record, writer::tokio::Writer,
+            codec::tokio::Codec, error::Error, reader::tokio::Reader, schema::Schema,
+            schema::tokio::SchemaExt, types::Record, writer::tokio::Writer,
         };
         use apache_avro_test_helper::TestResult;
         use bigdecimal::{One, Zero};
@@ -182,7 +185,7 @@ mod bigdecimal {
           ]
         }
         "#;
-            let schema = Schema::parse_str(schema_str).await?;
+            let schema = SchemaExt::parse_str(schema_str).await?;
 
             // build record with big decimal value
             let mut record = Record::new(&schema).unwrap();

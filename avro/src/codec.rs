@@ -25,7 +25,6 @@
     sync!();
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::decimal::tokio => crate::decimal::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
@@ -37,11 +36,9 @@
   }
 )]
 mod codec {
-    #[synca::cfg(tokio)]
-    use crate::AsyncAvroResult as AvroResult;
-    #[synca::cfg(sync)]
+
     use crate::AvroResult;
-    use crate::{error::tokio::Details, error::tokio::Error, types::tokio::Value};
+    use crate::{error::Details, error::Error, types::Value};
     use strum_macros::{EnumIter, EnumString, IntoStaticStr};
 
     /// Settings for the `Deflate` codec.
