@@ -20,7 +20,6 @@ use crate::{
     bigdecimal::deserialize_big_decimal,
     decimal::Decimal,
     duration::Duration,
-    encode::encode_long,
     error::Details,
     schema::{
         DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, RecordSchema, ResolvedSchema,
@@ -33,7 +32,6 @@ use std::{
     borrow::Borrow,
     collections::HashMap,
     io::{ErrorKind, Read},
-    str::FromStr,
 };
 use uuid::Uuid;
 
@@ -123,61 +121,18 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
             }
         }
         Schema::Uuid => {
-            let len = decode_len(reader)?;
-            let mut bytes = vec![0u8; len];
-            reader
-                .read_exact(&mut bytes)
-                .map_err(Details::ReadIntoBuf)?;
-
-            // use a Vec to be able re-read the bytes more than once if needed
-            let mut reader = Vec::with_capacity(len + 1);
-            encode_long(len as i64, &mut reader)?;
-            reader.extend_from_slice(&bytes);
-
-            let decode_from_string = |reader| match decode_internal(
-                &Schema::String,
-                names,
-                enclosing_namespace,
-                reader,
-            )? {
-                Value::String(ref s) => {
-                    Uuid::from_str(s).map_err(|e| Details::ConvertStrToUuid(e).into())
-                }
-                value => Err(Error::new(Details::GetUuidFromStringValue(value))),
+            let Value::Bytes(bytes) =
+                decode_internal(&Schema::Bytes, names, enclosing_namespace, reader)?
+            else {
+                // Calling decode_internal with Schema::Bytes can only return a Value::Bytes or an error
+                unreachable!();
             };
 
-            let uuid: Uuid = if len == 16 {
-                // most probably a Fixed schema
-                let fixed_result = decode_internal(
-                    &Schema::Fixed(FixedSchema {
-                        size: 16,
-                        name: "uuid".into(),
-                        aliases: None,
-                        doc: None,
-                        default: None,
-                        attributes: Default::default(),
-                    }),
-                    names,
-                    enclosing_namespace,
-                    &mut bytes.as_slice(),
-                );
-                if fixed_result.is_ok() {
-                    match fixed_result? {
-                        Value::Fixed(ref size, ref bytes) => {
-                            if *size != 16 {
-                                return Err(Details::ConvertFixedToUuid(*size).into());
-                            }
-                            Uuid::from_slice(bytes).map_err(Details::ConvertSliceToUuid)?
-                        }
-                        _ => decode_from_string(&mut reader.as_slice())?,
-                    }
-                } else {
-                    // try to decode as string
-                    decode_from_string(&mut reader.as_slice())?
-                }
+            let uuid = if bytes.len() == 16 {
+                Uuid::from_slice(&bytes).map_err(Details::ConvertSliceToUuid)?
             } else {
-                // definitely a string
-                decode_from_string(&mut reader.as_slice())?
+                let string = std::str::from_utf8(&bytes).map_err(Details::ConvertToUtf8Error)?;
+                Uuid::parse_str(string).map_err(Details::ConvertStrToUuid)?
             };
             Ok(Value::Uuid(uuid))
         }
