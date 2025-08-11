@@ -1773,11 +1773,9 @@ mod tests {
     use num_bigint::{BigInt, Sign};
     use serde::Serialize;
     use serde_bytes::{ByteArray, Bytes};
-    use serial_test::serial;
     use std::{
         collections::{BTreeMap, HashMap},
         marker::PhantomData,
-        sync::atomic::Ordering,
     };
     use uuid::Uuid;
 
@@ -2418,7 +2416,6 @@ mod tests {
     }
 
     #[test]
-    #[serial(serde_is_human_readable)]
     fn test_serialize_bigdecimal() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
@@ -2427,7 +2424,7 @@ mod tests {
         }"#,
         )?;
 
-        crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
+        assert!(crate::util::is_human_readable());
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
         let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
@@ -2441,7 +2438,6 @@ mod tests {
     }
 
     #[test]
-    #[serial(serde_is_human_readable)]
     fn test_serialize_uuid() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
@@ -2450,7 +2446,7 @@ mod tests {
         }"#,
         )?;
 
-        crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
+        assert!(crate::util::is_human_readable());
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
         let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
@@ -2718,7 +2714,6 @@ mod tests {
     }
 
     #[test]
-    #[serial(serde_is_human_readable)] // for BigDecimal and Uuid
     fn test_serialize_recursive_record() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
@@ -2745,7 +2740,7 @@ mod tests {
             inner_record: Option<Box<TestRecord>>,
         }
 
-        crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
+        assert!(crate::util::is_human_readable());
         let mut buffer: Vec<u8> = Vec::new();
         let rs = ResolvedSchema::try_from(&schema)?;
         let mut serializer =
