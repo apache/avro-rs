@@ -1390,7 +1390,7 @@ mod test_derive {
             #[avro(default = r#""Foo""#)]
             myenum: MyEnum,
 
-            #[avro(default = r#"null"#)]
+            #[avro(default = "null")]
             optional: Option<String>,
         }
 
