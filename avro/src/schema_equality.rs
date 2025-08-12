@@ -240,7 +240,7 @@ pub fn set_schemata_equality_comparator(
 pub(crate) fn compare_schemata(schema_one: &Schema, schema_two: &Schema) -> bool {
     SCHEMATA_COMPARATOR_ONCE
         .get_or_init(|| {
-            debug!("Going to use the default schemata equality comparator: SpecificationEq.",);
+            debug!("Going to use the default schemata equality comparator: StructFieldEq.",);
             Box::new(StructFieldEq {
                 include_attributes: false,
             })
