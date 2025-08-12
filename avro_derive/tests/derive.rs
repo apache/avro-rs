@@ -1389,6 +1389,9 @@ mod test_derive {
 
             #[avro(default = r#""Foo""#)]
             myenum: MyEnum,
+
+            #[avro(default = r#"null"#)]
+            optional: Option<String>,
         }
 
         let schema = r#"
@@ -1442,6 +1445,11 @@ mod test_derive {
                         "symbols":["Foo", "Bar", "Baz"]
                     },
                     "default":"Foo"
+                },
+                {
+                    "name":"optional",
+                    "type": ["null", "string"],
+                    "default":"null"
                 }
             ]
         }
@@ -1471,6 +1479,7 @@ mod test_derive {
                     ),
                     "c" => assert_eq!(None, field.default),
                     "myenum" => assert_eq!(Some(json!("Foo")), field.default),
+                    "optional" => assert_eq!(Some(json!(null)), field.default),
                     _ => panic!("Unexpected field name"),
                 }
             }
@@ -1490,6 +1499,7 @@ mod test_derive {
                 .collect(),
             array: vec![4, 5, 6],
             myenum: MyEnum::Bar,
+            optional: None,
         });
     }
 
