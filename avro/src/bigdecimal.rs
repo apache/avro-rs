@@ -102,7 +102,7 @@ mod bigdecimal {
     mod tests {
         use super::*;
         use crate::{
-            codec::tokio::Codec, error::Error, reader::tokio::Reader, schema::Schema,
+            codec::tokio::Codec, error::Error, reader::tokio::Reader,
             schema::tokio::SchemaExt, types::Record, writer::tokio::Writer,
         };
         use apache_avro_test_helper::TestResult;
@@ -201,10 +201,10 @@ mod bigdecimal {
                 .build();
 
             writer.append(record.clone()).await?;
-            writer.flush()?;
+            writer.flush().await?;
 
             // read record
-            let wrote_data = writer.into_inner()?;
+            let wrote_data = writer.into_inner().await?;
             let mut reader = Reader::new(&wrote_data[..]).await?;
 
             let value = reader.next().await.unwrap()?;

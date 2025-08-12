@@ -17,11 +17,10 @@
 
 //! Logic handling the intermediate representation of Avro values.
 
-use crate::Decimal;
-use crate::Duration;
-use crate::Uuid;
+use crate::{AvroResult, Decimal, Duration, Uuid};
 use crate::bigdecimal::BigDecimal;
 use crate::schema::{RecordSchema, Schema};
+use crate::error::{Details, Error};
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Debug,
@@ -258,6 +257,92 @@ impl From<serde_json::Value> for Value {
     }
 }
 
+macro_rules! to_value(
+    ($type:ty, $variant_constructor:expr) => (
+        impl From<$type> for Value {
+            fn from(value: $type) -> Self {
+                $variant_constructor(value)
+            }
+        }
+    );
+);
+
+to_value!(bool, Value::Boolean);
+to_value!(i32, Value::Int);
+to_value!(i64, Value::Long);
+to_value!(f32, Value::Float);
+to_value!(f64, Value::Double);
+to_value!(String, Value::String);
+to_value!(Vec<u8>, Value::Bytes);
+to_value!(uuid::Uuid, Value::Uuid);
+to_value!(Decimal, Value::Decimal);
+to_value!(BigDecimal, Value::BigDecimal);
+to_value!(Duration, Value::Duration);
+
+
+/// Convert Avro values to Json values
+impl TryFrom<Value> for serde_json::Value {
+    type Error = Error;
+    fn try_from(value: Value) -> AvroResult<serde_json::Value> {
+        match value {
+            Value::Null => Ok(serde_json::Value::Null),
+            Value::Boolean(b) => Ok(serde_json::Value::Bool(b)),
+            Value::Int(i) => Ok(serde_json::Value::Number(i.into())),
+            Value::Long(l) => Ok(serde_json::Value::Number(l.into())),
+            Value::Float(f) => serde_json::Number::from_f64(f.into())
+                .map(Self::Number)
+                .ok_or_else(|| Details::ConvertF64ToJson(f.into()).into()),
+            Value::Double(d) => serde_json::Number::from_f64(d)
+                .map(Self::Number)
+                .ok_or_else(|| Details::ConvertF64ToJson(d).into()),
+            Value::Bytes(bytes) => {
+                Ok(serde_json::Value::Array(bytes.into_iter().map(|b| b.into()).collect()))
+            }
+            Value::String(s) => Ok(serde_json::Value::String(s)),
+            Value::Fixed(_size, items) => {
+                Ok(serde_json::Value::Array(items.into_iter().map(|v| v.into()).collect()))
+            }
+            Value::Enum(_i, s) => Ok(serde_json::Value::String(s)),
+            Value::Union(_i, b) => Self::try_from(*b),
+            Value::Array(items) => items
+                .into_iter()
+                .map(Self::try_from)
+                .collect::<Result<Vec<_>, _>>()
+                .map(Self::Array),
+            Value::Map(items) => items
+                .into_iter()
+                .map(|(key, value)| Self::try_from(value).map(|v| (key, v)))
+                .collect::<Result<Vec<_>, _>>()
+                .map(|v| Self::Object(v.into_iter().collect())),
+            Value::Record(items) => items
+                .into_iter()
+                .map(|(key, value)| Self::try_from(value).map(|v| (key, v)))
+                .collect::<Result<Vec<_>, _>>()
+                .map(|v| Self::Object(v.into_iter().collect())),
+            Value::Date(d) => Ok(serde_json::Value::Number(d.into())),
+            Value::Decimal(ref d) => <Vec<u8>>::try_from(d)
+                .map(|vec| Self::Array(vec.into_iter().map(|v| v.into()).collect())),
+            Value::BigDecimal(ref bg) => {
+                let vec1: Vec<u8> = crate::bigdecimal::sync::serialize_big_decimal(bg)?;
+                Ok(serde_json::Value::Array(vec1.into_iter().map(|b| b.into()).collect()))
+            }
+            Value::TimeMillis(t) => Ok(serde_json::Value::Number(t.into())),
+            Value::TimeMicros(t) => Ok(serde_json::Value::Number(t.into())),
+            Value::TimestampMillis(t) => Ok(serde_json::Value::Number(t.into())),
+            Value::TimestampMicros(t) => Ok(serde_json::Value::Number(t.into())),
+            Value::TimestampNanos(t) => Ok(serde_json::Value::Number(t.into())),
+            Value::LocalTimestampMillis(t) => Ok(serde_json::Value::Number(t.into())),
+            Value::LocalTimestampMicros(t) => Ok(serde_json::Value::Number(t.into())),
+            Value::LocalTimestampNanos(t) => Ok(serde_json::Value::Number(t.into())),
+            Value::Duration(d) => Ok(serde_json::Value::Array(
+                <[u8; 12]>::from(d).iter().map(|&v| v.into()).collect(),
+            )),
+            Value::Uuid(uuid) => Ok(serde_json::Value::String(uuid.as_hyphenated().to_string())),
+        }
+    }
+}
+
+
 #[synca::synca(
   #[cfg(feature = "tokio")]
   pub mod tokio { },
@@ -295,73 +380,12 @@ mod types {
             DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, Precision, RecordField,
             RecordSchema, ResolvedSchema, Scale, Schema, SchemaKind, UnionSchema,
         },
+        schema::tokio::{UnionSchemaExt, RecordFieldExt},
         types::Value,
     };
     use log::{debug, error};
     use std::collections::HashMap;
     use std::str::FromStr;
-
-    /// Convert Avro values to Json values
-    impl TryFrom<Value> for serde_json::Value {
-        type Error = Error;
-        fn try_from(value: Value) -> AvroResult<Self> {
-            match value {
-                Value::Null => Ok(Self::Null),
-                Value::Boolean(b) => Ok(Self::Bool(b)),
-                Value::Int(i) => Ok(Self::Number(i.into())),
-                Value::Long(l) => Ok(Self::Number(l.into())),
-                Value::Float(f) => serde_json::Number::from_f64(f.into())
-                    .map(Self::Number)
-                    .ok_or_else(|| Details::ConvertF64ToJson(f.into()).into()),
-                Value::Double(d) => serde_json::Number::from_f64(d)
-                    .map(Self::Number)
-                    .ok_or_else(|| Details::ConvertF64ToJson(d).into()),
-                Value::Bytes(bytes) => {
-                    Ok(Self::Array(bytes.into_iter().map(|b| b.into()).collect()))
-                }
-                Value::String(s) => Ok(Self::String(s)),
-                Value::Fixed(_size, items) => {
-                    Ok(Self::Array(items.into_iter().map(|v| v.into()).collect()))
-                }
-                Value::Enum(_i, s) => Ok(Self::String(s)),
-                Value::Union(_i, b) => Self::try_from(*b),
-                Value::Array(items) => items
-                    .into_iter()
-                    .map(Self::try_from)
-                    .collect::<Result<Vec<_>, _>>()
-                    .map(Self::Array),
-                Value::Map(items) => items
-                    .into_iter()
-                    .map(|(key, value)| Self::try_from(value).map(|v| (key, v)))
-                    .collect::<Result<Vec<_>, _>>()
-                    .map(|v| Self::Object(v.into_iter().collect())),
-                Value::Record(items) => items
-                    .into_iter()
-                    .map(|(key, value)| Self::try_from(value).map(|v| (key, v)))
-                    .collect::<Result<Vec<_>, _>>()
-                    .map(|v| Self::Object(v.into_iter().collect())),
-                Value::Date(d) => Ok(Self::Number(d.into())),
-                Value::Decimal(ref d) => <Vec<u8>>::try_from(d)
-                    .map(|vec| Self::Array(vec.into_iter().map(|v| v.into()).collect())),
-                Value::BigDecimal(ref bg) => {
-                    let vec1: Vec<u8> = serialize_big_decimal(bg)?;
-                    Ok(Self::Array(vec1.into_iter().map(|b| b.into()).collect()))
-                }
-                Value::TimeMillis(t) => Ok(Self::Number(t.into())),
-                Value::TimeMicros(t) => Ok(Self::Number(t.into())),
-                Value::TimestampMillis(t) => Ok(Self::Number(t.into())),
-                Value::TimestampMicros(t) => Ok(Self::Number(t.into())),
-                Value::TimestampNanos(t) => Ok(Self::Number(t.into())),
-                Value::LocalTimestampMillis(t) => Ok(Self::Number(t.into())),
-                Value::LocalTimestampMicros(t) => Ok(Self::Number(t.into())),
-                Value::LocalTimestampNanos(t) => Ok(Self::Number(t.into())),
-                Value::Duration(d) => Ok(Self::Array(
-                    <[u8; 12]>::from(d).iter().map(|&v| v.into()).collect(),
-                )),
-                Value::Uuid(uuid) => Ok(Self::String(uuid.as_hyphenated().to_string())),
-            }
-        }
-    }
 
     /// Compute the maximum decimal value precision of a byte array of length `len` could hold.
     fn max_prec_for_len(len: usize) -> Result<usize, Error> {
@@ -369,27 +393,6 @@ mod types {
         Ok((2.0_f64.powi(8 * len - 1) - 1.0).log10().floor() as usize)
     }
 
-    macro_rules! to_value(
-    ($type:ty, $variant_constructor:expr) => (
-        impl From<$type> for Value {
-            fn from(value: $type) -> Self {
-                $variant_constructor(value)
-            }
-        }
-    );
-);
-
-    to_value!(bool, Value::Boolean);
-    to_value!(i32, Value::Int);
-    to_value!(i64, Value::Long);
-    to_value!(f32, Value::Float);
-    to_value!(f64, Value::Double);
-    to_value!(String, Value::String);
-    to_value!(Vec<u8>, Value::Bytes);
-    to_value!(uuid::Uuid, Value::Uuid);
-    to_value!(Decimal, Value::Decimal);
-    to_value!(BigDecimal, Value::BigDecimal);
-    to_value!(Duration, Value::Duration);
 
     pub struct ValueExt;
 
@@ -554,8 +557,7 @@ mod types {
                     }
                 }
                 (v, Schema::Union(inner)) => {
-                    match inner
-                        .find_schema_with_known_schemata(v, names, enclosing_namespace)
+                    match UnionSchemaExt::find_schema_with_known_schemata(inner, v, names, enclosing_namespace)
                         .await
                     {
                         Some(_) => None,
@@ -565,7 +567,7 @@ mod types {
                 (Value::Array(items), Schema::Array(inner)) => {
                     let mut acc = None;
                     for item in items.iter() {
-                        acc = Value::accumulate(
+                        acc = ValueExt::accumulate(
                             acc,
                             Box::pin(ValueExt::validate_internal(&item, &inner.items,
                                 names,
@@ -576,7 +578,7 @@ mod types {
                     }
                     acc
                     // items.iter().fold(None, |acc, item| {
-                    //     Value::accumulate(
+                    //     ValueExt::accumulate(
                     //         acc,
                     //         item.validate_internal(&inner.items, names, enclosing_namespace).await,
                     //     )
@@ -585,7 +587,7 @@ mod types {
                 (Value::Map(items), Schema::Map(inner)) => {
                     let mut acc = None;
                     for (_, value) in items.iter() {
-                        acc = Value::accumulate(
+                        acc = ValueExt::accumulate(
                             acc,
                             Box::pin(ValueExt::validate_internal(&value,
                                                                  &inner.types,
@@ -597,7 +599,7 @@ mod types {
                     }
                     acc
                     // items.iter().fold(None, |acc, (_, value)| {
-                    //     Value::accumulate(
+                    //     ValueExt::accumulate(
                     //         acc,
                     //         value.validate_internal(&inner.types, names, enclosing_namespace),
                     //     )
@@ -613,7 +615,7 @@ mod types {
                     }),
                 ) => {
                     let non_nullable_fields_count =
-                        fields.iter().filter(|&rf| !rf.is_nullable()).count();
+                        fields.iter().filter(|&rf| !RecordFieldExt::is_nullable(&rf.schema)).count();
 
                     // If the record contains fewer fields as required fields by the schema, it is invalid.
                     if record_fields.len() < non_nullable_fields_count {
@@ -640,7 +642,7 @@ mod types {
                         acc = match lookup.get(field_name) {
                             Some(idx) => {
                                 let field = &fields[*idx];
-                                Value::accumulate(
+                                ValueExt::accumulate(
                                     acc,
                                     Box::pin(ValueExt::validate_internal(&record_field,
                                                                          &field.schema,
@@ -650,7 +652,7 @@ mod types {
                                     .await,
                                 )
                             }
-                            None => Value::accumulate(
+                            None => ValueExt::accumulate(
                                 acc,
                                 Some(format!("There is no schema field for field '{field_name}'")),
                             ),
@@ -669,9 +671,9 @@ mod types {
                                 enclosing_namespace,
                             ))
                             .await;
-                            acc = Value::accumulate(acc, res);
-                        } else if !field.is_nullable() {
-                            acc = Value::accumulate(
+                            acc = ValueExt::accumulate(acc, res);
+                        } else if !RecordFieldExt::is_nullable(&field.schema) {
+                            acc = ValueExt::accumulate(
                                 acc,
                                 Some(format!(
                                     "Field with name '{:?}' is not a member of the map items",
@@ -715,16 +717,17 @@ mod types {
             } else {
                 ResolvedSchema::try_from(schemata)?
             };
-            ValueExt::resolve_internal(value.clone(), schema, rs.get_names(), &enclosing_namespace, &None).await
+            ValueExt::resolve_internal(&value, schema, rs.get_names(), &enclosing_namespace, &None).await
         }
 
         pub(crate) async fn resolve_internal(
-            value: &mut Value,
+            value: &Value,
             schema: &Schema,
             names: &HashMap<Name, Schema>,
             enclosing_namespace: &Namespace,
             field_default: &Option<serde_json::Value>,
         ) -> AvroResult<Value> {
+            let mut value = value;
             // Check if this schema is a union, and if the reader schema is not.
             if SchemaKind::from(value) == SchemaKind::Union
                 && SchemaKind::from(schema) != SchemaKind::Union
@@ -734,7 +737,7 @@ mod types {
                     Value::Union(_i, b) => *b,
                     _ => unreachable!(),
                 };
-                value = v;
+                value = &v;
             }
             match *schema {
                 Schema::Ref { ref name } => {
@@ -802,8 +805,8 @@ mod types {
             }
         }
 
-        fn resolve_uuid(value: Value) -> Result<Value, Error> {
-            Ok(match value {
+        fn resolve_uuid(value: &Value) -> AvroResult<Value> {
+            Ok(match value.clone() {
                 uuid @ Value::Uuid(_) => uuid,
                 Value::String(ref string) => {
                     Value::Uuid(Uuid::from_str(string).map_err(Details::ConvertStrToUuid)?)
@@ -812,16 +815,16 @@ mod types {
             })
         }
 
-        async fn resolve_bigdecimal(value: Value) -> Result<Value, Error> {
-            Ok(match value {
+        async fn resolve_bigdecimal(value: &Value) -> AvroResult<Value> {
+            Ok(match value.clone() {
                 bg @ Value::BigDecimal(_) => bg,
                 Value::Bytes(b) => Value::BigDecimal(deserialize_big_decimal(&b).await.unwrap()),
                 other => return Err(Details::GetBigDecimal(other).into()),
             })
         }
 
-        fn resolve_duration(value: Value) -> Result<Value, Error> {
-            Ok(match value {
+        fn resolve_duration(value: &Value) -> AvroResult<Value> {
+            Ok(match value.clone() {
                 duration @ Value::Duration { .. } => duration,
                 Value::Fixed(size, bytes) => {
                     if size != 12 {
@@ -841,7 +844,7 @@ mod types {
             precision: Precision,
             scale: Scale,
             inner: &Schema,
-        ) -> Result<Value, Error> {
+        ) -> AvroResult<Value> {
             if scale > precision {
                 return Err(Details::GetScaleAndPrecision { scale, precision }.into());
             }
@@ -854,7 +857,7 @@ mod types {
                 Schema::Bytes => (),
                 _ => return Err(Details::ResolveDecimalSchema(inner.into()).into()),
             };
-            match value {
+            match value.clone() {
                 Value::Decimal(num) => {
                     let num_bytes = num.len();
                     if max_prec_for_len(num_bytes)? < precision {
@@ -884,54 +887,54 @@ mod types {
             }
         }
 
-        fn resolve_date(value: Value) -> AvroResult<Value> {
-            match value {
+        fn resolve_date(value: &Value) -> AvroResult<Value> {
+            match value.clone() {
                 Value::Date(d) | Value::Int(d) => Ok(Value::Date(d)),
                 other => Err(Details::GetDate(other).into()),
             }
         }
 
-        fn resolve_time_millis(value: Value) -> AvroResult<Value> {
-            match value {
+        fn resolve_time_millis(value: &Value) -> AvroResult<Value> {
+            match value.clone() {
                 Value::TimeMillis(t) | Value::Int(t) => Ok(Value::TimeMillis(t)),
                 other => Err(Details::GetTimeMillis(other).into()),
             }
         }
 
-        fn resolve_time_micros(value: Value) -> AvroResult<Value> {
-            match value {
+        fn resolve_time_micros(value: &Value) -> AvroResult<Value> {
+            match value.clone() {
                 Value::TimeMicros(t) | Value::Long(t) => Ok(Value::TimeMicros(t)),
                 Value::Int(t) => Ok(Value::TimeMicros(i64::from(t))),
                 other => Err(Details::GetTimeMicros(other).into()),
             }
         }
 
-        fn resolve_timestamp_millis(value: Value) -> AvroResult<Value> {
-            match value {
+        fn resolve_timestamp_millis(value: &Value) -> AvroResult<Value> {
+            match value.clone() {
                 Value::TimestampMillis(ts) | Value::Long(ts) => Ok(Value::TimestampMillis(ts)),
                 Value::Int(ts) => Ok(Value::TimestampMillis(i64::from(ts))),
                 other => Err(Details::GetTimestampMillis(other).into()),
             }
         }
 
-        fn resolve_timestamp_micros(value: Value) -> AvroResult<Value> {
-            match value {
+        fn resolve_timestamp_micros(value: &Value) -> AvroResult<Value> {
+            match value.clone() {
                 Value::TimestampMicros(ts) | Value::Long(ts) => Ok(Value::TimestampMicros(ts)),
                 Value::Int(ts) => Ok(Value::TimestampMicros(i64::from(ts))),
                 other => Err(Details::GetTimestampMicros(other).into()),
             }
         }
 
-        fn resolve_timestamp_nanos(value: Value) -> AvroResult<Value> {
-            match value {
+        fn resolve_timestamp_nanos(value: &Value) -> AvroResult<Value> {
+            match value.clone() {
                 Value::TimestampNanos(ts) | Value::Long(ts) => Ok(Value::TimestampNanos(ts)),
                 Value::Int(ts) => Ok(Value::TimestampNanos(i64::from(ts))),
                 other => Err(Details::GetTimestampNanos(other).into()),
             }
         }
 
-        fn resolve_local_timestamp_millis(value: Value) -> AvroResult<Value> {
-            match value {
+        fn resolve_local_timestamp_millis(value: &Value) -> AvroResult<Value> {
+            match value.clone() {
                 Value::LocalTimestampMillis(ts) | Value::Long(ts) => {
                     Ok(Value::LocalTimestampMillis(ts))
                 }
@@ -940,8 +943,8 @@ mod types {
             }
         }
 
-        fn resolve_local_timestamp_micros(value: Value) -> AvroResult<Value> {
-            match value {
+        fn resolve_local_timestamp_micros(value: &Value) -> AvroResult<Value> {
+            match value.clone() {
                 Value::LocalTimestampMicros(ts) | Value::Long(ts) => {
                     Ok(Value::LocalTimestampMicros(ts))
                 }
@@ -950,8 +953,8 @@ mod types {
             }
         }
 
-        fn resolve_local_timestamp_nanos(value: Value) -> AvroResult<Value> {
-            match value {
+        fn resolve_local_timestamp_nanos(value: &Value) -> AvroResult<Value> {
+            match value.clone() {
                 Value::LocalTimestampNanos(ts) | Value::Long(ts) => {
                     Ok(Value::LocalTimestampNanos(ts))
                 }
@@ -960,59 +963,59 @@ mod types {
             }
         }
 
-        fn resolve_null(value: Value) -> AvroResult<Value> {
-            match value {
+        fn resolve_null(value: &Value) -> AvroResult<Value> {
+            match value.clone() {
                 Value::Null => Ok(Value::Null),
                 other => Err(Details::GetNull(other).into()),
             }
         }
 
-        fn resolve_boolean(value: Value) -> AvroResult<Value> {
-            match value {
+        fn resolve_boolean(value: &Value) -> AvroResult<Value> {
+            match value.clone() {
                 Value::Boolean(b) => Ok(Value::Boolean(b)),
                 other => Err(Details::GetBoolean(other).into()),
             }
         }
 
-        fn resolve_int(value: Value) -> AvroResult<Value> {
-            match value {
+        fn resolve_int(value: &Value) -> AvroResult<Value> {
+            match value.clone() {
                 Value::Int(n) => Ok(Value::Int(n)),
                 Value::Long(n) => Ok(Value::Int(n as i32)),
                 other => Err(Details::GetInt(other).into()),
             }
         }
 
-        fn resolve_long(value: Value) -> AvroResult<Value> {
-            match value {
+        fn resolve_long(value: &Value) -> AvroResult<Value> {
+            match value.clone() {
                 Value::Int(n) => Ok(Value::Long(i64::from(n))),
                 Value::Long(n) => Ok(Value::Long(n)),
                 other => Err(Details::GetLong(other).into()),
             }
         }
 
-        fn resolve_float(value: Value) -> AvroResult<Value> {
-            match value {
+        fn resolve_float(value: &Value) -> AvroResult<Value> {
+            match value.clone() {
                 Value::Int(n) => Ok(Value::Float(n as f32)),
                 Value::Long(n) => Ok(Value::Float(n as f32)),
                 Value::Float(x) => Ok(Value::Float(x)),
                 Value::Double(x) => Ok(Value::Float(x as f32)),
                 Value::String(ref x) => match Self::parse_special_float(x) {
                     Some(f) => Ok(Value::Float(f)),
-                    None => Err(Details::GetFloat(value).into()),
+                    None => Err(Details::GetFloat(value.clone()).into()),
                 },
                 other => Err(Details::GetFloat(other).into()),
             }
         }
 
-        fn resolve_double(value: Value) -> AvroResult<Value> {
-            match value {
+        fn resolve_double(value: &Value) -> AvroResult<Value> {
+            match value.clone() {
                 Value::Int(n) => Ok(Value::Double(f64::from(n))),
                 Value::Long(n) => Ok(Value::Double(n as f64)),
                 Value::Float(x) => Ok(Value::Double(f64::from(x))),
                 Value::Double(x) => Ok(Value::Double(x)),
                 Value::String(ref x) => match Self::parse_special_float(x) {
                     Some(f) => Ok(Value::Double(f64::from(f))),
-                    None => Err(Details::GetDouble(value).into()),
+                    None => Err(Details::GetDouble(value.clone()).into()),
                 },
                 other => Err(Details::GetDouble(other).into()),
             }
@@ -1029,8 +1032,8 @@ mod types {
             }
         }
 
-        async fn resolve_bytes(value: Value) -> AvroResult<Value> {
-            match value {
+        async fn resolve_bytes(value: &Value) -> AvroResult<Value> {
+            match value.clone() {
                 Value::Bytes(bytes) => Ok(Value::Bytes(bytes)),
                 Value::String(s) => Ok(Value::Bytes(s.into_bytes())),
                 Value::Array(items) => {
@@ -1045,8 +1048,8 @@ mod types {
             }
         }
 
-        fn resolve_string(value: Value) -> AvroResult<Value> {
-            match value {
+        fn resolve_string(value: &Value) -> AvroResult<Value> {
+            match value.clone() {
                 Value::String(s) => Ok(Value::String(s)),
                 Value::Bytes(bytes) | Value::Fixed(_, bytes) => Ok(Value::String(
                     String::from_utf8(bytes).map_err(Details::ConvertToUtf8)?,
@@ -1055,8 +1058,8 @@ mod types {
             }
         }
 
-        fn resolve_fixed(value: Value, size: usize) -> AvroResult<Value> {
-            match value {
+        fn resolve_fixed(value: &Value, size: usize) -> AvroResult<Value> {
+            match value.clone() {
                 Value::Fixed(n, bytes) => {
                     if n == size {
                         Ok(Value::Fixed(n, bytes))
@@ -1077,7 +1080,7 @@ mod types {
         }
 
         pub(crate) fn resolve_enum(
-            value: Value,
+            value: &Value,
             symbols: &[String],
             enum_default: &Option<String>,
             _field_default: &Option<serde_json::Value>,
@@ -1107,7 +1110,7 @@ mod types {
                 }
             };
 
-            match value {
+            match value.clone() {
                 Value::Enum(_raw_index, s) => validate_symbol(s, symbols),
                 Value::String(s) => validate_symbol(s, symbols),
                 other => Err(Details::GetEnum(other).into()),
@@ -1115,20 +1118,19 @@ mod types {
         }
 
         async fn resolve_union(
-            value: Value,
+            value: &Value,
             schema: &UnionSchema,
             names: &HashMap<Name, Schema>,
             enclosing_namespace: &Namespace,
             field_default: &Option<serde_json::Value>,
         ) -> AvroResult<Value> {
-            let v = match value {
+            let v = match value.clone() {
                 // Both are unions case.
                 Value::Union(_i, v) => *v,
                 // Reader is a union, but writer is not.
                 v => v,
             };
-            let (i, inner) = schema
-                .find_schema_with_known_schemata(&v, names, enclosing_namespace)
+            let (i, inner) = UnionSchemaExt::find_schema_with_known_schemata(schema, &v, names, enclosing_namespace)
                 .await
                 .ok_or_else(|| Details::FindUnionVariant {
                     schema: schema.clone(),
@@ -1145,15 +1147,15 @@ mod types {
         }
 
         async fn resolve_array(
-            value: Value,
+            value: &Value,
             schema: &Schema,
             names: &HashMap<Name, Schema>,
             enclosing_namespace: &Namespace,
         ) -> AvroResult<Value> {
-            match value {
+            match value.clone() {
                 Value::Array(items) => {
                     let mut resolved_values = Vec::with_capacity(items.len());
-                    for item in items.into_iter() {
+                    for item in items.iter() {
                         let resolved = Box::pin(ValueExt::resolve_internal(
                             item,
                             schema,
@@ -1175,15 +1177,15 @@ mod types {
         }
 
         async fn resolve_map(
-            value: Value,
+            value: &Value,
             schema: &Schema,
             names: &HashMap<Name, Schema>,
             enclosing_namespace: &Namespace,
         ) -> AvroResult<Value> {
-            match value {
+            match value.clone() {
                 Value::Map(items) => {
                     let mut resolved = HashMap::with_capacity(items.len());
-                    for (key, value) in items.into_iter() {
+                    for (key, value) in items.iter() {
                         let v = Box::pin(ValueExt::resolve_internal(
                             value,
                             schema,
@@ -1216,12 +1218,12 @@ mod types {
         }
 
         async fn resolve_record(
-            self,
+            value: &Value,
             fields: &[RecordField],
             names: &HashMap<Name, Schema>,
             enclosing_namespace: &Namespace,
-        ) -> Result<Value, Error> {
-            let mut items = match self {
+        ) -> AvroResult<Value> {
+            let mut items = match value.clone() {
                 Value::Map(items) => Ok(items),
                 Value::Record(fields) => Ok(fields.into_iter().collect::<HashMap<_, _>>()),
                 other => Err(Error::new(Details::GetRecord {
@@ -1238,13 +1240,13 @@ mod types {
                 let value = match items.remove(&field.name) {
                     Some(value) => value,
                     None => match field.default {
-                        Some(ref value) => match field.schema {
+                        Some(ref json_value) => match field.schema {
                             Schema::Enum(EnumSchema {
                                 ref symbols,
                                 ref default,
                                 ..
                             }) => ValueExt::resolve_enum(
-                                &Value::from(value.clone()),
+                                &Value::from(json_value.clone()),
                                 symbols,
                                 default,
                                 &field.default.clone(),
@@ -1259,7 +1261,7 @@ mod types {
                                         0,
                                         Box::new(
                                             Box::pin(ValueExt::resolve_internal(
-                                                Value::from(value.clone()),
+                                                &Value::from(json_value.clone()),
                                                 first,
                                                 names,
                                                 enclosing_namespace,
@@ -1270,7 +1272,7 @@ mod types {
                                     ),
                                 }
                             }
-                            _ => Value::from(value.clone()),
+                            _ => Value::from(json_value.clone()),
                         },
                         None => {
                             return Err(Details::GetField(field.name.clone()).into());
@@ -1279,7 +1281,7 @@ mod types {
                 };
 
                 let v = Box::pin(ValueExt::resolve_internal(
-                    value,
+                    &value,
                     &field.schema,
                     names,
                     enclosing_namespace,
@@ -1292,7 +1294,7 @@ mod types {
             Ok(Value::Record(new_fields))
         }
 
-        async fn try_u8(value: &Value) -> AvroResult<u8> {
+        async fn try_u8(value: Value) -> AvroResult<u8> {
             let int = ValueExt::resolve(value, &Schema::Int).await?;
             if let Value::Int(n) = int {
                 if n >= 0 && n <= i32::from(u8::MAX) {
@@ -1795,19 +1797,19 @@ Field with name '"b"' is not a member of the map items"#,
                 .await
             );
 
-            assert!(
-                Value::Union(
-                    1,
-                    Box::new(Value::Map(
-                        vec![
-                            ("a".to_string(), Value::Long(42i64)),
-                            ("b".to_string(), Value::String("foo".to_string())),
-                        ]
+            let value = Value::Union(
+                1,
+                Box::new(Value::Map(
+                    vec![
+                        ("a".to_string(), Value::Long(42i64)),
+                        ("b".to_string(), Value::String("foo".to_string())),
+                    ]
                         .into_iter()
                         .collect()
-                    ))
-                )
-                .validate(&union_schema)
+                ))
+            );
+            assert!(
+              ValueExt::validate(value, &union_schema)
                 .await
             );
 
@@ -1981,9 +1983,8 @@ Field with name '"b"' is not a member of the map items"#,
         async fn test_avro_3853_resolve_timestamp_millis() {
             let value = Value::LocalTimestampMillis(10);
             assert!(
-                value
-                    .clone()
-                    .resolve(&Schema::LocalTimestampMillis)
+                    ValueExt::resolve(value
+                        .clone(), &Schema::LocalTimestampMillis)
                     .await
                     .is_ok()
             );

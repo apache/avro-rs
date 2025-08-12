@@ -58,10 +58,14 @@ mod writer {
         error::Error,
         headers::tokio::{HeaderBuilder, RabinFingerprintHeader},
         schema::tokio::AvroSchema,
-        schema::{Name, ResolvedOwnedSchema, ResolvedSchema, Schema},
-        ser_schema::SchemaAwareWriteSerializer,
+        schema::{ResolvedOwnedSchema, ResolvedSchema, Schema},
         types::Value,
     };
+    #[synca::cfg(sync)]
+    use crate::schema::Name;
+    #[synca::cfg(sync)]
+    use crate::ser_schema::SchemaAwareWriteSerializer;
+    #[synca::cfg(sync)]
     use serde::Serialize;
     use std::{
         collections::HashMap, marker::PhantomData, mem::ManuallyDrop,
@@ -201,7 +205,7 @@ mod writer {
         /// internal buffering for performance reasons. If you want to be sure the value has been
         /// written, then call [`flush`](Writer::flush).
         pub async fn append<T: Into<Value>>(&mut self, value: T) -> AvroResult<usize> {
-            let n = self.maybe_write_header()?;
+            let n = self.maybe_write_header().await?;
 
             let avro = value.into();
             self.append_value_ref(&avro).await.map(|m| m + n)
@@ -246,8 +250,9 @@ mod writer {
         /// **NOTE**: This function is not guaranteed to perform any actual write, since it relies on
         /// internal buffering for performance reasons. If you want to be sure the value has been
         /// written, then call [`flush`](Writer::flush).
-        pub async fn append_ser<S: Serialize>(&mut self, value: S) -> AvroResult<usize> {
-            let n = self.maybe_write_header().await?;
+        #[synca::cfg(sync)]
+        pub fn append_ser<S: Serialize>(&mut self, value: S) -> AvroResult<usize> {
+            let n = self.maybe_write_header()?;
 
             match self.resolved_schema {
                 Some(ref rs) => {
@@ -261,7 +266,7 @@ mod writer {
                     self.num_values += 1;
 
                     if self.buffer.len() >= self.block_size {
-                        return self.flush().await.map(|b| b + n);
+                        return self.flush().map(|b| b + n);
                     }
 
                     Ok(n)
@@ -316,7 +321,8 @@ mod writer {
         ///
         /// **NOTE**: This function forces the written data to be flushed (an implicit
         /// call to [`flush`](Writer::flush) is performed).
-        pub async fn extend_ser<I, T: Serialize>(&mut self, values: I) -> AvroResult<usize>
+        #[synca::cfg(sync)]
+        pub fn extend_ser<I, T: Serialize>(&mut self, values: I) -> AvroResult<usize>
         where
             I: IntoIterator<Item = T>,
         {
@@ -338,7 +344,7 @@ mod writer {
             for value in values {
                 num_bytes += self.append_ser(value)?;
             }
-            num_bytes += self.flush().await?;
+            num_bytes += self.flush()?;
 
             Ok(num_bytes)
         }
@@ -682,13 +688,14 @@ mod writer {
         }
     }
 
+    #[synca::cfg(sync)]
     impl<T> SpecificSingleObjectWriter<T>
     where
         T: AvroSchema + Serialize,
     {
         /// Write the referenced `Serialize` object to the provided `Write` object. Returns a result with
         /// the number of bytes written including the header
-        pub async fn write_ref<W: AvroWrite + Unpin>(&mut self, data: &T, writer: &mut W) -> AvroResult<usize> {
+        pub async fn write_ref<W: std::io::Write>(&mut self, data: &T, writer: &mut W) -> AvroResult<usize> {
             let mut bytes_written: usize = 0;
 
             if !self.header_written {
@@ -788,7 +795,8 @@ mod writer {
     /// **NOTE**: This function has a quite small niche of usage and does **NOT** generate headers and sync
     /// markers; use [`append_ser`](Writer::append_ser) to be fully Avro-compatible
     /// if you don't know what you are doing, instead.
-    pub fn write_avro_datum_ref<T: Serialize, W: AvroWrite + Unpin>(
+    #[synca::cfg(sync)]
+    pub fn write_avro_datum_ref<T: Serialize, W: std::io::Write>(
         schema: &Schema,
         data: &T,
         writer: &mut W,
@@ -836,6 +844,7 @@ mod writer {
 
     #[cfg(test)]
     mod tests {
+        #[synca::cfg(sync)]
         use std::{cell::RefCell, rc::Rc};
 
         use super::*;
@@ -898,8 +907,9 @@ mod writer {
             Ok(())
         }
 
-        #[tokio::test]
-        async fn avro_rs_193_write_avro_datum_ref() -> TestResult {
+        #[test]
+        #[synca::cfg(sync)]
+        fn avro_rs_193_write_avro_datum_ref() -> TestResult {
             #[derive(Serialize)]
             struct TestStruct {
                 a: i64,
@@ -1201,9 +1211,10 @@ mod writer {
             b: String,
         }
 
-        #[tokio::test]
-        async fn test_writer_append_ser() -> TestResult {
-            let schema = SchemaExt::parse_str(SCHEMA).await?;
+        #[test]
+        #[synca::cfg(sync)]
+        fn test_writer_append_ser() -> TestResult {
+            let schema = SchemaExt::parse_str(SCHEMA)?;
             let mut writer = Writer::new(&schema, Vec::new());
 
             let record = TestSerdeSerialize {
@@ -1212,14 +1223,14 @@ mod writer {
             };
 
             let n1 = writer.append_ser(record)?;
-            let n2 = writer.flush().await?;
-            let result = writer.into_inner().await?;
+            let n2 = writer.flush()?;
+            let result = writer.into_inner()?;
 
             assert_eq!(n1 + n2, result.len());
 
             let mut data = Vec::new();
-            zig_i64(27, &mut data).await?;
-            zig_i64(3, &mut data).await?;
+            zig_i64(27, &mut data)?;
+            zig_i64(3, &mut data)?;
             data.extend(b"foo");
 
             // starts with magic
@@ -1234,8 +1245,9 @@ mod writer {
             Ok(())
         }
 
-        #[tokio::test]
-        async fn test_writer_extend_ser() -> TestResult {
+        #[test]
+        #[synca::cfg(sync)]
+        fn test_writer_extend_ser() -> TestResult {
             let schema = SchemaExt::parse_str(SCHEMA).await?;
             let mut writer = Writer::new(&schema, Vec::new());
 
@@ -1246,15 +1258,15 @@ mod writer {
             let record_copy = record.clone();
             let records = vec![record, record_copy];
 
-            let n1 = writer.extend_ser(records).await?;
-            let n2 = writer.flush().await?;
-            let result = writer.into_inner().await?;
+            let n1 = writer.extend_ser(records)?;
+            let n2 = writer.flush()?;
+            let result = writer.into_inner()?;
 
             assert_eq!(n1 + n2, result.len());
 
             let mut data = Vec::new();
-            zig_i64(27, &mut data).await?;
-            zig_i64(3, &mut data).await?;
+            zig_i64(27, &mut data)?;
+            zig_i64(3, &mut data)?;
             data.extend(b"foo");
             data.extend(data.clone());
 
@@ -1637,8 +1649,9 @@ mod writer {
             Ok(())
         }
 
-        #[tokio::test]
-        async fn test_writer_parity() -> TestResult {
+        #[test]
+        #[synca::cfg(sync)]
+        fn test_writer_parity() -> TestResult {
             let obj1 = TestSingleObjectWriter {
                 a: 300,
                 b: 34.555,
@@ -1650,7 +1663,7 @@ mod writer {
             let mut buf3: Vec<u8> = Vec::new();
 
             let mut generic_writer = GenericSingleObjectWriter::new_with_capacity(
-                &TestSingleObjectWriter::get_schema().await,
+                &TestSingleObjectWriter::get_schema(),
                 1024,
             )
             .expect("Should resolve schema");
@@ -1659,15 +1672,13 @@ mod writer {
                     .await
                     .expect("Resolved should pass");
             specific_writer
-                .write(obj1.clone(), &mut buf1).await
+                .write(obj1.clone(), &mut buf1)
                 .expect("Serialization expected");
             specific_writer
                 .write_value(obj1.clone(), &mut buf2)
-                .await
                 .expect("Serialization expected");
             generic_writer
                 .write_value(obj1.into(), &mut buf3)
-                .await
                 .expect("Serialization expected");
             assert_eq!(buf1, buf2);
             assert_eq!(buf1, buf3);
@@ -1675,8 +1686,9 @@ mod writer {
             Ok(())
         }
 
-        #[tokio::test]
-        async fn avro_3894_take_aliases_into_account_when_serializing() -> TestResult {
+        #[test]
+        #[synca::cfg(sync)]
+        fn avro_3894_take_aliases_into_account_when_serializing() -> TestResult {
             const SCHEMA: &str = r#"
   {
       "type": "record",
@@ -1698,7 +1710,7 @@ mod writer {
                 time: Some(1234567890),
             };
 
-            let schema = SchemaExt::parse_str(SCHEMA).await?;
+            let schema = SchemaExt::parse_str(SCHEMA)?;
             let mut writer = Writer::new(&schema, Vec::new());
 
             let bytes = writer.append_ser(conf)?;
@@ -1708,8 +1720,9 @@ mod writer {
             Ok(())
         }
 
-        #[tokio::test]
-        async fn avro_4014_validation_returns_a_detailed_error() -> TestResult {
+        #[test]
+        #[synca::cfg(sync)]
+        fn avro_4014_validation_returns_a_detailed_error() -> TestResult {
             const SCHEMA: &str = r#"
   {
       "type": "record",
@@ -1731,7 +1744,7 @@ mod writer {
                 time: Some(12345678.90),
             };
 
-            let schema = SchemaExt::parse_str(SCHEMA).await?;
+            let schema = SchemaExt::parse_str(SCHEMA)?;
             let mut writer = Writer::new(&schema, Vec::new());
 
             match writer.append_ser(conf) {
@@ -1770,7 +1783,7 @@ mod writer {
 
             impl std::io::Write for TestBuffer {
                 fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-                    self.0.borrow_mut().write(buf).await
+                    std::io::Write::write(&mut self.0.borrow_mut(), buf)
                 }
 
                 fn flush(&mut self) -> std::io::Result<()> {

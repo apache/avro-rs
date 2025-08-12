@@ -630,6 +630,24 @@ pub struct SchemaFingerprint {
     pub bytes: Vec<u8>,
 }
 
+const RESERVED_FIELDS: &[&str] = &[
+    "name",
+    "type",
+    "fields",
+    "symbols",
+    "items",
+    "values",
+    "size",
+    "logicalType",
+    "order",
+    "doc",
+    "aliases",
+    "default",
+    "precision",
+    "scale",
+];
+
+
 impl std::fmt::Display for SchemaFingerprint {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
@@ -864,26 +882,9 @@ impl Schema {
         format!("\"{s}\"")
     }
 
-    const RESERVED_FIELDS: &[&str] = &[
-        "name",
-        "type",
-        "fields",
-        "symbols",
-        "items",
-        "values",
-        "size",
-        "logicalType",
-        "order",
-        "doc",
-        "aliases",
-        "default",
-        "precision",
-        "scale",
-    ];
-
     // Used to define the ordering and inclusion of fields.
     fn field_ordering_position(field: &str) -> Option<usize> {
-        Self::RESERVED_FIELDS
+        RESERVED_FIELDS
             .iter()
             .position(|&f| f == field)
             .map(|pos| pos + 1)
@@ -1365,7 +1366,7 @@ mod schema {
     use crate::AvroResult;
     use crate::error::{Details, Error};
     use crate::schema::{
-        Alias, Aliases, ArraySchema, DecimalMetadata, DecimalSchema, Documentation, EnumSchema,
+        Alias, Aliases, DecimalMetadata, DecimalSchema, Documentation, EnumSchema,
         FixedSchema, MapSchema, Name, Names, Namespace, Precision, RecordField, RecordFieldOrder,
         RecordSchema, ResolvedSchema, Scale, Schema, SchemaFingerprint, SchemaKind, UnionSchema,
     };
@@ -1373,13 +1374,13 @@ mod schema {
     use crate::{
         types::{Value, ValueKind},
         validator::{
-            validate_enum_symbol_name, validate_namespace, validate_record_field_name,
+            validate_enum_symbol_name, validate_record_field_name,
             validate_schema_name,
         },
     };
     use log::{debug, error, warn};
     use serde::{
-        Deserialize, Serialize, Serializer,
+        Serialize,
         ser::{SerializeMap, SerializeSeq},
     };
     #[synca::cfg(sync)]
@@ -1472,8 +1473,7 @@ mod schema {
 
                         let mut resolved = false;
                         for schema in schemas {
-                            if ValueExt::resolve_internal(&avro_value
-                                .to_owned(), schema, names, &schema.namespace(), &None)
+                            if ValueExt::resolve_internal(&avro_value, schema, names, &schema.namespace(), &None)
                                 .await
                                 .is_ok()
                             {
@@ -1532,9 +1532,9 @@ mod schema {
         }
 
         /// Returns true if this `RecordField` is nullable, meaning the schema is a `UnionSchema` where the first variant is `Null`.
-        pub fn is_nullable(&self) -> bool {
-            match self.schema {
-                Schema::Union(ref inner) => inner.is_nullable(),
+        pub fn is_nullable(schema: &Schema) -> bool {
+            match schema {
+                Schema::Union(inner) => inner.is_nullable(),
                 _ => false,
             }
         }
@@ -1548,16 +1548,16 @@ mod schema {
         ///
         /// Extra arguments:
         /// - `known_schemata` - mapping between `Name` and `Schema` - if passed, additional external schemas would be used to resolve references.
-        pub async fn find_schema_with_known_schemata(
-            &self,
-            value: &Value,
-            known_schemata: &HashMap<Name, Schema>,
-            enclosing_namespace: &Namespace,
-        ) -> Option<(usize, &Schema)> {
+        pub async fn find_schema_with_known_schemata<'a>(
+            union_schema: &'a UnionSchema,
+            value: &'a Value,
+            known_schemata: &'a HashMap<Name, Schema>,
+            enclosing_namespace: &'a Namespace,
+        ) -> Option<(usize, &'a Schema)> {
             let schema_kind = SchemaKind::from(value);
-            if let Some(&i) = self.variant_index.get(&schema_kind) {
+            if let Some(&i) = &union_schema.variant_index.get(&schema_kind) {
                 // fast path
-                Some((i, &self.schemas[i]))
+                Some((i, &union_schema.schemas[i]))
             } else {
                 // slow path (required for matching logical or named types)
 
@@ -1568,7 +1568,7 @@ mod schema {
                     .collect();
 
                 let mut i: usize = 0;
-                for schema in self.schemas.iter() {
+                for schema in union_schema.schemas.iter() {
                     let resolved_schema = ResolvedSchema::new_with_known_schemata(
                         vec![schema],
                         enclosing_namespace,
@@ -1581,7 +1581,7 @@ mod schema {
                     collected_names.extend(resolved_names.clone());
                     let namespace = &schema.namespace().or_else(|| enclosing_namespace.clone());
 
-                    if ValueExt::resolve_internal(&value, schema, &collected_names, namespace, &None)
+                    if ValueExt::resolve_internal(value, schema, &collected_names, namespace, &None)
                         .await
                         .is_ok()
                     {
@@ -2275,7 +2275,7 @@ mod schema {
             let mut position = 0;
             for field in fields.iter() {
                 if let Some(field) = field.as_object() {
-                    let record_field = Box::pin(RecordField::parse(
+                    let record_field = Box::pin(RecordFieldExt::parse(
                         field,
                         position,
                         self,
@@ -2378,13 +2378,13 @@ mod schema {
                 }
             }
 
-            if let Some(ref value) = default {
-                let value = Value::from(value.clone());
-                let resolved = ValueExt::resolve_enum(&value, &symbols, &Some(value.to_string()), &None)
+            if let Some(ref json_value) = default {
+                let value = Value::from(json_value.clone());
+                let resolved = ValueExt::resolve_enum(&value, &symbols, &Some(json_value.to_string()), &None)
                     .is_ok();
                 if !resolved {
                     return Err(Details::GetEnumDefault {
-                        symbol: value.to_string(),
+                        symbol: json_value.to_string(),
                         symbols,
                     }
                     .into());
@@ -2867,7 +2867,7 @@ mod schema {
                 .position(1)
                 .build();
 
-            assert!(nullable_record_field.is_nullable());
+            assert!(RecordFieldExt::is_nullable(nullable_record_field));
 
             let non_nullable_record_field = RecordField::builder()
                 .name("next".to_string())
@@ -2877,7 +2877,7 @@ mod schema {
                 .position(1)
                 .build();
 
-            assert!(!non_nullable_record_field.is_nullable());
+            assert!(!RecordFieldExt::is_nullable(non_nullable_record_field));
             Ok(())
         }
 
@@ -6924,9 +6924,10 @@ mod schema {
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
+        #[synca::cfg(sync)]
         #[serial(serde_is_human_readable)]
-        async fn avro_rs_53_uuid_with_fixed() -> TestResult {
+        fn avro_rs_53_uuid_with_fixed() -> TestResult {
             #[derive(Debug, Serialize, Deserialize)]
             struct Comment {
                 id: Uuid,
@@ -6934,7 +6935,7 @@ mod schema {
 
             #[cfg_attr(feature = "tokio", async_trait::async_trait)]
             impl AvroSchema for Comment {
-                async fn get_schema() -> Schema {
+                fn get_schema() -> Schema {
                     SchemaExt::parse_str(
                         r#"{
                         "type" : "record",
@@ -6963,14 +6964,12 @@ mod schema {
             // serialize the Uuid as String
             crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
             let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)
-                .await?
                 .write_ref(&payload, &mut buffer)?;
             assert_eq!(bytes, 47);
 
             // serialize the Uuid as Bytes
             crate::util::SERDE_HUMAN_READABLE.store(false, Ordering::Release);
             let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)
-                .await?
                 .write_ref(&payload, &mut buffer)?;
             assert_eq!(bytes, 27);
 

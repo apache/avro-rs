@@ -943,8 +943,8 @@ mod reader {
 
             writer.append(record.clone()).await?;
             writer.append(record.clone()).await?;
-            writer.flush()?;
-            let result = writer.into_inner()?;
+            writer.flush().await?;
+            let result = writer.into_inner().await?;
 
             let reader = Reader::new(&result[..]).await?;
             assert_eq!(reader.user_metadata(), &user_meta_data);

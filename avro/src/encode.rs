@@ -58,18 +58,14 @@ mod encode {
     use log::error;
     use std::{borrow::Borrow, collections::HashMap};
 
-    /// Encode a `Value` into avro format.
-    ///
-    /// **NOTE** This will not perform schema validation. The value is assumed to
-    /// be valid with regards to the schema. Schema are needed only to guide the
-    /// encoding for complex type values.
+
     pub async fn encode<W: AvroWrite + Unpin>(
         value: &Value,
         schema: &Schema,
         writer: &mut W,
     ) -> AvroResult<usize> {
         let rs = ResolvedSchema::try_from(schema)?;
-        encode_internal(value, schema, rs.get_names(), &None, writer).await
+        Box::pin(encode_internal(value, schema, rs.get_names(), &None, writer)).await
     }
 
     pub(crate) async fn encode_bytes<B: AsRef<[u8]> + ?Sized, W: AvroWrite + Unpin>(

@@ -116,6 +116,7 @@
 //!
 //! ```
 //! use apache_avro::Schema;
+//! use apache_avro::schema::sync::SchemaExt;
 //!
 //! let raw_schema = r#"
 //!     {
@@ -129,7 +130,7 @@
 //! "#;
 //!
 //! // if the schema is not valid, this function will return an error
-//! let schema = SchemaExt::parse_str(raw_schema).await.unwrap();
+//! let schema = SchemaExt::parse_str(raw_schema).unwrap();
 //!
 //! // schemas can be printed for debugging
 //! println!("{:?}", schema);
@@ -140,6 +141,7 @@
 //!
 //! ```
 //! use apache_avro::Schema;
+//! use apache_avro::schema::sync::SchemaExt;
 //!
 //! let raw_schema_1 = r#"{
 //!         "name": "A",
@@ -192,21 +194,22 @@
 //! associated type provided by the library to specify the data we want to serialize:
 //!
 //! ```
-//! # use apache_avro::Schema;
+//! use apache_avro::Schema;
 //! use apache_avro::types::Record;
 //! use apache_avro::Writer;
-//! #
-//! # let raw_schema = r#"
-//! #     {
-//! #         "type": "record",
-//! #         "name": "test",
-//! #         "fields": [
-//! #             {"name": "a", "type": "long", "default": 42},
-//! #             {"name": "b", "type": "string"}
-//! #         ]
-//! #     }
-//! # "#;
-//! # let schema = SchemaExt::parse_str(raw_schema).await.unwrap();
+//! use apache_avro::schema::sync::SchemaExt;
+//!
+//! let raw_schema = r#"
+//!     {
+//!         "type": "record",
+//!         "name": "test",
+//!         "fields": [
+//!             {"name": "a", "type": "long", "default": 42},
+//!             {"name": "b", "type": "string"}
+//!         ]
+//!     }
+//!"#;
+//! let schema = SchemaExt::parse_str(raw_schema).unwrap();
 //! // a writer needs a schema and something to write to
 //! let mut writer = Writer::new(&schema, Vec::new());
 //!
@@ -241,9 +244,10 @@
 //! deriving `Serialize` to model our data:
 //!
 //! ```
-//! # use apache_avro::Schema;
-//! # use serde::Serialize;
+//! use apache_avro::Schema;
+//! use serde::Serialize;
 //! use apache_avro::Writer;
+//! use apache_avro::schema::sync::SchemaExt;
 //!
 //! #[derive(Debug, Serialize)]
 //! struct Test {
@@ -251,17 +255,17 @@
 //!     b: String,
 //! }
 //!
-//! # let raw_schema = r#"
-//! #     {
-//! #         "type": "record",
-//! #         "name": "test",
-//! #         "fields": [
-//! #             {"name": "a", "type": "long", "default": 42},
-//! #             {"name": "b", "type": "string"}
-//! #         ]
-//! #     }
-//! # "#;
-//! # let schema = SchemaExt::parse_str(raw_schema).await.unwrap();
+//! let raw_schema = r#"
+//!     {
+//!         "type": "record",
+//!         "name": "test",
+//!         "fields": [
+//!             {"name": "a", "type": "long", "default": 42},
+//!             {"name": "b", "type": "string"}
+//!         ]
+//!     }
+//! "#;
+//! let schema = SchemaExt::parse_str(raw_schema).unwrap();
 //! // a writer needs a schema and something to write to
 //! let mut writer = Writer::new(&schema, Vec::new());
 //!
@@ -315,18 +319,19 @@
 //! To specify a codec to use to compress data, just specify it while creating a `Writer`:
 //! ```
 //! use apache_avro::{Codec, DeflateSettings, Schema, Writer};
-//! #
-//! # let raw_schema = r#"
-//! #     {
-//! #         "type": "record",
-//! #         "name": "test",
-//! #         "fields": [
-//! #             {"name": "a", "type": "long", "default": 42},
-//! #             {"name": "b", "type": "string"}
-//! #         ]
-//! #     }
-//! # "#;
-//! # let schema = SchemaExt::parse_str(raw_schema).await.unwrap();
+//! use apache_avro::schema::sync::SchemaExt;
+//!
+//! let raw_schema = r#"
+//!     {
+//!         "type": "record",
+//!         "name": "test",
+//!         "fields": [
+//!             {"name": "a", "type": "long", "default": 42},
+//!             {"name": "b", "type": "string"}
+//!         ]
+//!     }
+//!"#;
+//! let schema = SchemaExt::parse_str(raw_schema).unwrap();
 //! let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default()));
 //! ```
 //!
@@ -338,27 +343,28 @@
 //!
 //! ```
 //! use apache_avro::Reader;
-//! # use apache_avro::Schema;
-//! # use apache_avro::types::Record;
-//! # use apache_avro::Writer;
-//! #
-//! # let raw_schema = r#"
-//! #     {
-//! #         "type": "record",
-//! #         "name": "test",
-//! #         "fields": [
-//! #             {"name": "a", "type": "long", "default": 42},
-//! #             {"name": "b", "type": "string"}
-//! #         ]
-//! #     }
-//! # "#;
-//! # let schema = SchemaExt::parse_str(raw_schema).await.unwrap();
-//! # let mut writer = Writer::new(&schema, Vec::new());
-//! # let mut record = Record::new(writer.schema()).unwrap();
-//! # record.put("a", 27i64);
-//! # record.put("b", "foo");
-//! # writer.append(record).unwrap();
-//! # let input = writer.into_inner().unwrap();
+//! use apache_avro::Schema;
+//! use apache_avro::schema::sync::SchemaExt;
+//! use apache_avro::types::Record;
+//! use apache_avro::Writer;
+//!
+//! let raw_schema = r#"
+//!     {
+//!         "type": "record",
+//!         "name": "test",
+//!         "fields": [
+//!             {"name": "a", "type": "long", "default": 42},
+//!             {"name": "b", "type": "string"}
+//!         ]
+//!     }
+//! "#;
+//! let schema = SchemaExt::parse_str(raw_schema).unwrap();
+//! let mut writer = Writer::new(&schema, Vec::new());
+//! let mut record = Record::new(writer.schema()).unwrap();
+//! record.put("a", 27i64);
+//! record.put("b", "foo");
+//! writer.append(record).unwrap();
+//! let input = writer.into_inner().unwrap();
 //! // reader creation can fail in case the input to read from is not Avro-compatible or malformed
 //! let reader = Reader::new(&input[..]).unwrap();
 //! ```
@@ -368,26 +374,27 @@
 //! ```
 //! use apache_avro::Schema;
 //! use apache_avro::Reader;
-//! # use apache_avro::types::Record;
-//! # use apache_avro::Writer;
-//! #
-//! # let writer_raw_schema = r#"
-//! #     {
-//! #         "type": "record",
-//! #         "name": "test",
-//! #         "fields": [
-//! #             {"name": "a", "type": "long", "default": 42},
-//! #             {"name": "b", "type": "string"}
-//! #         ]
-//! #     }
-//! # "#;
-//! # let writer_schema = SchemaExt::parse_str(writer_raw_schema).await.unwrap();
-//! # let mut writer = Writer::new(&writer_schema, Vec::new());
-//! # let mut record = Record::new(writer.schema()).unwrap();
-//! # record.put("a", 27i64);
-//! # record.put("b", "foo");
-//! # writer.append(record).unwrap();
-//! # let input = writer.into_inner().unwrap();
+//! use apache_avro::types::Record;
+//! use apache_avro::Writer;
+//! use apache_avro::schema::sync::SchemaExt;
+//!
+//! let writer_raw_schema = r#"
+//!     {
+//!         "type": "record",
+//!         "name": "test",
+//!         "fields": [
+//!             {"name": "a", "type": "long", "default": 42},
+//!             {"name": "b", "type": "string"}
+//!         ]
+//!     }
+//! "#;
+//! let writer_schema = SchemaExt::parse_str(writer_raw_schema).unwrap();
+//! let mut writer = Writer::new(&writer_schema, Vec::new());
+//! let mut record = Record::new(writer.schema()).unwrap();
+//! record.put("a", 27i64);
+//! record.put("b", "foo");
+//! writer.append(record).unwrap();
+//! let input = writer.into_inner().unwrap();
 //!
 //! let reader_raw_schema = r#"
 //!     {
@@ -401,7 +408,7 @@
 //!     }
 //! "#;
 //!
-//! let reader_schema = SchemaExt::parse_str(reader_raw_schema).await.unwrap();
+//! let reader_schema = SchemaExt::parse_str(reader_raw_schema).unwrap();
 //!
 //! // reader creation can fail in case the input to read from is not Avro-compatible or malformed
 //! let reader = Reader::with_schema(&reader_schema, &input[..]).unwrap();
@@ -425,29 +432,30 @@
 //! We can just read directly instances of `Value` out of the `Reader` iterator:
 //!
 //! ```
-//! # use apache_avro::Schema;
-//! # use apache_avro::types::Record;
-//! # use apache_avro::Writer;
+//! use apache_avro::Schema;
+//! use apache_avro::types::Record;
+//! use apache_avro::Writer;
 //! use apache_avro::Reader;
-//! #
-//! # let raw_schema = r#"
-//! #     {
-//! #         "type": "record",
-//! #         "name": "test",
-//! #         "fields": [
-//! #             {"name": "a", "type": "long", "default": 42},
-//! #             {"name": "b", "type": "string"}
-//! #         ]
-//! #     }
-//! # "#;
-//! # let schema = SchemaExt::parse_str(raw_schema).await.unwrap();
-//! # let schema = SchemaExt::parse_str(raw_schema).await.unwrap();
-//! # let mut writer = Writer::new(&schema, Vec::new());
-//! # let mut record = Record::new(writer.schema()).unwrap();
-//! # record.put("a", 27i64);
-//! # record.put("b", "foo");
-//! # writer.append(record).unwrap();
-//! # let input = writer.into_inner().unwrap();
+//! use apache_avro::schema::sync::SchemaExt;
+//!
+//! let raw_schema = r#"
+//!     {
+//!         "type": "record",
+//!         "name": "test",
+//!         "fields": [
+//!             {"name": "a", "type": "long", "default": 42},
+//!             {"name": "b", "type": "string"}
+//!         ]
+//!     }
+//! "#;
+//! let schema = SchemaExt::parse_str(raw_schema).unwrap();
+//! let schema = SchemaExt::parse_str(raw_schema).unwrap();
+//! let mut writer = Writer::new(&schema, Vec::new());
+//! let mut record = Record::new(writer.schema()).unwrap();
+//! record.put("a", 27i64);
+//! record.put("b", "foo");
+//! writer.append(record).unwrap();
+//! let input = writer.into_inner().unwrap();
 //! let reader = Reader::new(&input[..]).unwrap();
 //!
 //! // value is a Result  of an Avro Value in case the read operation fails
@@ -467,6 +475,7 @@
 //! # use apache_avro::Writer;
 //! # use serde::{Deserialize, Serialize};
 //! use apache_avro::Reader;
+//! use apache_avro::schema::sync::SchemaExt;
 //! use apache_avro::from_value;
 //!
 //! # #[derive(Serialize)]
@@ -486,7 +495,7 @@
 //! #         ]
 //! #     }
 //! # "#;
-//! # let schema = SchemaExt::parse_str(raw_schema).await.unwrap();
+//! # let schema = SchemaExt::parse_str(raw_schema).unwrap();
 //! # let mut writer = Writer::new(&schema, Vec::new());
 //! # let test = Test {
 //! #     a: 27,
@@ -509,6 +518,7 @@
 //!
 //! ```
 //! use apache_avro::{Codec, DeflateSettings, Reader, Schema, Writer, from_value, types::Record, Error};
+//! use apache_avro::schema::sync::SchemaExt;
 //! use serde::{Deserialize, Serialize};
 //!
 //! #[derive(Debug, Deserialize, Serialize)]
@@ -529,7 +539,7 @@
 //!         }
 //!     "#;
 //!
-//!     let schema = SchemaExt::parse_str(raw_schema).await?;
+//!     let schema = SchemaExt::parse_str(raw_schema)?;
 //!
 //!     println!("{:?}", schema);
 //!
@@ -576,6 +586,7 @@
 //!     types::Record, types::Value, Codec, Days, Decimal, DeflateSettings, Duration, Millis, Months, Reader, Schema,
 //!     Writer, Error,
 //! };
+//! use apache_avro::schema::sync::SchemaExt;
 //! use num_bigint::ToBigInt;
 //!
 //! fn main() -> Result<(), Error> {
@@ -655,7 +666,7 @@
 //!     }
 //!     "#;
 //!
-//!     let schema = SchemaExt::parse_str(raw_schema).await?;
+//!     let schema = SchemaExt::parse_str(raw_schema)?;
 //!
 //!     println!("{:?}", schema);
 //!
@@ -701,6 +712,7 @@
 //! ```rust
 //! use apache_avro::rabin::Rabin;
 //! use apache_avro::{Schema, Error};
+//! use apache_avro::schema::sync::SchemaExt;
 //! use md5::Md5;
 //! use sha2::Sha256;
 //!
@@ -715,7 +727,7 @@
 //!             ]
 //!         }
 //!     "#;
-//!     let schema = SchemaExt::parse_str(raw_schema).await?;
+//!     let schema = SchemaExt::parse_str(raw_schema)?;
 //!     println!("{}", schema.fingerprint::<Sha256>());
 //!     println!("{}", schema.fingerprint::<Md5>());
 //!     println!("{}", schema.fingerprint::<Rabin>());
@@ -764,10 +776,10 @@
 //! (32bit signed integer) fits into a long (64bit signed integer)
 //!
 //! ```rust
-//! use apache_avro::{Schema, schema_compatibility::SchemaCompatibility};
+//! use apache_avro::{Schema, schema::sync::SchemaExt, schema_compatibility::sync::SchemaCompatibility};
 //!
-//! let writers_schema = SchemaExt::parse_str(r#"{"type": "array", "items":"int"}"#).await.unwrap();
-//! let readers_schema = SchemaExt::parse_str(r#"{"type": "array", "items":"long"}"#).await.unwrap();
+//! let writers_schema = SchemaExt::parse_str(r#"{"type": "array", "items":"int"}"#).unwrap();
+//! let readers_schema = SchemaExt::parse_str(r#"{"type": "array", "items":"long"}"#).unwrap();
 //! assert!(SchemaCompatibility::can_read(&writers_schema, &readers_schema).is_ok());
 //! ```
 //!
@@ -777,10 +789,10 @@
 //! long (64bit signed integer) does not fit into an int (32bit signed integer)
 //!
 //! ```rust
-//! use apache_avro::{Schema, schema_compatibility::SchemaCompatibility};
+//! use apache_avro::{Schema, schema::sync::SchemaExt, schema_compatibility::sync::SchemaCompatibility};
 //!
-//! let writers_schema = SchemaExt::parse_str(r#"{"type": "array", "items":"long"}"#).await.unwrap();
-//! let readers_schema = SchemaExt::parse_str(r#"{"type": "array", "items":"int"}"#).await.unwrap();
+//! let writers_schema = SchemaExt::parse_str(r#"{"type": "array", "items":"long"}"#).unwrap();
+//! let readers_schema = SchemaExt::parse_str(r#"{"type": "array", "items":"int"}"#).unwrap();
 //! assert!(SchemaCompatibility::can_read(&writers_schema, &readers_schema).is_err());
 //! ```
 //! ## Custom names validators
@@ -920,16 +932,16 @@ pub use reader::tokio::{
 pub use schema::Schema;
 #[cfg(feature = "sync")]
 pub use schema::sync::AvroSchema;
-#[cfg(feature = "sync")]
-use schema::sync::SchemaExt;
 #[cfg(feature = "tokio")]
 pub use schema::tokio::AvroSchema as AsyncAvroSchema;
-#[cfg(feature = "tokio")]
-use schema::tokio::SchemaExt as AsyncSchemaExt;
 #[cfg(feature = "sync")]
 pub use ser::sync::to_value;
 #[cfg(feature = "tokio")]
 pub use ser::tokio::to_value as async_to_value;
+#[cfg(feature = "sync")]
+pub use schema::sync::SchemaExt;
+#[cfg(feature = "tokio")]
+pub use schema::tokio::SchemaExt as AsyncSchemaExt;
 pub use util::{max_allocation_bytes, set_serde_human_readable};
 pub use uuid::Uuid;
 #[cfg(feature = "sync")]
@@ -943,7 +955,6 @@ pub use writer::tokio::{
     SpecificSingleObjectWriter as AsyncSpecificSingleObjectWriter, Writer as AsyncWriter,
     WriterBuilder as AsyncWriterBuilder, to_avro_datum as async_to_avro_datum,
     to_avro_datum_schemata as async_to_avro_datum_schemata,
-    write_avro_datum_ref as async_write_avro_datum_ref,
 };
 
 #[cfg(feature = "derive")]
@@ -972,7 +983,7 @@ mod tests {
     use crate::{
         codec::tokio::Codec,
         reader::tokio::{Reader, from_avro_datum},
-        schema::Schema,
+        schema::tokio::SchemaExt,
         types::{Record, Value},
         writer::tokio::Writer,
     };
@@ -1019,7 +1030,7 @@ mod tests {
         record.put("a", 27i64);
         record.put("b", "foo");
         writer.append(record).await.unwrap();
-        let input = writer.into_inner().unwrap();
+        let input = writer.into_inner().await.unwrap();
         let mut reader = Reader::with_schema(&reader_schema, &input[..])
             .await
             .unwrap();
@@ -1063,7 +1074,7 @@ mod tests {
         record.put("b", "foo");
         record.put("c", "clubs");
         writer.append(record).await.unwrap();
-        let input = writer.into_inner().unwrap();
+        let input = writer.into_inner().await.unwrap();
         let mut reader = Reader::with_schema(&schema, &input[..]).await.unwrap();
         assert_eq!(
             reader.next().await.unwrap().unwrap(),
@@ -1105,7 +1116,7 @@ mod tests {
         record.put("b", "foo");
         record.put("c", "clubs");
         writer.append(record).await.unwrap();
-        let input = writer.into_inner().unwrap();
+        let input = writer.into_inner().await.unwrap();
         let mut reader = Reader::new(&input[..]).await.unwrap();
         assert_eq!(
             reader.next().await.unwrap().unwrap(),

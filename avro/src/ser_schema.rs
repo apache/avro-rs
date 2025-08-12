@@ -19,8 +19,8 @@
 //! which writes directly to a `Write` stream
 
     use crate::{
-        bigdecimal::tokio::big_decimal_as_bytes,
-        encode::tokio::{encode_int, encode_long},
+        bigdecimal::sync::big_decimal_as_bytes,
+        encode::sync::{encode_int, encode_long},
         error::{Details, Error},
         schema::{Name, Names, Namespace, RecordField, RecordSchema, Schema},
     };
@@ -1824,7 +1824,7 @@
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::schema::tokio::SchemaExt;
+        use crate::schema::sync::SchemaExt;
         use crate::{
             Days, Duration, Millis, Months, decimal::Decimal, error::Details,
             schema::ResolvedSchema,
@@ -2009,7 +2009,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         fn test_serialize_record() -> TestResult {
             let schema = SchemaExt::parse_str(
                 r#"{
@@ -2062,7 +2062,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         fn test_serialize_empty_record() -> TestResult {
             let schema = SchemaExt::parse_str(
                 r#"{
@@ -2115,7 +2115,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         fn test_serialize_enum() -> TestResult {
             let schema = SchemaExt::parse_str(
                 r#"{
@@ -2164,7 +2164,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         fn test_serialize_array() -> TestResult {
             let schema = SchemaExt::parse_str(
                 r#"{
@@ -2203,7 +2203,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         fn test_serialize_map() -> TestResult {
             let schema = SchemaExt::parse_str(
                 r#"{
@@ -2250,7 +2250,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         fn test_serialize_nullable_union() -> TestResult {
             let schema = SchemaExt::parse_str(
                 r#"{
@@ -2299,7 +2299,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         fn test_serialize_union() -> TestResult {
             let schema = SchemaExt::parse_str(
                 r#"{
@@ -2351,7 +2351,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         fn test_serialize_fixed() -> TestResult {
             let schema = SchemaExt::parse_str(
                 r#"{
@@ -2428,7 +2428,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         fn test_serialize_decimal_bytes() -> TestResult {
             let schema = SchemaExt::parse_str(
                 r#"{
@@ -2466,7 +2466,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         fn test_serialize_decimal_fixed() -> TestResult {
             let schema = SchemaExt::parse_str(
                 r#"{
@@ -2506,7 +2506,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         #[serial(serde_is_human_readable)]
         fn test_serialize_bigdecimal() -> TestResult {
             let schema = SchemaExt::parse_str(
@@ -2531,7 +2531,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         #[serial(serde_is_human_readable)]
         fn test_serialize_uuid() -> TestResult {
             let schema = SchemaExt::parse_str(
@@ -2577,7 +2577,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         fn test_serialize_date() -> TestResult {
             let schema = SchemaExt::parse_str(
                 r#"{
@@ -2622,7 +2622,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         fn test_serialize_time_millis() -> TestResult {
             let schema = SchemaExt::parse_str(
                 r#"{
@@ -2667,7 +2667,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         fn test_serialize_time_micros() -> TestResult {
             let schema = SchemaExt::parse_str(
                 r#"{
@@ -2715,7 +2715,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         fn test_serialize_timestamp() -> TestResult {
             for precision in ["millis", "micros", "nanos"] {
                 let schema = SchemaExt::parse_str(&format!(
@@ -2774,7 +2774,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         fn test_serialize_duration() -> TestResult {
             let schema = SchemaExt::parse_str(
                 r#"{
@@ -2820,7 +2820,7 @@
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
         #[serial(serde_is_human_readable)] // for BigDecimal and Uuid
         fn test_serialize_recursive_record() -> TestResult {
             let schema = SchemaExt::parse_str(

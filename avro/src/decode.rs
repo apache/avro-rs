@@ -48,10 +48,8 @@ mod decode {
         bigdecimal::tokio::deserialize_big_decimal,
         decimal::Decimal,
         duration::Duration,
-        encode::tokio::encode_long,
         error::Details,
         error::Error,
-        schema::tokio::SchemaExt,
         schema::{
             DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, RecordSchema, ResolvedSchema,
             Schema,
