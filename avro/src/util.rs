@@ -142,18 +142,18 @@ mod util {
 
     use crate::AvroResult;
     use crate::error::Details;
-    use std::io::Write;
+    use std::marker::Unpin;
 
     pub async fn read_long<R: AvroRead + Unpin>(reader: &mut R) -> AvroResult<i64> {
         zag_i64(reader).await
     }
 
-    pub async fn zig_i32<W: AvroWrite>(n: i32, buffer: W) -> AvroResult<usize> {
-        zig_i64(n as i64, buffer)
+    pub async fn zig_i32<W: AvroWrite + Unpin>(n: i32, buffer: W) -> AvroResult<usize> {
+        zig_i64(n as i64, buffer).await
     }
 
-    pub async fn zig_i64<W: AvroWrite>(n: i64, writer: W) -> AvroResult<usize> {
-        encode_variable(((n << 1) ^ (n >> 63)) as u64, writer)
+    pub async fn zig_i64<W: AvroWrite + Unpin>(n: i64, writer: W) -> AvroResult<usize> {
+        encode_variable(((n << 1) ^ (n >> 63)) as u64, writer).await
     }
 
     pub async fn zag_i32<R: AvroRead + Unpin>(reader: &mut R) -> AvroResult<i32> {
@@ -170,7 +170,7 @@ mod util {
         })
     }
 
-    async fn encode_variable<W: AvroWrite>(mut z: u64, mut writer: W) -> AvroResult<usize> {
+    async fn encode_variable<W: AvroWrite + Unpin>(mut z: u64, mut writer: W) -> AvroResult<usize> {
         let mut buffer = [0u8; 10];
         let mut i: usize = 0;
         loop {
@@ -185,7 +185,7 @@ mod util {
             }
         }
         writer
-            .write(&buffer[..i])
+            .write(&buffer[..i]).await
             .map_err(|e| Details::WriteBytes(e).into())
     }
 
@@ -236,87 +236,87 @@ mod util {
         use apache_avro_test_helper::TestResult;
         use pretty_assertions::assert_eq;
 
-        #[test]
-        fn test_zigzag() {
+        #[tokio::test]
+        async fn test_zigzag() {
             let mut a = Vec::new();
             let mut b = Vec::new();
-            zig_i32(42i32, &mut a).unwrap();
-            zig_i64(42i64, &mut b).unwrap();
+            zig_i32(42i32, &mut a).await.unwrap();
+            zig_i64(42i64, &mut b).await.unwrap();
             assert_eq!(a, b);
         }
 
-        #[test]
-        fn test_zig_i64() {
+        #[tokio::test]
+        async fn test_zig_i64() {
             let mut s = Vec::new();
 
-            zig_i64(0, &mut s).unwrap();
+            zig_i64(0, &mut s).await.unwrap();
             assert_eq!(s, [0]);
 
             s.clear();
-            zig_i64(-1, &mut s).unwrap();
+            zig_i64(-1, &mut s).await.unwrap();
             assert_eq!(s, [1]);
 
             s.clear();
-            zig_i64(1, &mut s).unwrap();
+            zig_i64(1, &mut s).await.unwrap();
             assert_eq!(s, [2]);
 
             s.clear();
-            zig_i64(-64, &mut s).unwrap();
+            zig_i64(-64, &mut s).await.unwrap();
             assert_eq!(s, [127]);
 
             s.clear();
-            zig_i64(64, &mut s).unwrap();
+            zig_i64(64, &mut s).await.unwrap();
             assert_eq!(s, [128, 1]);
 
             s.clear();
-            zig_i64(i32::MAX as i64, &mut s).unwrap();
+            zig_i64(i32::MAX as i64, &mut s).await.unwrap();
             assert_eq!(s, [254, 255, 255, 255, 15]);
 
             s.clear();
-            zig_i64(i32::MAX as i64 + 1, &mut s).unwrap();
+            zig_i64(i32::MAX as i64 + 1, &mut s).await.unwrap();
             assert_eq!(s, [128, 128, 128, 128, 16]);
 
             s.clear();
-            zig_i64(i32::MIN as i64, &mut s).unwrap();
+            zig_i64(i32::MIN as i64, &mut s).await.unwrap();
             assert_eq!(s, [255, 255, 255, 255, 15]);
 
             s.clear();
-            zig_i64(i32::MIN as i64 - 1, &mut s).unwrap();
+            zig_i64(i32::MIN as i64 - 1, &mut s).await.unwrap();
             assert_eq!(s, [129, 128, 128, 128, 16]);
 
             s.clear();
-            zig_i64(i64::MAX, &mut s).unwrap();
+            zig_i64(i64::MAX, &mut s).await.unwrap();
             assert_eq!(s, [254, 255, 255, 255, 255, 255, 255, 255, 255, 1]);
 
             s.clear();
-            zig_i64(i64::MIN, &mut s).unwrap();
+            zig_i64(i64::MIN, &mut s).await.unwrap();
             assert_eq!(s, [255, 255, 255, 255, 255, 255, 255, 255, 255, 1]);
         }
 
-        #[test]
-        fn test_zig_i32() {
+        #[tokio::test]
+        async fn test_zig_i32() {
             let mut s = Vec::new();
-            zig_i32(i32::MAX / 2, &mut s).unwrap();
+            zig_i32(i32::MAX / 2, &mut s).await.unwrap();
             assert_eq!(s, [254, 255, 255, 255, 7]);
 
             s.clear();
-            zig_i32(i32::MIN / 2, &mut s).unwrap();
+            zig_i32(i32::MIN / 2, &mut s).await.unwrap();
             assert_eq!(s, [255, 255, 255, 255, 7]);
 
             s.clear();
-            zig_i32(-(i32::MIN / 2), &mut s).unwrap();
+            zig_i32(-(i32::MIN / 2), &mut s).await.unwrap();
             assert_eq!(s, [128, 128, 128, 128, 8]);
 
             s.clear();
-            zig_i32(i32::MIN / 2 - 1, &mut s).unwrap();
+            zig_i32(i32::MIN / 2 - 1, &mut s).await.unwrap();
             assert_eq!(s, [129, 128, 128, 128, 8]);
 
             s.clear();
-            zig_i32(i32::MAX, &mut s).unwrap();
+            zig_i32(i32::MAX, &mut s).await.unwrap();
             assert_eq!(s, [254, 255, 255, 255, 15]);
 
             s.clear();
-            zig_i32(i32::MIN, &mut s).unwrap();
+            zig_i32(i32::MIN, &mut s).await.unwrap();
             assert_eq!(s, [255, 255, 255, 255, 15]);
         }
 

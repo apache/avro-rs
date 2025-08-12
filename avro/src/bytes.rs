@@ -375,7 +375,7 @@ mod tests {
             }"#,
         )
         .await?;
-        assert!(value.validate(&schema).await);
+        assert!(ValueExt::validate(&value, &schema).await);
         Ok(())
     }
 

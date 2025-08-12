@@ -854,7 +854,7 @@ impl Schema {
     fn pcf_array(arr: &[serde_json::Value], defined_names: &mut HashSet<String>) -> String {
         let inter = arr
             .iter()
-            .map(|a| parsing_canonical_form(a, defined_names))
+            .map(|a| Self::parsing_canonical_form(a, defined_names))
             .collect::<Vec<String>>()
             .join(",");
         format!("[{inter}]")
@@ -1377,7 +1377,6 @@ mod schema {
             validate_schema_name,
         },
     };
-    use digest::Digest;
     use log::{debug, error, warn};
     use serde::{
         Deserialize, Serialize, Serializer,
@@ -1389,13 +1388,13 @@ mod schema {
         collections::{BTreeMap, HashMap, HashSet},
         fmt::Debug,
         hash::Hash,
-        io::Read,
         str::FromStr,
     };
     #[synca::cfg(tokio)]
     use tokio::io::AsyncRead as AvroRead;
     #[cfg(feature = "tokio")]
     use tokio::io::AsyncReadExt;
+    use crate::types::tokio::ValueExt;
 
     pub struct RecordFieldExt;
 
@@ -1473,9 +1472,8 @@ mod schema {
 
                         let mut resolved = false;
                         for schema in schemas {
-                            if avro_value
-                                .to_owned()
-                                .resolve_internal(schema, names, &schema.namespace(), &None)
+                            if ValueExt::resolve_internal(&avro_value
+                                .to_owned(), schema, names, &schema.namespace(), &None)
                                 .await
                                 .is_ok()
                             {
@@ -1497,8 +1495,7 @@ mod schema {
                         }
                     }
                     _ => {
-                        let resolved = avro_value
-                            .resolve_internal(field_schema, names, &field_schema.namespace(), &None)
+                        let resolved = ValueExt::resolve_internal(&avro_value, field_schema, names, &field_schema.namespace(), &None)
                             .await
                             .is_ok();
 
@@ -1584,9 +1581,7 @@ mod schema {
                     collected_names.extend(resolved_names.clone());
                     let namespace = &schema.namespace().or_else(|| enclosing_namespace.clone());
 
-                    if value
-                        .clone()
-                        .resolve_internal(schema, &collected_names, namespace, &None)
+                    if ValueExt::resolve_internal(&value, schema, &collected_names, namespace, &None)
                         .await
                         .is_ok()
                     {
@@ -1742,7 +1737,7 @@ mod schema {
 
         /// Create a `Schema` from a reader which implements [`Read`].
         pub async fn parse_reader<R: AvroRead>(
-            reader: &mut (impl AvroRead + ?Sized),
+            reader: &mut (impl AvroRead + ?Sized + Unpin),
         ) -> AvroResult<Schema> {
             let mut buf = String::new();
             match reader.read_to_string(&mut buf).await {
@@ -2384,8 +2379,8 @@ mod schema {
             }
 
             if let Some(ref value) = default {
-                let resolved = Value::from(value.clone())
-                    .resolve_enum(&symbols, &Some(value.to_string()), &None)
+                let value = Value::from(value.clone());
+                let resolved = ValueExt::resolve_enum(&value, &symbols, &Some(value.to_string()), &None)
                     .is_ok();
                 if !resolved {
                     return Err(Details::GetEnumDefault {
@@ -5439,7 +5434,7 @@ mod schema {
             };
 
             let avro_value = to_value(foo)?;
-            assert!(avro_value.validate(&schema).await);
+            assert!(ValueExt::validate(&avro_value, &schema).await);
 
             let mut writer = Writer::new(&schema, Vec::new());
 
@@ -5538,7 +5533,7 @@ mod schema {
             };
             let avro_value = to_value(foo)?;
             assert!(
-                avro_value.validate(&writer_schema).await,
+                ValueExt::validate(&avro_value, &writer_schema).await,
                 "value is valid for schema",
             );
             let datum = to_avro_datum(&writer_schema, avro_value).await?;
@@ -6125,7 +6120,7 @@ mod schema {
             let writer_schema = SchemaExt::parse(&writer_schema).await?;
             let avro_value = to_value(s)?;
             assert!(
-                avro_value.validate(&writer_schema).await,
+                ValueExt::validate(&avro_value, &writer_schema).await,
                 "value is valid for schema",
             );
             let datum = to_avro_datum(&writer_schema, avro_value).await?;
@@ -6136,7 +6131,7 @@ mod schema {
 
             // Deserialization should succeed and we should be able to resolve the schema.
             let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema)).await?;
-            assert!(deser_value.validate(&reader_schema).await);
+            assert!(ValueExt::validate(&deser_value, &reader_schema).await);
 
             // Verify that we can read a field from the record.
             let d: MyRecordReader = from_value(&deser_value)?;

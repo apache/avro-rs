@@ -53,19 +53,19 @@ mod bigdecimal {
         let mut buffer: Vec<u8> = Vec::new();
         let (big_int, exponent): (BigInt, i64) = decimal.as_bigint_and_exponent();
         let big_endian_value: Vec<u8> = big_int.to_signed_bytes_be();
-        encode_bytes(&big_endian_value, &mut buffer)?;
-        encode_long(exponent, &mut buffer)?;
+        encode_bytes(&big_endian_value, &mut buffer).await?;
+        encode_long(exponent, &mut buffer).await?;
 
         Ok(buffer)
     }
 
     pub(crate) async fn serialize_big_decimal(decimal: &BigDecimal) -> AvroResult<Vec<u8>> {
         // encode big decimal, without global size
-        let buffer = big_decimal_as_bytes(decimal)?;
+        let buffer = big_decimal_as_bytes(decimal).await?;
 
         // encode global size and content
         let mut final_buffer: Vec<u8> = Vec::new();
-        encode_bytes(&buffer, &mut final_buffer)?;
+        encode_bytes(&buffer, &mut final_buffer).await?;
 
         Ok(final_buffer)
     }
@@ -85,7 +85,7 @@ mod bigdecimal {
         use tokio::io::AsyncReadExt;
 
         bytes
-            .read_exact(&mut big_decimal_buffer[..])
+            .read_exact(&mut big_decimal_buffer[..]).await
             .map_err(Details::ReadDouble)?;
 
         match decode_long(&mut bytes).await {
@@ -130,7 +130,7 @@ mod bigdecimal {
             let mut current: BigDecimal = BigDecimal::one();
 
             for iter in 1..180 {
-                let buffer: Vec<u8> = serialize_big_decimal(&current)?;
+                let buffer: Vec<u8> = serialize_big_decimal(&current).await?;
 
                 let mut as_slice = buffer.as_slice();
                 decode_long(&mut as_slice).await?;
@@ -148,7 +148,7 @@ mod bigdecimal {
                 current = current.mul(&value);
             }
 
-            let buffer: Vec<u8> = serialize_big_decimal(&BigDecimal::zero())?;
+            let buffer: Vec<u8> = serialize_big_decimal(&BigDecimal::zero()).await?;
             let mut as_slice = buffer.as_slice();
             decode_long(&mut as_slice).await?;
 

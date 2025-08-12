@@ -63,7 +63,7 @@ mod reader {
             Names, ResolvedOwnedSchema, ResolvedSchema, Schema, resolve_names,
             resolve_names_with_schemata,
         },
-        types::Value,
+        types::{Value, tokio::ValueExt},
         util::tokio::read_long,
     };
     use log::warn;
@@ -242,7 +242,7 @@ mod reader {
             )
             .await?;
             let item = match read_schema {
-                Some(schema) => item.resolve(schema).await?,
+                Some(schema) => ValueExt::resolve(item, schema).await?,
                 None => item,
             };
 
@@ -547,7 +547,7 @@ mod reader {
     ) -> AvroResult<Value> {
         let value = decode(writer_schema, reader).await?;
         match reader_schema {
-            Some(schema) => value.resolve(schema).await,
+            Some(schema) => ValueExt::resolve(value, schema).await,
             None => Ok(value),
         }
     }
@@ -592,9 +592,9 @@ mod reader {
         match reader_schema {
             Some(schema) => {
                 if reader_schemata.is_empty() {
-                    value.resolve(schema).await
+                    ValueExt::resolve(value, schema).await
                 } else {
-                    value.resolve_schemata(schema, reader_schemata).await
+                    ValueExt::resolve_schemata(value, schema, reader_schemata).await
                 }
             }
             None => Ok(value),
@@ -1052,7 +1052,7 @@ mod reader {
                 &obj.clone().into(),
                 &TestSingleObjectReader::get_schema().await,
                 &mut to_read,
-            )
+            ).await
             .expect("Encode should succeed");
             let mut to_read = &to_read[..];
             let generic_reader =
@@ -1089,7 +1089,7 @@ mod reader {
                 &obj.clone().into(),
                 &TestSingleObjectReader::get_schema().await,
                 &mut to_read_3,
-            )
+            ).await
             .expect("Encode should succeed");
             let mut to_read = (&to_read_1[..]).chain(&to_read_2[..]).chain(&to_read_3[..]);
             let generic_reader =
@@ -1125,7 +1125,7 @@ mod reader {
                 &obj.clone().into(),
                 &TestSingleObjectReader::get_schema().await,
                 &mut to_read,
-            )
+            ).await
             .expect("Encode should succeed");
             let generic_reader =
                 GenericSingleObjectReader::new(TestSingleObjectReader::get_schema().await)

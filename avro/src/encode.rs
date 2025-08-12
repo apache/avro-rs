@@ -41,7 +41,6 @@ mod encode {
     use crate::{
         bigdecimal::tokio::serialize_big_decimal,
         error::Details,
-        schema::tokio::SchemaExt,
         schema::{
             DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, RecordSchema, ResolvedSchema,
             Schema, SchemaKind, UnionSchema,
@@ -50,6 +49,7 @@ mod encode {
     };
     #[synca::cfg(sync)]
     use std::io::Write as AvroWrite;
+    use std::marker::Unpin;
     #[synca::cfg(tokio)]
     use tokio::io::AsyncWrite as AvroWrite;
     #[cfg(feature = "tokio")]
@@ -63,7 +63,7 @@ mod encode {
     /// **NOTE** This will not perform schema validation. The value is assumed to
     /// be valid with regards to the schema. Schema are needed only to guide the
     /// encoding for complex type values.
-    pub async fn encode<W: AvroWrite>(
+    pub async fn encode<W: AvroWrite + Unpin>(
         value: &Value,
         schema: &Schema,
         writer: &mut W,
@@ -72,27 +72,27 @@ mod encode {
         encode_internal(value, schema, rs.get_names(), &None, writer).await
     }
 
-    pub(crate) async fn encode_bytes<B: AsRef<[u8]> + ?Sized, W: AvroWrite>(
+    pub(crate) async fn encode_bytes<B: AsRef<[u8]> + ?Sized, W: AvroWrite + Unpin>(
         s: &B,
         mut writer: W,
     ) -> AvroResult<usize> {
         let bytes = s.as_ref();
-        encode_long(bytes.len() as i64, &mut writer)?;
+        encode_long(bytes.len() as i64, &mut writer).await?;
         writer
             .write(bytes)
             .await
             .map_err(|e| Details::WriteBytes(e).into())
     }
 
-    pub(crate) async fn encode_long<W: AvroWrite>(i: i64, writer: W) -> AvroResult<usize> {
+    pub(crate) async fn encode_long<W: AvroWrite + Unpin>(i: i64, writer: W) -> AvroResult<usize> {
         zig_i64(i, writer).await
     }
 
-    pub(crate) async fn encode_int<W: AvroWrite>(i: i32, writer: W) -> AvroResult<usize> {
+    pub(crate) async fn encode_int<W: AvroWrite + Unpin>(i: i32, writer: W) -> AvroResult<usize> {
         zig_i32(i, writer).await
     }
 
-    pub(crate) async fn encode_internal<W: AvroWrite, S: Borrow<Schema>>(
+    pub(crate) async fn encode_internal<W: AvroWrite + Unpin, S: Borrow<Schema>>(
         value: &Value,
         schema: &Schema,
         names: &HashMap<Name, S>,
@@ -130,7 +130,7 @@ mod encode {
                 }
             }
             Value::Boolean(b) => writer
-                .write(&[u8::from(*b)])
+                .write(&[u8::from(*b)]).await
                 .map_err(|e| Details::WriteBytes(e).into()),
             // Pattern | Pattern here to signify that these _must_ have the same encoding.
             Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => encode_int(*i, writer).await,
@@ -143,10 +143,10 @@ mod encode {
             | Value::LocalTimestampNanos(i)
             | Value::TimeMicros(i) => encode_long(*i, writer).await,
             Value::Float(x) => writer
-                .write(&x.to_le_bytes())
+                .write(&x.to_le_bytes()).await
                 .map_err(|e| Details::WriteBytes(e).into()),
             Value::Double(x) => writer
-                .write(&x.to_le_bytes())
+                .write(&x.to_le_bytes()).await
                 .map_err(|e| Details::WriteBytes(e).into()),
             Value::Decimal(decimal) => match schema {
                 Schema::Decimal(DecimalSchema { inner, .. }) => match *inner.clone() {
@@ -156,9 +156,9 @@ mod encode {
                         if num_bytes != size {
                             return Err(Details::EncodeDecimalAsFixedError(num_bytes, size).into());
                         }
-                        encode(&Value::Fixed(size, bytes), inner, writer)
+                        encode(&Value::Fixed(size, bytes), inner, writer).await
                     }
-                    Schema::Bytes => encode(&Value::Bytes(decimal.try_into()?), inner, writer),
+                    Schema::Bytes => encode(&Value::Bytes(decimal.try_into()?), inner, writer).await,
                     _ => {
                         Err(Details::ResolveDecimalSchema(SchemaKind::from(*inner.clone())).into())
                     }
@@ -172,7 +172,7 @@ mod encode {
             &Value::Duration(duration) => {
                 let slice: [u8; 12] = duration.into();
                 writer
-                    .write(&slice)
+                    .write(&slice).await
                     .map_err(|e| Details::WriteBytes(e).into())
             }
             Value::Uuid(uuid) => match *schema {
@@ -200,15 +200,15 @@ mod encode {
                 .into()),
             },
             Value::BigDecimal(bg) => {
-                let buf: Vec<u8> = serialize_big_decimal(bg)?;
+                let buf: Vec<u8> = serialize_big_decimal(bg).await?;
                 writer
-                    .write(buf.as_slice())
+                    .write(buf.as_slice()).await
                     .map_err(|e| Details::WriteBytes(e).into())
             }
             Value::Bytes(bytes) => match *schema {
                 Schema::Bytes => encode_bytes(bytes, writer).await,
                 Schema::Fixed { .. } => writer
-                    .write(bytes.as_slice())
+                    .write(bytes.as_slice()).await
                     .map_err(|e| Details::WriteBytes(e).into()),
                 _ => Err(Details::EncodeValueAsSchemaError {
                     value_kind: ValueKind::Bytes,
@@ -233,7 +233,7 @@ mod encode {
                 .into()),
             },
             Value::Fixed(_, bytes) => writer
-                .write(bytes.as_slice())
+                .write(bytes.as_slice()).await
                 .map_err(|e| Details::WriteBytes(e).into()),
             Value::Enum(i, _) => encode_int(*i as i32, writer).await,
             Value::Union(idx, item) => {
@@ -363,14 +363,14 @@ mod encode {
                 } else if let Schema::Union(UnionSchema { schemas, .. }) = schema {
                     let mut union_buffer: Vec<u8> = Vec::new();
                     for (index, schema) in schemas.iter().enumerate() {
-                        encode_long(index as i64, &mut union_buffer)?;
-                        let encode_res = encode_internal(
+                        encode_long(index as i64, &mut union_buffer).await?;
+                        let encode_res = Box::pin(encode_internal(
                             value,
                             schema,
                             names,
                             enclosing_namespace,
                             &mut union_buffer,
-                        );
+                        )).await;
                         match encode_res {
                             Ok(_) => {
                                 return writer
@@ -411,6 +411,7 @@ mod encode {
     pub(crate) mod tests {
         use super::*;
         use crate::error::{Details, Error};
+        use crate::schema::tokio::SchemaExt;
         use apache_avro_test_helper::TestResult;
         use pretty_assertions::assert_eq;
         use uuid::Uuid;
@@ -1029,7 +1030,7 @@ mod encode {
             let value = Value::String(String::from("00000000-0000-0000-0000-000000000000"));
             let schema = Schema::Uuid;
             let mut buffer = Vec::new();
-            let encoded = encode(&value, &schema, &mut buffer);
+            let encoded = encode(&value, &schema, &mut buffer).await;
             assert!(encoded.is_ok());
             assert!(!buffer.is_empty());
         }
@@ -1047,9 +1048,8 @@ mod encode {
             let value = Value::Uuid(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")?);
 
             let mut buffer = Vec::new();
-            match encode(&value, &schema, &mut buffer)
+            match encode(&value, &schema, &mut buffer).await
                 .map_err(Error::into_details)
-                .await
             {
                 Err(Details::ConvertFixedToUuid(actual)) => {
                     assert_eq!(actual, 15);

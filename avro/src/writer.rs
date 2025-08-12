@@ -42,6 +42,14 @@
 )]
 mod writer {
 
+    #[synca::cfg(sync)]
+    use std::io::Write as AvroWrite;
+    use std::marker::Unpin;
+    #[synca::cfg(tokio)]
+    use tokio::io::AsyncWrite as AvroWrite;
+    #[cfg(feature = "tokio")]
+    use tokio::io::AsyncWriteExt;
+
     use crate::AvroResult;
     use crate::{
         codec::tokio::Codec,
@@ -51,14 +59,15 @@ mod writer {
         headers::tokio::{HeaderBuilder, RabinFingerprintHeader},
         schema::tokio::AvroSchema,
         schema::{Name, ResolvedOwnedSchema, ResolvedSchema, Schema},
-        ser_schema::tokio::SchemaAwareWriteSerializer,
+        ser_schema::SchemaAwareWriteSerializer,
         types::Value,
     };
     use serde::Serialize;
     use std::{
-        collections::HashMap, io::Write, marker::PhantomData, mem::ManuallyDrop,
+        collections::HashMap, marker::PhantomData, mem::ManuallyDrop,
         ops::RangeInclusive,
     };
+    use crate::types::tokio::ValueExt;
 
     const DEFAULT_BLOCK_SIZE: usize = 16000;
     const AVRO_OBJECT_HEADER: &[u8] = b"Obj\x01";
@@ -69,7 +78,7 @@ mod writer {
     /// the contents of the buffer, any errors that happen in the process of dropping will be ignored.
     /// Calling flush ensures that the buffer is empty and thus dropping will not even attempt file operations.
     #[derive(bon::Builder)]
-    pub struct Writer<'a, W: Write> {
+    pub struct Writer<'a, W: AvroWrite + Unpin> {
         schema: &'a Schema,
         writer: W,
         #[builder(skip)]
@@ -93,7 +102,7 @@ mod writer {
         user_metadata: HashMap<String, Value>,
     }
 
-    impl<'a, W: Write> Writer<'a, W> {
+    impl<'a, W: AvroWrite + Unpin> Writer<'a, W> {
         /// Creates a `Writer` given a `Schema` and something implementing the `io::Write` trait to write
         /// to.
         /// No compression `Codec` will be used.
@@ -206,7 +215,7 @@ mod writer {
         /// internal buffering for performance reasons. If you want to be sure the value has been
         /// written, then call [`flush`](Writer::flush).
         pub async fn append_value_ref(&mut self, value: &Value) -> AvroResult<usize> {
-            let n = self.maybe_write_header()?;
+            let n = self.maybe_write_header().await?;
 
             // Lazy init for users using the builder pattern with error throwing
             match self.resolved_schema {
@@ -215,7 +224,7 @@ mod writer {
                     self.num_values += 1;
 
                     if self.buffer.len() >= self.block_size {
-                        return self.flush().map(|b| b + n);
+                        return self.flush().await.map(|b| b + n);
                     }
 
                     Ok(n)
@@ -237,8 +246,8 @@ mod writer {
         /// **NOTE**: This function is not guaranteed to perform any actual write, since it relies on
         /// internal buffering for performance reasons. If you want to be sure the value has been
         /// written, then call [`flush`](Writer::flush).
-        pub fn append_ser<S: Serialize>(&mut self, value: S) -> AvroResult<usize> {
-            let n = self.maybe_write_header()?;
+        pub async fn append_ser<S: Serialize>(&mut self, value: S) -> AvroResult<usize> {
+            let n = self.maybe_write_header().await?;
 
             match self.resolved_schema {
                 Some(ref rs) => {
@@ -252,7 +261,7 @@ mod writer {
                     self.num_values += 1;
 
                     if self.buffer.len() >= self.block_size {
-                        return self.flush().map(|b| b + n);
+                        return self.flush().await.map(|b| b + n);
                     }
 
                     Ok(n)
@@ -294,7 +303,7 @@ mod writer {
             for value in values {
                 num_bytes += self.append(value).await?;
             }
-            num_bytes += self.flush()?;
+            num_bytes += self.flush().await?;
 
             Ok(num_bytes)
         }
@@ -307,7 +316,7 @@ mod writer {
         ///
         /// **NOTE**: This function forces the written data to be flushed (an implicit
         /// call to [`flush`](Writer::flush) is performed).
-        pub fn extend_ser<I, T: Serialize>(&mut self, values: I) -> AvroResult<usize>
+        pub async fn extend_ser<I, T: Serialize>(&mut self, values: I) -> AvroResult<usize>
         where
             I: IntoIterator<Item = T>,
         {
@@ -329,7 +338,7 @@ mod writer {
             for value in values {
                 num_bytes += self.append_ser(value)?;
             }
-            num_bytes += self.flush()?;
+            num_bytes += self.flush().await?;
 
             Ok(num_bytes)
         }
@@ -346,7 +355,7 @@ mod writer {
             for value in values {
                 num_bytes += self.append_value_ref(value).await?;
             }
-            num_bytes += self.flush()?;
+            num_bytes += self.flush().await?;
 
             Ok(num_bytes)
         }
@@ -358,8 +367,8 @@ mod writer {
         /// [`WriterBuilder::has_header`].
         ///
         /// Returns the number of bytes written.
-        pub fn flush(&mut self) -> AvroResult<usize> {
-            let mut num_bytes = self.maybe_write_header()?;
+        pub async fn flush(&mut self) -> AvroResult<usize> {
+            let mut num_bytes = self.maybe_write_header().await?;
             if self.num_values == 0 {
                 return Ok(num_bytes);
             }
@@ -369,18 +378,18 @@ mod writer {
             let num_values = self.num_values;
             let stream_len = self.buffer.len();
 
-            num_bytes += self.append_raw(&num_values.into(), &Schema::Long)?
-                + self.append_raw(&stream_len.into(), &Schema::Long)?
+            num_bytes += self.append_raw(&num_values.into(), &Schema::Long).await?
+                + self.append_raw(&stream_len.into(), &Schema::Long).await?
                 + self
                     .writer
-                    .write(self.buffer.as_ref())
+                    .write(self.buffer.as_ref()).await
                     .map_err(Details::WriteBytes)?
-                + self.append_marker()?;
+                + self.append_marker().await?;
 
             self.buffer.clear();
             self.num_values = 0;
 
-            self.writer.flush().map_err(Details::FlushWriter)?;
+            self.writer.flush().await.map_err(Details::FlushWriter)?;
 
             Ok(num_bytes)
         }
@@ -389,9 +398,9 @@ mod writer {
         ///
         /// **NOTE**: This function forces the written data to be flushed (an implicit
         /// call to [`flush`](Writer::flush) is performed).
-        pub fn into_inner(mut self) -> AvroResult<W> {
-            self.maybe_write_header()?;
-            self.flush()?;
+        pub async fn into_inner(mut self) -> AvroResult<W> {
+            self.maybe_write_header().await?;
+            self.flush().await?;
 
             let mut this = ManuallyDrop::new(self);
 
@@ -425,23 +434,23 @@ mod writer {
         }
 
         /// Generate and append synchronization marker to the payload.
-        fn append_marker(&mut self) -> AvroResult<usize> {
+        async fn append_marker(&mut self) -> AvroResult<usize> {
             // using .writer.write directly to avoid mutable borrow of self
             // with ref borrowing of self.marker
             self.writer
-                .write(&self.marker)
+                .write(&self.marker).await
                 .map_err(|e| Details::WriteMarker(e).into())
         }
 
         /// Append a raw Avro Value to the payload avoiding to encode it again.
-        fn append_raw(&mut self, value: &Value, schema: &Schema) -> AvroResult<usize> {
-            self.append_bytes(encode_to_vec(value, schema).await?.as_ref())
+        async fn append_raw(&mut self, value: &Value, schema: &Schema) -> AvroResult<usize> {
+            self.append_bytes(encode_to_vec(value, schema).await?.as_ref()).await
         }
 
         /// Append pure bytes to the payload.
-        fn append_bytes(&mut self, bytes: &[u8]) -> AvroResult<usize> {
+        async fn append_bytes(&mut self, bytes: &[u8]) -> AvroResult<usize> {
             self.writer
-                .write(bytes)
+                .write(bytes).await
                 .map_err(|e| Details::WriteBytes(e).into())
         }
 
@@ -465,7 +474,7 @@ mod writer {
         }
 
         /// Create an Avro header based on schema, codec and sync marker.
-        fn header(&self) -> Result<Vec<u8>, Error> {
+        async fn header(&self) -> Result<Vec<u8>, Error> {
             let schema_bytes = serde_json::to_string(self.schema)
                 .map_err(Details::ConvertJsonToString)?
                 .into_bytes();
@@ -504,16 +513,16 @@ mod writer {
 
             let mut header = Vec::new();
             header.extend_from_slice(AVRO_OBJECT_HEADER);
-            encode(&metadata.into(), &Schema::map(Schema::Bytes), &mut header)?;
+            encode(&metadata.into(), &Schema::map(Schema::Bytes), &mut header).await?;
             header.extend_from_slice(&self.marker);
 
             Ok(header)
         }
 
-        fn maybe_write_header(&mut self) -> AvroResult<usize> {
+        async fn maybe_write_header(&mut self) -> AvroResult<usize> {
             if !self.has_header {
-                let header = self.header()?;
-                let n = self.append_bytes(header.as_ref())?;
+                let header = self.header().await?;
+                let n = self.append_bytes(header.as_ref()).await?;
                 self.has_header = true;
                 Ok(n)
             } else {
@@ -522,7 +531,7 @@ mod writer {
         }
     }
 
-    impl<W: Write> Drop for Writer<'_, W> {
+    impl<W: AvroWrite + Unpin> Drop for Writer<'_, W> {
         /// Drop the writer, will try to flush ignoring any errors.
         fn drop(&mut self) {
             let _ = self.maybe_write_header();
@@ -535,16 +544,16 @@ mod writer {
     ///
     /// This is an internal function which gets the bytes buffer where to write as parameter instead of
     /// creating a new one like `to_avro_datum`.
-    async fn write_avro_datum<T: Into<Value>, W: Write>(
+    async fn write_avro_datum<T: Into<Value>, W: AvroWrite + Unpin>(
         schema: &Schema,
         value: T,
         writer: &mut W,
     ) -> Result<(), Error> {
         let avro = value.into();
-        if !avro.validate(schema).await {
+        if !ValueExt::validate(&avro, schema).await {
             return Err(Details::Validation.into());
         }
-        encode(&avro, schema, writer)?;
+        encode(&avro, schema, writer).await?;
         Ok(())
     }
 
@@ -558,8 +567,8 @@ mod writer {
         let rs = ResolvedSchema::try_from(schemata)?;
         let names = rs.get_names();
         let enclosing_namespace = schema.namespace();
-        if let Some(_err) = avro
-            .validate_internal(schema, names, &enclosing_namespace)
+        if let Some(_err) =
+            ValueExt::validate_internal(&avro, schema, names, &enclosing_namespace)
             .await
         {
             return Err(Details::Validation.into());
@@ -602,7 +611,7 @@ mod writer {
         const HEADER_LENGTH_RANGE: RangeInclusive<usize> = 10_usize..=20_usize;
 
         /// Write the referenced Value to the provided Write object. Returns a result with the number of bytes written including the header
-        pub async fn write_value_ref<W: Write>(
+        pub async fn write_value_ref<W: AvroWrite + Unpin>(
             &mut self,
             v: &Value,
             writer: &mut W,
@@ -613,7 +622,7 @@ mod writer {
             } else {
                 write_value_ref_owned_resolved(&self.resolved, v, &mut self.buffer).await?;
                 writer
-                    .write_all(&self.buffer)
+                    .write_all(&self.buffer).await
                     .map_err(Details::WriteBytes)?;
                 let len = self.buffer.len();
                 self.buffer.truncate(original_length);
@@ -622,7 +631,7 @@ mod writer {
         }
 
         /// Write the Value to the provided Write object. Returns a result with the number of bytes written including the header
-        pub async fn write_value<W: Write>(
+        pub async fn write_value<W: AvroWrite + Unpin>(
             &mut self,
             v: Value,
             writer: &mut W,
@@ -663,7 +672,7 @@ mod writer {
     {
         /// Write the `Into<Value>` to the provided Write object. Returns a result with the number
         /// of bytes written including the header
-        pub async fn write_value<W: Write>(
+        pub async fn write_value<W: AvroWrite + Unpin>(
             &mut self,
             data: T,
             writer: &mut W,
@@ -679,12 +688,12 @@ mod writer {
     {
         /// Write the referenced `Serialize` object to the provided `Write` object. Returns a result with
         /// the number of bytes written including the header
-        pub fn write_ref<W: Write>(&mut self, data: &T, writer: &mut W) -> AvroResult<usize> {
+        pub async fn write_ref<W: AvroWrite + Unpin>(&mut self, data: &T, writer: &mut W) -> AvroResult<usize> {
             let mut bytes_written: usize = 0;
 
             if !self.header_written {
                 bytes_written += writer
-                    .write(self.inner.buffer.as_slice())
+                    .write(self.inner.buffer.as_slice()).await
                     .map_err(Details::WriteBytes)?;
                 self.header_written = true;
             }
@@ -696,8 +705,8 @@ mod writer {
 
         /// Write the Serialize object to the provided Write object. Returns a result with the number
         /// of bytes written including the header
-        pub fn write<W: Write>(&mut self, data: T, writer: &mut W) -> AvroResult<usize> {
-            self.write_ref(&data, writer)
+        pub async fn write<W: AvroWrite + Unpin>(&mut self, data: T, writer: &mut W) -> AvroResult<usize> {
+            self.write_ref(&data, writer).await
         }
     }
 
@@ -707,8 +716,7 @@ mod writer {
         value: &Value,
         buffer: &mut Vec<u8>,
     ) -> AvroResult<usize> {
-        match value
-            .validate_internal(schema, resolved_schema.get_names(), &schema.namespace())
+        match ValueExt::validate_internal(&value, schema, resolved_schema.get_names(), &schema.namespace())
             .await
         {
             Some(reason) => Err(Details::ValidationWithReason {
@@ -736,8 +744,8 @@ mod writer {
         buffer: &mut Vec<u8>,
     ) -> AvroResult<()> {
         let root_schema = resolved_schema.get_root_schema();
-        if let Some(reason) = value
-            .validate_internal(
+        if let Some(reason) = ValueExt::validate_internal(
+                &value,
                 root_schema,
                 resolved_schema.get_names(),
                 &root_schema.namespace(),
@@ -780,7 +788,7 @@ mod writer {
     /// **NOTE**: This function has a quite small niche of usage and does **NOT** generate headers and sync
     /// markers; use [`append_ser`](Writer::append_ser) to be fully Avro-compatible
     /// if you don't know what you are doing, instead.
-    pub fn write_avro_datum_ref<T: Serialize, W: Write>(
+    pub fn write_avro_datum_ref<T: Serialize, W: AvroWrite + Unpin>(
         schema: &Schema,
         data: &T,
         writer: &mut W,
@@ -881,8 +889,8 @@ mod writer {
             record.put("b", "foo");
 
             let mut expected = Vec::new();
-            zig_i64(27, &mut expected)?;
-            zig_i64(3, &mut expected)?;
+            zig_i64(27, &mut expected).await?;
+            zig_i64(3, &mut expected).await?;
             expected.extend([b'f', b'o', b'o']);
 
             assert_eq!(to_avro_datum(&schema, record).await?, expected);
@@ -906,8 +914,8 @@ mod writer {
             };
 
             let mut expected = Vec::new();
-            zig_i64(27, &mut expected)?;
-            zig_i64(3, &mut expected)?;
+            zig_i64(27, &mut expected).await?;
+            zig_i64(3, &mut expected).await?;
             expected.extend([b'f', b'o', b'o']);
 
             let bytes = write_avro_datum_ref(&schema, &data, &mut writer)?;
@@ -924,8 +932,8 @@ mod writer {
 
             // By default flush should write the header even if nothing was added yet
             let mut writer = Writer::new(&schema, Vec::new());
-            writer.flush()?;
-            let result = writer.into_inner()?;
+            writer.flush().await?;
+            let result = writer.into_inner().await?;
             assert_eq!(result.len(), 163);
 
             // Unless the user indicates via the builder that the header has already been written
@@ -934,8 +942,8 @@ mod writer {
                 .schema(&schema)
                 .writer(Vec::new())
                 .build();
-            writer.flush()?;
-            let result = writer.into_inner()?;
+            writer.flush().await?;
+            let result = writer.into_inner().await?;
             assert_eq!(result.len(), 0);
 
             Ok(())
@@ -947,8 +955,8 @@ mod writer {
             let union = Value::Union(1, Box::new(Value::Long(3)));
 
             let mut expected = Vec::new();
-            zig_i64(1, &mut expected)?;
-            zig_i64(3, &mut expected)?;
+            zig_i64(1, &mut expected).await?;
+            zig_i64(3, &mut expected).await?;
 
             assert_eq!(to_avro_datum(&schema, union).await?, expected);
 
@@ -961,7 +969,7 @@ mod writer {
             let union = Value::Union(0, Box::new(Value::Null));
 
             let mut expected = Vec::new();
-            zig_i64(0, &mut expected)?;
+            zig_i64(0, &mut expected).await?;
 
             assert_eq!(to_avro_datum(&schema, union).await?, expected);
 
@@ -1129,14 +1137,14 @@ mod writer {
 
             let n1 = writer.append(record.clone()).await?;
             let n2 = writer.append(record.clone()).await?;
-            let n3 = writer.flush()?;
-            let result = writer.into_inner()?;
+            let n3 = writer.flush().await?;
+            let result = writer.into_inner().await?;
 
             assert_eq!(n1 + n2 + n3, result.len());
 
             let mut data = Vec::new();
-            zig_i64(27, &mut data)?;
-            zig_i64(3, &mut data)?;
+            zig_i64(27, &mut data).await?;
+            zig_i64(3, &mut data).await?;
             data.extend(b"foo");
             data.extend(data.clone());
 
@@ -1164,14 +1172,14 @@ mod writer {
             let records = vec![record, record_copy];
 
             let n1 = writer.extend(records).await?;
-            let n2 = writer.flush()?;
-            let result = writer.into_inner()?;
+            let n2 = writer.flush().await?;
+            let result = writer.into_inner().await?;
 
             assert_eq!(n1 + n2, result.len());
 
             let mut data = Vec::new();
-            zig_i64(27, &mut data)?;
-            zig_i64(3, &mut data)?;
+            zig_i64(27, &mut data).await?;
+            zig_i64(3, &mut data).await?;
             data.extend(b"foo");
             data.extend(data.clone());
 
@@ -1204,14 +1212,14 @@ mod writer {
             };
 
             let n1 = writer.append_ser(record)?;
-            let n2 = writer.flush()?;
-            let result = writer.into_inner()?;
+            let n2 = writer.flush().await?;
+            let result = writer.into_inner().await?;
 
             assert_eq!(n1 + n2, result.len());
 
             let mut data = Vec::new();
-            zig_i64(27, &mut data)?;
-            zig_i64(3, &mut data)?;
+            zig_i64(27, &mut data).await?;
+            zig_i64(3, &mut data).await?;
             data.extend(b"foo");
 
             // starts with magic
@@ -1238,15 +1246,15 @@ mod writer {
             let record_copy = record.clone();
             let records = vec![record, record_copy];
 
-            let n1 = writer.extend_ser(records)?;
-            let n2 = writer.flush()?;
-            let result = writer.into_inner()?;
+            let n1 = writer.extend_ser(records).await?;
+            let n2 = writer.flush().await?;
+            let result = writer.into_inner().await?;
 
             assert_eq!(n1 + n2, result.len());
 
             let mut data = Vec::new();
-            zig_i64(27, &mut data)?;
-            zig_i64(3, &mut data)?;
+            zig_i64(27, &mut data).await?;
+            zig_i64(3, &mut data).await?;
             data.extend(b"foo");
             data.extend(data.clone());
 
@@ -1286,14 +1294,14 @@ mod writer {
 
             let n1 = writer.append(record.clone()).await?;
             let n2 = writer.append(record.clone()).await?;
-            let n3 = writer.flush()?;
-            let result = writer.into_inner()?;
+            let n3 = writer.flush().await?;
+            let result = writer.into_inner().await?;
 
             assert_eq!(n1 + n2 + n3, result.len());
 
             let mut data = Vec::new();
-            zig_i64(27, &mut data)?;
-            zig_i64(3, &mut data)?;
+            zig_i64(27, &mut data).await?;
+            zig_i64(3, &mut data).await?;
             data.extend(b"foo");
             data.extend(data.clone());
             Codec::Deflate(DeflateSettings::default()).compress(&mut data)?;
@@ -1363,18 +1371,18 @@ mod writer {
 
             let n1 = writer.append(record1).await?;
             let n2 = writer.append(record2).await?;
-            let n3 = writer.flush()?;
-            let result = writer.into_inner()?;
+            let n3 = writer.flush().await?;
+            let result = writer.into_inner().await?;
 
             assert_eq!(n1 + n2 + n3, result.len());
 
             let mut data = Vec::new();
             // byte indicating not null
-            zig_i64(1, &mut data)?;
-            zig_i64(1234, &mut data)?;
+            zig_i64(1, &mut data).await?;
+            zig_i64(1234, &mut data).await?;
 
             // byte indicating null
-            zig_i64(0, &mut data)?;
+            zig_i64(0, &mut data).await?;
             codec.compress(&mut data)?;
 
             // starts with magic
@@ -1405,8 +1413,8 @@ mod writer {
 
             writer.append(record.clone()).await?;
             writer.append(record.clone()).await?;
-            writer.flush()?;
-            let result = writer.into_inner()?;
+            writer.flush().await?;
+            let result = writer.into_inner().await?;
 
             assert_eq!(result.len(), 260);
 
@@ -1418,7 +1426,7 @@ mod writer {
             let schema = SchemaExt::parse_str(SCHEMA).await?;
             let mut writer = Writer::new(&schema, Vec::new());
             writer.add_user_metadata("a".to_string(), "b")?;
-            let result = writer.into_inner()?;
+            let result = writer.into_inner().await?;
 
             let mut reader = Reader::with_schema(&schema, &result[..]).await?;
             let mut expected = HashMap::new();
@@ -1594,7 +1602,7 @@ mod writer {
                 &value,
                 &TestSingleObjectWriter::get_schema().await,
                 &mut msg_binary,
-            )
+            ).await
             .expect("encode should have failed by here as a dependency of any writing");
             assert_eq!(&buf[10..], &msg_binary[..]);
 
@@ -1651,7 +1659,7 @@ mod writer {
                     .await
                     .expect("Resolved should pass");
             specific_writer
-                .write(obj1.clone(), &mut buf1)
+                .write(obj1.clone(), &mut buf1).await
                 .expect("Serialization expected");
             specific_writer
                 .write_value(obj1.clone(), &mut buf2)
@@ -1738,8 +1746,9 @@ mod writer {
             Ok(())
         }
 
-        #[tokio::test]
-        async fn avro_4063_flush_applies_to_inner_writer() -> TestResult {
+        #[synca::cfg(sync)]
+        #[test]
+        fn avro_4063_flush_applies_to_inner_writer() -> TestResult {
             const SCHEMA: &str = r#"
         {
             "type": "record",
@@ -1759,9 +1768,9 @@ mod writer {
                 }
             }
 
-            impl Write for TestBuffer {
+            impl std::io::Write for TestBuffer {
                 fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-                    self.0.borrow_mut().write(buf)
+                    self.0.borrow_mut().write(buf).await
                 }
 
                 fn flush(&mut self) -> std::io::Result<()> {
@@ -1781,7 +1790,7 @@ mod writer {
             record.put("exampleField", "value");
 
             writer.append(record).await?;
-            writer.flush()?;
+            writer.flush().await?;
 
             assert_eq!(
                 shared_buffer.len(),
