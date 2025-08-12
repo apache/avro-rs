@@ -1449,7 +1449,7 @@ mod test_derive {
                 {
                     "name":"optional",
                     "type": ["null", "string"],
-                    "default":"null"
+                    "default": null
                 }
             ]
         }
