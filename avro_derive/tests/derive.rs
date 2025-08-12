@@ -31,6 +31,7 @@ mod test_derive {
     use std::{borrow::Cow, sync::Mutex};
 
     use super::*;
+    use pretty_assertions::assert_eq;
 
     /// Takes in a type that implements the right combination of traits and runs it through a Serde Cycle and asserts the result is the same
     fn serde_assert<T>(obj: T)

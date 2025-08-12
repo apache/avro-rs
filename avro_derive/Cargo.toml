@@ -47,7 +47,7 @@ apache-avro = { default-features = false, path = "../avro", features = [
 ] }
 proptest = { default-features = false, version = "1.7.0", features = ["std"] }
 serde = { workspace = true }
-
+pretty_assertions = { workspace = true }
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]

@@ -95,7 +95,7 @@ apache-avro-test-helper = { default-features = false, version = "0.20.0", path =
 criterion = { default-features = false, version = "0.7.0" }
 hex-literal = { default-features = false, version = "1.0.0" }
 md-5 = { default-features = false, version = "0.10.6" }
-pretty_assertions = { default-features = false, version = "1.4.1", features = ["std"] }
+pretty_assertions = { workspace = true }
 serial_test = "3.2.0"
 sha2 = { default-features = false, version = "0.10.9" }
 paste = { default-features = false, version = "1.0.15" }

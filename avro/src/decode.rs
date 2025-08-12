@@ -161,87 +161,18 @@ mod decode {
                 }
             }
             Schema::Uuid => {
-                let len = decode_len(reader).await?;
-                let mut bytes = vec![0u8; len];
-                reader
-                    .read_exact(&mut bytes)
-                    .await
-                    .map_err(Details::ReadIntoBuf)?;
+                let Value::Bytes(bytes) =
+                    Box::pin(decode_internal(&Schema::Bytes, names, enclosing_namespace, reader)).await?
+                else {
+                    // Calling decode_internal with Schema::Bytes can only return a Value::Bytes or an error
+                    unreachable!();
+                };
 
-                // use a Vec to be able re-read the bytes more than once if needed
-                let mut reader = Vec::with_capacity(len + 1);
-                encode_long(len as i64, &mut reader)?;
-                reader.extend_from_slice(&bytes);
-
-                async fn decode_from_string<R, S>(
-                    reader: &mut R,
-                    names: &HashMap<Name, S>,
-                    enclosing_namespace: &Namespace,
-                ) -> AvroResult<Uuid>
-                where
-                    R: AvroRead + Unpin,
-                    S: Borrow<Schema>,
-                {
-                    match decode_internal(&Schema::String, names, enclosing_namespace, reader)
-                        .await?
-                    {
-                        Value::String(ref s) => {
-                            Uuid::from_str(s).map_err(|e| Details::ConvertStrToUuid(e).into())
-                        }
-                        value => Err(Error::new(Details::GetUuidFromStringValue(value))),
-                    }
-                }
-
-                let uuid: Uuid = if len == 16 {
-                    // most probably a Fixed schema
-                    let fixed_result = Box::pin(decode_internal(
-                        &Schema::Fixed(FixedSchema {
-                            size: 16,
-                            name: "uuid".into(),
-                            aliases: None,
-                            doc: None,
-                            default: None,
-                            attributes: Default::default(),
-                        }),
-                        names,
-                        enclosing_namespace,
-                        &mut bytes.as_slice(),
-                    ))
-                    .await;
-                    if fixed_result.is_ok() {
-                        match fixed_result? {
-                            Value::Fixed(ref size, ref bytes) => {
-                                if *size != 16 {
-                                    return Err(Details::ConvertFixedToUuid(*size).into());
-                                }
-                                Uuid::from_slice(bytes).map_err(Details::ConvertSliceToUuid)?
-                            }
-                            _ => {
-                                Box::pin(decode_from_string(
-                                    &mut reader.as_slice(),
-                                    names,
-                                    enclosing_namespace,
-                                ))
-                                .await?
-                            }
-                        }
-                    } else {
-                        // try to decode as string
-                        Box::pin(decode_from_string(
-                            &mut reader.as_slice(),
-                            names,
-                            enclosing_namespace,
-                        ))
-                        .await?
-                    }
+                let uuid = if bytes.len() == 16 {
+                    Uuid::from_slice(&bytes).map_err(Details::ConvertSliceToUuid)?
                 } else {
-                    // definitely a string
-                    Box::pin(decode_from_string(
-                        &mut reader.as_slice(),
-                        names,
-                        enclosing_namespace,
-                    ))
-                    .await?
+                    let string = std::str::from_utf8(&bytes).map_err(Details::ConvertToUtf8Error)?;
+                    Uuid::parse_str(string).map_err(Details::ConvertStrToUuid)?
                 };
                 Ok(Value::Uuid(uuid))
             }
