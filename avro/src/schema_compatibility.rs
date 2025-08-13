@@ -565,6 +565,7 @@ mod schema_compatibility {
         use apache_avro_test_helper::TestResult;
         #[synca::cfg(tokio)]
         use futures::StreamExt;
+        #[synca::cfg(sync)]
         use rstest::*;
 
         async fn int_array_schema() -> Schema {
@@ -817,7 +818,7 @@ mod schema_compatibility {
             );
         }
 
-        #[cfg_attr(feature = "tokio", tokio::test)]
+        #[synca::cfg(sync)]
         #[rstest]
         // Record type test
         #[case(
@@ -886,7 +887,7 @@ mod schema_compatibility {
             r#"{"type": "array", "items": "int"}"#,
             r#"{"type": "array", "items": "long"}"#
         )]
-        async fn test_avro_3950_match_schemas_ok(
+        fn test_avro_3950_match_schemas_ok(
             #[case] writer_schema_str: &str,
             #[case] reader_schema_str: &str,
         ) {
@@ -896,7 +897,7 @@ mod schema_compatibility {
             assert!(SchemaCompatibility::match_schemas(&writer_schema, &reader_schema).is_ok());
         }
 
-        #[cfg_attr(feature = "tokio", tokio::test)]
+        #[synca::cfg(sync)]
         #[rstest]
         // Record type test
         #[case(
@@ -1067,7 +1068,7 @@ mod schema_compatibility {
         r#"{"type": "fixed", "name": "EmployeeId", "size": 16}"#,
         CompatibilityError::Inconclusive(String::from("writers_schema"))
     )]
-        async fn test_avro_3950_match_schemas_error(
+        fn test_avro_3950_match_schemas_error(
             #[case] writer_schema_str: &str,
             #[case] reader_schema_str: &str,
             #[case] expected_error: CompatibilityError,
