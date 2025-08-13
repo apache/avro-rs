@@ -17,17 +17,11 @@
 
 use std::{
     collections::HashMap,
-    io::{Cursor, Read},
+    io::Cursor,
 };
-
-use apache_avro::{
-    Codec, Reader, Writer,
-    error::{Details, Error},
-    from_avro_datum, from_value,
-    schema::{EnumSchema, FixedSchema, Name, RecordField, RecordSchema, Schema},
-    to_avro_datum, to_value,
-    types::{Record, Value},
-};
+use std::io::Read;
+use apache_avro::{Codec, Reader, Writer, error::{Details, Error}, from_avro_datum, from_value, schema::{EnumSchema, FixedSchema, Name, RecordField, RecordSchema, Schema}, to_avro_datum, to_value, types::{Record, Value}, SchemaExt};
+use apache_avro::types::sync::ValueExt;
 use apache_avro_test_helper::{
     TestResult,
     data::{DOC_EXAMPLES, examples, valid_examples},
@@ -109,7 +103,8 @@ fn test_parse() -> TestResult {
 fn test_3799_parse_reader() -> TestResult {
     init();
     for (raw_schema, valid) in examples().iter() {
-        let schema = SchemaExt::parse_reader(&mut Cursor::new(raw_schema));
+        let mut reader: &mut (dyn Read + Unpin) = &mut Cursor::new(raw_schema);
+        let schema = SchemaExt::parse_reader(&mut reader);
         if *valid {
             assert!(
                 schema.is_ok(),
@@ -125,7 +120,7 @@ fn test_3799_parse_reader() -> TestResult {
 
     // Ensure it works for trait objects too.
     for (raw_schema, valid) in examples().iter() {
-        let reader: &mut dyn Read = &mut Cursor::new(raw_schema);
+        let reader = &mut Cursor::new(raw_schema);
         let schema = SchemaExt::parse_reader(reader);
         if *valid {
             assert!(
@@ -145,8 +140,7 @@ fn test_3799_parse_reader() -> TestResult {
 #[test]
 fn test_3799_raise_io_error_from_parse_read() -> Result<(), String> {
     // 0xDF is invalid for UTF-8.
-    let mut invalid_data = Cursor::new([0xDF]);
-
+    let mut invalid_data: &mut (dyn Read + Unpin) = &mut Cursor::new([0xDF]);
     let error = SchemaExt::parse_reader(&mut invalid_data)
         .unwrap_err()
         .into_details();
@@ -995,7 +989,7 @@ fn test_avro_3785_deserialize_namespace_with_nullable_type_containing_reference_
     };
     let avro_value = crate::to_value(foo1)?;
     assert!(
-        avro_value.validate(&writer_schema),
+        ValueExt::validate(&avro_value, &writer_schema),
         "value is valid for schema",
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;

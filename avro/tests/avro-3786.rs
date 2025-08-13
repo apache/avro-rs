@@ -15,9 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::schema::Schema;
 use apache_avro::types::Value;
-use apache_avro::{from_avro_datum, to_avro_datum, to_value};
+use apache_avro::{from_avro_datum, to_avro_datum, to_value, SchemaExt};
+use apache_avro::types::sync::ValueExt;
 use apache_avro_test_helper::TestResult;
 
 #[test]
@@ -131,7 +131,7 @@ fn avro_3786_deserialize_union_with_different_enum_order() -> TestResult {
     };
     let avro_value = to_value(foo1)?;
     assert!(
-        avro_value.validate(&writer_schema),
+        ValueExt::validate(&avro_value, &writer_schema),
         "value is valid for schema",
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;
@@ -255,7 +255,7 @@ fn avro_3786_deserialize_union_with_different_enum_order_defined_in_record() -> 
     };
     let avro_value = to_value(foo1)?;
     assert!(
-        avro_value.validate(&writer_schema),
+        ValueExt::validate(&avro_value, &writer_schema),
         "value is valid for schema",
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;
@@ -368,7 +368,7 @@ fn test_avro_3786_deserialize_union_with_different_enum_order_defined_in_record_
     };
     let avro_value = to_value(foo1)?;
     assert!(
-        avro_value.validate(&writer_schema),
+        ValueExt::validate(&avro_value, &writer_schema),
         "value is valid for schema",
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;
@@ -481,7 +481,7 @@ fn test_avro_3786_deserialize_union_with_different_enum_order_defined_in_record_
     };
     let avro_value = to_value(foo1)?;
     assert!(
-        avro_value.validate(&writer_schema),
+        ValueExt::validate(&avro_value, &writer_schema),
         "value is valid for schema",
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;
@@ -594,7 +594,7 @@ fn deserialize_union_with_different_enum_order_defined_in_record() -> TestResult
     };
     let avro_value = to_value(foo1)?;
     assert!(
-        avro_value.validate(&writer_schema),
+        ValueExt::validate(&avro_value, &writer_schema),
         "value is valid for schema",
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;
@@ -868,7 +868,7 @@ fn deserialize_union_with_record_with_enum_defined_inline_reader_has_different_i
     };
     let avro_value = to_value(foo1)?;
     assert!(
-        avro_value.validate(&writer_schema),
+        ValueExt::validate(&avro_value, &writer_schema),
         "value is valid for schema",
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;

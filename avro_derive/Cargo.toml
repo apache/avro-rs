@@ -51,3 +51,8 @@ pretty_assertions = { workspace = true }
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
+
+[[test]]
+name = "derive"
+path = "tests/derive.rs"
+required-features = ["sync"]

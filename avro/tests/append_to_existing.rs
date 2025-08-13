@@ -15,10 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{
-    AvroResult, Reader, Schema, Writer, read_marker,
-    types::{Record, Value},
-};
+use apache_avro::{AvroResult, Reader, Schema, Writer, read_marker, types::{Record, Value}, SchemaExt};
 use apache_avro_test_helper::TestResult;
 
 const SCHEMA: &str = r#"{

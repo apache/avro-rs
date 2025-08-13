@@ -15,9 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::Schema;
+use apache_avro::SchemaExt;
 use apache_avro::types::Value;
 use apache_avro::{from_avro_datum, to_avro_datum, to_value};
+use apache_avro::types::sync::ValueExt;
 use apache_avro_test_helper::TestResult;
 
 #[test]
@@ -132,7 +133,7 @@ fn avro_3787_deserialize_union_with_unknown_symbol() -> TestResult {
     };
     let avro_value = to_value(foo1)?;
     assert!(
-        avro_value.validate(&writer_schema),
+        ValueExt::validate(&avro_value, &writer_schema),
         "value is valid for schema",
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;
@@ -259,7 +260,7 @@ fn avro_3787_deserialize_union_with_unknown_symbol_no_ref() -> TestResult {
     };
     let avro_value = to_value(foo2)?;
     assert!(
-        avro_value.validate(&writer_schema),
+        ValueExt::validate(&avro_value, &writer_schema),
         "value is valid for schema",
     );
     let datum = to_avro_datum(&writer_schema, avro_value)?;

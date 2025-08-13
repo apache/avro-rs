@@ -19,15 +19,15 @@
 mod test_derive {
 
     use apache_avro::{
-        AsyncReader, AsyncSchema, AsyncWriter, AvroSchema, async_from_value,
-        derive::AvroSchemaComponent,
+        Reader, Schema, Writer, AvroSchema, from_value,
+        schema::sync::AvroSchemaComponent, schema::sync::SchemaExt,
     };
     use apache_avro_derive::*;
     use proptest::prelude::*;
     use serde::{Deserialize, Serialize, de::DeserializeOwned};
     use std::collections::HashMap;
 
-    use apache_avro::schema::tokio::{Alias, EnumSchema, RecordSchema};
+    use apache_avro::schema::{Alias, EnumSchema, RecordSchema};
     use std::{borrow::Cow, sync::Mutex};
 
     use super::*;

@@ -15,10 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{
-    Codec, DeflateSettings, Reader, Schema, Writer,
-    types::{Record, Value},
-};
+use apache_avro::{Codec, DeflateSettings, Reader, Writer, types::{Record, Value}, SchemaExt};
 use apache_avro_test_helper::TestResult;
 use miniz_oxide::deflate::CompressionLevel;
 

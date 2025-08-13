@@ -1730,8 +1730,8 @@ mod schema {
         }
 
         /// Create a `Schema` from a reader which implements [`Read`].
-        pub async fn parse_reader<R: AvroRead>(
-            reader: &mut (impl AvroRead + ?Sized + Unpin),
+        pub async fn parse_reader<R: AvroRead + Unpin>(
+            reader: &mut R,
         ) -> AvroResult<Schema> {
             let mut buf = String::new();
             match reader.read_to_string(&mut buf).await {

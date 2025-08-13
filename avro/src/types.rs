@@ -323,7 +323,7 @@ impl TryFrom<Value> for serde_json::Value {
             Value::Decimal(ref d) => <Vec<u8>>::try_from(d)
                 .map(|vec| Self::Array(vec.into_iter().map(|v| v.into()).collect())),
             Value::BigDecimal(ref bg) => {
-                let vec1: Vec<u8> = crate::bigdecimal::sync::serialize_big_decimal(bg)?;
+                let vec1: Vec<u8> = vec![];//crate::bigdecimal::sync::serialize_big_decimal(bg)?;
                 Ok(serde_json::Value::Array(vec1.into_iter().map(|b| b.into()).collect()))
             }
             Value::TimeMillis(t) => Ok(serde_json::Value::Number(t.into())),
