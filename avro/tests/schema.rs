@@ -15,18 +15,22 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::{
-    collections::HashMap,
-    io::Cursor,
-};
-use std::io::Read;
-use apache_avro::{Codec, Reader, Writer, error::{Details, Error}, from_avro_datum, from_value, schema::{EnumSchema, FixedSchema, Name, RecordField, RecordSchema, Schema}, to_avro_datum, to_value, types::{Record, Value}, SchemaExt};
 use apache_avro::types::sync::ValueExt;
+use apache_avro::{
+    Codec, Reader, SchemaExt, Writer,
+    error::{Details, Error},
+    from_avro_datum, from_value,
+    schema::{EnumSchema, FixedSchema, Name, RecordField, RecordSchema, Schema},
+    to_avro_datum, to_value,
+    types::{Record, Value},
+};
 use apache_avro_test_helper::{
     TestResult,
     data::{DOC_EXAMPLES, examples, valid_examples},
     init,
 };
+use std::io::Read;
+use std::{collections::HashMap, io::Cursor};
 
 #[test]
 fn test_correct_recursive_extraction() -> TestResult {

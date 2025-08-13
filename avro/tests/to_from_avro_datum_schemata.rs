@@ -15,7 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{Codec, Reader, Schema, Writer, from_avro_datum_reader_schemata, from_avro_datum_schemata, to_avro_datum_schemata, types::Value, SchemaExt};
+use apache_avro::{
+    Codec, Reader, Schema, SchemaExt, Writer, from_avro_datum_reader_schemata,
+    from_avro_datum_schemata, to_avro_datum_schemata, types::Value,
+};
 use apache_avro_test_helper::{TestResult, init};
 
 static SCHEMA_A_STR: &str = r#"{

@@ -15,7 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{Codec, Schema, Writer, types::{Record, Value}, SchemaExt};
+use apache_avro::{
+    Codec, Schema, SchemaExt, Writer,
+    types::{Record, Value},
+};
 use std::{
     collections::HashMap,
     error::Error,
@@ -105,7 +108,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn write_user_metadata<W: Write + Unpin>(writer: &mut Writer<BufWriter<W>>) -> Result<(), Box<dyn Error>> {
+fn write_user_metadata<W: Write + Unpin>(
+    writer: &mut Writer<BufWriter<W>>,
+) -> Result<(), Box<dyn Error>> {
     writer.add_user_metadata("user_metadata".to_string(), b"someByteArray")?;
 
     Ok(())

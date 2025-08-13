@@ -19,8 +19,8 @@
 mod test_derive {
 
     use apache_avro::{
-        Reader, Schema, Writer, AvroSchema, from_value,
-        schema::sync::AvroSchemaComponent, schema::sync::SchemaExt,
+        AvroSchema, Reader, Schema, Writer, from_value, schema::sync::AvroSchemaComponent,
+        schema::sync::SchemaExt,
     };
     use apache_avro_derive::*;
     use proptest::prelude::*;

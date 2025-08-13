@@ -930,16 +930,16 @@ pub use reader::tokio::{
     from_avro_datum_reader_schemata as async_from_avro_datum_reader_schemata,
     from_avro_datum_schemata as async_from_avro_datum_schemata, read_marker as async_read_marker,
 };
-pub use schema::Schema;
 pub use schema::AvroSchema;
-#[cfg(feature = "sync")]
-pub use ser::sync::to_value;
-#[cfg(feature = "tokio")]
-pub use ser::tokio::to_value as async_to_value;
+pub use schema::Schema;
 #[cfg(feature = "sync")]
 pub use schema::sync::SchemaExt;
 #[cfg(feature = "tokio")]
 pub use schema::tokio::SchemaExt as AsyncSchemaExt;
+#[cfg(feature = "sync")]
+pub use ser::sync::to_value;
+#[cfg(feature = "tokio")]
+pub use ser::tokio::to_value as async_to_value;
 pub use util::{max_allocation_bytes, set_serde_human_readable};
 pub use uuid::Uuid;
 #[cfg(feature = "sync")]

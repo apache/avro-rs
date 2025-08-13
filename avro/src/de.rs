@@ -797,8 +797,8 @@ mod de {
 
     #[cfg(test)]
     mod tests {
-        use crate::schema::tokio::SchemaExt;
         use crate::reader::tokio::from_avro_datum;
+        use crate::schema::tokio::SchemaExt;
         use crate::ser::tokio::to_value;
         use crate::writer::tokio::to_avro_datum;
         use num_bigint::BigInt;

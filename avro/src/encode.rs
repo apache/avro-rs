@@ -58,14 +58,20 @@ mod encode {
     use log::error;
     use std::{borrow::Borrow, collections::HashMap};
 
-
     pub async fn encode<W: AvroWrite + Unpin>(
         value: &Value,
         schema: &Schema,
         writer: &mut W,
     ) -> AvroResult<usize> {
         let rs = ResolvedSchema::try_from(schema)?;
-        Box::pin(encode_internal(value, schema, rs.get_names(), &None, writer)).await
+        Box::pin(encode_internal(
+            value,
+            schema,
+            rs.get_names(),
+            &None,
+            writer,
+        ))
+        .await
     }
 
     pub(crate) async fn encode_bytes<B: AsRef<[u8]> + ?Sized, W: AvroWrite + Unpin>(
@@ -126,7 +132,8 @@ mod encode {
                 }
             }
             Value::Boolean(b) => writer
-                .write(&[u8::from(*b)]).await
+                .write(&[u8::from(*b)])
+                .await
                 .map_err(|e| Details::WriteBytes(e).into()),
             // Pattern | Pattern here to signify that these _must_ have the same encoding.
             Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => encode_int(*i, writer).await,
@@ -139,10 +146,12 @@ mod encode {
             | Value::LocalTimestampNanos(i)
             | Value::TimeMicros(i) => encode_long(*i, writer).await,
             Value::Float(x) => writer
-                .write(&x.to_le_bytes()).await
+                .write(&x.to_le_bytes())
+                .await
                 .map_err(|e| Details::WriteBytes(e).into()),
             Value::Double(x) => writer
-                .write(&x.to_le_bytes()).await
+                .write(&x.to_le_bytes())
+                .await
                 .map_err(|e| Details::WriteBytes(e).into()),
             Value::Decimal(decimal) => match schema {
                 Schema::Decimal(DecimalSchema { inner, .. }) => match *inner.clone() {
@@ -154,7 +163,9 @@ mod encode {
                         }
                         encode(&Value::Fixed(size, bytes), inner, writer).await
                     }
-                    Schema::Bytes => encode(&Value::Bytes(decimal.try_into()?), inner, writer).await,
+                    Schema::Bytes => {
+                        encode(&Value::Bytes(decimal.try_into()?), inner, writer).await
+                    }
                     _ => {
                         Err(Details::ResolveDecimalSchema(SchemaKind::from(*inner.clone())).into())
                     }
@@ -168,7 +179,8 @@ mod encode {
             &Value::Duration(duration) => {
                 let slice: [u8; 12] = duration.into();
                 writer
-                    .write(&slice).await
+                    .write(&slice)
+                    .await
                     .map_err(|e| Details::WriteBytes(e).into())
             }
             Value::Uuid(uuid) => match *schema {
@@ -198,13 +210,15 @@ mod encode {
             Value::BigDecimal(bg) => {
                 let buf: Vec<u8> = serialize_big_decimal(bg).await?;
                 writer
-                    .write(buf.as_slice()).await
+                    .write(buf.as_slice())
+                    .await
                     .map_err(|e| Details::WriteBytes(e).into())
             }
             Value::Bytes(bytes) => match *schema {
                 Schema::Bytes => encode_bytes(bytes, writer).await,
                 Schema::Fixed { .. } => writer
-                    .write(bytes.as_slice()).await
+                    .write(bytes.as_slice())
+                    .await
                     .map_err(|e| Details::WriteBytes(e).into()),
                 _ => Err(Details::EncodeValueAsSchemaError {
                     value_kind: ValueKind::Bytes,
@@ -229,7 +243,8 @@ mod encode {
                 .into()),
             },
             Value::Fixed(_, bytes) => writer
-                .write(bytes.as_slice()).await
+                .write(bytes.as_slice())
+                .await
                 .map_err(|e| Details::WriteBytes(e).into()),
             Value::Enum(i, _) => encode_int(*i as i32, writer).await,
             Value::Union(idx, item) => {
@@ -366,7 +381,8 @@ mod encode {
                             names,
                             enclosing_namespace,
                             &mut union_buffer,
-                        )).await;
+                        ))
+                        .await;
                         match encode_res {
                             Ok(_) => {
                                 return writer
@@ -1044,7 +1060,8 @@ mod encode {
             let value = Value::Uuid(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")?);
 
             let mut buffer = Vec::new();
-            match encode(&value, &schema, &mut buffer).await
+            match encode(&value, &schema, &mut buffer)
+                .await
                 .map_err(Error::into_details)
             {
                 Err(Details::ConvertFixedToUuid(actual)) => {

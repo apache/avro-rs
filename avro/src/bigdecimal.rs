@@ -83,7 +83,8 @@ mod bigdecimal {
         use tokio::io::AsyncReadExt;
 
         bytes
-            .read_exact(&mut big_decimal_buffer[..]).await
+            .read_exact(&mut big_decimal_buffer[..])
+            .await
             .map_err(Details::ReadDouble)?;
 
         match decode_long(&mut bytes).await {
@@ -100,8 +101,8 @@ mod bigdecimal {
     mod tests {
         use super::*;
         use crate::{
-            codec::tokio::Codec, error::Error, reader::tokio::Reader,
-            schema::tokio::SchemaExt, types::Record, writer::tokio::Writer,
+            codec::tokio::Codec, error::Error, reader::tokio::Reader, schema::tokio::SchemaExt,
+            types::Record, writer::tokio::Writer,
         };
         use apache_avro_test_helper::TestResult;
         use bigdecimal::{One, Zero};

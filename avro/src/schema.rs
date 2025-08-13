@@ -647,7 +647,6 @@ const RESERVED_FIELDS: &[&str] = &[
     "scale",
 ];
 
-
 impl std::fmt::Display for SchemaFingerprint {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
@@ -1347,7 +1346,6 @@ pub trait AvroSchema {
     fn get_schema() -> Schema;
 }
 
-
 #[cfg(feature = "derive")]
 pub mod derive {
     use super::*;
@@ -1402,10 +1400,8 @@ pub mod derive {
     ///}
     /// ```
     pub trait AvroSchemaComponent {
-        fn get_schema_in_ctxt(
-            named_schemas: &mut Names,
-            enclosing_namespace: &Namespace,
-        ) -> Schema;
+        fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace)
+        -> Schema;
     }
 
     impl<T> AvroSchema for T
@@ -1561,16 +1557,15 @@ mod schema {
     use crate::AvroResult;
     use crate::error::{Details, Error};
     use crate::schema::{
-        Alias, Aliases, DecimalMetadata, DecimalSchema, EnumSchema,
-        FixedSchema, Name, Names, Namespace, Precision, RecordField, RecordFieldOrder,
-        RecordSchema, ResolvedSchema, Scale, Schema, SchemaKind, UnionSchema,
+        Alias, Aliases, DecimalMetadata, DecimalSchema, EnumSchema, FixedSchema, Name, Names,
+        Namespace, Precision, RecordField, RecordFieldOrder, RecordSchema, ResolvedSchema, Scale,
+        Schema, SchemaKind, UnionSchema,
     };
+    use crate::types::tokio::ValueExt;
     use crate::util::MapHelper;
     use crate::{
         types::{Value, ValueKind},
-        validator::{
-            validate_enum_symbol_name, validate_record_field_name,
-        },
+        validator::{validate_enum_symbol_name, validate_record_field_name},
     };
     use log::{debug, error, warn};
     #[synca::cfg(sync)]
@@ -1584,7 +1579,6 @@ mod schema {
     use tokio::io::AsyncRead as AvroRead;
     #[cfg(feature = "tokio")]
     use tokio::io::AsyncReadExt;
-    use crate::types::tokio::ValueExt;
 
     pub struct RecordFieldExt;
 
@@ -1662,9 +1656,15 @@ mod schema {
 
                         let mut resolved = false;
                         for schema in schemas {
-                            if ValueExt::resolve_internal(&avro_value, schema, names, &schema.namespace(), &None)
-                                .await
-                                .is_ok()
+                            if ValueExt::resolve_internal(
+                                &avro_value,
+                                schema,
+                                names,
+                                &schema.namespace(),
+                                &None,
+                            )
+                            .await
+                            .is_ok()
                             {
                                 resolved = true;
                                 break;
@@ -1684,9 +1684,15 @@ mod schema {
                         }
                     }
                     _ => {
-                        let resolved = ValueExt::resolve_internal(&avro_value, field_schema, names, &field_schema.namespace(), &None)
-                            .await
-                            .is_ok();
+                        let resolved = ValueExt::resolve_internal(
+                            &avro_value,
+                            field_schema,
+                            names,
+                            &field_schema.namespace(),
+                            &None,
+                        )
+                        .await
+                        .is_ok();
 
                         if !resolved {
                             return Err(Details::GetDefaultRecordField(
@@ -1925,9 +1931,7 @@ mod schema {
         }
 
         /// Create a `Schema` from a reader which implements [`Read`].
-        pub async fn parse_reader<R: AvroRead + Unpin>(
-            reader: &mut R,
-        ) -> AvroResult<Schema> {
+        pub async fn parse_reader<R: AvroRead + Unpin>(reader: &mut R) -> AvroResult<Schema> {
             let mut buf = String::new();
             match reader.read_to_string(&mut buf).await {
                 Ok(_) => Self::parse_str(&buf).await,
@@ -2569,8 +2573,9 @@ mod schema {
 
             if let Some(ref json_value) = default {
                 let value = Value::from(json_value.clone());
-                let resolved = ValueExt::resolve_enum(&value, &symbols, &Some(json_value.to_string()), &None)
-                    .is_ok();
+                let resolved =
+                    ValueExt::resolve_enum(&value, &symbols, &Some(json_value.to_string()), &None)
+                        .is_ok();
                 if !resolved {
                     return Err(Details::GetEnumDefault {
                         symbol: json_value.to_string(),
@@ -2751,6 +2756,8 @@ mod schema {
     #[cfg(test)]
     mod tests {
         use super::*;
+        #[synca::cfg(sync)]
+        use crate::writer::sync::SpecificSingleObjectWriter;
         use crate::{
             de::tokio::from_value,
             error::Details,
@@ -2759,14 +2766,12 @@ mod schema {
             ser::tokio::to_value,
             writer::tokio::{Writer, to_avro_datum},
         };
-        #[synca::cfg(sync)]
-        use crate::writer::sync::SpecificSingleObjectWriter;
         use apache_avro_test_helper::{
             TestResult,
             logger::{assert_logged, assert_not_logged},
         };
-        use serde_json::json;
         use serde::{Deserialize, Serialize};
+        use serde_json::json;
         #[synca::cfg(sync)]
         use serial_test::serial;
         #[synca::cfg(sync)]
@@ -2874,7 +2879,9 @@ mod schema {
                 .position(1)
                 .build();
 
-            assert!(!RecordFieldExt::is_nullable(&non_nullable_record_field.schema));
+            assert!(!RecordFieldExt::is_nullable(
+                &non_nullable_record_field.schema
+            ));
             Ok(())
         }
 
@@ -5398,15 +5405,7 @@ mod schema {
         "#;
 
             #[derive(
-                Debug,
-                PartialEq,
-                Eq,
-                Hash,
-                PartialOrd,
-                Ord,
-                Clone,
-                Deserialize,
-                Serialize,
+                Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone, Deserialize, Serialize,
             )]
             pub enum Bar {
                 #[serde(rename = "bar0")]
@@ -5444,15 +5443,7 @@ mod schema {
         #[tokio::test]
         async fn avro_3755_deserialize() -> TestResult {
             #[derive(
-                Debug,
-                PartialEq,
-                Eq,
-                Hash,
-                PartialOrd,
-                Ord,
-                Clone,
-                Deserialize,
-                Serialize,
+                Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone, Deserialize, Serialize,
             )]
             pub enum Bar {
                 #[serde(rename = "bar0")]

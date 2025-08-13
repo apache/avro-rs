@@ -306,7 +306,7 @@ mod tests {
     use crate::de::tokio::from_value;
     use crate::schema::tokio::SchemaExt;
     use crate::ser::tokio::to_value;
-    use crate::types::{tokio::ValueExt, Value};
+    use crate::types::{Value, tokio::ValueExt};
     use apache_avro_test_helper::TestResult;
     use serde::{Deserialize, Serialize};
 

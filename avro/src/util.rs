@@ -185,7 +185,8 @@ mod util {
             }
         }
         writer
-            .write(&buffer[..i]).await
+            .write(&buffer[..i])
+            .await
             .map_err(|e| Details::WriteBytes(e).into())
     }
 

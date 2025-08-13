@@ -159,8 +159,13 @@ mod decode {
                 }
             }
             Schema::Uuid => {
-                let Value::Bytes(bytes) =
-                    Box::pin(decode_internal(&Schema::Bytes, names, enclosing_namespace, reader)).await?
+                let Value::Bytes(bytes) = Box::pin(decode_internal(
+                    &Schema::Bytes,
+                    names,
+                    enclosing_namespace,
+                    reader,
+                ))
+                .await?
                 else {
                     // Calling decode_internal with Schema::Bytes can only return a Value::Bytes or an error
                     unreachable!();
@@ -169,7 +174,8 @@ mod decode {
                 let uuid = if bytes.len() == 16 {
                     Uuid::from_slice(&bytes).map_err(Details::ConvertSliceToUuid)?
                 } else {
-                    let string = std::str::from_utf8(&bytes).map_err(Details::ConvertToUtf8Error)?;
+                    let string =
+                        std::str::from_utf8(&bytes).map_err(Details::ConvertToUtf8Error)?;
                     Uuid::parse_str(string).map_err(Details::ConvertStrToUuid)?
                 };
                 Ok(Value::Uuid(uuid))
@@ -390,6 +396,7 @@ mod decode {
     #[cfg(test)]
     #[allow(clippy::expect_fun_call)]
     mod tests {
+        use crate::schema::tokio::SchemaExt;
         use crate::{
             decimal::Decimal,
             decode::tokio::decode,
@@ -397,7 +404,6 @@ mod decode {
             schema::{DecimalSchema, FixedSchema, Name, Schema},
             types::Value,
         };
-        use crate::schema::tokio::SchemaExt;
         use apache_avro_test_helper::TestResult;
         use pretty_assertions::assert_eq;
         use std::collections::HashMap;
@@ -467,7 +473,9 @@ mod decode {
             let value = Value::Decimal(Decimal::from(bigint.to_signed_bytes_be()));
 
             let mut buffer = Vec::new();
-            encode(&value, &schema, &mut buffer).await.expect(&success(&value, &schema));
+            encode(&value, &schema, &mut buffer)
+                .await
+                .expect(&success(&value, &schema));
 
             let mut bytes = &buffer[..];
             let result = decode(&schema, &mut bytes).await?;
@@ -497,7 +505,9 @@ mod decode {
             ));
             let mut buffer = Vec::<u8>::new();
 
-            encode(&value, &schema, &mut buffer).await.expect(&success(&value, &schema));
+            encode(&value, &schema, &mut buffer)
+                .await
+                .expect(&success(&value, &schema));
             let mut bytes: &[u8] = &buffer[..];
             let result = decode(&schema, &mut bytes).await?;
             assert_eq!(result, value);
@@ -541,7 +551,9 @@ mod decode {
                 ("b".into(), inner_value2.clone()),
             ]);
             let mut buf = Vec::new();
-            encode(&outer_value1, &schema, &mut buf).await.expect(&success(&outer_value1, &schema));
+            encode(&outer_value1, &schema, &mut buf)
+                .await
+                .expect(&success(&outer_value1, &schema));
             assert!(!buf.is_empty());
             let mut bytes = &buf[..];
             assert_eq!(
@@ -557,7 +569,9 @@ mod decode {
                 ("a".into(), Value::Union(0, Box::new(Value::Null))),
                 ("b".into(), inner_value2),
             ]);
-            encode(&outer_value2, &schema, &mut buf).await.expect(&success(&outer_value2, &schema));
+            encode(&outer_value2, &schema, &mut buf)
+                .await
+                .expect(&success(&outer_value2, &schema));
             let mut bytes = &buf[..];
             assert_eq!(
                 outer_value2,
@@ -608,7 +622,9 @@ mod decode {
                 ("b".into(), inner_value2),
             ]);
             let mut buf = Vec::new();
-            encode(&outer_value, &schema, &mut buf).await.expect(&success(&outer_value, &schema));
+            encode(&outer_value, &schema, &mut buf)
+                .await
+                .expect(&success(&outer_value, &schema));
             let mut bytes = &buf[..];
             assert_eq!(
                 outer_value,
@@ -662,7 +678,9 @@ mod decode {
                 ("b".into(), inner_value2),
             ]);
             let mut buf = Vec::new();
-            encode(&outer_value, &schema, &mut buf).await.expect(&success(&outer_value, &schema));
+            encode(&outer_value, &schema, &mut buf)
+                .await
+                .expect(&success(&outer_value, &schema));
             let mut bytes = &buf[..];
             assert_eq!(
                 outer_value,
@@ -753,7 +771,8 @@ mod decode {
             ]);
 
             let mut buf = Vec::new();
-            encode(&outer_record_variation_1, &schema, &mut buf).await
+            encode(&outer_record_variation_1, &schema, &mut buf)
+                .await
                 .expect(&success(&outer_record_variation_1, &schema));
             let mut bytes = &buf[..];
             assert_eq!(
@@ -765,7 +784,8 @@ mod decode {
             );
 
             let mut buf = Vec::new();
-            encode(&outer_record_variation_2, &schema, &mut buf).await
+            encode(&outer_record_variation_2, &schema, &mut buf)
+                .await
                 .expect(&success(&outer_record_variation_2, &schema));
             let mut bytes = &buf[..];
             assert_eq!(
@@ -777,7 +797,8 @@ mod decode {
             );
 
             let mut buf = Vec::new();
-            encode(&outer_record_variation_3, &schema, &mut buf).await
+            encode(&outer_record_variation_3, &schema, &mut buf)
+                .await
                 .expect(&success(&outer_record_variation_3, &schema));
             let mut bytes = &buf[..];
             assert_eq!(
@@ -870,7 +891,8 @@ mod decode {
             ]);
 
             let mut buf = Vec::new();
-            encode(&outer_record_variation_1, &schema, &mut buf).await
+            encode(&outer_record_variation_1, &schema, &mut buf)
+                .await
                 .expect(&success(&outer_record_variation_1, &schema));
             let mut bytes = &buf[..];
             assert_eq!(
@@ -882,7 +904,8 @@ mod decode {
             );
 
             let mut buf = Vec::new();
-            encode(&outer_record_variation_2, &schema, &mut buf).await
+            encode(&outer_record_variation_2, &schema, &mut buf)
+                .await
                 .expect(&success(&outer_record_variation_2, &schema));
             let mut bytes = &buf[..];
             assert_eq!(
@@ -894,7 +917,8 @@ mod decode {
             );
 
             let mut buf = Vec::new();
-            encode(&outer_record_variation_3, &schema, &mut buf).await
+            encode(&outer_record_variation_3, &schema, &mut buf)
+                .await
                 .expect(&success(&outer_record_variation_3, &schema));
             let mut bytes = &buf[..];
             assert_eq!(
@@ -914,7 +938,9 @@ mod decode {
             let value = Value::Uuid(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")?);
 
             let mut buffer = Vec::new();
-            encode(&value, &schema, &mut buffer).await.expect(&success(&value, &schema));
+            encode(&value, &schema, &mut buffer)
+                .await
+                .expect(&success(&value, &schema));
 
             let result = decode(&Schema::Uuid, &mut &buffer[..]).await?;
             assert_eq!(result, value);
@@ -935,7 +961,9 @@ mod decode {
             let value = Value::Uuid(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")?);
 
             let mut buffer = Vec::new();
-            encode(&value, &schema, &mut buffer).await.expect(&success(&value, &schema));
+            encode(&value, &schema, &mut buffer)
+                .await
+                .expect(&success(&value, &schema));
 
             let result = decode(&Schema::Uuid, &mut &buffer[..]).await?;
             assert_eq!(result, value);

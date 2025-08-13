@@ -470,8 +470,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
         let ref_schema = self.names.get(full_name.as_ref()).clone();
 
-        ref_schema
-            .ok_or_else(|| Details::SchemaResolutionError(full_name.as_ref().clone()).into())
+        ref_schema.ok_or_else(|| Details::SchemaResolutionError(full_name.as_ref().clone()).into())
     }
 
     fn write_bytes(&mut self, bytes: &[u8]) -> Result<usize, Error> {
@@ -483,11 +482,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         Ok(bytes_written)
     }
 
-    fn serialize_bool_with_schema(
-        &mut self,
-        value: bool,
-        schema: &Schema,
-    ) -> Result<usize, Error> {
+    fn serialize_bool_with_schema(&mut self, value: bool, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| {
             Error::new(Details::SerializeValueWithSchema {
                 value_type: "bool",
@@ -520,11 +515,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         }
     }
 
-    fn serialize_i32_with_schema(
-        &mut self,
-        value: i32,
-        schema: &Schema,
-    ) -> Result<usize, Error> {
+    fn serialize_i32_with_schema(&mut self, value: i32, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| {
             Error::new(Details::SerializeValueWithSchema {
                 value_type: "int (i8 | i16 | i32)",
@@ -534,9 +525,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         };
 
         match schema {
-            Schema::Int | Schema::TimeMillis | Schema::Date => {
-                encode_int(value, &mut self.writer)
-            }
+            Schema::Int | Schema::TimeMillis | Schema::Date => encode_int(value, &mut self.writer),
             Schema::Long
             | Schema::TimeMicros
             | Schema::TimestampMillis
@@ -573,11 +562,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         }
     }
 
-    fn serialize_i64_with_schema(
-        &mut self,
-        value: i64,
-        schema: &Schema,
-    ) -> Result<usize, Error> {
+    fn serialize_i64_with_schema(&mut self, value: i64, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| {
             Error::new(Details::SerializeValueWithSchema {
                 value_type: "i64",
@@ -680,11 +665,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         }
     }
 
-    fn serialize_u32_with_schema(
-        &mut self,
-        value: u32,
-        schema: &Schema,
-    ) -> Result<usize, Error> {
+    fn serialize_u32_with_schema(&mut self, value: u32, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| {
             Error::new(Details::SerializeValueWithSchema {
                 value_type: "unsigned int (u16 | u32)",
@@ -735,11 +716,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         }
     }
 
-    fn serialize_u64_with_schema(
-        &mut self,
-        value: u64,
-        schema: &Schema,
-    ) -> Result<usize, Error> {
+    fn serialize_u64_with_schema(&mut self, value: u64, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| {
             Error::new(Details::SerializeValueWithSchema {
                 value_type: "u64",
@@ -795,11 +772,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         }
     }
 
-    fn serialize_f32_with_schema(
-        &mut self,
-        value: f32,
-        schema: &Schema,
-    ) -> Result<usize, Error> {
+    fn serialize_f32_with_schema(&mut self, value: f32, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| {
             Error::new(Details::SerializeValueWithSchema {
                 value_type: "f32",
@@ -836,11 +809,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         }
     }
 
-    fn serialize_f64_with_schema(
-        &mut self,
-        value: f64,
-        schema: &Schema,
-    ) -> Result<usize, Error> {
+    fn serialize_f64_with_schema(&mut self, value: f64, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| {
             Error::new(Details::SerializeValueWithSchema {
                 value_type: "f64",
@@ -877,11 +846,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         }
     }
 
-    fn serialize_char_with_schema(
-        &mut self,
-        value: char,
-        schema: &Schema,
-    ) -> Result<usize, Error> {
+    fn serialize_char_with_schema(&mut self, value: char, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| {
             Error::new(Details::SerializeValueWithSchema {
                 value_type: "char",
@@ -910,11 +875,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         }
     }
 
-    fn serialize_str_with_schema(
-        &mut self,
-        value: &str,
-        schema: &Schema,
-    ) -> Result<usize, Error> {
+    fn serialize_str_with_schema(&mut self, value: &str, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| {
             Error::new(Details::SerializeValueWithSchema {
                 value_type: "string",
@@ -1023,8 +984,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
             }
             Schema::Decimal(decimal_schema) => match decimal_schema.inner.as_ref() {
                 Schema::Bytes => self.write_bytes(value),
-                Schema::Fixed(fixed_schema) => match fixed_schema.size.checked_sub(value.len())
-                {
+                Schema::Fixed(fixed_schema) => match fixed_schema.size.checked_sub(value.len()) {
                     Some(pad) => {
                         let pad_val = match value.len() {
                             0 => 0,
@@ -1108,11 +1068,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         }
     }
 
-    fn serialize_some_with_schema<T>(
-        &mut self,
-        value: &T,
-        schema: &Schema,
-    ) -> Result<usize, Error>
+    fn serialize_some_with_schema<T>(&mut self, value: &T, schema: &Schema) -> Result<usize, Error>
     where
         T: ?Sized + ser::Serialize,
     {
@@ -1180,13 +1136,11 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     match variant_schema {
                         Schema::Record(record_schema) if record_schema.fields.is_empty() => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            return self
-                                .serialize_unit_struct_with_schema(name, variant_schema);
+                            return self.serialize_unit_struct_with_schema(name, variant_schema);
                         }
                         Schema::Null | Schema::Ref { name: _ } => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            return self
-                                .serialize_unit_struct_with_schema(name, variant_schema);
+                            return self.serialize_unit_struct_with_schema(name, variant_schema);
                         }
                         _ => { /* skip */ }
                     }
@@ -1245,12 +1199,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
             }
             Schema::Ref { name: ref_name } => {
                 let ref_schema = self.get_ref_schema(ref_name)?;
-                self.serialize_unit_variant_with_schema(
-                    name,
-                    variant_index,
-                    variant,
-                    ref_schema,
-                )
+                self.serialize_unit_variant_with_schema(name, variant_index, variant, ref_schema)
             }
             unsupported => Err(create_error(format!(
                 "Unsupported schema: {unsupported:?}. Expected: Enum, Union or Ref"
@@ -1478,13 +1427,13 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         match schema {
             Schema::Union(union_schema) => {
                 let variant_schema = union_schema
-                .schemas
-                .get(variant_index as usize)
-                .ok_or_else(|| {
-                    create_error(format!(
-                        "Cannot find a variant at position {variant_index} in {union_schema:?}"
-                    ))
-                })?;
+                    .schemas
+                    .get(variant_index as usize)
+                    .ok_or_else(|| {
+                        create_error(format!(
+                            "Cannot find a variant at position {variant_index} in {union_schema:?}"
+                        ))
+                    })?;
 
                 encode_int(variant_index as i32, &mut self.writer)?;
                 self.serialize_tuple_struct_with_schema(variant, len, variant_schema)
@@ -1567,19 +1516,11 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                             if inner.fields.len() == len && inner.name.name == name =>
                         {
                             encode_int(i as i32, &mut *self.writer)?;
-                            return self.serialize_struct_with_schema(
-                                name,
-                                len,
-                                variant_schema,
-                            );
+                            return self.serialize_struct_with_schema(name, len, variant_schema);
                         }
                         Schema::Ref { name: _ } => {
                             encode_int(i as i32, &mut *self.writer)?;
-                            return self.serialize_struct_with_schema(
-                                name,
-                                len,
-                                variant_schema,
-                            );
+                            return self.serialize_struct_with_schema(name, len, variant_schema);
                         }
                         _ => { /* skip */ }
                     }
@@ -1613,13 +1554,13 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         match schema {
             Schema::Union(union_schema) => {
                 let variant_schema = union_schema
-                .schemas
-                .get(variant_index as usize)
-                .ok_or_else(|| {
-                    create_error(format!(
-                        "Cannot find variant at position {variant_index} in {union_schema:?}"
-                    ))
-                })?;
+                    .schemas
+                    .get(variant_index as usize)
+                    .ok_or_else(|| {
+                        create_error(format!(
+                            "Cannot find variant at position {variant_index} in {union_schema:?}"
+                        ))
+                    })?;
 
                 encode_int(variant_index as i32, &mut self.writer)?;
                 self.serialize_struct_with_schema(variant, len, variant_schema)
@@ -1826,8 +1767,7 @@ mod tests {
     use super::*;
     use crate::schema::sync::SchemaExt;
     use crate::{
-        Days, Duration, Millis, Months, decimal::Decimal, error::Details,
-        schema::ResolvedSchema,
+        Days, Duration, Millis, Months, decimal::Decimal, error::Details, schema::ResolvedSchema,
     };
     use apache_avro_test_helper::TestResult;
     use bigdecimal::BigDecimal;
@@ -1847,8 +1787,7 @@ mod tests {
         let schema = Schema::Null;
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         ().serialize(&mut serializer)?;
         None::<()>.serialize(&mut serializer)?;
@@ -1867,8 +1806,7 @@ mod tests {
         let schema = Schema::Boolean;
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         true.serialize(&mut serializer)?;
         false.serialize(&mut serializer)?;
@@ -1885,8 +1823,7 @@ mod tests {
         let schema = Schema::Int;
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         4u8.serialize(&mut serializer)?;
         31u16.serialize(&mut serializer)?;
@@ -1907,8 +1844,7 @@ mod tests {
         let schema = Schema::Long;
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         4u8.serialize(&mut serializer)?;
         31u16.serialize(&mut serializer)?;
@@ -1934,8 +1870,7 @@ mod tests {
         let schema = Schema::Float;
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         4.7f32.serialize(&mut serializer)?;
         (-14.1f64).serialize(&mut serializer)?;
@@ -1952,8 +1887,7 @@ mod tests {
         let schema = Schema::Float;
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         4.7f32.serialize(&mut serializer)?;
         (-14.1f64).serialize(&mut serializer)?;
@@ -1970,8 +1904,7 @@ mod tests {
         let schema = Schema::Bytes;
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         'a'.serialize(&mut serializer)?;
         "test".serialize(&mut serializer)?;
@@ -1992,8 +1925,7 @@ mod tests {
         let schema = Schema::String;
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         'a'.serialize(&mut serializer)?;
         "test".serialize(&mut serializer)?;
@@ -2020,8 +1952,7 @@ mod tests {
             {"name": "intField", "type": "int"}
         ]
     }"#,
-        )
-        ?;
+        )?;
 
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
@@ -2039,8 +1970,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         let good_record = GoodTestRecord {
             string_field: String::from("test"),
@@ -2070,13 +2000,11 @@ mod tests {
         "name": "EmptyRecord",
         "fields": []
     }"#,
-        )
-        ?;
+        )?;
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         #[derive(Serialize)]
         struct EmptyRecord;
@@ -2123,8 +2051,7 @@ mod tests {
         "name": "Suit",
         "symbols": ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
     }"#,
-        )
-        ?;
+        )?;
 
         #[derive(Serialize)]
         enum Suit {
@@ -2136,8 +2063,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         Suit::Spades.serialize(&mut serializer)?;
         Suit::Hearts.serialize(&mut serializer)?;
@@ -2171,13 +2097,11 @@ mod tests {
         "type": "array",
         "items": "long"
     }"#,
-        )
-        ?;
+        )?;
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         let arr: Vec<i64> = vec![10, 5, 400];
         arr.serialize(&mut serializer)?;
@@ -2210,13 +2134,11 @@ mod tests {
         "type": "map",
         "values": "long"
     }"#,
-        )
-        ?;
+        )?;
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         let mut map: BTreeMap<String, i64> = BTreeMap::new();
         map.insert(String::from("item1"), 10);
@@ -2242,8 +2164,8 @@ mod tests {
         assert_eq!(
             buffer.as_slice(),
             &[
-                4, 10, b'i', b't', b'e', b'm', b'1', 20, 10, b'i', b't', b'e', b'm', b'2', 160,
-                6, 0
+                4, 10, b'i', b't', b'e', b'm', b'1', 20, 10, b'i', b't', b'e', b'm', b'2', 160, 6,
+                0
             ]
         );
 
@@ -2256,8 +2178,7 @@ mod tests {
             r#"{
         "type": ["null", "long"]
     }"#,
-        )
-        ?;
+        )?;
 
         #[derive(Serialize)]
         enum NullableLong {
@@ -2267,8 +2188,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         Some(10i64).serialize(&mut serializer)?;
         None::<i64>.serialize(&mut serializer)?;
@@ -2305,8 +2225,7 @@ mod tests {
             r#"{
         "type": ["null", "long", "string"]
     }"#,
-        )
-        ?;
+        )?;
 
         #[derive(Serialize)]
         enum LongOrString {
@@ -2317,8 +2236,7 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         LongOrString::Null.serialize(&mut serializer)?;
         LongOrString::Long(400).serialize(&mut serializer)?;
@@ -2359,13 +2277,11 @@ mod tests {
         "size": 8,
         "name": "LongVal"
     }"#,
-        )
-        ?;
+        )?;
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         Bytes::new(&[10, 124, 31, 97, 14, 201, 3, 88]).serialize(&mut serializer)?;
 
@@ -2437,13 +2353,11 @@ mod tests {
         "precision": 16,
         "scale": 2
     }"#,
-        )
-        ?;
+        )?;
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         let val = Decimal::from(&[251, 155]);
         val.serialize(&mut serializer)?;
@@ -2477,13 +2391,11 @@ mod tests {
         "precision": 16,
         "scale": 2
     }"#,
-        )
-        ?;
+        )?;
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         let val = Decimal::from(&[0, 0, 0, 0, 0, 0, 251, 155]);
         val.serialize(&mut serializer)?;
@@ -2514,14 +2426,12 @@ mod tests {
         "type": "bytes",
         "logicalType": "big-decimal"
     }"#,
-        )
-        ?;
+        )?;
 
         crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         let val = BigDecimal::new(BigInt::new(Sign::Plus, vec![50024]), 2);
         val.serialize(&mut serializer)?;
@@ -2539,14 +2449,12 @@ mod tests {
         "type": "string",
         "logicalType": "uuid"
     }"#,
-        )
-        ?;
+        )?;
 
         crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         "8c28da81-238c-4326-bddd-4e3d00cc5099"
             .parse::<Uuid>()?
@@ -2568,9 +2476,9 @@ mod tests {
         assert_eq!(
             buffer.as_slice(),
             &[
-                72, b'8', b'c', b'2', b'8', b'd', b'a', b'8', b'1', b'-', b'2', b'3', b'8',
-                b'c', b'-', b'4', b'3', b'2', b'6', b'-', b'b', b'd', b'd', b'd', b'-', b'4',
-                b'e', b'3', b'd', b'0', b'0', b'c', b'c', b'5', b'0', b'9', b'9'
+                72, b'8', b'c', b'2', b'8', b'd', b'a', b'8', b'1', b'-', b'2', b'3', b'8', b'c',
+                b'-', b'4', b'3', b'2', b'6', b'-', b'b', b'd', b'd', b'd', b'-', b'4', b'e', b'3',
+                b'd', b'0', b'0', b'c', b'c', b'5', b'0', b'9', b'9'
             ]
         );
 
@@ -2584,13 +2492,11 @@ mod tests {
         "type": "int",
         "logicalType": "date"
     }"#,
-        )
-        ?;
+        )?;
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         100_u8.serialize(&mut serializer)?;
         1000_u16.serialize(&mut serializer)?;
@@ -2629,13 +2535,11 @@ mod tests {
         "type": "int",
         "logicalType": "time-millis"
     }"#,
-        )
-        ?;
+        )?;
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         100_u8.serialize(&mut serializer)?;
         1000_u16.serialize(&mut serializer)?;
@@ -2674,13 +2578,11 @@ mod tests {
         "type": "long",
         "logicalType": "time-micros"
     }"#,
-        )
-        ?;
+        )?;
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         100_u8.serialize(&mut serializer)?;
         1000_u16.serialize(&mut serializer)?;
@@ -2723,8 +2625,7 @@ mod tests {
             "type": "long",
             "logicalType": "timestamp-{precision}"
         }}"#
-            ))
-            ?;
+            ))?;
 
             let mut buffer: Vec<u8> = Vec::new();
             let names = HashMap::new();
@@ -2783,17 +2684,14 @@ mod tests {
         "name": "duration",
         "logicalType": "duration"
     }"#,
-        )
-        ?;
+        )?;
 
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
-        let duration_bytes = ByteArray::new(
-            Duration::new(Months::new(3), Days::new(2), Millis::new(1200)).into(),
-        );
+        let duration_bytes =
+            ByteArray::new(Duration::new(Months::new(3), Days::new(2), Millis::new(1200)).into());
         duration_bytes.serialize(&mut serializer)?;
 
         match [1; 12]
@@ -2872,12 +2770,12 @@ mod tests {
         assert_eq!(
             buffer.as_slice(),
             &[
-                8, 116, 101, 115, 116, 20, 10, 6, 0, 195, 104, 4, 72, 56, 99, 50, 56, 100, 97,
-                56, 49, 45, 50, 51, 56, 99, 45, 52, 51, 50, 54, 45, 98, 100, 100, 100, 45, 52,
-                101, 51, 100, 48, 48, 99, 99, 53, 48, 57, 56, 2, 20, 105, 110, 110, 101, 114,
-                95, 116, 101, 115, 116, 200, 1, 8, 4, 78, 70, 4, 72, 56, 99, 50, 56, 100, 97,
-                56, 49, 45, 50, 51, 56, 99, 45, 52, 51, 50, 54, 45, 98, 100, 100, 100, 45, 52,
-                101, 51, 100, 48, 48, 99, 99, 53, 48, 57, 57, 0
+                8, 116, 101, 115, 116, 20, 10, 6, 0, 195, 104, 4, 72, 56, 99, 50, 56, 100, 97, 56,
+                49, 45, 50, 51, 56, 99, 45, 52, 51, 50, 54, 45, 98, 100, 100, 100, 45, 52, 101, 51,
+                100, 48, 48, 99, 99, 53, 48, 57, 56, 2, 20, 105, 110, 110, 101, 114, 95, 116, 101,
+                115, 116, 200, 1, 8, 4, 78, 70, 4, 72, 56, 99, 50, 56, 100, 97, 56, 49, 45, 50, 51,
+                56, 99, 45, 52, 51, 50, 54, 45, 98, 100, 100, 100, 45, 52, 101, 51, 100, 48, 48,
+                99, 99, 53, 48, 57, 57, 0
             ]
         );
 

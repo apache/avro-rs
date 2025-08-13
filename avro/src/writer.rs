@@ -51,6 +51,11 @@ mod writer {
     use tokio::io::AsyncWriteExt;
 
     use crate::AvroResult;
+    #[synca::cfg(sync)]
+    use crate::schema::Name;
+    #[synca::cfg(sync)]
+    use crate::ser_schema::SchemaAwareWriteSerializer;
+    use crate::types::tokio::ValueExt;
     use crate::{
         codec::tokio::Codec,
         encode::tokio::{encode, encode_internal, encode_to_vec},
@@ -61,16 +66,8 @@ mod writer {
         types::Value,
     };
     #[synca::cfg(sync)]
-    use crate::schema::Name;
-    #[synca::cfg(sync)]
-    use crate::ser_schema::SchemaAwareWriteSerializer;
-    #[synca::cfg(sync)]
     use serde::Serialize;
-    use std::{
-        collections::HashMap, marker::PhantomData, mem::ManuallyDrop,
-        ops::RangeInclusive,
-    };
-    use crate::types::tokio::ValueExt;
+    use std::{collections::HashMap, marker::PhantomData, mem::ManuallyDrop, ops::RangeInclusive};
 
     const DEFAULT_BLOCK_SIZE: usize = 16000;
     const AVRO_OBJECT_HEADER: &[u8] = b"Obj\x01";
@@ -387,7 +384,8 @@ mod writer {
                 + self.append_raw(&stream_len.into(), &Schema::Long).await?
                 + self
                     .writer
-                    .write(self.buffer.as_ref()).await
+                    .write(self.buffer.as_ref())
+                    .await
                     .map_err(Details::WriteBytes)?
                 + self.append_marker().await?;
 
@@ -443,19 +441,22 @@ mod writer {
             // using .writer.write directly to avoid mutable borrow of self
             // with ref borrowing of self.marker
             self.writer
-                .write(&self.marker).await
+                .write(&self.marker)
+                .await
                 .map_err(|e| Details::WriteMarker(e).into())
         }
 
         /// Append a raw Avro Value to the payload avoiding to encode it again.
         async fn append_raw(&mut self, value: &Value, schema: &Schema) -> AvroResult<usize> {
-            self.append_bytes(encode_to_vec(value, schema).await?.as_ref()).await
+            self.append_bytes(encode_to_vec(value, schema).await?.as_ref())
+                .await
         }
 
         /// Append pure bytes to the payload.
         async fn append_bytes(&mut self, bytes: &[u8]) -> AvroResult<usize> {
             self.writer
-                .write(bytes).await
+                .write(bytes)
+                .await
                 .map_err(|e| Details::WriteBytes(e).into())
         }
 
@@ -573,8 +574,7 @@ mod writer {
         let names = rs.get_names();
         let enclosing_namespace = schema.namespace();
         if let Some(_err) =
-            ValueExt::validate_internal(&avro, schema, names, &enclosing_namespace)
-            .await
+            ValueExt::validate_internal(&avro, schema, names, &enclosing_namespace).await
         {
             return Err(Details::Validation.into());
         }
@@ -627,7 +627,8 @@ mod writer {
             } else {
                 write_value_ref_owned_resolved(&self.resolved, v, &mut self.buffer).await?;
                 writer
-                    .write_all(&self.buffer).await
+                    .write_all(&self.buffer)
+                    .await
                     .map_err(Details::WriteBytes)?;
                 let len = self.buffer.len();
                 self.buffer.truncate(original_length);
@@ -694,12 +695,17 @@ mod writer {
     {
         /// Write the referenced `Serialize` object to the provided `Write` object. Returns a result with
         /// the number of bytes written including the header
-        pub async fn write_ref<W: std::io::Write>(&mut self, data: &T, writer: &mut W) -> AvroResult<usize> {
+        pub async fn write_ref<W: std::io::Write>(
+            &mut self,
+            data: &T,
+            writer: &mut W,
+        ) -> AvroResult<usize> {
             let mut bytes_written: usize = 0;
 
             if !self.header_written {
                 bytes_written += writer
-                    .write(self.inner.buffer.as_slice()).await
+                    .write(self.inner.buffer.as_slice())
+                    .await
                     .map_err(Details::WriteBytes)?;
                 self.header_written = true;
             }
@@ -711,7 +717,11 @@ mod writer {
 
         /// Write the Serialize object to the provided Write object. Returns a result with the number
         /// of bytes written including the header
-        pub async fn write<W: AvroWrite + Unpin>(&mut self, data: T, writer: &mut W) -> AvroResult<usize> {
+        pub async fn write<W: AvroWrite + Unpin>(
+            &mut self,
+            data: T,
+            writer: &mut W,
+        ) -> AvroResult<usize> {
             self.write_ref(&data, writer).await
         }
     }
@@ -722,8 +732,13 @@ mod writer {
         value: &Value,
         buffer: &mut Vec<u8>,
     ) -> AvroResult<usize> {
-        match ValueExt::validate_internal(&value, schema, resolved_schema.get_names(), &schema.namespace())
-            .await
+        match ValueExt::validate_internal(
+            &value,
+            schema,
+            resolved_schema.get_names(),
+            &schema.namespace(),
+        )
+        .await
         {
             Some(reason) => Err(Details::ValidationWithReason {
                 value: value.clone(),
@@ -751,12 +766,12 @@ mod writer {
     ) -> AvroResult<()> {
         let root_schema = resolved_schema.get_root_schema();
         if let Some(reason) = ValueExt::validate_internal(
-                &value,
-                root_schema,
-                resolved_schema.get_names(),
-                &root_schema.namespace(),
-            )
-            .await
+            &value,
+            root_schema,
+            resolved_schema.get_names(),
+            &root_schema.namespace(),
+        )
+        .await
         {
             return Err(Details::ValidationWithReason {
                 value: value.clone(),
@@ -861,9 +876,9 @@ mod writer {
         use serde::{Deserialize, Serialize};
         use uuid::Uuid;
 
+        use crate::schema::AvroSchema;
         use crate::{codec::tokio::DeflateSettings, error::Details};
         use apache_avro_test_helper::TestResult;
-        use crate::schema::AvroSchema;
 
         const AVRO_OBJECT_HEADER_LEN: usize = AVRO_OBJECT_HEADER.len();
 
@@ -1015,7 +1030,7 @@ mod writer {
                 &Schema::Int,
                 1_i32,
             )
-                .await
+            .await
         }
 
         #[tokio::test]
@@ -1027,7 +1042,7 @@ mod writer {
                 &Schema::Int,
                 1_i32,
             )
-                .await
+            .await
         }
 
         #[tokio::test]
@@ -1039,7 +1054,7 @@ mod writer {
                 &Schema::Long,
                 1_i64,
             )
-                .await
+            .await
         }
 
         #[tokio::test]
@@ -1051,7 +1066,7 @@ mod writer {
                 &Schema::Long,
                 1_i64,
             )
-                .await
+            .await
         }
 
         #[tokio::test]
@@ -1063,7 +1078,7 @@ mod writer {
                 &Schema::Long,
                 1_i64,
             )
-                .await
+            .await
         }
 
         #[tokio::test]
@@ -1106,7 +1121,7 @@ mod writer {
                 &inner,
                 value,
             )
-                .await
+            .await
         }
 
         #[tokio::test]
@@ -1589,7 +1604,7 @@ mod writer {
                 &TestSingleObjectWriter::get_schema(),
                 1024,
             )
-                .expect("Should resolve schema");
+            .expect("Should resolve schema");
             let value = obj.into();
             let written_bytes = writer
                 .write_value_ref(&value, &mut buf)
@@ -1611,7 +1626,7 @@ mod writer {
                 &TestSingleObjectWriter::get_schema(),
                 &mut msg_binary,
             )
-                .expect("encode should have failed by here as a dependency of any writing");
+            .expect("encode should have failed by here as a dependency of any writing");
             assert_eq!(&buf[10..], &msg_binary[..]);
 
             Ok(())
@@ -1633,7 +1648,7 @@ mod writer {
                 1024,
                 header_builder,
             )
-                .expect("Should resolve schema");
+            .expect("Should resolve schema");
             let value = obj.into();
             writer
                 .write_value_ref(&value, &mut buf)
@@ -1662,7 +1677,7 @@ mod writer {
                 &TestSingleObjectWriter::get_schema(),
                 1024,
             )
-                .expect("Should resolve schema");
+            .expect("Should resolve schema");
             let mut specific_writer =
                 SpecificSingleObjectWriter::<TestSingleObjectWriter>::with_capacity(1024)
                     .await
