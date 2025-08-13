@@ -931,10 +931,7 @@ pub use reader::tokio::{
     from_avro_datum_schemata as async_from_avro_datum_schemata, read_marker as async_read_marker,
 };
 pub use schema::Schema;
-#[cfg(feature = "sync")]
-pub use schema::sync::AvroSchema;
-#[cfg(feature = "tokio")]
-pub use schema::tokio::AvroSchema as AsyncAvroSchema;
+pub use schema::AvroSchema;
 #[cfg(feature = "sync")]
 pub use ser::sync::to_value;
 #[cfg(feature = "tokio")]

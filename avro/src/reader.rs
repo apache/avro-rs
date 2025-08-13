@@ -58,7 +58,8 @@ mod reader {
         error::Details,
         error::Error,
         headers::tokio::{HeaderBuilder, RabinFingerprintHeader},
-        schema::tokio::{AvroSchema, SchemaExt},
+        schema::AvroSchema,
+        schema::tokio::SchemaExt,
         schema::{
             Names, ResolvedOwnedSchema, ResolvedSchema, Schema, resolve_names,
             resolve_names_with_schemata,
@@ -662,7 +663,7 @@ mod reader {
     {
         pub async fn new() -> AvroResult<SpecificSingleObjectReader<T>> {
             Ok(SpecificSingleObjectReader {
-                inner: GenericSingleObjectReader::new(T::get_schema().await)?,
+                inner: GenericSingleObjectReader::new(T::get_schema())?,
                 _model: PhantomData,
             })
         }
@@ -959,9 +960,9 @@ mod reader {
             c: Vec<String>,
         }
 
-        #[cfg_attr(feature = "tokio", async_trait::async_trait)]
+        #[synca::cfg(sync)]
         impl AvroSchema for TestSingleObjectReader {
-            async fn get_schema() -> Schema {
+            fn get_schema() -> Schema {
                 let schema = r#"
             {
                 "type":"record",
@@ -985,7 +986,7 @@ mod reader {
                 ]
             }
             "#;
-                SchemaExt::parse_str(schema).await.unwrap()
+                SchemaExt::parse_str(schema).unwrap()
             }
         }
 
@@ -1033,8 +1034,9 @@ mod reader {
             }
         }
 
-        #[tokio::test]
-        async fn test_avro_3507_single_object_reader() -> TestResult {
+        #[test]
+        #[synca::cfg(sync)]
+        fn test_avro_3507_single_object_reader() -> TestResult {
             let obj = TestSingleObjectReader {
                 a: 42,
                 b: 3.33,
@@ -1044,23 +1046,21 @@ mod reader {
             to_read.extend_from_slice(&[0xC3, 0x01]);
             to_read.extend_from_slice(
                 &TestSingleObjectReader::get_schema()
-                    .await
                     .fingerprint::<Rabin>()
                     .bytes[..],
             );
             encode(
                 &obj.clone().into(),
-                &TestSingleObjectReader::get_schema().await,
+                &TestSingleObjectReader::get_schema(),
                 &mut to_read,
-            ).await
+            )
             .expect("Encode should succeed");
             let mut to_read = &to_read[..];
             let generic_reader =
-                GenericSingleObjectReader::new(TestSingleObjectReader::get_schema().await)
+                GenericSingleObjectReader::new(TestSingleObjectReader::get_schema())
                     .expect("Schema should resolve");
             let val = generic_reader
                 .read_value(&mut to_read)
-                .await
                 .expect("Should read");
             let expected_value: Value = obj.into();
             assert_eq!(expected_value, val);
@@ -1068,8 +1068,9 @@ mod reader {
             Ok(())
         }
 
-        #[tokio::test]
-        async fn avro_3642_test_single_object_reader_incomplete_reads() -> TestResult {
+        #[test]
+        #[synca::cfg(sync)]
+        fn avro_3642_test_single_object_reader_incomplete_reads() -> TestResult {
             let obj = TestSingleObjectReader {
                 a: 42,
                 b: 3.33,
@@ -1080,16 +1081,15 @@ mod reader {
             let mut to_read_2 = Vec::<u8>::new();
             to_read_2.extend_from_slice(
                 &TestSingleObjectReader::get_schema()
-                    .await
                     .fingerprint::<Rabin>()
                     .bytes[..],
             );
             let mut to_read_3 = Vec::<u8>::new();
             encode(
                 &obj.clone().into(),
-                &TestSingleObjectReader::get_schema().await,
+                &TestSingleObjectReader::get_schema(),
                 &mut to_read_3,
-            ).await
+            )
             .expect("Encode should succeed");
 
             #[synca::cfg(sync)]
@@ -1097,11 +1097,10 @@ mod reader {
             #[synca::cfg(tokio)]
             let mut to_read = tokio::io::AsyncReadExt::chain(&to_read_1[..], &to_read_2[..]).chain(&to_read_3[..]);
             let generic_reader =
-                GenericSingleObjectReader::new(TestSingleObjectReader::get_schema().await)
+                GenericSingleObjectReader::new(TestSingleObjectReader::get_schema())
                     .expect("Schema should resolve");
             let val = generic_reader
                 .read_value(&mut to_read)
-                .await
                 .expect("Should read");
             let expected_value: Value = obj.into();
             assert_eq!(expected_value, val);
@@ -1109,8 +1108,9 @@ mod reader {
             Ok(())
         }
 
-        #[tokio::test]
-        async fn test_avro_3507_reader_parity() -> TestResult {
+        #[test]
+        #[synca::cfg(sync)]
+        fn test_avro_3507_reader_parity() -> TestResult {
             let obj = TestSingleObjectReader {
                 a: 42,
                 b: 3.33,
@@ -1121,21 +1121,19 @@ mod reader {
             to_read.extend_from_slice(&[0xC3, 0x01]);
             to_read.extend_from_slice(
                 &TestSingleObjectReader::get_schema()
-                    .await
                     .fingerprint::<Rabin>()
                     .bytes[..],
             );
             encode(
                 &obj.clone().into(),
-                &TestSingleObjectReader::get_schema().await,
+                &TestSingleObjectReader::get_schema(),
                 &mut to_read,
-            ).await
+            )
             .expect("Encode should succeed");
             let generic_reader =
-                GenericSingleObjectReader::new(TestSingleObjectReader::get_schema().await)
+                GenericSingleObjectReader::new(TestSingleObjectReader::get_schema())
                     .expect("Schema should resolve");
             let specific_reader = SpecificSingleObjectReader::<TestSingleObjectReader>::new()
-                .await
                 .expect("schema should resolve");
             let mut to_read1 = &to_read[..];
             let mut to_read2 = &to_read[..];
@@ -1143,15 +1141,12 @@ mod reader {
 
             let val = generic_reader
                 .read_value(&mut to_read1)
-                .await
                 .expect("Should read");
             let read_obj1 = specific_reader
                 .read_from_value(&mut to_read2)
-                .await
                 .expect("Should read from value");
             let read_obj2 = specific_reader
                 .read(&mut to_read3)
-                .await
                 .expect("Should read from deserilize");
             let expected_value: Value = obj.clone().into();
             assert_eq!(obj, read_obj1);
@@ -1161,12 +1156,13 @@ mod reader {
             Ok(())
         }
 
-        #[tokio::test]
-        async fn avro_rs_164_generic_reader_alternate_header() -> TestResult {
+        #[test]
+        #[synca::cfg(sync)]
+        fn avro_rs_164_generic_reader_alternate_header() -> TestResult {
             let schema_uuid = Uuid::parse_str("b2f1cf00-0434-013e-439a-125eb8485a5f")?;
             let header_builder = GlueSchemaUuidHeader::from_uuid(schema_uuid);
             let generic_reader = GenericSingleObjectReader::new_with_header_builder(
-                TestSingleObjectReader::get_schema().await,
+                TestSingleObjectReader::get_schema(),
                 header_builder,
             )
             .expect("failed to build reader");
@@ -1176,7 +1172,6 @@ mod reader {
             let mut to_read = &data_to_read[..];
             let read_result = generic_reader
                 .read_value(&mut to_read)
-                .await
                 .map_err(Error::into_details);
             matches!(read_result, Err(Details::ReadBytes(_)));
             Ok(())

@@ -57,8 +57,7 @@ mod writer {
         error::Details,
         error::Error,
         headers::tokio::{HeaderBuilder, RabinFingerprintHeader},
-        schema::tokio::AvroSchema,
-        schema::{ResolvedOwnedSchema, ResolvedSchema, Schema},
+        schema::{AvroSchema, ResolvedOwnedSchema, ResolvedSchema, Schema},
         types::Value,
     };
     #[synca::cfg(sync)]
@@ -662,7 +661,7 @@ mod writer {
         T: AvroSchema,
     {
         pub async fn with_capacity(buffer_cap: usize) -> AvroResult<SpecificSingleObjectWriter<T>> {
-            let schema = T::get_schema().await;
+            let schema = T::get_schema();
             Ok(SpecificSingleObjectWriter {
                 inner: GenericSingleObjectWriter::new_with_capacity(&schema, buffer_cap)?,
                 schema,
@@ -864,6 +863,7 @@ mod writer {
 
         use crate::{codec::tokio::DeflateSettings, error::Details};
         use apache_avro_test_helper::TestResult;
+        use crate::schema::AvroSchema;
 
         const AVRO_OBJECT_HEADER_LEN: usize = AVRO_OBJECT_HEADER.len();
 
@@ -1533,9 +1533,9 @@ mod writer {
             c: Vec<String>,
         }
 
-        #[cfg_attr(feature = "tokio", async_trait::async_trait)]
+        #[synca::cfg(sync)]
         impl AvroSchema for TestSingleObjectWriter {
-            async fn get_schema() -> Schema {
+            fn get_schema() -> Schema {
                 let schema = r#"
             {
                 "type":"record",
@@ -1559,7 +1559,7 @@ mod writer {
                 ]
             }
             "#;
-                SchemaExt::parse_str(schema).await.unwrap()
+                SchemaExt::parse_str(schema).unwrap()
             }
         }
 
@@ -1576,8 +1576,9 @@ mod writer {
             }
         }
 
-        #[tokio::test]
-        async fn test_single_object_writer() -> TestResult {
+        #[synca::cfg(sync)]
+        #[test]
+        fn test_single_object_writer() -> TestResult {
             let mut buf: Vec<u8> = Vec::new();
             let obj = TestSingleObjectWriter {
                 a: 300,
@@ -1585,14 +1586,13 @@ mod writer {
                 c: vec!["cat".into(), "dog".into()],
             };
             let mut writer = GenericSingleObjectWriter::new_with_capacity(
-                &TestSingleObjectWriter::get_schema().await,
+                &TestSingleObjectWriter::get_schema(),
                 1024,
             )
                 .expect("Should resolve schema");
             let value = obj.into();
             let written_bytes = writer
                 .write_value_ref(&value, &mut buf)
-                .await
                 .expect("Error serializing properly");
 
             assert!(buf.len() > 10, "no bytes written");
@@ -1602,23 +1602,23 @@ mod writer {
             assert_eq!(
                 &buf[2..10],
                 &TestSingleObjectWriter::get_schema()
-                    .await
                     .fingerprint::<Rabin>()
                     .bytes[..]
             );
             let mut msg_binary = Vec::new();
             encode(
                 &value,
-                &TestSingleObjectWriter::get_schema().await,
+                &TestSingleObjectWriter::get_schema(),
                 &mut msg_binary,
-            ).await
+            )
                 .expect("encode should have failed by here as a dependency of any writing");
             assert_eq!(&buf[10..], &msg_binary[..]);
 
             Ok(())
         }
 
-        #[tokio::test]
+        #[test]
+        #[synca::cfg(sync)]
         async fn test_single_object_writer_with_header_builder() -> TestResult {
             let mut buf: Vec<u8> = Vec::new();
             let obj = TestSingleObjectWriter {
@@ -1629,7 +1629,7 @@ mod writer {
             let schema_uuid = Uuid::parse_str("b2f1cf00-0434-013e-439a-125eb8485a5f")?;
             let header_builder = GlueSchemaUuidHeader::from_uuid(schema_uuid);
             let mut writer = GenericSingleObjectWriter::new_with_capacity_and_header_builder(
-                &TestSingleObjectWriter::get_schema().await,
+                &TestSingleObjectWriter::get_schema(),
                 1024,
                 header_builder,
             )
@@ -1637,7 +1637,6 @@ mod writer {
             let value = obj.into();
             writer
                 .write_value_ref(&value, &mut buf)
-                .await
                 .expect("Error serializing properly");
 
             assert_eq!(buf[0], 0x03);

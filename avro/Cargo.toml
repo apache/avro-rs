@@ -36,7 +36,7 @@ snappy = ["dep:crc32fast", "dep:snap"]
 xz = ["dep:xz2"]
 zstandard = ["dep:zstd"]
 sync = []
-tokio = ["dep:tokio", "dep:futures", "dep:async-trait"]
+tokio = ["dep:tokio", "dep:futures"]
 
 [lib]
 # disable benchmarks to allow passing criterion arguments to `cargo bench`
@@ -80,8 +80,6 @@ zstd = { default-features = false, version = "0.13.3", optional = true }
 #synca = { git = "https://github.com/martin-g/rs_synca/", branch = "add-support-for-use-path-replacing" }
 synca = { path = "/home/martin/git/rust/rs_synca/synca" }
 futures = { version =  "0.3.31", optional = true }
-async-trait = { version = "0.1.88", optional = true }
-
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 quad-rand = { default-features = false, version = "0.2.3" }
