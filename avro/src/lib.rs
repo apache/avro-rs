@@ -902,14 +902,11 @@ pub use crate::bytes::{
 };
 #[cfg(feature = "bzip")]
 pub use codec::bzip::Bzip2Settings;
-#[cfg(feature = "sync")]
-pub use codec::sync::{Codec, DeflateSettings};
-#[cfg(feature = "tokio")]
-pub use codec::tokio::{Codec as AsyncCodec, DeflateSettings as AsyncDeflateSettings};
 #[cfg(feature = "xz")]
 pub use codec::xz::XzSettings;
 #[cfg(feature = "zstandard")]
 pub use codec::zstandard::ZstandardSettings;
+pub use codec::{Codec, DeflateSettings};
 #[cfg(feature = "sync")]
 pub use de::sync::from_value;
 #[cfg(feature = "tokio")]
@@ -967,9 +964,8 @@ pub type AvroResult<T> = Result<T, Error>;
   pub mod sync {
     sync!();
     replace!(
-      crate::codec::tokio => crate::codec::sync,
-      crate::reader::tokio => crate::reader::sync,
-      crate::schema::tokio => crate::schema::sync,
+    crate::reader::tokio => crate::reader::sync,
+    crate::schema::tokio => crate::schema::sync,
       crate::types::tokio => crate::types::sync,
       crate::writer::tokio => crate::writer::sync,
       #[tokio::test] => #[test]
@@ -979,7 +975,7 @@ pub type AvroResult<T> = Result<T, Error>;
 #[cfg(test)]
 mod tests {
     use crate::{
-        codec::tokio::Codec,
+        codec::Codec,
         reader::tokio::{Reader, from_avro_datum},
         schema::tokio::SchemaExt,
         types::{Record, Value},

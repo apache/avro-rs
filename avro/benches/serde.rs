@@ -16,7 +16,7 @@
 // under the License.
 
 use apache_avro::{
-    AvroResult, Reader, Writer,
+    AvroResult, Reader, SchemaExt, Writer,
     schema::Schema,
     types::{Record, Value},
 };

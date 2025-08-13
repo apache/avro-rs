@@ -23,7 +23,6 @@
     sync!();
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::codec::tokio => crate::codec::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
@@ -46,7 +45,6 @@ mod reader {
     use crate::from_value;
     #[synca::cfg(sync)]
     use std::io::Read as AvroRead;
-    use std::str::FromStr;
     #[synca::cfg(tokio)]
     use tokio::io::AsyncRead as AvroRead;
     #[cfg(feature = "tokio")]
@@ -54,7 +52,7 @@ mod reader {
 
     use crate::util::tokio::safe_len;
     use crate::{
-        codec::tokio::Codec,
+        codec::Codec,
         error::Details,
         error::Error,
         headers::tokio::{HeaderBuilder, RabinFingerprintHeader},
@@ -70,10 +68,10 @@ mod reader {
     use log::warn;
     use serde::de::DeserializeOwned;
     use serde_json::from_slice;
+    use std::str::FromStr;
     use std::{collections::HashMap, io::ErrorKind, marker::PhantomData};
 
-    /// Internal Block reader.
-
+    // Internal Block reader.
     #[derive(Debug, Clone)]
     struct Block<'r, R> {
         reader: R,
@@ -701,16 +699,20 @@ mod reader {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::{
-            encode::tokio::encode, headers::tokio::GlueSchemaUuidHeader, rabin::Rabin,
-            types::Record,
-        };
+        #[synca::cfg(sync)]
+        use crate::encode::tokio::encode;
+        #[synca::cfg(sync)]
+        use crate::headers::sync::GlueSchemaUuidHeader;
+        #[synca::cfg(sync)]
+        use crate::rabin::Rabin;
+        use crate::types::Record;
         use apache_avro_test_helper::TestResult;
         #[synca::cfg(tokio)]
         use futures::StreamExt;
         use pretty_assertions::assert_eq;
         use serde::Deserialize;
         use std::io::Cursor;
+        #[synca::cfg(sync)]
         use uuid::Uuid;
 
         const SCHEMA: &str = r#"
@@ -863,6 +865,8 @@ mod reader {
             let expected = [record1.into(), record2.into()];
 
             let mut i = 0;
+
+            #[allow(clippy::while_let_on_iterator)]
             while let Some(value) = reader.next().await {
                 assert_eq!(value?, expected[i]);
                 i += 1;
@@ -893,6 +897,8 @@ mod reader {
                 .rev()
                 .collect::<Vec<u8>>();
             let mut reader = Reader::with_schema(&schema, &invalid[..]).await?;
+
+            #[allow(clippy::while_let_on_iterator)]
             while let Some(value) = reader.next().await {
                 assert!(value.is_err());
             }
@@ -912,6 +918,8 @@ mod reader {
         async fn test_reader_only_header() -> TestResult {
             let invalid = ENCODED.iter().copied().take(165).collect::<Vec<u8>>();
             let mut reader = Reader::new(&invalid[..]).await?;
+
+            #[allow(clippy::while_let_on_iterator)]
             while let Some(value) = reader.next().await {
                 assert!(value.is_err());
             }

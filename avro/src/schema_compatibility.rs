@@ -25,7 +25,6 @@
     sync!();
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::codec::tokio => crate::codec::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
@@ -556,7 +555,7 @@ mod schema_compatibility {
     mod tests {
         use super::*;
         use crate::{
-            codec::tokio::Codec,
+            codec::Codec,
             reader::tokio::Reader,
             schema::tokio::SchemaExt,
             types::{Record, Value},

@@ -25,7 +25,6 @@
     sync!();
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::codec::tokio => crate::codec::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
@@ -57,7 +56,7 @@ mod writer {
     use crate::ser_schema::SchemaAwareWriteSerializer;
     use crate::types::tokio::ValueExt;
     use crate::{
-        codec::tokio::Codec,
+        codec::Codec,
         encode::tokio::{encode, encode_internal, encode_to_vec},
         error::Details,
         error::Error,
@@ -537,6 +536,7 @@ mod writer {
         }
     }
 
+    #[synca::cfg(sync)]
     impl<W: AvroWrite + Unpin> Drop for Writer<'_, W> {
         /// Drop the writer, will try to flush ignoring any errors.
         fn drop(&mut self) {
@@ -695,7 +695,7 @@ mod writer {
     {
         /// Write the referenced `Serialize` object to the provided `Write` object. Returns a result with
         /// the number of bytes written including the header
-        pub async fn write_ref<W: std::io::Write>(
+        pub fn write_ref<W: std::io::Write>(
             &mut self,
             data: &T,
             writer: &mut W,
@@ -705,7 +705,6 @@ mod writer {
             if !self.header_written {
                 bytes_written += writer
                     .write(self.inner.buffer.as_slice())
-                    .await
                     .map_err(Details::WriteBytes)?;
                 self.header_written = true;
             }
@@ -717,12 +716,12 @@ mod writer {
 
         /// Write the Serialize object to the provided Write object. Returns a result with the number
         /// of bytes written including the header
-        pub async fn write<W: AvroWrite + Unpin>(
+        pub fn write<W: AvroWrite + Unpin>(
             &mut self,
             data: T,
             writer: &mut W,
         ) -> AvroResult<usize> {
-            self.write_ref(&data, writer).await
+            self.write_ref(&data, writer)
         }
     }
 
@@ -733,7 +732,7 @@ mod writer {
         buffer: &mut Vec<u8>,
     ) -> AvroResult<usize> {
         match ValueExt::validate_internal(
-            &value,
+            value,
             schema,
             resolved_schema.get_names(),
             &schema.namespace(),
@@ -766,7 +765,7 @@ mod writer {
     ) -> AvroResult<()> {
         let root_schema = resolved_schema.get_root_schema();
         if let Some(reason) = ValueExt::validate_internal(
-            &value,
+            value,
             root_schema,
             resolved_schema.get_names(),
             &root_schema.namespace(),
@@ -859,26 +858,27 @@ mod writer {
     #[cfg(test)]
     mod tests {
         use super::*;
+        #[synca::cfg(sync)]
+        use crate::schema::AvroSchema;
+        use crate::{codec::DeflateSettings, error::Details};
         use crate::{
             decimal::Decimal,
             duration::{Days, Duration, Millis, Months},
-            headers::tokio::GlueSchemaUuidHeader,
-            rabin::Rabin,
             reader::tokio::{Reader, from_avro_datum},
             schema::tokio::SchemaExt,
             schema::{DecimalSchema, FixedSchema, Name},
             types::Record,
             util::tokio::zig_i64,
         };
+        #[synca::cfg(sync)]
+        use crate::{headers::tokio::GlueSchemaUuidHeader, rabin::Rabin};
+        use apache_avro_test_helper::TestResult;
         #[synca::cfg(tokio)]
         use futures::StreamExt;
         use pretty_assertions::assert_eq;
         use serde::{Deserialize, Serialize};
+        #[synca::cfg(sync)]
         use uuid::Uuid;
-
-        use crate::schema::AvroSchema;
-        use crate::{codec::tokio::DeflateSettings, error::Details};
-        use apache_avro_test_helper::TestResult;
 
         const AVRO_OBJECT_HEADER_LEN: usize = AVRO_OBJECT_HEADER.len();
 

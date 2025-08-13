@@ -222,7 +222,7 @@ fn test_validate() -> TestResult {
     for (raw_schema, value) in schemas_to_validate().iter() {
         let schema = SchemaExt::parse_str(raw_schema)?;
         assert!(
-            ValueExt::validate(&value, &schema),
+            ValueExt::validate(value, &schema),
             "value {value:?} does not validate schema: {raw_schema}"
         );
     }

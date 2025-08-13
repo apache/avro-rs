@@ -548,7 +548,7 @@ mod types {
                 (&Value::Union(i, ref value), Schema::Union(inner)) => {
                     if let Some(schema) = inner.variants().get(i as usize) {
                         Box::pin(ValueExt::validate_internal(
-                            &value,
+                            value,
                             schema,
                             names,
                             enclosing_namespace,
@@ -575,7 +575,7 @@ mod types {
                         acc = ValueExt::accumulate(
                             acc,
                             Box::pin(ValueExt::validate_internal(
-                                &item,
+                                item,
                                 &inner.items,
                                 names,
                                 enclosing_namespace,
@@ -597,7 +597,7 @@ mod types {
                         acc = ValueExt::accumulate(
                             acc,
                             Box::pin(ValueExt::validate_internal(
-                                &value,
+                                value,
                                 &inner.types,
                                 names,
                                 enclosing_namespace,
@@ -655,7 +655,7 @@ mod types {
                                 ValueExt::accumulate(
                                     acc,
                                     Box::pin(ValueExt::validate_internal(
-                                        &record_field,
+                                        record_field,
                                         &field.schema,
                                         names,
                                         record_namespace,
@@ -676,7 +676,7 @@ mod types {
                     for field in fields.iter() {
                         if let Some(item) = items.get(&field.name) {
                             let res = Box::pin(ValueExt::validate_internal(
-                                &item,
+                                item,
                                 &field.schema,
                                 names,
                                 enclosing_namespace,
@@ -749,7 +749,7 @@ mod types {
                     Value::Union(_i, b) => b,
                     _ => unreachable!(),
                 };
-                value = &v;
+                value = v;
             }
             match *schema {
                 Schema::Ref { ref name } => {

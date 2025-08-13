@@ -25,7 +25,6 @@ pub use bigdecimal::BigDecimal;
     sync!();
     replace!(
       crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::codec::tokio => crate::codec::sync,
       crate::decode::tokio => crate::decode::sync,
       crate::encode::tokio => crate::encode::sync,
       crate::error::tokio => crate::error::sync,
@@ -101,7 +100,7 @@ mod bigdecimal {
     mod tests {
         use super::*;
         use crate::{
-            codec::tokio::Codec, error::Error, reader::tokio::Reader, schema::tokio::SchemaExt,
+            codec::Codec, error::Error, reader::tokio::Reader, schema::tokio::SchemaExt,
             types::Record, writer::tokio::Writer,
         };
         use apache_avro_test_helper::TestResult;

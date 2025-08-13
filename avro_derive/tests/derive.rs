@@ -19,10 +19,10 @@
 mod test_derive {
 
     use apache_avro::{
-        AvroSchema, Reader, Schema, Writer, from_value, schema::sync::AvroSchemaComponent,
+        AvroSchema, Reader, Schema, Writer, from_value, schema::derive::AvroSchemaComponent,
         schema::sync::SchemaExt,
     };
-    use apache_avro_derive::*;
+    // use apache_avro_derive::*;
     use proptest::prelude::*;
     use serde::{Deserialize, Serialize, de::DeserializeOwned};
     use std::collections::HashMap;
@@ -30,7 +30,6 @@ mod test_derive {
     use apache_avro::schema::{Alias, EnumSchema, RecordSchema};
     use std::{borrow::Cow, sync::Mutex};
 
-    use super::*;
     use pretty_assertions::assert_eq;
 
     /// Takes in a type that implements the right combination of traits and runs it through a Serde Cycle and asserts the result is the same

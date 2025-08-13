@@ -468,7 +468,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
             }),
         };
 
-        let ref_schema = self.names.get(full_name.as_ref()).clone();
+        let ref_schema = self.names.get(full_name.as_ref());
 
         ref_schema.ok_or_else(|| Details::SchemaResolutionError(full_name.as_ref().clone()).into())
     }

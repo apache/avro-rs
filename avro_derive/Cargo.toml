@@ -43,7 +43,7 @@ syn = { default-features = false, version = "2.0.104", features = [
 
 [dev-dependencies]
 apache-avro = { default-features = false, path = "../avro", features = [
-    "derive",
+    "derive", "sync"
 ] }
 proptest = { default-features = false, version = "1.7.0", features = ["std"] }
 serde = { workspace = true }
@@ -55,4 +55,4 @@ rustdoc-args = ["--cfg", "docsrs"]
 [[test]]
 name = "derive"
 path = "tests/derive.rs"
-required-features = ["sync"]
+#required-features = ["sync"]

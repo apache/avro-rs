@@ -271,7 +271,7 @@ impl<'s> ResolvedSchema<'s> {
     /// Creates `ResolvedSchema` with some already known schemas.
     ///
     /// Those schemata would be used to resolve references if needed.
-    pub fn new_with_known_schemata<'n>(
+    pub fn new_with_known_schemata(
         schemata_to_resolve: Vec<&'s Schema>,
         enclosing_namespace: &Namespace,
         known_schemata: &Names,
@@ -285,7 +285,7 @@ impl<'s> ResolvedSchema<'s> {
         Ok(rs)
     }
 
-    fn resolve<'n>(
+    fn resolve(
         &mut self,
         schemata: Vec<&'s Schema>,
         enclosing_namespace: &Namespace,
@@ -1782,7 +1782,7 @@ mod schema {
                     {
                         return Some((i, schema));
                     } else {
-                        i = i + 1;
+                        i += 1;
                     }
                 }
                 None

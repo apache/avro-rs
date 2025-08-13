@@ -16,6 +16,7 @@
 // under the License.
 
 use apache_avro::{
+    SchemaExt,
     schema::Schema,
     to_avro_datum,
     types::{Record, Value},
