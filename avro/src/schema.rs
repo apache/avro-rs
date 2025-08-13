@@ -1366,29 +1366,23 @@ mod schema {
     use crate::AvroResult;
     use crate::error::{Details, Error};
     use crate::schema::{
-        Alias, Aliases, DecimalMetadata, DecimalSchema, Documentation, EnumSchema,
-        FixedSchema, MapSchema, Name, Names, Namespace, Precision, RecordField, RecordFieldOrder,
-        RecordSchema, ResolvedSchema, Scale, Schema, SchemaFingerprint, SchemaKind, UnionSchema,
+        Alias, Aliases, DecimalMetadata, DecimalSchema, EnumSchema,
+        FixedSchema, Name, Names, Namespace, Precision, RecordField, RecordFieldOrder,
+        RecordSchema, ResolvedSchema, Scale, Schema, SchemaKind, UnionSchema,
     };
     use crate::util::MapHelper;
     use crate::{
         types::{Value, ValueKind},
         validator::{
             validate_enum_symbol_name, validate_record_field_name,
-            validate_schema_name,
         },
     };
     use log::{debug, error, warn};
-    use serde::{
-        Serialize,
-        ser::{SerializeMap, SerializeSeq},
-    };
     #[synca::cfg(sync)]
     use std::io::Read as AvroRead;
     use std::{
         collections::{BTreeMap, HashMap, HashSet},
         fmt::Debug,
-        hash::Hash,
         str::FromStr,
     };
     #[synca::cfg(tokio)]

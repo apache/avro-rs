@@ -368,10 +368,7 @@ mod types {
     use crate::AvroResult;
     use crate::{
         Uuid,
-        bigdecimal::{
-            BigDecimal,
-            tokio::{deserialize_big_decimal, serialize_big_decimal},
-        },
+        bigdecimal::tokio::deserialize_big_decimal,
         decimal::Decimal,
         duration::Duration,
         error::Details,

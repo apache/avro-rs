@@ -80,8 +80,6 @@ mod bigdecimal {
         #[synca::cfg(sync)]
         use std::io::Read;
         #[synca::cfg(tokio)]
-        use tokio::io::AsyncRead;
-        #[synca::cfg(tokio)]
         use tokio::io::AsyncReadExt;
 
         bytes

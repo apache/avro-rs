@@ -56,7 +56,7 @@ mod decode {
         },
         types::Value,
     };
-    use std::{borrow::Borrow, collections::HashMap, io::ErrorKind, str::FromStr};
+    use std::{borrow::Borrow, collections::HashMap, io::ErrorKind};
 
     #[inline]
     pub(crate) async fn decode_long<R: AvroRead + Unpin>(reader: &mut R) -> AvroResult<Value> {
