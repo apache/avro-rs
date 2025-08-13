@@ -1549,7 +1549,7 @@ mod schema {
             enclosing_namespace: &'a Namespace,
         ) -> Option<(usize, &'a Schema)> {
             let schema_kind = SchemaKind::from(value);
-            if let Some(&i) = &union_schema.variant_index.get(&schema_kind) {
+            if let Some(&i) = union_schema.variant_index.get(&schema_kind) {
                 // fast path
                 Some((i, &union_schema.schemas[i]))
             } else {
@@ -2753,20 +2753,24 @@ mod schema {
     mod tests {
         use super::*;
         use crate::{
-            Uuid,
             de::tokio::from_value,
             error::Details,
             rabin::Rabin,
             reader::tokio::from_avro_datum,
             ser::tokio::to_value,
-            writer::tokio::{SpecificSingleObjectWriter, Writer, to_avro_datum},
+            writer::tokio::{Writer, to_avro_datum},
         };
+        #[synca::cfg(sync)]
+        use crate::writer::sync::SpecificSingleObjectWriter;
         use apache_avro_test_helper::{
             TestResult,
             logger::{assert_logged, assert_not_logged},
         };
         use serde_json::json;
+        use serde::{Deserialize, Serialize};
+        #[synca::cfg(sync)]
         use serial_test::serial;
+        #[synca::cfg(sync)]
         use std::sync::atomic::Ordering;
 
         #[tokio::test]
@@ -2861,7 +2865,7 @@ mod schema {
                 .position(1)
                 .build();
 
-            assert!(RecordFieldExt::is_nullable(nullable_record_field));
+            assert!(RecordFieldExt::is_nullable(&nullable_record_field.schema));
 
             let non_nullable_record_field = RecordField::builder()
                 .name("next".to_string())
@@ -2871,7 +2875,7 @@ mod schema {
                 .position(1)
                 .build();
 
-            assert!(!RecordFieldExt::is_nullable(non_nullable_record_field));
+            assert!(!RecordFieldExt::is_nullable(&non_nullable_record_field.schema));
             Ok(())
         }
 
@@ -5402,8 +5406,8 @@ mod schema {
                 PartialOrd,
                 Ord,
                 Clone,
-                serde::Deserialize,
-                serde::Serialize,
+                Deserialize,
+                Serialize,
             )]
             pub enum Bar {
                 #[serde(rename = "bar0")]
@@ -5412,7 +5416,7 @@ mod schema {
                 Bar1,
             }
 
-            #[derive(Debug, PartialEq, Eq, Clone, serde::Deserialize, serde::Serialize)]
+            #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
             pub struct Foo {
                 #[serde(rename = "barInit")]
                 pub bar_init: Bar,
@@ -5448,8 +5452,8 @@ mod schema {
                 PartialOrd,
                 Ord,
                 Clone,
-                serde::Deserialize,
-                serde::Serialize,
+                Deserialize,
+                Serialize,
             )]
             pub enum Bar {
                 #[serde(rename = "bar0")]
@@ -5460,7 +5464,7 @@ mod schema {
                 Bar2,
             }
 
-            #[derive(Debug, PartialEq, Eq, Clone, serde::Deserialize, serde::Serialize)]
+            #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
             pub struct Foo {
                 #[serde(rename = "barInit")]
                 pub bar_init: Bar,
@@ -6924,7 +6928,7 @@ mod schema {
         fn avro_rs_53_uuid_with_fixed() -> TestResult {
             #[derive(Debug, Serialize, Deserialize)]
             struct Comment {
-                id: Uuid,
+                id: crate::Uuid,
             }
 
             #[cfg_attr(feature = "tokio", async_trait::async_trait)]
@@ -6957,13 +6961,13 @@ mod schema {
 
             // serialize the Uuid as String
             crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
-            let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)
+            let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)?
                 .write_ref(&payload, &mut buffer)?;
             assert_eq!(bytes, 47);
 
             // serialize the Uuid as Bytes
             crate::util::SERDE_HUMAN_READABLE.store(false, Ordering::Release);
-            let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)
+            let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)?
                 .write_ref(&payload, &mut buffer)?;
             assert_eq!(bytes, 27);
 

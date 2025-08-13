@@ -1091,7 +1091,11 @@ mod reader {
                 &mut to_read_3,
             ).await
             .expect("Encode should succeed");
-            let mut to_read = (&to_read_1[..]).chain(&to_read_2[..]).chain(&to_read_3[..]);
+
+            #[synca::cfg(sync)]
+            let mut to_read = std::io::Read::chain(&to_read_1[..], &to_read_2[..]).chain(&to_read_3[..]);
+            #[synca::cfg(tokio)]
+            let mut to_read = tokio::io::AsyncReadExt::chain(&to_read_1[..], &to_read_2[..]).chain(&to_read_3[..]);
             let generic_reader =
                 GenericSingleObjectReader::new(TestSingleObjectReader::get_schema().await)
                     .expect("Schema should resolve");

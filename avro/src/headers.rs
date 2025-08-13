@@ -132,10 +132,11 @@ mod headers {
     }
 
     #[cfg(test)]
-    mod test {
+    mod tests {
         use super::*;
         use crate::error::{Details, Error};
         use apache_avro_test_helper::TestResult;
+        use crate::schema::tokio::SchemaExt;
 
         #[tokio::test]
         async fn test_rabin_fingerprint_header() -> TestResult {

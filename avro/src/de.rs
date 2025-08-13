@@ -811,7 +811,6 @@ mod de {
         use apache_avro_test_helper::TestResult;
 
         use crate::decimal::Decimal;
-        use crate::schema::Schema;
 
         use super::*;
 

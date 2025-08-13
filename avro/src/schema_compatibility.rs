@@ -1599,7 +1599,7 @@ mod schema_compatibility {
             record.put("b", "foo");
             record.put("c", "clubs");
             writer.append(record).await.unwrap();
-            let input = writer.into_inner()?;
+            let input = writer.into_inner().await?;
             let mut reader = Reader::with_schema(&reader_schema, &input[..]).await?;
             assert_eq!(
                 reader.next().await.unwrap().unwrap(),
@@ -1663,7 +1663,7 @@ mod schema_compatibility {
             record.put("b", "foo");
             record.put("c", "hearts");
             writer.append(record).await.unwrap();
-            let input = writer.into_inner()?;
+            let input = writer.into_inner().await?;
             let mut reader = Reader::with_schema(&reader_schema, &input[..]).await?;
             assert_eq!(
                 reader.next().await.unwrap().unwrap(),

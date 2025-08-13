@@ -304,10 +304,9 @@ pub mod serde_avro_slice_opt {
 mod tests {
     use super::*;
     use crate::de::tokio::from_value;
-    use crate::schema::Schema;
     use crate::schema::tokio::SchemaExt;
     use crate::ser::tokio::to_value;
-    use crate::types::Value;
+    use crate::types::{{tokio::ValueExt}, Value};
     use apache_avro_test_helper::TestResult;
     use serde::{Deserialize, Serialize};
 
@@ -339,7 +338,7 @@ mod tests {
             slice_field: &[1, 2, 3],
             slice_field_opt: Some(&[1, 2, 3]),
         };
-        let value: Value = to_value(test).unwrap();
+        let value: Value = to_value(test)?;
         let schema = SchemaExt::parse_str(
             r#"
             {
@@ -502,7 +501,7 @@ mod tests {
                 Value::Union(1, Box::new(Value::Null)),
             ),
         ]);
-        assert_eq!(expected, from_value(&value).unwrap());
+        assert_eq!(expected, from_value(&value)?);
         Ok(())
     }
 
@@ -701,7 +700,7 @@ mod tests {
                 Value::Union(0, Box::new(Value::Null)),
             ),
         ]);
-        assert_eq!(expected, to_value(test).unwrap());
+        assert_eq!(expected, to_value(test)?);
         Ok(())
     }
 }

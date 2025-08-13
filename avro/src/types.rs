@@ -730,8 +730,8 @@ mod types {
                 && SchemaKind::from(schema) != SchemaKind::Union
             {
                 // Pull out the Union, and attempt to resolve against it.
-                let v = match *value {
-                    Value::Union(_i, b) => *b,
+                let v = match value {
+                    Value::Union(_i, b) => b,
                     _ => unreachable!(),
                 };
                 value = &v;
@@ -1806,7 +1806,7 @@ Field with name '"b"' is not a member of the map items"#,
                 ))
             );
             assert!(
-              ValueExt::validate(value, &union_schema)
+              ValueExt::validate(&value, &union_schema)
                 .await
             );
 
@@ -3253,7 +3253,7 @@ Field with name '"b"' is not a member of the map items"#,
             let schema =
                 r#"{"name": "bigDecimalSchema", "logicalType": "big-decimal", "type": "bytes" }"#;
 
-            let avro_value = Value::BigDecimal(BigDecimal::from(12345678u32));
+            let avro_value = Value::BigDecimal(bigdecimal::BigDecimal::from(12345678u32));
             let schema = SchemaExt::parse_str(schema).await?;
             let resolve_result: AvroResult<Value> = ValueExt::resolve(avro_value, &schema).await;
             assert!(
