@@ -18,9 +18,8 @@
 //! Logic handling the intermediate representation of Avro values.
 
 use crate::bigdecimal::BigDecimal;
-use crate::error::{Details, Error};
 use crate::schema::{RecordSchema, Schema};
-use crate::{AvroResult, Decimal, Duration, Uuid};
+use crate::{Decimal, Duration, Uuid};
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Debug,
@@ -279,70 +278,6 @@ to_value!(Decimal, Value::Decimal);
 to_value!(BigDecimal, Value::BigDecimal);
 to_value!(Duration, Value::Duration);
 
-/// Convert Avro values to Json values
-impl TryFrom<Value> for serde_json::Value {
-    type Error = Error;
-    fn try_from(value: Value) -> AvroResult<serde_json::Value> {
-        match value {
-            Value::Null => Ok(serde_json::Value::Null),
-            Value::Boolean(b) => Ok(serde_json::Value::Bool(b)),
-            Value::Int(i) => Ok(serde_json::Value::Number(i.into())),
-            Value::Long(l) => Ok(serde_json::Value::Number(l.into())),
-            Value::Float(f) => serde_json::Number::from_f64(f.into())
-                .map(Self::Number)
-                .ok_or_else(|| Details::ConvertF64ToJson(f.into()).into()),
-            Value::Double(d) => serde_json::Number::from_f64(d)
-                .map(Self::Number)
-                .ok_or_else(|| Details::ConvertF64ToJson(d).into()),
-            Value::Bytes(bytes) => Ok(serde_json::Value::Array(
-                bytes.into_iter().map(|b| b.into()).collect(),
-            )),
-            Value::String(s) => Ok(serde_json::Value::String(s)),
-            Value::Fixed(_size, items) => Ok(serde_json::Value::Array(
-                items.into_iter().map(|v| v.into()).collect(),
-            )),
-            Value::Enum(_i, s) => Ok(serde_json::Value::String(s)),
-            Value::Union(_i, b) => Self::try_from(*b),
-            Value::Array(items) => items
-                .into_iter()
-                .map(Self::try_from)
-                .collect::<Result<Vec<_>, _>>()
-                .map(Self::Array),
-            Value::Map(items) => items
-                .into_iter()
-                .map(|(key, value)| Self::try_from(value).map(|v| (key, v)))
-                .collect::<Result<Vec<_>, _>>()
-                .map(|v| Self::Object(v.into_iter().collect())),
-            Value::Record(items) => items
-                .into_iter()
-                .map(|(key, value)| Self::try_from(value).map(|v| (key, v)))
-                .collect::<Result<Vec<_>, _>>()
-                .map(|v| Self::Object(v.into_iter().collect())),
-            Value::Date(d) => Ok(serde_json::Value::Number(d.into())),
-            Value::Decimal(ref d) => <Vec<u8>>::try_from(d)
-                .map(|vec| Self::Array(vec.into_iter().map(|v| v.into()).collect())),
-            Value::BigDecimal(ref bg) => {
-                let vec1: Vec<u8> = vec![]; //crate::bigdecimal::sync::serialize_big_decimal(bg)?;
-                Ok(serde_json::Value::Array(
-                    vec1.into_iter().map(|b| b.into()).collect(),
-                ))
-            }
-            Value::TimeMillis(t) => Ok(serde_json::Value::Number(t.into())),
-            Value::TimeMicros(t) => Ok(serde_json::Value::Number(t.into())),
-            Value::TimestampMillis(t) => Ok(serde_json::Value::Number(t.into())),
-            Value::TimestampMicros(t) => Ok(serde_json::Value::Number(t.into())),
-            Value::TimestampNanos(t) => Ok(serde_json::Value::Number(t.into())),
-            Value::LocalTimestampMillis(t) => Ok(serde_json::Value::Number(t.into())),
-            Value::LocalTimestampMicros(t) => Ok(serde_json::Value::Number(t.into())),
-            Value::LocalTimestampNanos(t) => Ok(serde_json::Value::Number(t.into())),
-            Value::Duration(d) => Ok(serde_json::Value::Array(
-                <[u8; 12]>::from(d).iter().map(|&v| v.into()).collect(),
-            )),
-            Value::Uuid(uuid) => Ok(serde_json::Value::String(uuid.as_hyphenated().to_string())),
-        }
-    }
-}
-
 #[synca::synca(
   #[cfg(feature = "tokio")]
   pub mod tokio { },
@@ -368,7 +303,7 @@ mod types {
     use crate::AvroResult;
     use crate::{
         Uuid,
-        bigdecimal::tokio::deserialize_big_decimal,
+        bigdecimal::tokio::{deserialize_big_decimal, serialize_big_decimal},
         decimal::Decimal,
         duration::Duration,
         error::Details,
@@ -393,6 +328,81 @@ mod types {
     pub struct ValueExt;
 
     impl ValueExt {
+
+        /// Convert Avro values to Json values
+        async fn try_from(value: Value) -> AvroResult<serde_json::Value> {
+            match value {
+                Value::Null => Ok(serde_json::Value::Null),
+                Value::Boolean(b) => Ok(serde_json::Value::Bool(b)),
+                Value::Int(i) => Ok(serde_json::Value::Number(i.into())),
+                Value::Long(l) => Ok(serde_json::Value::Number(l.into())),
+                Value::Float(f) => serde_json::Number::from_f64(f.into())
+                    .map(serde_json::Value::Number)
+                    .ok_or_else(|| Details::ConvertF64ToJson(f.into()).into()),
+                Value::Double(d) => serde_json::Number::from_f64(d)
+                    .map(serde_json::Value::Number)
+                    .ok_or_else(|| Details::ConvertF64ToJson(d).into()),
+                Value::Bytes(bytes) => Ok(serde_json::Value::Array(
+                    bytes.into_iter().map(|b| b.into()).collect(),
+                )),
+                Value::String(s) => Ok(serde_json::Value::String(s)),
+                Value::Fixed(_size, items) => Ok(serde_json::Value::Array(
+                    items.into_iter().map(|v| v.into()).collect(),
+                )),
+                Value::Enum(_i, s) => Ok(serde_json::Value::String(s)),
+                Value::Union(_i, b) => Box::pin(Self::try_from(*b)).await,
+                Value::Array(items) => {
+                    let mut result = Vec::with_capacity(items.len());
+                    for item in items {
+                        let json = Box::pin(Self::try_from(item)).await?;
+                        result.push(json);
+                    }
+                    Ok(serde_json::Value::Array(result))
+                },
+                Value::Map(items) => {
+                    let mut result = serde_json::map::Map::with_capacity(items.len());
+                    for (key, value) in items {
+                        let v = Box::pin(Self::try_from(value)).await?;
+                        result.insert(key, v);
+                    }
+                    Ok(serde_json::Value::Object(result))
+                },
+                Value::Record(items) => {
+                    let mut result = serde_json::map::Map::with_capacity(items.len());
+                    for (key, value) in items {
+                        let v = Box::pin(Self::try_from(value)).await?;
+                        result.insert(key, v);
+                    }
+                    Ok(serde_json::Value::Object(result))
+                },
+                // Value::Record(items) => items
+                //     .into_iter()
+                //     .map(|(key, value)| Self::try_from(value).await.map(|v| (key, v))).await
+                //     .collect::<Result<Vec<_>, _>>()
+                //     .map(|v| serde_json::Value::Object(v.into_iter().collect())),
+                Value::Date(d) => Ok(serde_json::Value::Number(d.into())),
+                Value::Decimal(ref d) => <Vec<u8>>::try_from(d)
+                    .map(|vec| serde_json::Value::Array(vec.into_iter().map(|v| v.into()).collect())),
+                Value::BigDecimal(ref bg) => {
+                    let vec1: Vec<u8> = serialize_big_decimal(bg).await?;
+                    Ok(serde_json::Value::Array(
+                        vec1.into_iter().map(|b| b.into()).collect(),
+                    ))
+                }
+                Value::TimeMillis(t) => Ok(serde_json::Value::Number(t.into())),
+                Value::TimeMicros(t) => Ok(serde_json::Value::Number(t.into())),
+                Value::TimestampMillis(t) => Ok(serde_json::Value::Number(t.into())),
+                Value::TimestampMicros(t) => Ok(serde_json::Value::Number(t.into())),
+                Value::TimestampNanos(t) => Ok(serde_json::Value::Number(t.into())),
+                Value::LocalTimestampMillis(t) => Ok(serde_json::Value::Number(t.into())),
+                Value::LocalTimestampMicros(t) => Ok(serde_json::Value::Number(t.into())),
+                Value::LocalTimestampNanos(t) => Ok(serde_json::Value::Number(t.into())),
+                Value::Duration(d) => Ok(serde_json::Value::Array(
+                    <[u8; 12]>::from(d).iter().map(|&v| v.into()).collect(),
+                )),
+                Value::Uuid(uuid) => Ok(serde_json::Value::String(uuid.as_hyphenated().to_string())),
+            }
+        }
         /// Validate the value against the given [Schema](../schema/enum.Schema.html).
         ///
         /// See the [Avro specification](https://avro.apache.org/docs/current/specification)
@@ -2206,31 +2216,31 @@ Field with name '"b"' is not a member of the map items"#,
         #[tokio::test]
         async fn json_from_avro() -> TestResult {
             assert_eq!(
-                serde_json::Value::try_from(Value::Null)?,
+                ValueExt::try_from(Value::Null).await?,
                 serde_json::Value::Null
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::Boolean(true))?,
+                ValueExt::try_from(Value::Boolean(true)).await?,
                 serde_json::Value::Bool(true)
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::Int(1))?,
+                ValueExt::try_from(Value::Int(1)).await?,
                 serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::Long(1))?,
+                ValueExt::try_from(Value::Long(1)).await?,
                 serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::Float(1.0))?,
+                ValueExt::try_from(Value::Float(1.0)).await?,
                 serde_json::Value::Number(serde_json::Number::from_f64(1.0).unwrap())
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::Double(1.0))?,
+                ValueExt::try_from(Value::Double(1.0)).await?,
                 serde_json::Value::Number(serde_json::Number::from_f64(1.0).unwrap())
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::Bytes(vec![1, 2, 3]))?,
+                ValueExt::try_from(Value::Bytes(vec![1, 2, 3])).await?,
                 serde_json::Value::Array(vec![
                     serde_json::Value::Number(1.into()),
                     serde_json::Value::Number(2.into()),
@@ -2238,11 +2248,11 @@ Field with name '"b"' is not a member of the map items"#,
                 ])
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::String("test".into()))?,
+                ValueExt::try_from(Value::String("test".into())).await?,
                 serde_json::Value::String("test".into())
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::Fixed(3, vec![1, 2, 3]))?,
+                ValueExt::try_from(Value::Fixed(3, vec![1, 2, 3])).await?,
                 serde_json::Value::Array(vec![
                     serde_json::Value::Number(1.into()),
                     serde_json::Value::Number(2.into()),
@@ -2250,22 +2260,22 @@ Field with name '"b"' is not a member of the map items"#,
                 ])
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::Enum(1, "test_enum".into()))?,
+                ValueExt::try_from(Value::Enum(1, "test_enum".into())).await?,
                 serde_json::Value::String("test_enum".into())
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::Union(
+                ValueExt::try_from(Value::Union(
                     1,
                     Box::new(Value::String("test_enum".into()))
-                ))?,
+                )).await?,
                 serde_json::Value::String("test_enum".into())
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::Array(vec![
+                ValueExt::try_from(Value::Array(vec![
                     Value::Int(1),
                     Value::Int(2),
                     Value::Int(3)
-                ]))?,
+                ])).await?,
                 serde_json::Value::Array(vec![
                     serde_json::Value::Number(1.into()),
                     serde_json::Value::Number(2.into()),
@@ -2273,7 +2283,7 @@ Field with name '"b"' is not a member of the map items"#,
                 ])
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::Map(
+                ValueExt::try_from(Value::Map(
                     vec![
                         ("v1".to_string(), Value::Int(1)),
                         ("v2".to_string(), Value::Int(2)),
@@ -2281,7 +2291,7 @@ Field with name '"b"' is not a member of the map items"#,
                     ]
                     .into_iter()
                     .collect()
-                ))?,
+                )).await?,
                 serde_json::Value::Object(
                     vec![
                         ("v1".to_string(), serde_json::Value::Number(1.into())),
@@ -2293,11 +2303,11 @@ Field with name '"b"' is not a member of the map items"#,
                 )
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::Record(vec![
+                ValueExt::try_from(Value::Record(vec![
                     ("v1".to_string(), Value::Int(1)),
                     ("v2".to_string(), Value::Int(2)),
                     ("v3".to_string(), Value::Int(3))
-                ]))?,
+                ])).await?,
                 serde_json::Value::Object(
                     vec![
                         ("v1".to_string(), serde_json::Value::Number(1.into())),
@@ -2309,11 +2319,11 @@ Field with name '"b"' is not a member of the map items"#,
                 )
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::Date(1))?,
+                ValueExt::try_from(Value::Date(1)).await?,
                 serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::Decimal(vec![1, 2, 3].into()))?,
+                ValueExt::try_from(Value::Decimal(vec![1, 2, 3].into())).await?,
                 serde_json::Value::Array(vec![
                     serde_json::Value::Number(1.into()),
                     serde_json::Value::Number(2.into()),
@@ -2321,44 +2331,44 @@ Field with name '"b"' is not a member of the map items"#,
                 ])
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::TimeMillis(1))?,
+                ValueExt::try_from(Value::TimeMillis(1)).await?,
                 serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::TimeMicros(1))?,
+                ValueExt::try_from(Value::TimeMicros(1)).await?,
                 serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::TimestampMillis(1))?,
+                ValueExt::try_from(Value::TimestampMillis(1)).await?,
                 serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::TimestampMicros(1))?,
+                ValueExt::try_from(Value::TimestampMicros(1)).await?,
                 serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::TimestampNanos(1))?,
+                ValueExt::try_from(Value::TimestampNanos(1)).await?,
                 serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::LocalTimestampMillis(1))?,
+                ValueExt::try_from(Value::LocalTimestampMillis(1)).await?,
                 serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::LocalTimestampMicros(1))?,
+                ValueExt::try_from(Value::LocalTimestampMicros(1)).await?,
                 serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::LocalTimestampNanos(1))?,
+                ValueExt::try_from(Value::LocalTimestampNanos(1)).await?,
                 serde_json::Value::Number(1.into())
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::Duration(
+                ValueExt::try_from(Value::Duration(
                     [
                         1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8, 10u8, 11u8, 12u8
                     ]
                     .into()
-                ))?,
+                )).await?,
                 serde_json::Value::Array(vec![
                     serde_json::Value::Number(1.into()),
                     serde_json::Value::Number(2.into()),
@@ -2375,9 +2385,9 @@ Field with name '"b"' is not a member of the map items"#,
                 ])
             );
             assert_eq!(
-                serde_json::Value::try_from(Value::Uuid(Uuid::parse_str(
+                ValueExt::try_from(Value::Uuid(Uuid::parse_str(
                     "936DA01F-9ABD-4D9D-80C7-02AF85C822A8"
-                )?))?,
+                )?)).await?,
                 serde_json::Value::String("936da01f-9abd-4d9d-80c7-02af85c822a8".into())
             );
 
