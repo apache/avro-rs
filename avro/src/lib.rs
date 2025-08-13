@@ -881,6 +881,7 @@ mod duration;
 mod encode;
 mod reader;
 mod ser;
+#[cfg(feature = "sync")]
 mod ser_schema;
 mod util;
 mod writer;
