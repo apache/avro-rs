@@ -884,6 +884,7 @@ mod writer {
         #[synca::cfg(tokio)]
         use futures::StreamExt;
         use pretty_assertions::assert_eq;
+        #[synca::cfg(sync)]
         use serde::{Deserialize, Serialize};
         #[synca::cfg(sync)]
         use uuid::Uuid;
@@ -1225,6 +1226,7 @@ mod writer {
             Ok(())
         }
 
+        #[synca::cfg(sync)]
         #[derive(Debug, Clone, Deserialize, Serialize)]
         struct TestSerdeSerialize {
             a: i64,
@@ -1549,6 +1551,7 @@ mod writer {
             Ok(())
         }
 
+        #[synca::cfg(sync)]
         #[derive(Serialize, Clone)]
         struct TestSingleObjectWriter {
             a: i64,
@@ -1586,6 +1589,7 @@ mod writer {
             }
         }
 
+        #[synca::cfg(sync)]
         impl From<TestSingleObjectWriter> for Value {
             fn from(obj: TestSingleObjectWriter) -> Value {
                 Value::Record(vec![
