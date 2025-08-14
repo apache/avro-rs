@@ -223,13 +223,18 @@ mod reader {
         }
 
         async fn read_next(&mut self, read_schema: Option<&Schema>) -> AvroResult<Option<Value>> {
+            dbg!("read_next called", &read_schema);
             if self.is_empty() {
+                dbg!("read_next called - empty");
                 self.read_block_next().await?;
+                dbg!("read_block_next passed");
                 if self.is_empty() {
+                    dbg!("read_next called - empty 2");
                     return Ok(None);
                 }
             }
 
+            dbg!("read_next called 2", self.buf_idx);
             let mut block_bytes = &self.buf[self.buf_idx..];
             let b_original = block_bytes.len();
 
@@ -240,6 +245,7 @@ mod reader {
                 &mut block_bytes,
             )
             .await?;
+            dbg!("read_next called 3", &item);
             let item = match read_schema {
                 Some(schema) => ValueExt::resolve(item, schema).await?,
                 None => item,
@@ -377,8 +383,17 @@ mod reader {
         reader_schema: Option<&'a Schema>,
         errored: bool,
         should_resolve_schema: bool,
-        #[synca::cfg(tokio)]
-        pending_future: Option<Pin<Box<dyn Future<Output = AvroResult<Value>> + Send>>>,
+    }
+
+    impl<R> std::fmt::Debug for Reader<'_, R> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("Reader")
+                // .field("block", &self.block)
+                .field("reader_schema", &self.reader_schema)
+                .field("errored", &self.errored)
+                .field("should_resolve_schema", &self.should_resolve_schema)
+                .finish()
+        }
     }
 
     impl<'a, R> Reader<'a, R>
@@ -396,8 +411,6 @@ mod reader {
                 reader_schema: None,
                 errored: false,
                 should_resolve_schema: false,
-                #[synca::cfg(tokio)]
-                pending_future: None,
             };
             Ok(reader)
         }
@@ -413,8 +426,6 @@ mod reader {
                 reader_schema: Some(schema),
                 errored: false,
                 should_resolve_schema: false,
-                #[synca::cfg(tokio)]
-                pending_future: None,
             };
             // Check if the reader and writer schemas disagree.
             reader.should_resolve_schema = reader.writer_schema() != schema;
@@ -436,8 +447,6 @@ mod reader {
                 reader_schema: Some(schema),
                 errored: false,
                 should_resolve_schema: false,
-                #[synca::cfg(tokio)]
-                pending_future: None,
             };
             // Check if the reader and writer schemas disagree.
             reader.should_resolve_schema = reader.writer_schema() != schema;
@@ -469,6 +478,7 @@ mod reader {
             } else {
                 None
             };
+            dbg!("Reader::read_next called 1", &self);
 
             self.block.read_next(read_schema).await
         }
@@ -503,30 +513,28 @@ mod reader {
         type Item = AvroResult<Value>;
 
         fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            dbg!("poll_next called", &self);
             // to prevent keep on reading after the first error occurs
             if self.errored {
                 return Poll::Ready(None);
             };
-            if let Some(mut future) = self.pending_future.take() {
-                match future.as_mut().poll(cx) {
-                    Poll::Ready(result) => {
-                        // Future completed, return the result
-                        if result.is_err() {
-                            self.errored = true;
+            let mut future = Box::pin(self.read_next());
+            match future.as_mut().poll(cx) {
+                Poll::Ready(result) => {
+                    dbg!("Ready", &result);
+                    match result {
+                        Ok(opt) => Poll::Ready(opt.map(Ok)),
+                        Err(e) => {
+                            dbg!("Ready 1 - errored");
+                            // self.errored = true;
+                            Poll::Ready(Some(Err(e)))
                         }
-                        Poll::Ready(Some(result))
-                    }
-                    Poll::Pending => {
-                        // Restore the pending future
-                        self.pending_future = Some(future);
-                        Poll::Pending
                     }
                 }
-            } else {
-                // TODO: mgrigorov: This breaks rustc !!!
-                // let future = self.read_next();
-                // self.pending_future = Some(future);
-                Poll::Pending
+                Poll::Pending => {
+                    dbg!("Pending");
+                    Poll::Pending
+                }
             }
         }
     }
