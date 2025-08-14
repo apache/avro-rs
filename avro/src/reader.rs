@@ -368,14 +368,13 @@ mod reader {
     /// ```no_run
     /// use apache_avro::Reader;
     /// use std::io::Cursor;
-    /// async {
+    ///
     /// let input = Cursor::new(Vec::<u8>::new());
-    /// for value in Reader::new(input).await.unwrap() {
+    /// for value in Reader::new(input).unwrap() {
     ///     match value {
     ///         Ok(v) => println!("{:?}", v),
     ///         Err(e) => println!("Error: {}", e),
     ///     };
-    /// }
     /// }
     /// ```
     pub struct Reader<'a, R> {
@@ -526,7 +525,8 @@ mod reader {
                         Ok(opt) => Poll::Ready(opt.map(Ok)),
                         Err(e) => {
                             dbg!("Ready 1 - errored");
-                            // self.errored = true;
+                            drop(future);
+                            self.errored = true;
                             Poll::Ready(Some(Err(e)))
                         }
                     }
@@ -908,6 +908,7 @@ mod reader {
 
             #[allow(clippy::while_let_on_iterator)]
             while let Some(value) = reader.next().await {
+                dbg!(&value);
                 assert!(value.is_err());
             }
 
