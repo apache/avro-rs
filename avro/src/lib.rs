@@ -947,7 +947,7 @@ pub use writer::sync::{
 #[cfg(feature = "tokio")]
 pub use writer::tokio::{
     GenericSingleObjectWriter as AsyncGenericSingleObjectWriter,
-    SpecificSingleObjectWriter as AsyncSpecificSingleObjectWriter, Writer as AsyncWriter,
+    Writer as AsyncWriter,
     WriterBuilder as AsyncWriterBuilder, to_avro_datum as async_to_avro_datum,
     to_avro_datum_schemata as async_to_avro_datum_schemata,
 };

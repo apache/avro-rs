@@ -329,6 +329,7 @@ mod types {
 
     impl ValueExt {
         /// Convert Avro values to Json values
+        #[allow(dead_code)] // TODO: mgrigorv: Seems unused! Delete ?!
         async fn try_from(value: Value) -> AvroResult<serde_json::Value> {
             match value {
                 Value::Null => Ok(serde_json::Value::Null),

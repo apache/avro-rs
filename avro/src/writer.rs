@@ -61,12 +61,17 @@ mod writer {
         error::Details,
         error::Error,
         headers::tokio::{HeaderBuilder, RabinFingerprintHeader},
-        schema::{AvroSchema, ResolvedOwnedSchema, ResolvedSchema, Schema},
+        schema::{ResolvedOwnedSchema, ResolvedSchema, Schema},
         types::Value,
     };
     #[synca::cfg(sync)]
     use serde::Serialize;
-    use std::{collections::HashMap, marker::PhantomData, mem::ManuallyDrop, ops::RangeInclusive};
+    use std::{collections::HashMap, mem::ManuallyDrop, ops::RangeInclusive};
+
+    #[synca::cfg(sync)]
+    use std::marker::PhantomData;
+    #[synca::cfg(sync)]
+    use crate::AvroSchema;
 
     const DEFAULT_BLOCK_SIZE: usize = 16000;
     const AVRO_OBJECT_HEADER: &[u8] = b"Obj\x01";
@@ -647,6 +652,7 @@ mod writer {
     }
 
     /// Writer that encodes messages according to the single object encoding v1 spec
+    #[synca::cfg(sync)]
     pub struct SpecificSingleObjectWriter<T>
     where
         T: AvroSchema,
@@ -657,6 +663,7 @@ mod writer {
         _model: PhantomData<T>,
     }
 
+    #[synca::cfg(sync)]
     impl<T> SpecificSingleObjectWriter<T>
     where
         T: AvroSchema,
@@ -672,6 +679,7 @@ mod writer {
         }
     }
 
+    #[synca::cfg(sync)]
     impl<T> SpecificSingleObjectWriter<T>
     where
         T: AvroSchema + Into<Value>,
