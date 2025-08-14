@@ -69,9 +69,9 @@ mod writer {
     use std::{collections::HashMap, mem::ManuallyDrop, ops::RangeInclusive};
 
     #[synca::cfg(sync)]
-    use std::marker::PhantomData;
-    #[synca::cfg(sync)]
     use crate::AvroSchema;
+    #[synca::cfg(sync)]
+    use std::marker::PhantomData;
 
     const DEFAULT_BLOCK_SIZE: usize = 16000;
     const AVRO_OBJECT_HEADER: &[u8] = b"Obj\x01";
