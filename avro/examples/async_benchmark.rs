@@ -16,12 +16,13 @@
 // under the License.
 
 use apache_avro::{
-    AsyncReader as Reader, Schema, schema::tokio::SchemaExt, AsyncWriter as Writer,
+    AsyncReader as Reader, AsyncWriter as Writer, Schema,
+    schema::tokio::SchemaExt,
     types::{Record, Value},
 };
+use futures::StreamExt;
 use std::time::{Duration, Instant};
 use tokio::io::{BufReader, BufWriter};
-use futures::StreamExt;
 
 fn nanos(duration: Duration) -> u64 {
     duration.as_secs() * 1_000_000_000 + duration.subsec_nanos() as u64
@@ -78,7 +79,7 @@ async fn benchmark(
         let mut reader = Reader::with_schema(schema, BufReader::new(&bytes[..])).await?;
 
         let mut read_records = Vec::with_capacity(count);
-        while let Some(record) =reader.next().await {
+        while let Some(record) = reader.next().await {
             read_records.push(record);
         }
 

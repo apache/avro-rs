@@ -240,7 +240,7 @@ mod reader {
                 &mut block_bytes,
             )
             .await?;
-            
+
             let item = match read_schema {
                 Some(schema) => ValueExt::resolve(item, schema).await?,
                 None => item,
@@ -511,19 +511,15 @@ mod reader {
             };
             let mut future = Box::pin(self.read_next());
             match future.as_mut().poll(cx) {
-                Poll::Ready(result) => {
-                    match result {
-                        Ok(opt) => Poll::Ready(opt.map(Ok)),
-                        Err(e) => {
-                            drop(future);
-                            self.errored = true;
-                            Poll::Ready(Some(Err(e)))
-                        }
+                Poll::Ready(result) => match result {
+                    Ok(opt) => Poll::Ready(opt.map(Ok)),
+                    Err(e) => {
+                        drop(future);
+                        self.errored = true;
+                        Poll::Ready(Some(Err(e)))
                     }
-                }
-                Poll::Pending => {
-                    Poll::Pending
-                }
+                },
+                Poll::Pending => Poll::Pending,
             }
         }
     }
