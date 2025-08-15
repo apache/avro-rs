@@ -184,6 +184,11 @@ path = "tests/schema.rs"
 required-features = ["sync"]
 
 [[test]]
+name = "async_schema"
+path = "tests/async_schema.rs"
+required-features = ["tokio"]
+
+[[test]]
 name = "shared"
 path = "tests/shared.rs"
 required-features = ["sync"]
