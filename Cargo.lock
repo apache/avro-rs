@@ -1294,7 +1294,7 @@ dependencies = [
 [[package]]
 name = "synca"
 version = "0.5.3"
-source = "git+https://github.com/martin-g/rs_synca/?branch=add-support-for-use-path-replacing#1a98bbafcebc82e4bc111036842f2287cbeec3ab"
+source = "git+https://github.com/martin-g/rs_synca/?branch=add-support-for-use-path-replacing#99486dde498a1065733639638fb6342fd922d28b"
 dependencies = [
  "proc-macro2",
  "quote",
