@@ -16,13 +16,12 @@
 // under the License.
 
 use apache_avro::{
-    Reader, Schema, SchemaExt, Writer,
+    AsyncReader as Reader, Schema, schema::tokio::SchemaExt, AsyncWriter as Writer,
     types::{Record, Value},
 };
-use std::{
-    io::{BufReader, BufWriter},
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
+use tokio::io::{BufReader, BufWriter};
+use futures::StreamExt;
 
 fn nanos(duration: Duration) -> u64 {
     duration.as_secs() * 1_000_000_000 + duration.subsec_nanos() as u64
@@ -38,7 +37,7 @@ fn duration(nanos: u64) -> Duration {
 }
 */
 
-fn benchmark(
+async fn benchmark(
     schema: &Schema,
     record: &Value,
     big_or_small: &str,
@@ -58,12 +57,12 @@ fn benchmark(
 
         let start = Instant::now();
         let mut writer = Writer::new(schema, BufWriter::new(Vec::new()));
-        writer.extend(records)?;
+        writer.extend(records).await?;
 
         let duration = Instant::now().duration_since(start);
         durations.push(duration);
 
-        bytes = Some(writer.into_inner()?.into_inner()?);
+        bytes = Some(writer.into_inner().await?.into_inner());
     }
 
     let total_duration_write = durations.into_iter().fold(0u64, |a, b| a + nanos(b));
@@ -76,10 +75,10 @@ fn benchmark(
 
     for _ in 0..runs {
         let start = Instant::now();
-        let reader = Reader::with_schema(schema, BufReader::new(&bytes[..]))?;
+        let mut reader = Reader::with_schema(schema, BufReader::new(&bytes[..])).await?;
 
         let mut read_records = Vec::with_capacity(count);
-        for record in reader {
+        while let Some(record) =reader.next().await {
             read_records.push(record);
         }
 
@@ -99,7 +98,8 @@ fn benchmark(
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let raw_small_schema = r#"
         {"namespace": "test", "type": "record", "name": "Test", "fields": [{"type": {"type": "string"}, "name": "field"}]}
     "#;
@@ -108,8 +108,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         {"namespace": "my.example", "type": "record", "name": "userInfo", "fields": [{"default": "NONE", "type": "string", "name": "username"}, {"default": -1, "type": "int", "name": "age"}, {"default": "NONE", "type": "string", "name": "phone"}, {"default": "NONE", "type": "string", "name": "housenum"}, {"default": {}, "type": {"fields": [{"default": "NONE", "type": "string", "name": "street"}, {"default": "NONE", "type": "string", "name": "city"}, {"default": "NONE", "type": "string", "name": "state_prov"}, {"default": "NONE", "type": "string", "name": "country"}, {"default": "NONE", "type": "string", "name": "zip"}], "type": "record", "name": "mailing_address"}, "name": "address"}]}
     "#;
 
-    let small_schema = SchemaExt::parse_str(raw_small_schema)?;
-    let big_schema = SchemaExt::parse_str(raw_big_schema)?;
+    let small_schema = SchemaExt::parse_str(raw_small_schema).await?;
+    let big_schema = SchemaExt::parse_str(raw_big_schema).await?;
 
     println!("{small_schema:?}");
     println!("{big_schema:?}");
@@ -119,7 +119,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let small_record = small_record.into();
 
     let raw_address_schema = r#"{"fields": [{"default": "NONE", "type": "string", "name": "street"}, {"default": "NONE", "type": "string", "name": "city"}, {"default": "NONE", "type": "string", "name": "state_prov"}, {"default": "NONE", "type": "string", "name": "country"}, {"default": "NONE", "type": "string", "name": "zip"}], "type": "record", "name": "mailing_address"}"#;
-    let address_schema = SchemaExt::parse_str(raw_address_schema).unwrap();
+    let address_schema = SchemaExt::parse_str(raw_address_schema).await?;
     let mut address = Record::new(&address_schema).unwrap();
     address.put("street", "street");
     address.put("city", "city");
@@ -138,16 +138,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
     println!("Count\t\tRuns\t\tBig/Small\tTotal write secs\tTotal read secs");
 
-    benchmark(&small_schema, &small_record, "Small", 10_000, 1)?;
-    benchmark(&big_schema, &big_record, "Big", 10_000, 1)?;
+    benchmark(&small_schema, &small_record, "Small", 10_000, 1).await?;
+    benchmark(&big_schema, &big_record, "Big", 10_000, 1).await?;
 
-    benchmark(&small_schema, &small_record, "Small", 1, 100_000)?;
-    benchmark(&small_schema, &small_record, "Small", 100, 1000)?;
-    benchmark(&small_schema, &small_record, "Small", 10_000, 10)?;
+    benchmark(&small_schema, &small_record, "Small", 1, 100_000).await?;
+    benchmark(&small_schema, &small_record, "Small", 100, 1000).await?;
+    benchmark(&small_schema, &small_record, "Small", 10_000, 10).await?;
 
-    benchmark(&big_schema, &big_record, "Big", 1, 100_000)?;
-    benchmark(&big_schema, &big_record, "Big", 100, 1000)?;
-    benchmark(&big_schema, &big_record, "Big", 10_000, 10)?;
+    benchmark(&big_schema, &big_record, "Big", 1, 100_000).await?;
+    benchmark(&big_schema, &big_record, "Big", 100, 1000).await?;
+    benchmark(&big_schema, &big_record, "Big", 10_000, 10).await?;
 
     Ok(())
 }

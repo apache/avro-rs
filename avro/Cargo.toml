@@ -109,6 +109,11 @@ path = "examples/benchmark.rs"
 required-features = ["sync"]
 
 [[example]]
+name = "async_benchmark"
+path = "examples/async_benchmark.rs"
+required-features = ["tokio"]
+
+[[example]]
 name = "generate_interop_data"
 path = "examples/generate_interop_data.rs"
 required-features = ["sync"]
