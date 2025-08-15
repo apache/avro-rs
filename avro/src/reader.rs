@@ -223,18 +223,13 @@ mod reader {
         }
 
         async fn read_next(&mut self, read_schema: Option<&Schema>) -> AvroResult<Option<Value>> {
-            dbg!("read_next called", &read_schema);
             if self.is_empty() {
-                dbg!("read_next called - empty");
                 self.read_block_next().await?;
-                dbg!("read_block_next passed");
                 if self.is_empty() {
-                    dbg!("read_next called - empty 2");
                     return Ok(None);
                 }
             }
 
-            dbg!("read_next called 2", self.buf_idx);
             let mut block_bytes = &self.buf[self.buf_idx..];
             let b_original = block_bytes.len();
 
@@ -245,7 +240,7 @@ mod reader {
                 &mut block_bytes,
             )
             .await?;
-            dbg!("read_next called 3", &item);
+            
             let item = match read_schema {
                 Some(schema) => ValueExt::resolve(item, schema).await?,
                 None => item,
@@ -477,8 +472,6 @@ mod reader {
             } else {
                 None
             };
-            dbg!("Reader::read_next called 1", &self);
-
             self.block.read_next(read_schema).await
         }
     }
@@ -512,7 +505,6 @@ mod reader {
         type Item = AvroResult<Value>;
 
         fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-            dbg!("poll_next called", &self);
             // to prevent keep on reading after the first error occurs
             if self.errored {
                 return Poll::Ready(None);
@@ -520,11 +512,9 @@ mod reader {
             let mut future = Box::pin(self.read_next());
             match future.as_mut().poll(cx) {
                 Poll::Ready(result) => {
-                    dbg!("Ready", &result);
                     match result {
                         Ok(opt) => Poll::Ready(opt.map(Ok)),
                         Err(e) => {
-                            dbg!("Ready 1 - errored");
                             drop(future);
                             self.errored = true;
                             Poll::Ready(Some(Err(e)))
@@ -532,7 +522,6 @@ mod reader {
                     }
                 }
                 Poll::Pending => {
-                    dbg!("Pending");
                     Poll::Pending
                 }
             }
@@ -908,7 +897,6 @@ mod reader {
 
             #[allow(clippy::while_let_on_iterator)]
             while let Some(value) = reader.next().await {
-                dbg!(&value);
                 assert!(value.is_err());
             }
 
