@@ -285,14 +285,33 @@ pub mod serde_avro_slice_opt {
     }
 }
 
+#[synca::synca(
+  #[cfg(feature = "tokio")]
+  pub mod tokio_tests { },
+  #[cfg(feature = "sync")]
+  pub mod sync_tests {
+    sync!();
+    replace!(
+      crate::de::tokio => crate::de::sync,
+      crate::schema::tokio => crate::schema::sync,
+      crate::ser::tokio => crate::ser::sync,
+      crate::types::tokio => crate::types::sync,
+      #[tokio::test] => #[test]
+    );
+  }
+)]
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Schema, from_value, to_value, types::Value};
+    use crate::de::tokio::from_value;
+    use crate::schema::tokio::SchemaExt;
+    use crate::ser::tokio::to_value;
+    use crate::types::{Value, tokio::ValueExt};
+    use apache_avro_test_helper::TestResult;
     use serde::{Deserialize, Serialize};
 
-    #[test]
-    fn avro_3631_validate_schema_for_struct_with_byte_types() {
+    #[tokio::test]
+    async fn avro_3631_validate_schema_for_struct_with_byte_types() -> TestResult {
         #[derive(Debug, Serialize)]
         struct TestStructWithBytes<'a> {
             #[serde(with = "serde_avro_bytes")]
@@ -319,8 +338,8 @@ mod tests {
             slice_field: &[1, 2, 3],
             slice_field_opt: Some(&[1, 2, 3]),
         };
-        let value: Value = to_value(test).unwrap();
-        let schema = Schema::parse_str(
+        let value: Value = to_value(test)?;
+        let schema = SchemaExt::parse_str(
             r#"
             {
               "type": "record",
@@ -354,12 +373,13 @@ mod tests {
               } ]
             }"#,
         )
-        .unwrap();
-        assert!(value.validate(&schema));
+        .await?;
+        assert!(ValueExt::validate(&value, &schema).await);
+        Ok(())
     }
 
-    #[test]
-    fn avro_3631_deserialize_value_to_struct_with_byte_types() {
+    #[tokio::test]
+    async fn avro_3631_deserialize_value_to_struct_with_byte_types() -> TestResult {
         #[derive(Debug, Deserialize, PartialEq)]
         struct TestStructWithBytes<'a> {
             #[serde(with = "serde_avro_bytes")]
@@ -481,11 +501,12 @@ mod tests {
                 Value::Union(1, Box::new(Value::Null)),
             ),
         ]);
-        assert_eq!(expected, from_value(&value).unwrap());
+        assert_eq!(expected, from_value(&value)?);
+        Ok(())
     }
 
-    #[test]
-    fn avro_3631_serialize_struct_to_value_with_byte_types() {
+    #[tokio::test]
+    async fn avro_3631_serialize_struct_to_value_with_byte_types() -> TestResult {
         #[derive(Debug, Serialize)]
         struct TestStructWithBytes<'a> {
             array_field: &'a [u8],
@@ -679,6 +700,7 @@ mod tests {
                 Value::Union(0, Box::new(Value::Null)),
             ),
         ]);
-        assert_eq!(expected, to_value(test).unwrap());
+        assert_eq!(expected, to_value(test)?);
+        Ok(())
     }
 }

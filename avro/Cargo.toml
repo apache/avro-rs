@@ -29,11 +29,14 @@ categories.workspace = true
 documentation.workspace = true
 
 [features]
+default = ["tokio"]
 bzip = ["dep:bzip2"]
 derive = ["dep:apache-avro-derive"]
 snappy = ["dep:crc32fast", "dep:snap"]
 xz = ["dep:xz2"]
 zstandard = ["dep:zstd"]
+sync = []
+tokio = ["dep:tokio", "dep:futures"]
 
 [lib]
 # disable benchmarks to allow passing criterion arguments to `cargo bench`
@@ -70,10 +73,13 @@ snap = { default-features = false, version = "1.1.0", optional = true }
 strum = { default-features = false, version = "0.27.2" }
 strum_macros = { default-features = false, version = "0.27.2" }
 thiserror = { default-features = false, version = "2.0.14" }
+tokio = { version = "1.47.0", default-features = false, features = [ "fs", "io-util", "macros", "rt-multi-thread" ], optional = true }
 uuid = { default-features = false, version = "1.18.0", features = ["serde", "std"] }
 xz2 = { default-features = false, version = "0.1.7", optional = true }
 zstd = { default-features = false, version = "0.13.3", optional = true }
-
+synca = { git = "https://github.com/martin-g/rs_synca/", branch = "add-support-for-use-path-replacing", default-features = false, features = ["boxpin", "usepath"] }
+#synca = { path = "/home/martin/git/rust/rs_synca/synca", default-features = false, features = ["boxpin", "usepath"] }
+futures = { version =  "0.3.31", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 quad-rand = { default-features = false, version = "0.2.3" }
@@ -96,3 +102,113 @@ rstest = { default-features = false, version = "0.26.1" }
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[[example]]
+name = "benchmark"
+path = "examples/benchmark.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "async_benchmark"
+path = "examples/async_benchmark.rs"
+required-features = ["tokio"]
+
+[[example]]
+name = "generate_interop_data"
+path = "examples/generate_interop_data.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "specific_single_object"
+path = "examples/specific_single_object.rs"
+required-features = ["sync", "derive"]
+
+[[example]]
+name = "test_interop_data"
+path = "examples/test_interop_data.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "test_interop_single_object_encoding"
+path = "examples/test_interop_single_object_encoding.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "to_value"
+path = "examples/to_value.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "append_to_existing"
+path = "tests/append_to_existing.rs"
+required-features = ["sync", "derive"]
+
+[[test]]
+name = "avro-3786"
+path = "tests/avro-3786.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "avro-3787"
+path = "tests/avro-3787.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "avro-rs-219"
+path = "tests/avro-rs-219.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "avro-rs-226"
+path = "tests/avro-rs-226.rs"
+required-features = ["sync", "derive"]
+
+[[test]]
+name = "big_decimal"
+path = "tests/big_decimal.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "codecs"
+path = "tests/codecs.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "io"
+path = "tests/io.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "schema"
+path = "tests/schema.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "async_schema"
+path = "tests/async_schema.rs"
+required-features = ["tokio"]
+
+[[test]]
+name = "shared"
+path = "tests/shared.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "to_from_avro_datum_schemata"
+path = "tests/to_from_avro_datum_schemata.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "union_schema"
+path = "tests/union_schema.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "uuids"
+path = "tests/uuids.rs"
+required-features = ["sync"]
+
+[[test]]
+name = "validators"
+path = "tests/validators.rs"
+required-features = ["sync"]

@@ -15,7 +15,31 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::{AvroResult, error::Details, schema::Namespace};
+// #[synca::synca(
+//   #[cfg(feature = "tokio")]
+//   pub mod tokio { },
+//   #[cfg(feature = "sync")]
+//   pub mod sync {
+//     sync!();
+//     replace!(
+//       crate::bigdecimal::tokio => crate::bigdecimal::sync,
+//       crate::decode::tokio => crate::decode::sync,
+//       crate::encode::tokio => crate::encode::sync,
+//       crate::error::tokio => crate::error::sync,
+//       crate::schema::tokio => crate::schema::sync,
+//       crate::util::tokio => crate::util::sync,
+//       crate::types::tokio => crate::types::sync,
+//       crate::schema_equality::tokio => crate::schema_equality::sync,
+//       crate::util::tokio => crate::util::sync,
+//       crate::validator::tokio => crate::validator::sync,
+//       #[tokio::test] => #[test]
+//     );
+//   }
+// )]
+// mod validator {
+
+use crate::AvroResult;
+use crate::{error::Details, schema::Namespace};
 use log::debug;
 use regex_lite::Regex;
 use std::sync::OnceLock;
@@ -317,3 +341,4 @@ mod tests {
         Ok(())
     }
 }
+// }

@@ -15,6 +15,26 @@
 // specific language governing permissions and limitations
 // under the License.
 
+// #[synca::synca(
+//   #[cfg(feature = "tokio")]
+//   pub mod tokio { },
+//   #[cfg(feature = "sync")]
+//   pub mod sync {
+//     sync!();
+//     replace!(
+//       crate::bigdecimal::tokio => crate::bigdecimal::sync,
+//       crate::decimal::tokio => crate::decimal::sync,
+//       crate::decode::tokio => crate::decode::sync,
+//       crate::encode::tokio => crate::encode::sync,
+//       crate::error::tokio => crate::error::sync,
+//       crate::schema::tokio => crate::schema::sync,
+//       crate::util::tokio => crate::util::sync,
+//       crate::types::tokio => crate::types::sync,
+//       #[tokio::test] => #[test]
+//     );
+//   }
+// )]
+// mod error {
 use crate::{
     schema::{Name, Schema, SchemaKind, UnionSchema},
     types::{Value, ValueKind},
@@ -238,10 +258,12 @@ pub enum Details {
     #[error("Expected Value::Long or Value::Int, got: {0:?}")]
     GetLong(Value),
 
-    #[error(r#"Expected Value::Double, Value::Float, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: {0:?}"#)]
+    #[error(r#"Expected Value::Double, Value::Float, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: {0:?}"#
+        )]
     GetDouble(Value),
 
-    #[error(r#"Expected Value::Float, Value::Double, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: {0:?}"#)]
+    #[error(r#"Expected Value::Float, Value::Double, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: {0:?}"#
+        )]
     GetFloat(Value),
 
     #[error("Expected Value::Bytes, got: {0:?}")]
@@ -656,3 +678,4 @@ impl fmt::Debug for CompatibilityError {
         write!(f, "{msg}")
     }
 }
+// }

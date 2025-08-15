@@ -19,10 +19,10 @@
 //! which writes directly to a `Write` stream
 
 use crate::{
-    bigdecimal::big_decimal_as_bytes,
-    encode::{encode_int, encode_long},
+    bigdecimal::sync::big_decimal_as_bytes,
+    encode::sync::{encode_int, encode_long},
     error::{Details, Error},
-    schema::{Name, NamesRef, Namespace, RecordField, RecordSchema, Schema},
+    schema::{Name, Names, Namespace, RecordField, RecordSchema, Schema},
 };
 use bigdecimal::BigDecimal;
 use serde::{Serialize, ser};
@@ -431,7 +431,7 @@ impl<W: Write> ser::SerializeTupleVariant for SchemaAwareWriteSerializeTupleStru
 pub struct SchemaAwareWriteSerializer<'s, W: Write> {
     writer: &'s mut W,
     root_schema: &'s Schema,
-    names: &'s NamesRef<'s>,
+    names: &'s Names,
     enclosing_namespace: Namespace,
 }
 
@@ -448,7 +448,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     pub fn new(
         writer: &'s mut W,
         schema: &'s Schema,
-        names: &'s NamesRef<'s>,
+        names: &'s Names,
         enclosing_namespace: Namespace,
     ) -> SchemaAwareWriteSerializer<'s, W> {
         SchemaAwareWriteSerializer {
@@ -468,7 +468,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
             }),
         };
 
-        let ref_schema = self.names.get(full_name.as_ref()).copied();
+        let ref_schema = self.names.get(full_name.as_ref());
 
         ref_schema.ok_or_else(|| Details::SchemaResolutionError(full_name.as_ref().clone()).into())
     }
@@ -1765,6 +1765,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut SchemaAwareWriteSerializer<'s
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::schema::sync::SchemaExt;
     use crate::{
         Days, Duration, Millis, Months, decimal::Decimal, error::Details, schema::ResolvedSchema,
     };
@@ -1942,15 +1943,15 @@ mod tests {
 
     #[test]
     fn test_serialize_record() -> TestResult {
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"{
-            "type": "record",
-            "name": "TestRecord",
-            "fields": [
-                {"name": "stringField", "type": "string"},
-                {"name": "intField", "type": "int"}
-            ]
-        }"#,
+        "type": "record",
+        "name": "TestRecord",
+        "fields": [
+            {"name": "stringField", "type": "string"},
+            {"name": "intField", "type": "int"}
+        ]
+    }"#,
         )?;
 
         #[derive(Serialize)]
@@ -1993,12 +1994,12 @@ mod tests {
 
     #[test]
     fn test_serialize_empty_record() -> TestResult {
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"{
-            "type": "record",
-            "name": "EmptyRecord",
-            "fields": []
-        }"#,
+        "type": "record",
+        "name": "EmptyRecord",
+        "fields": []
+    }"#,
         )?;
 
         let mut buffer: Vec<u8> = Vec::new();
@@ -2044,12 +2045,12 @@ mod tests {
 
     #[test]
     fn test_serialize_enum() -> TestResult {
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"{
-            "type": "enum",
-            "name": "Suit",
-            "symbols": ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
-        }"#,
+        "type": "enum",
+        "name": "Suit",
+        "symbols": ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
+    }"#,
         )?;
 
         #[derive(Serialize)]
@@ -2091,11 +2092,11 @@ mod tests {
 
     #[test]
     fn test_serialize_array() -> TestResult {
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"{
-            "type": "array",
-            "items": "long"
-        }"#,
+        "type": "array",
+        "items": "long"
+    }"#,
         )?;
 
         let mut buffer: Vec<u8> = Vec::new();
@@ -2128,11 +2129,11 @@ mod tests {
 
     #[test]
     fn test_serialize_map() -> TestResult {
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"{
-            "type": "map",
-            "values": "long"
-        }"#,
+        "type": "map",
+        "values": "long"
+    }"#,
         )?;
 
         let mut buffer: Vec<u8> = Vec::new();
@@ -2173,10 +2174,10 @@ mod tests {
 
     #[test]
     fn test_serialize_nullable_union() -> TestResult {
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"{
-            "type": ["null", "long"]
-        }"#,
+        "type": ["null", "long"]
+    }"#,
         )?;
 
         #[derive(Serialize)]
@@ -2220,10 +2221,10 @@ mod tests {
 
     #[test]
     fn test_serialize_union() -> TestResult {
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"{
-            "type": ["null", "long", "string"]
-        }"#,
+        "type": ["null", "long", "string"]
+    }"#,
         )?;
 
         #[derive(Serialize)]
@@ -2270,12 +2271,12 @@ mod tests {
 
     #[test]
     fn test_serialize_fixed() -> TestResult {
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"{
-            "type": "fixed",
-            "size": 8,
-            "name": "LongVal"
-        }"#,
+        "type": "fixed",
+        "size": 8,
+        "name": "LongVal"
+    }"#,
         )?;
 
         let mut buffer: Vec<u8> = Vec::new();
@@ -2345,13 +2346,13 @@ mod tests {
 
     #[test]
     fn test_serialize_decimal_bytes() -> TestResult {
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"{
-            "type": "bytes",
-            "logicalType": "decimal",
-            "precision": 16,
-            "scale": 2
-        }"#,
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 16,
+        "scale": 2
+    }"#,
         )?;
 
         let mut buffer: Vec<u8> = Vec::new();
@@ -2381,15 +2382,15 @@ mod tests {
 
     #[test]
     fn test_serialize_decimal_fixed() -> TestResult {
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"{
-            "type": "fixed",
-            "name": "FixedDecimal",
-            "size": 8,
-            "logicalType": "decimal",
-            "precision": 16,
-            "scale": 2
-        }"#,
+        "type": "fixed",
+        "name": "FixedDecimal",
+        "size": 8,
+        "logicalType": "decimal",
+        "precision": 16,
+        "scale": 2
+    }"#,
         )?;
 
         let mut buffer: Vec<u8> = Vec::new();
@@ -2420,11 +2421,11 @@ mod tests {
     #[test]
     #[serial(serde_is_human_readable)]
     fn test_serialize_bigdecimal() -> TestResult {
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"{
-            "type": "bytes",
-            "logicalType": "big-decimal"
-        }"#,
+        "type": "bytes",
+        "logicalType": "big-decimal"
+    }"#,
         )?;
 
         crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
@@ -2443,11 +2444,11 @@ mod tests {
     #[test]
     #[serial(serde_is_human_readable)]
     fn test_serialize_uuid() -> TestResult {
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"{
-            "type": "string",
-            "logicalType": "uuid"
-        }"#,
+        "type": "string",
+        "logicalType": "uuid"
+    }"#,
         )?;
 
         crate::util::SERDE_HUMAN_READABLE.store(true, Ordering::Release);
@@ -2486,11 +2487,11 @@ mod tests {
 
     #[test]
     fn test_serialize_date() -> TestResult {
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"{
-            "type": "int",
-            "logicalType": "date"
-        }"#,
+        "type": "int",
+        "logicalType": "date"
+    }"#,
         )?;
 
         let mut buffer: Vec<u8> = Vec::new();
@@ -2529,11 +2530,11 @@ mod tests {
 
     #[test]
     fn test_serialize_time_millis() -> TestResult {
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"{
-            "type": "int",
-            "logicalType": "time-millis"
-        }"#,
+        "type": "int",
+        "logicalType": "time-millis"
+    }"#,
         )?;
 
         let mut buffer: Vec<u8> = Vec::new();
@@ -2572,11 +2573,11 @@ mod tests {
 
     #[test]
     fn test_serialize_time_micros() -> TestResult {
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"{
-            "type": "long",
-            "logicalType": "time-micros"
-        }"#,
+        "type": "long",
+        "logicalType": "time-micros"
+    }"#,
         )?;
 
         let mut buffer: Vec<u8> = Vec::new();
@@ -2619,11 +2620,11 @@ mod tests {
     #[test]
     fn test_serialize_timestamp() -> TestResult {
         for precision in ["millis", "micros", "nanos"] {
-            let schema = Schema::parse_str(&format!(
+            let schema = SchemaExt::parse_str(&format!(
                 r#"{{
-                "type": "long",
-                "logicalType": "timestamp-{precision}"
-            }}"#
+            "type": "long",
+            "logicalType": "timestamp-{precision}"
+        }}"#
             ))?;
 
             let mut buffer: Vec<u8> = Vec::new();
@@ -2676,13 +2677,13 @@ mod tests {
 
     #[test]
     fn test_serialize_duration() -> TestResult {
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"{
-            "type": "fixed",
-            "size": 12,
-            "name": "duration",
-            "logicalType": "duration"
-        }"#,
+        "type": "fixed",
+        "size": 12,
+        "name": "duration",
+        "logicalType": "duration"
+    }"#,
         )?;
 
         let mut buffer: Vec<u8> = Vec::new();
@@ -2720,18 +2721,18 @@ mod tests {
     #[test]
     #[serial(serde_is_human_readable)] // for BigDecimal and Uuid
     fn test_serialize_recursive_record() -> TestResult {
-        let schema = Schema::parse_str(
+        let schema = SchemaExt::parse_str(
             r#"{
-            "type": "record",
-            "name": "TestRecord",
-            "fields": [
-                {"name": "stringField", "type": "string"},
-                {"name": "intField", "type": "int"},
-                {"name": "bigDecimalField", "type": {"type": "bytes", "logicalType": "big-decimal"}},
-                {"name": "uuidField", "type": "fixed", "size": 16, "logicalType": "uuid"},
-                {"name": "innerRecord", "type": ["null", "TestRecord"]}
-            ]
-        }"#,
+        "type": "record",
+        "name": "TestRecord",
+        "fields": [
+            {"name": "stringField", "type": "string"},
+            {"name": "intField", "type": "int"},
+            {"name": "bigDecimalField", "type": {"type": "bytes", "logicalType": "big-decimal"}},
+            {"name": "uuidField", "type": "fixed", "size": 16, "logicalType": "uuid"},
+            {"name": "innerRecord", "type": ["null", "TestRecord"]}
+        ]
+    }"#,
         )?;
 
         #[derive(Serialize)]
