@@ -873,6 +873,7 @@ mod ser_schema;
 mod util;
 mod writer;
 
+mod de_schema;
 pub mod error;
 pub mod headers;
 pub mod rabin;
@@ -902,7 +903,7 @@ pub use duration::{Days, Duration, Millis, Months};
 pub use error::Error;
 pub use reader::{
     GenericSingleObjectReader, Reader, SpecificSingleObjectReader, from_avro_datum,
-    from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
+    from_avro_datum_reader_schemata, from_avro_datum_schemata, read_avro_datum_ref, read_marker,
 };
 pub use schema::{AvroSchema, Schema};
 pub use ser::to_value;
