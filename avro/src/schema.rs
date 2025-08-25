@@ -1531,7 +1531,7 @@ pub mod derive {
 }
 
 #[synca::synca(
-  #[cfg(feature = "tokio")]
+  #[cfg(feature = "async")]
   pub mod tokio {},
   #[cfg(feature = "sync")]
   pub mod sync {
@@ -1576,9 +1576,9 @@ mod schema {
         str::FromStr,
     };
     #[synca::cfg(tokio)]
-    use tokio::io::AsyncRead as AvroRead;
-    #[cfg(feature = "tokio")]
-    use tokio::io::AsyncReadExt;
+    use futures::AsyncRead as AvroRead;
+    #[cfg(feature = "async")]
+    use futures::AsyncReadExt;
 
     pub struct RecordFieldExt;
 

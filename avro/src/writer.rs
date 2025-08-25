@@ -18,7 +18,7 @@
 //! Logic handling writing in Avro format at user level.
 
 #[synca::synca(
-  #[cfg(feature = "tokio")]
+  #[cfg(feature = "async")]
   pub mod tokio { },
   #[cfg(feature = "sync")]
   pub mod sync {
@@ -45,9 +45,9 @@ mod writer {
     use std::io::Write as AvroWrite;
     use std::marker::Unpin;
     #[synca::cfg(tokio)]
-    use tokio::io::AsyncWrite as AvroWrite;
-    #[cfg(feature = "tokio")]
-    use tokio::io::AsyncWriteExt;
+    use futures::AsyncWrite as AvroWrite;
+    #[cfg(feature = "async")]
+    use futures::AsyncWriteExt;
 
     use crate::AvroResult;
     #[synca::cfg(sync)]

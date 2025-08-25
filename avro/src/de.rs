@@ -18,7 +18,7 @@
 //! Logic for serde-compatible deserialization.
 
 #[synca::synca(
-  #[cfg(feature = "tokio")]
+  #[cfg(feature = "async")]
   pub mod tokio { },
   #[cfg(feature = "sync")]
   pub mod sync {
@@ -811,6 +811,10 @@ mod de {
         use apache_avro_test_helper::TestResult;
 
         use crate::decimal::Decimal;
+        #[synca::cfg(sync)]
+        use std::io::Cursor;
+        #[synca::cfg(tokio)]
+        use futures::io::Cursor;
 
         use super::*;
 
@@ -848,7 +852,7 @@ mod de {
             // encode into avro
             let value = to_value(&data)?;
 
-            let mut buf = std::io::Cursor::new(to_avro_datum(&schema, value).await?);
+            let mut buf = Cursor::new(to_avro_datum(&schema, value).await?);
 
             // decode from avro
             let value = from_avro_datum(&schema, &mut buf, None).await?;

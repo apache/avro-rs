@@ -22,7 +22,7 @@ use apache_avro::{
 };
 use futures::StreamExt;
 use std::time::{Duration, Instant};
-use tokio::io::{BufReader, BufWriter};
+use futures::io::{BufReader, BufWriter};
 
 fn nanos(duration: Duration) -> u64 {
     duration.as_secs() * 1_000_000_000 + duration.subsec_nanos() as u64

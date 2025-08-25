@@ -286,7 +286,7 @@ pub mod serde_avro_slice_opt {
 }
 
 #[synca::synca(
-  #[cfg(feature = "tokio")]
+  #[cfg(feature = "async")]
   pub mod tokio_tests { },
   #[cfg(feature = "sync")]
   pub mod sync_tests {

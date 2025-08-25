@@ -16,7 +16,7 @@
 // under the License.
 
 #[synca::synca(
-  #[cfg(feature = "tokio")]
+  #[cfg(feature = "async")]
   pub mod tokio {},
   #[cfg(feature = "sync")]
   pub mod sync {
@@ -37,9 +37,9 @@ mod decode {
     #[synca::cfg(sync)]
     use std::io::Read as AvroRead;
     #[synca::cfg(tokio)]
-    use tokio::io::AsyncRead as AvroRead;
-    #[cfg(feature = "tokio")]
-    use tokio::io::AsyncReadExt;
+    use futures::AsyncRead as AvroRead;
+    #[cfg(feature = "async")]
+    use futures::AsyncReadExt;
 
     use crate::AvroResult;
     use crate::Uuid;

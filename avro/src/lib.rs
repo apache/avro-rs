@@ -909,7 +909,7 @@ pub use codec::zstandard::ZstandardSettings;
 pub use codec::{Codec, DeflateSettings};
 #[cfg(feature = "sync")]
 pub use de::sync::from_value;
-#[cfg(feature = "tokio")]
+#[cfg(feature = "async")]
 pub use de::tokio::from_value as async_from_value;
 pub use decimal::Decimal;
 pub use duration::{Days, Duration, Millis, Months};
@@ -919,7 +919,7 @@ pub use reader::sync::{
     GenericSingleObjectReader, Reader, SpecificSingleObjectReader, from_avro_datum,
     from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
 };
-#[cfg(feature = "tokio")]
+#[cfg(feature = "async")]
 pub use reader::tokio::{
     GenericSingleObjectReader as AsyncGenericSingleObjectReader, Reader as AsyncReader,
     SpecificSingleObjectReader as AsyncSpecificSingleObjectReader,
@@ -931,11 +931,11 @@ pub use schema::AvroSchema;
 pub use schema::Schema;
 #[cfg(feature = "sync")]
 pub use schema::sync::SchemaExt;
-#[cfg(feature = "tokio")]
+#[cfg(feature = "async")]
 pub use schema::tokio::SchemaExt as AsyncSchemaExt;
 #[cfg(feature = "sync")]
 pub use ser::sync::to_value;
-#[cfg(feature = "tokio")]
+#[cfg(feature = "async")]
 pub use ser::tokio::to_value as async_to_value;
 pub use util::{max_allocation_bytes, set_serde_human_readable};
 pub use uuid::Uuid;
@@ -944,7 +944,7 @@ pub use writer::sync::{
     GenericSingleObjectWriter, SpecificSingleObjectWriter, Writer, WriterBuilder, to_avro_datum,
     to_avro_datum_schemata, write_avro_datum_ref,
 };
-#[cfg(feature = "tokio")]
+#[cfg(feature = "async")]
 pub use writer::tokio::{
     GenericSingleObjectWriter as AsyncGenericSingleObjectWriter, Writer as AsyncWriter,
     WriterBuilder as AsyncWriterBuilder, to_avro_datum as async_to_avro_datum,
@@ -957,7 +957,7 @@ pub use apache_avro_derive::*;
 pub type AvroResult<T> = Result<T, Error>;
 
 #[synca::synca(
-  #[cfg(feature = "tokio")]
+  #[cfg(feature = "async")]
   pub mod tokio { },
   #[cfg(feature = "sync")]
   pub mod sync {

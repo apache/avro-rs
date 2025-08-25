@@ -16,7 +16,7 @@
 // under the License.
 
 #[synca::synca(
-  #[cfg(feature = "tokio")]
+  #[cfg(feature = "async")]
   pub mod tokio {},
   #[cfg(feature = "sync")]
   pub mod sync {
@@ -46,9 +46,9 @@ mod reader {
     #[synca::cfg(sync)]
     use std::io::Read as AvroRead;
     #[synca::cfg(tokio)]
-    use tokio::io::AsyncRead as AvroRead;
-    #[cfg(feature = "tokio")]
-    use tokio::io::AsyncReadExt;
+    use futures::AsyncRead as AvroRead;
+    #[cfg(feature = "async")]
+    use futures::AsyncReadExt;
 
     use crate::util::tokio::safe_len;
     use crate::{
@@ -704,7 +704,10 @@ mod reader {
         use futures::StreamExt;
         use pretty_assertions::assert_eq;
         use serde::Deserialize;
+        #[synca::cfg(sync)]
         use std::io::Cursor;
+        #[synca::cfg(tokio)]
+        use futures::io::Cursor;
         #[synca::cfg(sync)]
         use uuid::Uuid;
 
@@ -1097,7 +1100,7 @@ mod reader {
             let mut to_read =
                 std::io::Read::chain(&to_read_1[..], &to_read_2[..]).chain(&to_read_3[..]);
             #[synca::cfg(tokio)]
-            let mut to_read = tokio::io::AsyncReadExt::chain(&to_read_1[..], &to_read_2[..])
+            let mut to_read = futures::AsyncReadExt::chain(&to_read_1[..], &to_read_2[..])
                 .chain(&to_read_3[..]);
             let generic_reader =
                 GenericSingleObjectReader::new(TestSingleObjectReader::get_schema())

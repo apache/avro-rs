@@ -18,7 +18,7 @@
 pub use bigdecimal::BigDecimal;
 
 #[synca::synca(
-  #[cfg(feature = "tokio")]
+  #[cfg(feature = "async")]
   pub mod tokio { },
   #[cfg(feature = "sync")]
   pub mod sync {
@@ -79,7 +79,7 @@ mod bigdecimal {
         #[synca::cfg(sync)]
         use std::io::Read;
         #[synca::cfg(tokio)]
-        use tokio::io::AsyncReadExt;
+        use futures::AsyncReadExt;
 
         bytes
             .read_exact(&mut big_decimal_buffer[..])
@@ -119,7 +119,9 @@ mod bigdecimal {
         #[synca::cfg(tokio)]
         use tokio::fs::File;
         #[synca::cfg(tokio)]
-        use tokio::io::BufReader;
+        use futures::io::BufReader;
+        #[synca::cfg(tokio)]
+        use tokio_util::compat::TokioAsyncReadCompatExt;
 
         #[tokio::test]
         async fn test_avro_3779_bigdecimal_serial() -> TestResult {
@@ -227,7 +229,10 @@ mod bigdecimal {
             // Open file generated with Java code to ensure compatibility
             // with Java big decimal logical type.
             let file = File::open("./tests/bigdec.avro").await?;
-            let mut reader = Reader::new(BufReader::new(file)).await?;
+            #[synca::cfg(tokio)]
+            let file = file.compat();
+            let buf_reader = BufReader::new(file);
+            let mut reader = Reader::new(buf_reader).await?;
             let next_element = reader.next().await;
             assert!(next_element.is_some());
             let value = next_element.unwrap()?;

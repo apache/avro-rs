@@ -16,7 +16,7 @@
 // under the License.
 
 // #[synca::synca(
-//   #[cfg(feature = "tokio")]
+//   #[cfg(feature = "async")]
 //   pub mod tokio {},
 //   #[cfg(feature = "sync")]
 //   pub mod sync {

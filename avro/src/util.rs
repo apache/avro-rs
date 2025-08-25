@@ -106,7 +106,7 @@ impl MapHelper for Map<String, Value> {
 }
 
 #[synca::synca(
-  #[cfg(feature = "tokio")]
+  #[cfg(feature = "async")]
   pub mod tokio { },
   #[cfg(feature = "sync")]
   pub mod sync {
@@ -125,20 +125,20 @@ impl MapHelper for Map<String, Value> {
   }
 )]
 mod util {
-    #[cfg(feature = "tokio")]
+    #[cfg(feature = "async")]
     use futures::future::TryFutureExt;
     #[synca::cfg(sync)]
     use std::io::Read as AvroRead;
     #[synca::cfg(sync)]
     use std::io::Write as AvroWrite;
     #[synca::cfg(tokio)]
-    use tokio::io::AsyncRead as AvroRead;
-    #[cfg(feature = "tokio")]
-    use tokio::io::AsyncReadExt;
+    use futures::AsyncRead as AvroRead;
+    #[cfg(feature = "async")]
+    use futures::AsyncReadExt;
     #[synca::cfg(tokio)]
-    use tokio::io::AsyncWrite as AvroWrite;
-    #[cfg(feature = "tokio")]
-    use tokio::io::AsyncWriteExt;
+    use futures::AsyncWrite as AvroWrite;
+    #[cfg(feature = "async")]
+    use futures::AsyncWriteExt;
 
     use crate::AvroResult;
     use crate::error::Details;

@@ -31,8 +31,9 @@ use apache_avro_test_helper::{
     init,
 };
 use futures::StreamExt;
-use std::{collections::HashMap, io::Cursor};
-use tokio::io::AsyncRead;
+use std::collections::HashMap;
+use futures::AsyncRead;
+use futures::io::BufWriter;
 
 #[tokio::test]
 async fn test_correct_recursive_extraction() -> TestResult {
@@ -109,7 +110,7 @@ async fn test_parse() -> TestResult {
 async fn test_3799_parse_reader() -> TestResult {
     init();
     for (raw_schema, valid) in examples().iter() {
-        let mut reader: &mut (dyn AsyncRead + Unpin) = &mut Cursor::new(raw_schema);
+        let mut reader: &mut (dyn AsyncRead + Unpin) = &mut raw_schema.as_bytes();
         let schema = SchemaExt::parse_reader(&mut reader).await;
         if *valid {
             assert!(
@@ -126,7 +127,7 @@ async fn test_3799_parse_reader() -> TestResult {
 
     // Ensure it works for trait objects too.
     for (raw_schema, valid) in examples().iter() {
-        let reader = &mut Cursor::new(raw_schema);
+        let reader = &mut raw_schema.as_bytes();
         let schema = SchemaExt::parse_reader(reader).await;
         if *valid {
             assert!(
@@ -146,7 +147,9 @@ async fn test_3799_parse_reader() -> TestResult {
 #[tokio::test]
 async fn test_3799_raise_io_error_from_parse_read() -> Result<(), String> {
     // 0xDF is invalid for UTF-8.
-    let mut invalid_data: &mut (dyn AsyncRead + Unpin) = &mut Cursor::new([0xDF]);
+    let mut buf = Vec::with_capacity(1);
+    buf.push(0xDF_u8);
+    let mut invalid_data: &mut (dyn AsyncRead + Unpin) = &mut buf.as_slice();
     let error = SchemaExt::parse_reader(&mut invalid_data)
         .await
         .unwrap_err()
@@ -2487,14 +2490,14 @@ async fn avro_rs_66_test_independent_canonical_form_missing_ref() -> TestResult 
 
 #[tokio::test]
 async fn avro_rs_181_single_null_record() -> TestResult {
-    let mut buff = Cursor::new(Vec::new());
+    let mut buff = BufWriter::new(Vec::new());
     let schema = SchemaExt::parse_str(r#""null""#).await?;
     let mut writer = Writer::new(&schema, &mut buff);
     writer.append(serde_json::Value::Null).await?;
     writer.into_inner().await?;
-    buff.set_position(0);
+    let reader = buff.into_inner();
 
-    let mut reader = Reader::new(buff).await?;
+    let mut reader = Reader::new(&reader[..]).await?;
     while let Some(value) = reader.next().await {
         assert_eq!(Value::Null, value?);
     }
