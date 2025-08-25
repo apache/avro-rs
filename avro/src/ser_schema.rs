@@ -19,8 +19,8 @@
 //! which writes directly to a `Write` stream
 
 use crate::{
-    bigdecimal::sync::big_decimal_as_bytes,
-    encode::sync::{encode_int, encode_long},
+    bigdecimal::synch::big_decimal_as_bytes,
+    encode::synch::{encode_int, encode_long},
     error::{Details, Error},
     schema::{Name, Names, Namespace, RecordField, RecordSchema, Schema},
 };
@@ -1765,7 +1765,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut SchemaAwareWriteSerializer<'s
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schema::sync::SchemaExt;
+    use crate::schema::synch::SchemaExt;
     use crate::{
         Days, Duration, Millis, Months, decimal::Decimal, error::Details, schema::ResolvedSchema,
     };

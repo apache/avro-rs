@@ -29,14 +29,14 @@ categories.workspace = true
 documentation.workspace = true
 
 [features]
-default = ["async"]
+default = ["asynch"]
 bzip = ["dep:bzip2"]
 derive = ["dep:apache-avro-derive"]
 snappy = ["dep:crc32fast", "dep:snap"]
 xz = ["dep:xz2"]
 zstandard = ["dep:zstd"]
-sync = []
-async = ["dep:futures"]
+synch = []
+asynch = ["dep:futures"]
 
 [lib]
 # disable benchmarks to allow passing criterion arguments to `cargo bench`
@@ -134,109 +134,109 @@ rustdoc-args = ["--cfg", "docsrs"]
 [[example]]
 name = "benchmark"
 path = "examples/benchmark.rs"
-required-features = ["sync"]
+required-features = ["synch"]
 
 [[example]]
 name = "async_benchmark"
 path = "examples/async_benchmark.rs"
-required-features = ["async"]
+required-features = ["asynch"]
 
 [[example]]
 name = "generate_interop_data"
 path = "examples/generate_interop_data.rs"
-required-features = ["sync"]
+required-features = ["synch"]
 
 [[example]]
 name = "specific_single_object"
 path = "examples/specific_single_object.rs"
-required-features = ["sync", "derive"]
+required-features = ["synch", "derive"]
 
 [[example]]
 name = "test_interop_data"
 path = "examples/test_interop_data.rs"
-required-features = ["sync"]
+required-features = ["synch"]
 
 [[example]]
 name = "test_interop_single_object_encoding"
 path = "examples/test_interop_single_object_encoding.rs"
-required-features = ["sync"]
+required-features = ["synch"]
 
 [[example]]
 name = "to_value"
 path = "examples/to_value.rs"
-required-features = ["sync"]
+required-features = ["synch"]
 
 [[test]]
 name = "append_to_existing"
 path = "tests/append_to_existing.rs"
-required-features = ["sync", "derive"]
+required-features = ["synch", "derive"]
 
 [[test]]
 name = "avro-3786"
 path = "tests/avro-3786.rs"
-required-features = ["sync"]
+required-features = ["synch"]
 
 [[test]]
 name = "avro-3787"
 path = "tests/avro-3787.rs"
-required-features = ["sync"]
+required-features = ["synch"]
 
 [[test]]
 name = "avro-rs-219"
 path = "tests/avro-rs-219.rs"
-required-features = ["sync"]
+required-features = ["synch"]
 
 [[test]]
 name = "avro-rs-226"
 path = "tests/avro-rs-226.rs"
-required-features = ["sync", "derive"]
+required-features = ["synch", "derive"]
 
 [[test]]
 name = "big_decimal"
 path = "tests/big_decimal.rs"
-required-features = ["sync"]
+required-features = ["synch"]
 
 [[test]]
 name = "codecs"
 path = "tests/codecs.rs"
-required-features = ["sync"]
+required-features = ["synch"]
 
 [[test]]
 name = "io"
 path = "tests/io.rs"
-required-features = ["sync"]
+required-features = ["synch"]
 
 [[test]]
 name = "schema"
 path = "tests/schema.rs"
-required-features = ["sync"]
+required-features = ["synch"]
 
 [[test]]
 name = "async_schema"
 path = "tests/async_schema.rs"
-required-features = ["async"]
+required-features = ["asynch"]
 
 [[test]]
 name = "shared"
 path = "tests/shared.rs"
-required-features = ["sync"]
+required-features = ["synch"]
 
 [[test]]
 name = "to_from_avro_datum_schemata"
 path = "tests/to_from_avro_datum_schemata.rs"
-required-features = ["sync"]
+required-features = ["synch"]
 
 [[test]]
 name = "union_schema"
 path = "tests/union_schema.rs"
-required-features = ["sync"]
+required-features = ["synch"]
 
 [[test]]
 name = "uuids"
 path = "tests/uuids.rs"
-required-features = ["sync"]
+required-features = ["synch"]
 
 [[test]]
 name = "validators"
 path = "tests/validators.rs"
-required-features = ["sync"]
+required-features = ["synch"]

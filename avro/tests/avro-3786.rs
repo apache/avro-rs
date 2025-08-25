@@ -16,7 +16,7 @@
 // under the License.
 
 use apache_avro::types::Value;
-use apache_avro::types::sync::ValueExt;
+use apache_avro::types::synch::ValueExt;
 use apache_avro::{SchemaExt, from_avro_datum, to_avro_datum, to_value};
 use apache_avro_test_helper::TestResult;
 

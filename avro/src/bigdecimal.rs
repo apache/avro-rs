@@ -18,21 +18,21 @@
 pub use bigdecimal::BigDecimal;
 
 #[synca::synca(
-  #[cfg(feature = "async")]
-  pub mod tokio { },
-  #[cfg(feature = "sync")]
-  pub mod sync {
+  #[cfg(feature = "asynch")]
+  pub mod asynch { },
+  #[cfg(feature = "synch")]
+  pub mod synch {
     sync!();
     replace!(
-      crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::decode::tokio => crate::decode::sync,
-      crate::encode::tokio => crate::encode::sync,
-      crate::error::tokio => crate::error::sync,
-      crate::schema::tokio => crate::schema::sync,
-      crate::reader::tokio => crate::reader::sync,
-      crate::util::tokio => crate::util::sync,
-      crate::types::tokio => crate::types::sync,
-      crate::writer::tokio => crate::writer::sync,
+      crate::bigdecimal::asynch => crate::bigdecimal::synch,
+      crate::decode::asynch => crate::decode::synch,
+      crate::encode::asynch => crate::encode::synch,
+      crate::error::asynch => crate::error::synch,
+      crate::schema::asynch => crate::schema::synch,
+      crate::reader::asynch => crate::reader::synch,
+      crate::util::asynch => crate::util::synch,
+      crate::types::asynch => crate::types::synch,
+      crate::writer::asynch => crate::writer::synch,
       #[tokio::test] => #[test]
     );
   }
@@ -40,8 +40,8 @@ pub use bigdecimal::BigDecimal;
 mod bigdecimal {
     use crate::AvroResult;
     use crate::{
-        decode::tokio::{decode_len, decode_long},
-        encode::tokio::{encode_bytes, encode_long},
+        decode::asynch::{decode_len, decode_long},
+        encode::asynch::{encode_bytes, encode_long},
         error::Details,
         types::Value,
     };
@@ -76,9 +76,9 @@ mod bigdecimal {
             Err(err) => return Err(Details::BigDecimalLen(Box::new(err)).into()),
         };
 
-        #[synca::cfg(tokio)]
+        #[synca::cfg(asynch)]
         use futures::AsyncReadExt;
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         use std::io::Read;
 
         bytes
@@ -100,27 +100,27 @@ mod bigdecimal {
     mod tests {
         use super::*;
         use crate::{
-            codec::Codec, error::Error, reader::tokio::Reader, schema::tokio::SchemaExt,
-            types::Record, writer::tokio::Writer,
+            codec::Codec, error::Error, reader::asynch::Reader, schema::asynch::SchemaExt,
+            types::Record, writer::asynch::Writer,
         };
         use apache_avro_test_helper::TestResult;
         use bigdecimal::{One, Zero};
-        #[synca::cfg(tokio)]
+        #[synca::cfg(asynch)]
         use futures::StreamExt;
-        #[synca::cfg(tokio)]
+        #[synca::cfg(asynch)]
         use futures::io::BufReader;
         use pretty_assertions::assert_eq;
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         use std::fs::File;
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         use std::io::BufReader;
         use std::{
             ops::{Div, Mul},
             str::FromStr,
         };
-        #[synca::cfg(tokio)]
+        #[synca::cfg(asynch)]
         use tokio::fs::File;
-        #[synca::cfg(tokio)]
+        #[synca::cfg(asynch)]
         use tokio_util::compat::TokioAsyncReadCompatExt;
 
         #[tokio::test]
@@ -229,7 +229,7 @@ mod bigdecimal {
             // Open file generated with Java code to ensure compatibility
             // with Java big decimal logical type.
             let file = File::open("./tests/bigdec.avro").await?;
-            #[synca::cfg(tokio)]
+            #[synca::cfg(asynch)]
             let file = file.compat();
             let buf_reader = BufReader::new(file);
             let mut reader = Reader::new(buf_reader).await?;

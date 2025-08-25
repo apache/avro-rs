@@ -116,7 +116,7 @@
 //!
 //! ```
 //! use apache_avro::Schema;
-//! use apache_avro::schema::sync::SchemaExt;
+//! use apache_avro::schema::synch::SchemaExt;
 //!
 //! let raw_schema = r#"
 //!     {
@@ -141,7 +141,7 @@
 //!
 //! ```
 //! use apache_avro::Schema;
-//! use apache_avro::schema::sync::SchemaExt;
+//! use apache_avro::schema::synch::SchemaExt;
 //!
 //! let raw_schema_1 = r#"{
 //!         "name": "A",
@@ -197,7 +197,7 @@
 //! use apache_avro::Schema;
 //! use apache_avro::types::Record;
 //! use apache_avro::Writer;
-//! use apache_avro::schema::sync::SchemaExt;
+//! use apache_avro::schema::synch::SchemaExt;
 //!
 //! let raw_schema = r#"
 //!     {
@@ -247,7 +247,7 @@
 //! use apache_avro::Schema;
 //! use serde::Serialize;
 //! use apache_avro::Writer;
-//! use apache_avro::schema::sync::SchemaExt;
+//! use apache_avro::schema::synch::SchemaExt;
 //!
 //! #[derive(Debug, Serialize)]
 //! struct Test {
@@ -319,7 +319,7 @@
 //! To specify a codec to use to compress data, just specify it while creating a `Writer`:
 //! ```
 //! use apache_avro::{Codec, DeflateSettings, Schema, Writer};
-//! use apache_avro::schema::sync::SchemaExt;
+//! use apache_avro::schema::synch::SchemaExt;
 //!
 //! let raw_schema = r#"
 //!     {
@@ -344,7 +344,7 @@
 //! ```
 //! use apache_avro::Reader;
 //! use apache_avro::Schema;
-//! use apache_avro::schema::sync::SchemaExt;
+//! use apache_avro::schema::synch::SchemaExt;
 //! use apache_avro::types::Record;
 //! use apache_avro::Writer;
 //!
@@ -376,7 +376,7 @@
 //! use apache_avro::Reader;
 //! use apache_avro::types::Record;
 //! use apache_avro::Writer;
-//! use apache_avro::schema::sync::SchemaExt;
+//! use apache_avro::schema::synch::SchemaExt;
 //!
 //! let writer_raw_schema = r#"
 //!     {
@@ -436,7 +436,7 @@
 //! use apache_avro::types::Record;
 //! use apache_avro::Writer;
 //! use apache_avro::Reader;
-//! use apache_avro::schema::sync::SchemaExt;
+//! use apache_avro::schema::synch::SchemaExt;
 //!
 //! let raw_schema = r#"
 //!     {
@@ -475,7 +475,7 @@
 //! # use apache_avro::Writer;
 //! # use serde::{Deserialize, Serialize};
 //! use apache_avro::Reader;
-//! use apache_avro::schema::sync::SchemaExt;
+//! use apache_avro::schema::synch::SchemaExt;
 //! use apache_avro::from_value;
 //!
 //! # #[derive(Serialize)]
@@ -518,7 +518,7 @@
 //!
 //! ```
 //! use apache_avro::{Codec, DeflateSettings, Reader, Schema, Writer, from_value, types::Record, Error};
-//! use apache_avro::schema::sync::SchemaExt;
+//! use apache_avro::schema::synch::SchemaExt;
 //! use serde::{Deserialize, Serialize};
 //!
 //! #[derive(Debug, Deserialize, Serialize)]
@@ -586,7 +586,7 @@
 //!     types::Record, types::Value, Codec, Days, Decimal, DeflateSettings, Duration, Millis, Months, Reader, Schema,
 //!     Writer, Error,
 //! };
-//! use apache_avro::schema::sync::SchemaExt;
+//! use apache_avro::schema::synch::SchemaExt;
 //! use num_bigint::ToBigInt;
 //!
 //! fn main() -> Result<(), Error> {
@@ -712,7 +712,7 @@
 //! ```rust
 //! use apache_avro::rabin::Rabin;
 //! use apache_avro::{Schema, Error};
-//! use apache_avro::schema::sync::SchemaExt;
+//! use apache_avro::schema::synch::SchemaExt;
 //! use md5::Md5;
 //! use sha2::Sha256;
 //!
@@ -776,7 +776,7 @@
 //! (32bit signed integer) fits into a long (64bit signed integer)
 //!
 //! ```rust
-//! use apache_avro::{Schema, schema::sync::SchemaExt, schema_compatibility::sync::SchemaCompatibility};
+//! use apache_avro::{Schema, schema::synch::SchemaExt, schema_compatibility::synch::SchemaCompatibility};
 //!
 //! let writers_schema = SchemaExt::parse_str(r#"{"type": "array", "items":"int"}"#).unwrap();
 //! let readers_schema = SchemaExt::parse_str(r#"{"type": "array", "items":"long"}"#).unwrap();
@@ -789,7 +789,7 @@
 //! long (64bit signed integer) does not fit into an int (32bit signed integer)
 //!
 //! ```rust
-//! use apache_avro::{Schema, schema::sync::SchemaExt, schema_compatibility::sync::SchemaCompatibility};
+//! use apache_avro::{Schema, schema::synch::SchemaExt, schema_compatibility::synch::SchemaCompatibility};
 //!
 //! let writers_schema = SchemaExt::parse_str(r#"{"type": "array", "items":"long"}"#).unwrap();
 //! let readers_schema = SchemaExt::parse_str(r#"{"type": "array", "items":"int"}"#).unwrap();
@@ -881,7 +881,7 @@ mod duration;
 mod encode;
 mod reader;
 mod ser;
-#[cfg(feature = "sync")]
+#[cfg(feature = "synch")]
 mod ser_schema;
 mod util;
 mod writer;
@@ -907,48 +907,48 @@ pub use codec::xz::XzSettings;
 #[cfg(feature = "zstandard")]
 pub use codec::zstandard::ZstandardSettings;
 pub use codec::{Codec, DeflateSettings};
-#[cfg(feature = "sync")]
-pub use de::sync::from_value;
-#[cfg(feature = "async")]
-pub use de::tokio::from_value as async_from_value;
+#[cfg(feature = "asynch")]
+pub use de::asynch::from_value as async_from_value;
+#[cfg(feature = "synch")]
+pub use de::synch::from_value;
 pub use decimal::Decimal;
 pub use duration::{Days, Duration, Millis, Months};
 pub use error::Error;
-#[cfg(feature = "sync")]
-pub use reader::sync::{
-    GenericSingleObjectReader, Reader, SpecificSingleObjectReader, from_avro_datum,
-    from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
-};
-#[cfg(feature = "async")]
-pub use reader::tokio::{
+#[cfg(feature = "asynch")]
+pub use reader::asynch::{
     GenericSingleObjectReader as AsyncGenericSingleObjectReader, Reader as AsyncReader,
     SpecificSingleObjectReader as AsyncSpecificSingleObjectReader,
     from_avro_datum as async_from_avro_datum,
     from_avro_datum_reader_schemata as async_from_avro_datum_reader_schemata,
     from_avro_datum_schemata as async_from_avro_datum_schemata, read_marker as async_read_marker,
 };
+#[cfg(feature = "synch")]
+pub use reader::synch::{
+    GenericSingleObjectReader, Reader, SpecificSingleObjectReader, from_avro_datum,
+    from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
+};
 pub use schema::AvroSchema;
 pub use schema::Schema;
-#[cfg(feature = "sync")]
-pub use schema::sync::SchemaExt;
-#[cfg(feature = "async")]
-pub use schema::tokio::SchemaExt as AsyncSchemaExt;
-#[cfg(feature = "sync")]
-pub use ser::sync::to_value;
-#[cfg(feature = "async")]
-pub use ser::tokio::to_value as async_to_value;
+#[cfg(feature = "asynch")]
+pub use schema::asynch::SchemaExt as AsyncSchemaExt;
+#[cfg(feature = "synch")]
+pub use schema::synch::SchemaExt;
+#[cfg(feature = "asynch")]
+pub use ser::asynch::to_value as async_to_value;
+#[cfg(feature = "synch")]
+pub use ser::synch::to_value;
 pub use util::{max_allocation_bytes, set_serde_human_readable};
 pub use uuid::Uuid;
-#[cfg(feature = "sync")]
-pub use writer::sync::{
-    GenericSingleObjectWriter, SpecificSingleObjectWriter, Writer, WriterBuilder, to_avro_datum,
-    to_avro_datum_schemata, write_avro_datum_ref,
-};
-#[cfg(feature = "async")]
-pub use writer::tokio::{
+#[cfg(feature = "asynch")]
+pub use writer::asynch::{
     GenericSingleObjectWriter as AsyncGenericSingleObjectWriter, Writer as AsyncWriter,
     WriterBuilder as AsyncWriterBuilder, to_avro_datum as async_to_avro_datum,
     to_avro_datum_schemata as async_to_avro_datum_schemata,
+};
+#[cfg(feature = "synch")]
+pub use writer::synch::{
+    GenericSingleObjectWriter, SpecificSingleObjectWriter, Writer, WriterBuilder, to_avro_datum,
+    to_avro_datum_schemata, write_avro_datum_ref,
 };
 
 #[cfg(feature = "derive")]
@@ -957,16 +957,16 @@ pub use apache_avro_derive::*;
 pub type AvroResult<T> = Result<T, Error>;
 
 #[synca::synca(
-  #[cfg(feature = "async")]
-  pub mod tokio { },
-  #[cfg(feature = "sync")]
-  pub mod sync {
+  #[cfg(feature = "asynch")]
+  pub mod asynch { },
+  #[cfg(feature = "synch")]
+  pub mod synch {
     sync!();
     replace!(
-    crate::reader::tokio => crate::reader::sync,
-    crate::schema::tokio => crate::schema::sync,
-      crate::types::tokio => crate::types::sync,
-      crate::writer::tokio => crate::writer::sync,
+    crate::reader::asynch => crate::reader::synch,
+    crate::schema::asynch => crate::schema::synch,
+      crate::types::asynch => crate::types::synch,
+      crate::writer::asynch => crate::writer::synch,
       #[tokio::test] => #[test]
     );
   }
@@ -975,12 +975,12 @@ pub type AvroResult<T> = Result<T, Error>;
 mod tests {
     use crate::{
         codec::Codec,
-        reader::tokio::{Reader, from_avro_datum},
-        schema::tokio::SchemaExt,
+        reader::asynch::{Reader, from_avro_datum},
+        schema::asynch::SchemaExt,
         types::{Record, Value},
-        writer::tokio::Writer,
+        writer::asynch::Writer,
     };
-    #[synca::cfg(tokio)]
+    #[synca::cfg(asynch)]
     use futures::StreamExt;
     use pretty_assertions::assert_eq;
 

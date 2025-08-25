@@ -127,7 +127,7 @@ Avro schemas are defined in **JSON** format and can just be parsed out of a raw 
 
 ```rust
 use apache_avro::Schema;
-use apache_avro::schema::sync::SchemaExt;
+use apache_avro::schema::synch::SchemaExt;
 
 let raw_schema = r#"
     {
@@ -152,7 +152,7 @@ them will be parsed into the corresponding schemas.
 
 ```rust
 use apache_avro::Schema;
-use apache_avro::schema::sync::SchemaExt;
+use apache_avro::schema::synch::SchemaExt;
 
 let raw_schema_1 = r#"{
         "name": "A",
@@ -208,7 +208,7 @@ associated type provided by the library to specify the data we want to serialize
 use apache_avro::Schema;
 use apache_avro::types::Record;
 use apache_avro::Writer;
-use apache_avro::schema::sync::SchemaExt;
+use apache_avro::schema::synch::SchemaExt;
 
 let raw_schema = r#"
     {
@@ -258,7 +258,7 @@ deriving `Serialize` to model our data:
 use apache_avro::Schema;
 use serde::Serialize;
 use apache_avro::Writer;
-use apache_avro::schema::sync::SchemaExt;
+use apache_avro::schema::synch::SchemaExt;
 
 #[derive(Debug, Serialize)]
 struct Test {
@@ -330,7 +330,7 @@ Avro supports three different compression codecs when encoding data:
 To specify a codec to use to compress data, just specify it while creating a `Writer`:
 ```rust
 use apache_avro::{Codec, DeflateSettings, Schema, Writer};
-use apache_avro::schema::sync::SchemaExt;
+use apache_avro::schema::synch::SchemaExt;
 
 let raw_schema = r#"
     {
@@ -355,7 +355,7 @@ codec:
 ```rust
 use apache_avro::Reader;
 use apache_avro::Schema;
-use apache_avro::schema::sync::SchemaExt;
+use apache_avro::schema::synch::SchemaExt;
 use apache_avro::types::Record;
 use apache_avro::Writer;
 
@@ -387,7 +387,7 @@ use apache_avro::Schema;
 use apache_avro::Reader;
 use apache_avro::types::Record;
 use apache_avro::Writer;
-use apache_avro::schema::sync::SchemaExt;
+use apache_avro::schema::synch::SchemaExt;
 
 let writer_raw_schema = r#"
     {
@@ -447,7 +447,7 @@ use apache_avro::Schema;
 use apache_avro::types::Record;
 use apache_avro::Writer;
 use apache_avro::Reader;
-use apache_avro::schema::sync::SchemaExt;
+use apache_avro::schema::synch::SchemaExt;
 
 let raw_schema = r#"
     {
@@ -483,7 +483,7 @@ read the data into:
 
 ```rust
 use apache_avro::Reader;
-use apache_avro::schema::sync::SchemaExt;
+use apache_avro::schema::synch::SchemaExt;
 use apache_avro::from_value;
 
 #[derive(Debug, Deserialize)]
@@ -507,7 +507,7 @@ quick reference of the library interface:
 
 ```rust
 use apache_avro::{Codec, DeflateSettings, Reader, Schema, Writer, from_value, types::Record, Error};
-use apache_avro::schema::sync::SchemaExt;
+use apache_avro::schema::synch::SchemaExt;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -575,7 +575,7 @@ use apache_avro::{
     types::Record, types::Value, Codec, Days, Decimal, DeflateSettings, Duration, Millis, Months, Reader, Schema,
     Writer, Error,
 };
-use apache_avro::schema::sync::SchemaExt;
+use apache_avro::schema::synch::SchemaExt;
 use num_bigint::ToBigInt;
 
 fn main() -> Result<(), Error> {
@@ -701,7 +701,7 @@ An example of fingerprinting for the supported fingerprints:
 ```rust
 use apache_avro::rabin::Rabin;
 use apache_avro::{Schema, Error};
-use apache_avro::schema::sync::SchemaExt;
+use apache_avro::schema::synch::SchemaExt;
 use md5::Md5;
 use sha2::Sha256;
 
@@ -765,7 +765,7 @@ Explanation: an int array schema can be read by a long array schema- an int
 (32bit signed integer) fits into a long (64bit signed integer)
 
 ```rust
-use apache_avro::{Schema, schema::sync::SchemaExt, schema_compatibility::sync::SchemaCompatibility};
+use apache_avro::{Schema, schema::synch::SchemaExt, schema_compatibility::synch::SchemaCompatibility};
 
 let writers_schema = SchemaExt::parse_str(r#"{"type": "array", "items":"int"}"#).unwrap();
 let readers_schema = SchemaExt::parse_str(r#"{"type": "array", "items":"long"}"#).unwrap();
@@ -778,7 +778,7 @@ Explanation: a long array schema cannot be read by an int array schema- a
 long (64bit signed integer) does not fit into an int (32bit signed integer)
 
 ```rust
-use apache_avro::{Schema, schema::sync::SchemaExt, schema_compatibility::sync::SchemaCompatibility};
+use apache_avro::{Schema, schema::synch::SchemaExt, schema_compatibility::synch::SchemaCompatibility};
 
 let writers_schema = SchemaExt::parse_str(r#"{"type": "array", "items":"long"}"#).unwrap();
 let readers_schema = SchemaExt::parse_str(r#"{"type": "array", "items":"int"}"#).unwrap();

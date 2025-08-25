@@ -279,21 +279,21 @@ to_value!(BigDecimal, Value::BigDecimal);
 to_value!(Duration, Value::Duration);
 
 #[synca::synca(
-  #[cfg(feature = "async")]
-  pub mod tokio { },
-  #[cfg(feature = "sync")]
-  pub mod sync {
+  #[cfg(feature = "asynch")]
+  pub mod asynch { },
+  #[cfg(feature = "synch")]
+  pub mod synch {
     sync!();
     replace!(
-      crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::decode::tokio => crate::decode::sync,
-      crate::encode::tokio => crate::encode::sync,
-      crate::error::tokio => crate::error::sync,
-      crate::schema::tokio => crate::schema::sync,
-      crate::util::tokio => crate::util::sync,
-      crate::types::tokio => crate::types::sync,
-      crate::ser::tokio => crate::ser::sync,
-      crate::util::tokio => crate::util::sync,
+      crate::bigdecimal::asynch => crate::bigdecimal::synch,
+      crate::decode::asynch => crate::decode::synch,
+      crate::encode::asynch => crate::encode::synch,
+      crate::error::asynch => crate::error::synch,
+      crate::schema::asynch => crate::schema::synch,
+      crate::util::asynch => crate::util::synch,
+      crate::types::asynch => crate::types::synch,
+      crate::ser::asynch => crate::ser::synch,
+      crate::util::asynch => crate::util::synch,
       #[tokio::test] => #[test]
     );
   }
@@ -303,12 +303,12 @@ mod types {
     use crate::AvroResult;
     use crate::{
         Uuid,
-        bigdecimal::tokio::{deserialize_big_decimal, serialize_big_decimal},
+        bigdecimal::asynch::{deserialize_big_decimal, serialize_big_decimal},
         decimal::Decimal,
         duration::Duration,
         error::Details,
         error::Error,
-        schema::tokio::{RecordFieldExt, UnionSchemaExt},
+        schema::asynch::{RecordFieldExt, UnionSchemaExt},
         schema::{
             DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, Precision, RecordField,
             RecordSchema, ResolvedSchema, Scale, Schema, SchemaKind, UnionSchema,
@@ -1265,7 +1265,7 @@ mod types {
                     //             .map(|value| (key, value))
                     //     })
                     //     .collect::<Result<_, _>>();
-                    // #[synca::cfg(tokio)]
+                    // #[synca::cfg(asynch)]
                     // let resolved = futures::future::try_join_all(resolved).await?;
                     Ok(Value::Map(resolved))
                 }
@@ -1373,8 +1373,8 @@ mod types {
             duration::{Days, Millis, Months},
             error::Details,
             schema::RecordFieldOrder,
-            schema::tokio::SchemaExt,
-            ser::tokio::Serializer,
+            schema::asynch::SchemaExt,
+            ser::asynch::Serializer,
             types::{Record, Value},
         };
         use apache_avro_test_helper::{
@@ -3001,7 +3001,7 @@ Field with name '"b"' is not a member of the map items"#,
 
         #[tokio::test]
         async fn test_avro_3460_validation_with_refs_real_struct() -> TestResult {
-            use crate::ser::tokio::Serializer;
+            use crate::ser::asynch::Serializer;
             use serde::Serialize;
 
             #[derive(Serialize, Clone)]
@@ -3091,7 +3091,7 @@ Field with name '"b"' is not a member of the map items"#,
         }
 
         async fn avro_3674_with_or_without_namespace(with_namespace: bool) -> TestResult {
-            use crate::ser::tokio::Serializer;
+            use crate::ser::asynch::Serializer;
             use serde::Serialize;
 
             let schema_str = r#"

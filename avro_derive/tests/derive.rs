@@ -20,7 +20,7 @@ mod test_derive {
 
     use apache_avro::{
         AvroSchema, Reader, Schema, Writer, from_value, schema::derive::AvroSchemaComponent,
-        schema::sync::SchemaExt,
+        schema::synch::SchemaExt,
     };
     // use apache_avro_derive::*;
     use proptest::prelude::*;

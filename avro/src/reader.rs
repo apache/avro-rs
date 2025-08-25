@@ -16,21 +16,21 @@
 // under the License.
 
 #[synca::synca(
-  #[cfg(feature = "async")]
-  pub mod tokio {},
-  #[cfg(feature = "sync")]
-  pub mod sync {
+  #[cfg(feature = "asynch")]
+  pub mod asynch {},
+  #[cfg(feature = "synch")]
+  pub mod synch {
     sync!();
     replace!(
-      crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::decode::tokio => crate::decode::sync,
-      crate::encode::tokio => crate::encode::sync,
-      crate::error::tokio => crate::error::sync,
-      crate::headers::tokio => crate::headers::sync,
-      crate::schema::tokio => crate::schema::sync,
-      crate::util::tokio => crate::util::sync,
-      crate::types::tokio => crate::types::sync,
-      crate::writer::tokio => crate::writer::sync,
+      crate::bigdecimal::asynch => crate::bigdecimal::synch,
+      crate::decode::asynch => crate::decode::synch,
+      crate::encode::asynch => crate::encode::synch,
+      crate::error::asynch => crate::error::synch,
+      crate::headers::asynch => crate::headers::synch,
+      crate::schema::asynch => crate::schema::synch,
+      crate::util::asynch => crate::util::synch,
+      crate::types::asynch => crate::types::synch,
+      crate::writer::asynch => crate::writer::synch,
       #[tokio::test] => #[test]
     );
   }
@@ -38,32 +38,32 @@
 mod reader {
 
     use crate::AvroResult;
-    #[synca::cfg(tokio)]
+    #[synca::cfg(asynch)]
     use crate::async_from_value as from_value;
-    use crate::decode::tokio::{decode, decode_internal};
-    #[synca::cfg(sync)]
+    use crate::decode::asynch::{decode, decode_internal};
+    #[synca::cfg(synch)]
     use crate::from_value;
-    #[synca::cfg(tokio)]
+    #[synca::cfg(asynch)]
     use futures::AsyncRead as AvroRead;
-    #[cfg(feature = "async")]
+    #[cfg(feature = "asynch")]
     use futures::AsyncReadExt;
-    #[synca::cfg(sync)]
+    #[synca::cfg(synch)]
     use std::io::Read as AvroRead;
 
-    use crate::util::tokio::safe_len;
+    use crate::util::asynch::safe_len;
     use crate::{
         codec::Codec,
         error::Details,
         error::Error,
-        headers::tokio::{HeaderBuilder, RabinFingerprintHeader},
+        headers::asynch::{HeaderBuilder, RabinFingerprintHeader},
         schema::AvroSchema,
-        schema::tokio::SchemaExt,
+        schema::asynch::SchemaExt,
         schema::{
             Names, ResolvedOwnedSchema, ResolvedSchema, Schema, resolve_names,
             resolve_names_with_schemata,
         },
-        types::{Value, tokio::ValueExt},
-        util::tokio::read_long,
+        types::{Value, asynch::ValueExt},
+        util::asynch::read_long,
     };
     use log::warn;
     use serde::de::DeserializeOwned;
@@ -476,7 +476,7 @@ mod reader {
         }
     }
 
-    #[synca::cfg(sync)]
+    #[synca::cfg(synch)]
     impl<R: AvroRead + Unpin> Iterator for Reader<'_, R> {
         type Item = AvroResult<Value>;
 
@@ -495,12 +495,12 @@ mod reader {
         }
     }
 
-    #[synca::cfg(tokio)]
+    #[synca::cfg(asynch)]
     use std::pin::Pin;
-    #[synca::cfg(tokio)]
+    #[synca::cfg(asynch)]
     use std::task::{Context, Poll};
 
-    #[synca::cfg(tokio)]
+    #[synca::cfg(asynch)]
     impl<R: AvroRead + Unpin> futures::Stream for Reader<'_, R> {
         type Item = AvroResult<Value>;
 
@@ -692,23 +692,23 @@ mod reader {
     #[cfg(test)]
     mod tests {
         use super::*;
-        #[synca::cfg(sync)]
-        use crate::encode::tokio::encode;
-        #[synca::cfg(sync)]
-        use crate::headers::sync::GlueSchemaUuidHeader;
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
+        use crate::encode::asynch::encode;
+        #[synca::cfg(synch)]
+        use crate::headers::synch::GlueSchemaUuidHeader;
+        #[synca::cfg(synch)]
         use crate::rabin::Rabin;
         use crate::types::Record;
         use apache_avro_test_helper::TestResult;
-        #[synca::cfg(tokio)]
+        #[synca::cfg(asynch)]
         use futures::StreamExt;
-        #[synca::cfg(tokio)]
+        #[synca::cfg(asynch)]
         use futures::io::Cursor;
         use pretty_assertions::assert_eq;
         use serde::Deserialize;
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         use std::io::Cursor;
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         use uuid::Uuid;
 
         const SCHEMA: &str = r#"
@@ -925,7 +925,7 @@ mod reader {
 
         #[tokio::test]
         async fn test_avro_3405_read_user_metadata_success() -> TestResult {
-            use crate::writer::tokio::Writer;
+            use crate::writer::asynch::Writer;
 
             let schema = SchemaExt::parse_str(SCHEMA).await?;
             let mut writer = Writer::new(&schema, Vec::new());
@@ -964,7 +964,7 @@ mod reader {
             c: Vec<String>,
         }
 
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         impl AvroSchema for TestSingleObjectReader {
             fn get_schema() -> Schema {
                 let schema = r#"
@@ -1039,7 +1039,7 @@ mod reader {
         }
 
         #[test]
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         fn test_avro_3507_single_object_reader() -> TestResult {
             let obj = TestSingleObjectReader {
                 a: 42,
@@ -1073,7 +1073,7 @@ mod reader {
         }
 
         #[test]
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         fn avro_3642_test_single_object_reader_incomplete_reads() -> TestResult {
             let obj = TestSingleObjectReader {
                 a: 42,
@@ -1096,10 +1096,10 @@ mod reader {
             )
             .expect("Encode should succeed");
 
-            #[synca::cfg(sync)]
+            #[synca::cfg(synch)]
             let mut to_read =
                 std::io::Read::chain(&to_read_1[..], &to_read_2[..]).chain(&to_read_3[..]);
-            #[synca::cfg(tokio)]
+            #[synca::cfg(asynch)]
             let mut to_read =
                 futures::AsyncReadExt::chain(&to_read_1[..], &to_read_2[..]).chain(&to_read_3[..]);
             let generic_reader =
@@ -1115,7 +1115,7 @@ mod reader {
         }
 
         #[test]
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         fn test_avro_3507_reader_parity() -> TestResult {
             let obj = TestSingleObjectReader {
                 a: 42,
@@ -1163,7 +1163,7 @@ mod reader {
         }
 
         #[test]
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         fn avro_rs_164_generic_reader_alternate_header() -> TestResult {
             let schema_uuid = Uuid::parse_str("b2f1cf00-0434-013e-439a-125eb8485a5f")?;
             let header_builder = GlueSchemaUuidHeader::from_uuid(schema_uuid);

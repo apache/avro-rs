@@ -16,20 +16,20 @@
 // under the License.
 
 // #[synca::synca(
-//   #[cfg(feature = "async")]
-//   pub mod tokio { },
-//   #[cfg(feature = "sync")]
-//   pub mod sync {
+//   #[cfg(feature = "asynch")]
+//   pub mod asynch { },
+//   #[cfg(feature = "synch")]
+//   pub mod synch {
 //     sync!();
 //     replace!(
-//       crate::bigdecimal::tokio => crate::bigdecimal::sync,
-//       crate::decimal::tokio => crate::decimal::sync,
-//       crate::decode::tokio => crate::decode::sync,
-//       crate::encode::tokio => crate::encode::sync,
-//       crate::error::tokio => crate::error::sync,
-//       crate::schema::tokio => crate::schema::sync,
-//       crate::util::tokio => crate::util::sync,
-//       crate::types::tokio => crate::types::sync,
+//       crate::bigdecimal::asynch => crate::bigdecimal::synch,
+//       crate::decimal::asynch => crate::decimal::synch,
+//       crate::decode::asynch => crate::decode::synch,
+//       crate::encode::asynch => crate::encode::synch,
+//       crate::error::asynch => crate::error::synch,
+//       crate::schema::asynch => crate::schema::synch,
+//       crate::util::asynch => crate::util::synch,
+//       crate::types::asynch => crate::types::synch,
 //       #[tokio::test] => #[test]
 //     );
 //   }

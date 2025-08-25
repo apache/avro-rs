@@ -1531,23 +1531,23 @@ pub mod derive {
 }
 
 #[synca::synca(
-  #[cfg(feature = "async")]
-  pub mod tokio {},
-  #[cfg(feature = "sync")]
-  pub mod sync {
+  #[cfg(feature = "asynch")]
+  pub mod asynch {},
+  #[cfg(feature = "synch")]
+  pub mod synch {
     sync!();
     replace!(
-      crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::de::tokio => crate::de::sync,
-      crate::decode::tokio => crate::decode::sync,
-      crate::encode::tokio => crate::encode::sync,
-      crate::error::tokio => crate::error::sync,
-      crate::reader::tokio => crate::reader::sync,
-      crate::writer::tokio => crate::writer::sync,
-      crate::ser::tokio => crate::ser::sync,
-      crate::util::tokio => crate::util::sync,
-      crate::types::tokio => crate::types::sync,
-      crate::util::tokio => crate::util::sync,
+      crate::bigdecimal::asynch => crate::bigdecimal::synch,
+      crate::de::asynch => crate::de::synch,
+      crate::decode::asynch => crate::decode::synch,
+      crate::encode::asynch => crate::encode::synch,
+      crate::error::asynch => crate::error::synch,
+      crate::reader::asynch => crate::reader::synch,
+      crate::writer::asynch => crate::writer::synch,
+      crate::ser::asynch => crate::ser::synch,
+      crate::util::asynch => crate::util::synch,
+      crate::types::asynch => crate::types::synch,
+      crate::util::asynch => crate::util::synch,
       #[tokio::test] => #[test]
     );
   }
@@ -1561,18 +1561,18 @@ mod schema {
         Namespace, Precision, RecordField, RecordFieldOrder, RecordSchema, ResolvedSchema, Scale,
         Schema, SchemaKind, UnionSchema,
     };
-    use crate::types::tokio::ValueExt;
+    use crate::types::asynch::ValueExt;
     use crate::util::MapHelper;
     use crate::{
         types::{Value, ValueKind},
         validator::{validate_enum_symbol_name, validate_record_field_name},
     };
-    #[synca::cfg(tokio)]
+    #[synca::cfg(asynch)]
     use futures::AsyncRead as AvroRead;
-    #[cfg(feature = "async")]
+    #[cfg(feature = "asynch")]
     use futures::AsyncReadExt;
     use log::{debug, error, warn};
-    #[synca::cfg(sync)]
+    #[synca::cfg(synch)]
     use std::io::Read as AvroRead;
     use std::{
         collections::{BTreeMap, HashMap, HashSet},
@@ -2756,15 +2756,15 @@ mod schema {
     #[cfg(test)]
     mod tests {
         use super::*;
-        #[synca::cfg(sync)]
-        use crate::writer::sync::SpecificSingleObjectWriter;
+        #[synca::cfg(synch)]
+        use crate::writer::synch::SpecificSingleObjectWriter;
         use crate::{
-            de::tokio::from_value,
+            de::asynch::from_value,
             error::Details,
             rabin::Rabin,
-            reader::tokio::from_avro_datum,
-            ser::tokio::to_value,
-            writer::tokio::{Writer, to_avro_datum},
+            reader::asynch::from_avro_datum,
+            ser::asynch::to_value,
+            writer::asynch::{Writer, to_avro_datum},
         };
         use apache_avro_test_helper::{
             TestResult,
@@ -2772,9 +2772,9 @@ mod schema {
         };
         use serde::{Deserialize, Serialize};
         use serde_json::json;
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         use serial_test::serial;
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         use std::sync::atomic::Ordering;
 
         #[tokio::test]
@@ -6913,7 +6913,7 @@ mod schema {
         }
 
         #[test]
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         #[serial(serde_is_human_readable)]
         fn avro_rs_53_uuid_with_fixed() -> TestResult {
             #[derive(Debug, Serialize, Deserialize)]

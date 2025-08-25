@@ -18,22 +18,22 @@
 //! Logic for serde-compatible deserialization.
 
 #[synca::synca(
-  #[cfg(feature = "async")]
-  pub mod tokio { },
-  #[cfg(feature = "sync")]
-  pub mod sync {
+  #[cfg(feature = "asynch")]
+  pub mod asynch { },
+  #[cfg(feature = "synch")]
+  pub mod synch {
     sync!();
     replace!(
-      crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::decode::tokio => crate::decode::sync,
-      crate::encode::tokio => crate::encode::sync,
-      crate::error::tokio => crate::error::sync,
-      crate::ser::tokio => crate::ser::sync,
-      crate::schema::tokio => crate::schema::sync,
-      crate::reader::tokio => crate::reader::sync,
-      crate::util::tokio => crate::util::sync,
-      crate::types::tokio => crate::types::sync,
-      crate::writer::tokio => crate::writer::sync,
+      crate::bigdecimal::asynch => crate::bigdecimal::synch,
+      crate::decode::asynch => crate::decode::synch,
+      crate::encode::asynch => crate::encode::synch,
+      crate::error::asynch => crate::error::synch,
+      crate::ser::asynch => crate::ser::synch,
+      crate::schema::asynch => crate::schema::synch,
+      crate::reader::asynch => crate::reader::synch,
+      crate::util::asynch => crate::util::synch,
+      crate::types::asynch => crate::types::synch,
+      crate::writer::asynch => crate::writer::synch,
       #[tokio::test] => #[test]
     );
   }
@@ -797,10 +797,10 @@ mod de {
 
     #[cfg(test)]
     mod tests {
-        use crate::reader::tokio::from_avro_datum;
-        use crate::schema::tokio::SchemaExt;
-        use crate::ser::tokio::to_value;
-        use crate::writer::tokio::to_avro_datum;
+        use crate::reader::asynch::from_avro_datum;
+        use crate::schema::asynch::SchemaExt;
+        use crate::ser::asynch::to_value;
+        use crate::writer::asynch::to_avro_datum;
         use num_bigint::BigInt;
         use pretty_assertions::assert_eq;
         use serde::{Deserialize, Serialize};
@@ -811,9 +811,9 @@ mod de {
         use apache_avro_test_helper::TestResult;
 
         use crate::decimal::Decimal;
-        #[synca::cfg(tokio)]
+        #[synca::cfg(asynch)]
         use futures::io::Cursor;
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         use std::io::Cursor;
 
         use super::*;

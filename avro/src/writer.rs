@@ -18,59 +18,59 @@
 //! Logic handling writing in Avro format at user level.
 
 #[synca::synca(
-  #[cfg(feature = "async")]
-  pub mod tokio { },
-  #[cfg(feature = "sync")]
-  pub mod sync {
+  #[cfg(feature = "asynch")]
+  pub mod asynch { },
+  #[cfg(feature = "synch")]
+  pub mod synch {
     sync!();
     replace!(
-      crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::decode::tokio => crate::decode::sync,
-      crate::encode::tokio => crate::encode::sync,
-      crate::error::tokio => crate::error::sync,
-      crate::headers::tokio => crate::headers::sync,
-      crate::schema::tokio => crate::schema::sync,
-      crate::ser_schema::tokio => crate::ser_schema::sync,
-      crate::reader::tokio => crate::reader::sync,
-      crate::util::tokio => crate::util::sync,
-      crate::types::tokio => crate::types::sync,
-      crate::util::tokio => crate::util::sync,
+      crate::bigdecimal::asynch => crate::bigdecimal::synch,
+      crate::decode::asynch => crate::decode::synch,
+      crate::encode::asynch => crate::encode::synch,
+      crate::error::asynch => crate::error::synch,
+      crate::headers::asynch => crate::headers::synch,
+      crate::schema::asynch => crate::schema::synch,
+      crate::ser_schema::asynch => crate::ser_schema::synch,
+      crate::reader::asynch => crate::reader::synch,
+      crate::util::asynch => crate::util::synch,
+      crate::types::asynch => crate::types::synch,
+      crate::util::asynch => crate::util::synch,
       #[tokio::test] => #[test]
     );
   }
 )]
 mod writer {
 
-    #[synca::cfg(tokio)]
+    #[synca::cfg(asynch)]
     use futures::AsyncWrite as AvroWrite;
-    #[cfg(feature = "async")]
+    #[cfg(feature = "asynch")]
     use futures::AsyncWriteExt;
-    #[synca::cfg(sync)]
+    #[synca::cfg(synch)]
     use std::io::Write as AvroWrite;
     use std::marker::Unpin;
 
     use crate::AvroResult;
-    #[synca::cfg(sync)]
+    #[synca::cfg(synch)]
     use crate::schema::Name;
-    #[synca::cfg(sync)]
+    #[synca::cfg(synch)]
     use crate::ser_schema::SchemaAwareWriteSerializer;
-    use crate::types::tokio::ValueExt;
+    use crate::types::asynch::ValueExt;
     use crate::{
         codec::Codec,
-        encode::tokio::{encode, encode_internal, encode_to_vec},
+        encode::asynch::{encode, encode_internal, encode_to_vec},
         error::Details,
         error::Error,
-        headers::tokio::{HeaderBuilder, RabinFingerprintHeader},
+        headers::asynch::{HeaderBuilder, RabinFingerprintHeader},
         schema::{ResolvedOwnedSchema, ResolvedSchema, Schema},
         types::Value,
     };
-    #[synca::cfg(sync)]
+    #[synca::cfg(synch)]
     use serde::Serialize;
     use std::{collections::HashMap, mem::ManuallyDrop, ops::RangeInclusive};
 
-    #[synca::cfg(sync)]
+    #[synca::cfg(synch)]
     use crate::AvroSchema;
-    #[synca::cfg(sync)]
+    #[synca::cfg(synch)]
     use std::marker::PhantomData;
 
     const DEFAULT_BLOCK_SIZE: usize = 16000;
@@ -250,7 +250,7 @@ mod writer {
         /// **NOTE**: This function is not guaranteed to perform any actual write, since it relies on
         /// internal buffering for performance reasons. If you want to be sure the value has been
         /// written, then call [`flush`](Writer::flush).
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         pub fn append_ser<S: Serialize>(&mut self, value: S) -> AvroResult<usize> {
             let n = self.maybe_write_header()?;
 
@@ -321,7 +321,7 @@ mod writer {
         ///
         /// **NOTE**: This function forces the written data to be flushed (an implicit
         /// call to [`flush`](Writer::flush) is performed).
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         pub fn extend_ser<I, T: Serialize>(&mut self, values: I) -> AvroResult<usize>
         where
             I: IntoIterator<Item = T>,
@@ -541,7 +541,7 @@ mod writer {
         }
     }
 
-    #[synca::cfg(sync)]
+    #[synca::cfg(synch)]
     impl<W: AvroWrite + Unpin> Drop for Writer<'_, W> {
         /// Drop the writer, will try to flush ignoring any errors.
         fn drop(&mut self) {
@@ -652,7 +652,7 @@ mod writer {
     }
 
     /// Writer that encodes messages according to the single object encoding v1 spec
-    #[synca::cfg(sync)]
+    #[synca::cfg(synch)]
     pub struct SpecificSingleObjectWriter<T>
     where
         T: AvroSchema,
@@ -663,7 +663,7 @@ mod writer {
         _model: PhantomData<T>,
     }
 
-    #[synca::cfg(sync)]
+    #[synca::cfg(synch)]
     impl<T> SpecificSingleObjectWriter<T>
     where
         T: AvroSchema,
@@ -679,7 +679,7 @@ mod writer {
         }
     }
 
-    #[synca::cfg(sync)]
+    #[synca::cfg(synch)]
     impl<T> SpecificSingleObjectWriter<T>
     where
         T: AvroSchema + Into<Value>,
@@ -696,7 +696,7 @@ mod writer {
         }
     }
 
-    #[synca::cfg(sync)]
+    #[synca::cfg(synch)]
     impl<T> SpecificSingleObjectWriter<T>
     where
         T: AvroSchema + Serialize,
@@ -816,7 +816,7 @@ mod writer {
     /// **NOTE**: This function has a quite small niche of usage and does **NOT** generate headers and sync
     /// markers; use [`append_ser`](Writer::append_ser) to be fully Avro-compatible
     /// if you don't know what you are doing, instead.
-    #[synca::cfg(sync)]
+    #[synca::cfg(synch)]
     pub fn write_avro_datum_ref<T: Serialize, W: std::io::Write>(
         schema: &Schema,
         data: &T,
@@ -866,27 +866,27 @@ mod writer {
     #[cfg(test)]
     mod tests {
         use super::*;
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         use crate::schema::AvroSchema;
         use crate::{codec::DeflateSettings, error::Details};
         use crate::{
             decimal::Decimal,
             duration::{Days, Duration, Millis, Months},
-            reader::tokio::{Reader, from_avro_datum},
-            schema::tokio::SchemaExt,
+            reader::asynch::{Reader, from_avro_datum},
+            schema::asynch::SchemaExt,
             schema::{DecimalSchema, FixedSchema, Name},
             types::Record,
-            util::tokio::zig_i64,
+            util::asynch::zig_i64,
         };
-        #[synca::cfg(sync)]
-        use crate::{headers::tokio::GlueSchemaUuidHeader, rabin::Rabin};
+        #[synca::cfg(synch)]
+        use crate::{headers::asynch::GlueSchemaUuidHeader, rabin::Rabin};
         use apache_avro_test_helper::TestResult;
-        #[synca::cfg(tokio)]
+        #[synca::cfg(asynch)]
         use futures::StreamExt;
         use pretty_assertions::assert_eq;
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         use serde::{Deserialize, Serialize};
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         use uuid::Uuid;
 
         const AVRO_OBJECT_HEADER_LEN: usize = AVRO_OBJECT_HEADER.len();
@@ -929,7 +929,7 @@ mod writer {
         }
 
         #[test]
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         fn avro_rs_193_write_avro_datum_ref() -> TestResult {
             #[derive(Serialize)]
             struct TestStruct {
@@ -1226,7 +1226,7 @@ mod writer {
             Ok(())
         }
 
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         #[derive(Debug, Clone, Deserialize, Serialize)]
         struct TestSerdeSerialize {
             a: i64,
@@ -1234,7 +1234,7 @@ mod writer {
         }
 
         #[test]
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         fn test_writer_append_ser() -> TestResult {
             let schema = SchemaExt::parse_str(SCHEMA)?;
             let mut writer = Writer::new(&schema, Vec::new());
@@ -1268,7 +1268,7 @@ mod writer {
         }
 
         #[test]
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         fn test_writer_extend_ser() -> TestResult {
             let schema = SchemaExt::parse_str(SCHEMA).await?;
             let mut writer = Writer::new(&schema, Vec::new());
@@ -1551,7 +1551,7 @@ mod writer {
             Ok(())
         }
 
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         #[derive(Serialize, Clone)]
         struct TestSingleObjectWriter {
             a: i64,
@@ -1559,7 +1559,7 @@ mod writer {
             c: Vec<String>,
         }
 
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         impl AvroSchema for TestSingleObjectWriter {
             fn get_schema() -> Schema {
                 let schema = r#"
@@ -1589,7 +1589,7 @@ mod writer {
             }
         }
 
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         impl From<TestSingleObjectWriter> for Value {
             fn from(obj: TestSingleObjectWriter) -> Value {
                 Value::Record(vec![
@@ -1603,7 +1603,7 @@ mod writer {
             }
         }
 
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         #[test]
         fn test_single_object_writer() -> TestResult {
             let mut buf: Vec<u8> = Vec::new();
@@ -1645,7 +1645,7 @@ mod writer {
         }
 
         #[test]
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         async fn test_single_object_writer_with_header_builder() -> TestResult {
             let mut buf: Vec<u8> = Vec::new();
             let obj = TestSingleObjectWriter {
@@ -1673,7 +1673,7 @@ mod writer {
         }
 
         #[test]
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         fn test_writer_parity() -> TestResult {
             let obj1 = TestSingleObjectWriter {
                 a: 300,
@@ -1710,7 +1710,7 @@ mod writer {
         }
 
         #[test]
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         fn avro_3894_take_aliases_into_account_when_serializing() -> TestResult {
             const SCHEMA: &str = r#"
   {
@@ -1744,7 +1744,7 @@ mod writer {
         }
 
         #[test]
-        #[synca::cfg(sync)]
+        #[synca::cfg(synch)]
         fn avro_4014_validation_returns_a_detailed_error() -> TestResult {
             const SCHEMA: &str = r#"
   {
@@ -1783,7 +1783,7 @@ mod writer {
         }
     }
 
-    // #[cfg(feature = "sync")]
+    // #[cfg(feature = "synch")]
     // #[test]
     // fn avro_4063_flush_applies_to_inner_writer() -> TestResult {
     //     const SCHEMA: &str = r#"
@@ -1796,8 +1796,8 @@ mod writer {
     //     }
     //     "#;
     //     use std::{cell::RefCell, rc::Rc};
-    //     use crate::writer::sync::Writer;
-    //     use crate::schema::sync::SchemaExt;
+    //     use crate::writer::synch::Writer;
+    //     use crate::schema::synch::SchemaExt;
     //
     //     #[derive(Clone, Default)]
     //     struct TestBuffer(Rc<RefCell<Vec<u8>>>);

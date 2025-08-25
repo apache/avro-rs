@@ -15,13 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::types::tokio::ValueExt;
+use apache_avro::types::asynch::ValueExt;
 use apache_avro::{
     AsyncReader as Reader, AsyncWriter as Writer, Codec, async_from_avro_datum as from_avro_datum,
     async_from_value as from_value, async_to_avro_datum as to_avro_datum,
     async_to_value as to_value,
     error::{Details, Error},
-    schema::tokio::SchemaExt,
+    schema::asynch::SchemaExt,
     schema::{EnumSchema, FixedSchema, Name, RecordField, RecordSchema, Schema},
     types::{Record, Value},
 };

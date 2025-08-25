@@ -16,30 +16,30 @@
 // under the License.
 
 #[synca::synca(
-  #[cfg(feature = "async")]
-  pub mod tokio {},
-  #[cfg(feature = "sync")]
-  pub mod sync {
+  #[cfg(feature = "asynch")]
+  pub mod asynch {},
+  #[cfg(feature = "synch")]
+  pub mod synch {
     sync!();
     replace!(
-      crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::decode::tokio => crate::decode::sync,
-      crate::encode::tokio => crate::encode::sync,
-      crate::error::tokio => crate::error::sync,
-      crate::schema::tokio => crate::schema::sync,
-      crate::util::tokio => crate::util::sync,
-      crate::types::tokio => crate::types::sync,
+      crate::bigdecimal::asynch => crate::bigdecimal::synch,
+      crate::decode::asynch => crate::decode::synch,
+      crate::encode::asynch => crate::encode::synch,
+      crate::error::asynch => crate::error::synch,
+      crate::schema::asynch => crate::schema::synch,
+      crate::util::asynch => crate::util::synch,
+      crate::types::asynch => crate::types::synch,
       #[tokio::test] => #[test]
     );
   }
 )]
 mod encode {
 
-    use crate::util::tokio::{zig_i32, zig_i64};
+    use crate::util::asynch::{zig_i32, zig_i64};
 
     use crate::AvroResult;
     use crate::{
-        bigdecimal::tokio::serialize_big_decimal,
+        bigdecimal::asynch::serialize_big_decimal,
         error::Details,
         schema::{
             DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, RecordSchema, ResolvedSchema,
@@ -47,11 +47,11 @@ mod encode {
         },
         types::{Value, ValueKind},
     };
-    #[synca::cfg(tokio)]
+    #[synca::cfg(asynch)]
     use futures::AsyncWrite as AvroWrite;
-    #[cfg(feature = "async")]
+    #[cfg(feature = "asynch")]
     use futures::AsyncWriteExt;
-    #[synca::cfg(sync)]
+    #[synca::cfg(synch)]
     use std::io::Write as AvroWrite;
     use std::marker::Unpin;
 
@@ -423,7 +423,7 @@ mod encode {
     pub(crate) mod tests {
         use super::*;
         use crate::error::{Details, Error};
-        use crate::schema::tokio::SchemaExt;
+        use crate::schema::asynch::SchemaExt;
         use apache_avro_test_helper::TestResult;
         use pretty_assertions::assert_eq;
         use uuid::Uuid;

@@ -17,7 +17,7 @@
 
 use apache_avro::{
     AsyncReader as Reader, AsyncWriter as Writer, Schema,
-    schema::tokio::SchemaExt,
+    schema::asynch::SchemaExt,
     types::{Record, Value},
 };
 use futures::StreamExt;

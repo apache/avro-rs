@@ -286,16 +286,16 @@ pub mod serde_avro_slice_opt {
 }
 
 #[synca::synca(
-  #[cfg(feature = "async")]
+  #[cfg(feature = "asynch")]
   pub mod tokio_tests { },
-  #[cfg(feature = "sync")]
+  #[cfg(feature = "synch")]
   pub mod sync_tests {
     sync!();
     replace!(
-      crate::de::tokio => crate::de::sync,
-      crate::schema::tokio => crate::schema::sync,
-      crate::ser::tokio => crate::ser::sync,
-      crate::types::tokio => crate::types::sync,
+      crate::de::asynch => crate::de::synch,
+      crate::schema::asynch => crate::schema::synch,
+      crate::ser::asynch => crate::ser::synch,
+      crate::types::asynch => crate::types::synch,
       #[tokio::test] => #[test]
     );
   }
@@ -303,10 +303,10 @@ pub mod serde_avro_slice_opt {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::de::tokio::from_value;
-    use crate::schema::tokio::SchemaExt;
-    use crate::ser::tokio::to_value;
-    use crate::types::{Value, tokio::ValueExt};
+    use crate::de::asynch::from_value;
+    use crate::schema::asynch::SchemaExt;
+    use crate::ser::asynch::to_value;
+    use crate::types::{Value, asynch::ValueExt};
     use apache_avro_test_helper::TestResult;
     use serde::{Deserialize, Serialize};
 

@@ -34,7 +34,7 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-apache-avro = { path = "../avro", default-features = false, features = ["sync"] }
+apache-avro = { path = "../avro", default-features = false, features = ["synch"] }
 serde = { workspace = true }
 wasm-bindgen = "0.2.97"
 

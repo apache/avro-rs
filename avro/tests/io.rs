@@ -16,7 +16,7 @@
 // under the License.
 
 //! Port of https://github.com/apache/avro/blob/release-1.9.1/lang/py/test/test_io.py
-use apache_avro::types::sync::ValueExt;
+use apache_avro::types::synch::ValueExt;
 use apache_avro::{
     Error, Schema, SchemaExt, error::Details, from_avro_datum, to_avro_datum, types::Value,
 };

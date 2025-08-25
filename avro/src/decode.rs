@@ -16,36 +16,36 @@
 // under the License.
 
 #[synca::synca(
-  #[cfg(feature = "async")]
-  pub mod tokio {},
-  #[cfg(feature = "sync")]
-  pub mod sync {
+  #[cfg(feature = "asynch")]
+  pub mod asynch {},
+  #[cfg(feature = "synch")]
+  pub mod synch {
     sync!();
     replace!(
-      crate::bigdecimal::tokio => crate::bigdecimal::sync,
-      crate::decode::tokio => crate::decode::sync,
-      crate::encode::tokio => crate::encode::sync,
-      crate::error::tokio => crate::error::sync,
-      crate::schema::tokio => crate::schema::sync,
-      crate::util::tokio => crate::util::sync,
-      crate::types::tokio => crate::types::sync,
+      crate::bigdecimal::asynch => crate::bigdecimal::synch,
+      crate::decode::asynch => crate::decode::synch,
+      crate::encode::asynch => crate::encode::synch,
+      crate::error::asynch => crate::error::synch,
+      crate::schema::asynch => crate::schema::synch,
+      crate::util::asynch => crate::util::synch,
+      crate::types::asynch => crate::types::synch,
       #[tokio::test] => #[test]
     );
   }
 )]
 mod decode {
-    #[synca::cfg(tokio)]
+    #[synca::cfg(asynch)]
     use futures::AsyncRead as AvroRead;
-    #[cfg(feature = "async")]
+    #[synca::cfg(asynch)]
     use futures::AsyncReadExt;
-    #[synca::cfg(sync)]
+    #[synca::cfg(synch)]
     use std::io::Read as AvroRead;
 
     use crate::AvroResult;
     use crate::Uuid;
-    use crate::util::tokio::{safe_len, zag_i32, zag_i64};
+    use crate::util::asynch::{safe_len, zag_i32, zag_i64};
     use crate::{
-        bigdecimal::tokio::deserialize_big_decimal,
+        bigdecimal::asynch::deserialize_big_decimal,
         decimal::Decimal,
         duration::Duration,
         error::Details,
@@ -396,11 +396,11 @@ mod decode {
     #[cfg(test)]
     #[allow(clippy::expect_fun_call)]
     mod tests {
-        use crate::schema::tokio::SchemaExt;
+        use crate::schema::asynch::SchemaExt;
         use crate::{
             decimal::Decimal,
-            decode::tokio::decode,
-            encode::tokio::{encode, tests::success},
+            decode::asynch::decode,
+            encode::asynch::{encode, tests::success},
             schema::{DecimalSchema, FixedSchema, Name, Schema},
             types::Value,
         };

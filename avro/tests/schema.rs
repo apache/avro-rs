@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::types::sync::ValueExt;
+use apache_avro::types::synch::ValueExt;
 use apache_avro::{
     Codec, Reader, SchemaExt, Writer,
     error::{Details, Error},
