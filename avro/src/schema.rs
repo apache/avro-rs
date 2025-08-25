@@ -1567,6 +1567,10 @@ mod schema {
         types::{Value, ValueKind},
         validator::{validate_enum_symbol_name, validate_record_field_name},
     };
+    #[synca::cfg(tokio)]
+    use futures::AsyncRead as AvroRead;
+    #[cfg(feature = "async")]
+    use futures::AsyncReadExt;
     use log::{debug, error, warn};
     #[synca::cfg(sync)]
     use std::io::Read as AvroRead;
@@ -1575,10 +1579,6 @@ mod schema {
         fmt::Debug,
         str::FromStr,
     };
-    #[synca::cfg(tokio)]
-    use futures::AsyncRead as AvroRead;
-    #[cfg(feature = "async")]
-    use futures::AsyncReadExt;
 
     pub struct RecordFieldExt;
 

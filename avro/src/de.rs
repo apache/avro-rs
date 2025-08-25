@@ -811,10 +811,10 @@ mod de {
         use apache_avro_test_helper::TestResult;
 
         use crate::decimal::Decimal;
-        #[synca::cfg(sync)]
-        use std::io::Cursor;
         #[synca::cfg(tokio)]
         use futures::io::Cursor;
+        #[synca::cfg(sync)]
+        use std::io::Cursor;
 
         use super::*;
 

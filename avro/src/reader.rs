@@ -43,12 +43,12 @@ mod reader {
     use crate::decode::tokio::{decode, decode_internal};
     #[synca::cfg(sync)]
     use crate::from_value;
-    #[synca::cfg(sync)]
-    use std::io::Read as AvroRead;
     #[synca::cfg(tokio)]
     use futures::AsyncRead as AvroRead;
     #[cfg(feature = "async")]
     use futures::AsyncReadExt;
+    #[synca::cfg(sync)]
+    use std::io::Read as AvroRead;
 
     use crate::util::tokio::safe_len;
     use crate::{
@@ -702,12 +702,12 @@ mod reader {
         use apache_avro_test_helper::TestResult;
         #[synca::cfg(tokio)]
         use futures::StreamExt;
+        #[synca::cfg(tokio)]
+        use futures::io::Cursor;
         use pretty_assertions::assert_eq;
         use serde::Deserialize;
         #[synca::cfg(sync)]
         use std::io::Cursor;
-        #[synca::cfg(tokio)]
-        use futures::io::Cursor;
         #[synca::cfg(sync)]
         use uuid::Uuid;
 
@@ -1100,8 +1100,8 @@ mod reader {
             let mut to_read =
                 std::io::Read::chain(&to_read_1[..], &to_read_2[..]).chain(&to_read_3[..]);
             #[synca::cfg(tokio)]
-            let mut to_read = futures::AsyncReadExt::chain(&to_read_1[..], &to_read_2[..])
-                .chain(&to_read_3[..]);
+            let mut to_read =
+                futures::AsyncReadExt::chain(&to_read_1[..], &to_read_2[..]).chain(&to_read_3[..]);
             let generic_reader =
                 GenericSingleObjectReader::new(TestSingleObjectReader::get_schema())
                     .expect("Schema should resolve");

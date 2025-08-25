@@ -19,8 +19,8 @@ use apache_avro::{
     Reader, Schema, SchemaExt, Writer,
     types::{Record, Value},
 };
-use std::time::{Duration, Instant};
 use std::io::{BufReader, BufWriter};
+use std::time::{Duration, Instant};
 
 fn nanos(duration: Duration) -> u64 {
     duration.as_secs() * 1_000_000_000 + duration.subsec_nanos() as u64

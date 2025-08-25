@@ -47,13 +47,13 @@ mod encode {
         },
         types::{Value, ValueKind},
     };
-    #[synca::cfg(sync)]
-    use std::io::Write as AvroWrite;
-    use std::marker::Unpin;
     #[synca::cfg(tokio)]
     use futures::AsyncWrite as AvroWrite;
     #[cfg(feature = "async")]
     use futures::AsyncWriteExt;
+    #[synca::cfg(sync)]
+    use std::io::Write as AvroWrite;
+    use std::marker::Unpin;
 
     use log::error;
     use std::{borrow::Borrow, collections::HashMap};

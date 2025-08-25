@@ -30,10 +30,10 @@ use apache_avro_test_helper::{
     data::{DOC_EXAMPLES, examples, valid_examples},
     init,
 };
-use futures::StreamExt;
-use std::collections::HashMap;
 use futures::AsyncRead;
+use futures::StreamExt;
 use futures::io::BufWriter;
+use std::collections::HashMap;
 
 #[tokio::test]
 async fn test_correct_recursive_extraction() -> TestResult {
@@ -147,8 +147,7 @@ async fn test_3799_parse_reader() -> TestResult {
 #[tokio::test]
 async fn test_3799_raise_io_error_from_parse_read() -> Result<(), String> {
     // 0xDF is invalid for UTF-8.
-    let mut buf = Vec::with_capacity(1);
-    buf.push(0xDF_u8);
+    let buf = vec![0xDF_u8];
     let mut invalid_data: &mut (dyn AsyncRead + Unpin) = &mut buf.as_slice();
     let error = SchemaExt::parse_reader(&mut invalid_data)
         .await

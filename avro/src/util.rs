@@ -125,12 +125,6 @@ impl MapHelper for Map<String, Value> {
   }
 )]
 mod util {
-    #[cfg(feature = "async")]
-    use futures::future::TryFutureExt;
-    #[synca::cfg(sync)]
-    use std::io::Read as AvroRead;
-    #[synca::cfg(sync)]
-    use std::io::Write as AvroWrite;
     #[synca::cfg(tokio)]
     use futures::AsyncRead as AvroRead;
     #[cfg(feature = "async")]
@@ -139,6 +133,12 @@ mod util {
     use futures::AsyncWrite as AvroWrite;
     #[cfg(feature = "async")]
     use futures::AsyncWriteExt;
+    #[cfg(feature = "async")]
+    use futures::future::TryFutureExt;
+    #[synca::cfg(sync)]
+    use std::io::Read as AvroRead;
+    #[synca::cfg(sync)]
+    use std::io::Write as AvroWrite;
 
     use crate::AvroResult;
     use crate::error::Details;

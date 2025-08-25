@@ -76,10 +76,10 @@ mod bigdecimal {
             Err(err) => return Err(Details::BigDecimalLen(Box::new(err)).into()),
         };
 
-        #[synca::cfg(sync)]
-        use std::io::Read;
         #[synca::cfg(tokio)]
         use futures::AsyncReadExt;
+        #[synca::cfg(sync)]
+        use std::io::Read;
 
         bytes
             .read_exact(&mut big_decimal_buffer[..])
@@ -107,6 +107,8 @@ mod bigdecimal {
         use bigdecimal::{One, Zero};
         #[synca::cfg(tokio)]
         use futures::StreamExt;
+        #[synca::cfg(tokio)]
+        use futures::io::BufReader;
         use pretty_assertions::assert_eq;
         #[synca::cfg(sync)]
         use std::fs::File;
@@ -118,8 +120,6 @@ mod bigdecimal {
         };
         #[synca::cfg(tokio)]
         use tokio::fs::File;
-        #[synca::cfg(tokio)]
-        use futures::io::BufReader;
         #[synca::cfg(tokio)]
         use tokio_util::compat::TokioAsyncReadCompatExt;
 

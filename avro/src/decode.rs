@@ -34,12 +34,12 @@
   }
 )]
 mod decode {
-    #[synca::cfg(sync)]
-    use std::io::Read as AvroRead;
     #[synca::cfg(tokio)]
     use futures::AsyncRead as AvroRead;
     #[cfg(feature = "async")]
     use futures::AsyncReadExt;
+    #[synca::cfg(sync)]
+    use std::io::Read as AvroRead;
 
     use crate::AvroResult;
     use crate::Uuid;
