@@ -57,29 +57,53 @@ name = "single"
 
 [dependencies]
 apache-avro-derive = { default-features = false, version = "0.20.0", path = "../avro_derive", optional = true }
-bigdecimal = { default-features = false, version = "0.4.8", features = ["std", "serde"] }
-bon = { default-features = false, version = "3.7.0" }
+bigdecimal = { default-features = false, version = "0.4.8", features = [
+    "std",
+    "serde",
+] }
+bon = { default-features = false, version = "3.7.1" }
 bzip2 = { version = "0.6.0", optional = true }
 crc32fast = { default-features = false, version = "1.5.0", optional = true }
-digest = { default-features = false, version = "0.10.7", features = ["core-api"] }
-miniz_oxide = { default-features = false, version = "0.8.9", features = ["with-alloc"] }
+digest = { default-features = false, version = "0.10.7", features = [
+    "core-api",
+] }
+miniz_oxide = { default-features = false, version = "0.8.9", features = [
+    "with-alloc",
+] }
 log = { workspace = true }
-num-bigint = { default-features = false, version = "0.4.6", features = ["std", "serde"] }
-regex-lite = { default-features = false, version = "0.1.6", features = ["std", "string"] }
+num-bigint = { default-features = false, version = "0.4.6", features = [
+    "std",
+    "serde",
+] }
+regex-lite = { default-features = false, version = "0.1.7", features = [
+    "std",
+    "string",
+] }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 snap = { default-features = false, version = "1.1.0", optional = true }
 strum = { default-features = false, version = "0.27.2" }
 strum_macros = { default-features = false, version = "0.27.2" }
-thiserror = { default-features = false, version = "2.0.14" }
-tokio = { version = "1.47.0", default-features = false, features = [ "fs", "io-util", "macros", "rt-multi-thread" ], optional = true }
-uuid = { default-features = false, version = "1.18.0", features = ["serde", "std"] }
+thiserror = { default-features = false, version = "2.0.16" }
+tokio = { version = "1.47.0", default-features = false, features = [
+    "fs",
+    "io-util",
+    "macros",
+    "rt-multi-thread",
+], optional = true }
+uuid = { default-features = false, version = "1.18.0", features = [
+    "serde",
+    "std",
+] }
 xz2 = { default-features = false, version = "0.1.7", optional = true }
 zstd = { default-features = false, version = "0.13.3", optional = true }
-synca = { git = "https://github.com/martin-g/rs_synca/", branch = "add-support-for-use-path-replacing", default-features = false, features = ["boxpin", "usepath"] }
+synca = { git = "https://github.com/martin-g/rs_synca/", branch = "add-support-for-use-path-replacing", default-features = false, features = [
+    "boxpin",
+    "usepath",
+] }
 #synca = { path = "/home/martin/git/rust/rs_synca/synca", default-features = false, features = ["boxpin", "usepath"] }
-futures = { version =  "0.3.31", optional = true }
+futures = { version = "0.3.31", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 quad-rand = { default-features = false, version = "0.2.3" }

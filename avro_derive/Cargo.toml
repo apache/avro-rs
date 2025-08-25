@@ -32,11 +32,11 @@ readme = "README.md"
 proc-macro = true
 
 [dependencies]
-darling = { default-features = false, version = "0.21.1" }
-proc-macro2 = { default-features = false, version = "1.0.97" }
+darling = { default-features = false, version = "0.21.3" }
+proc-macro2 = { default-features = false, version = "1.0.101" }
 quote = { default-features = false, version = "1.0.40" }
 serde_json = { workspace = true }
-syn = { default-features = false, version = "2.0.105", features = ["full", "fold"] }
+syn = { default-features = false, version = "2.0.106", features = ["full", "fold"] }
 
 [dev-dependencies]
 apache-avro = { default-features = false, path = "../avro", features = [
