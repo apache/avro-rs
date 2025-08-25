@@ -15,12 +15,30 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::{
-    Schema,
-    schema::{
-        ArraySchema, DecimalSchema, EnumSchema, FixedSchema, MapSchema, RecordField, RecordSchema,
-        UnionSchema,
-    },
+// #[synca::synca(
+//   #[cfg(feature = "asynch")]
+//   pub mod asynch {},
+//   #[cfg(feature = "synch")]
+//   pub mod synch {
+//     sync!();
+//     replace!(
+//       crate::bigdecimal::asynch => crate::bigdecimal::synch,
+//       crate::decode::asynch => crate::decode::synch,
+//       crate::encode::asynch => crate::encode::synch,
+//       crate::error::asynch => crate::error::synch,
+//       crate::schema::asynch => crate::schema::synch,
+//       crate::util::asynch => crate::util::synch,
+//       crate::types::asynch => crate::types::synch,
+//       crate::schema_equality::asynch => crate::schema_equality::synch,
+//       crate::util::asynch => crate::util::synch,
+//       #[tokio::test] => #[test]
+//     );
+//   }
+// )]
+// mod schema_equality {
+use crate::schema::{
+    ArraySchema, DecimalSchema, EnumSchema, FixedSchema, MapSchema, RecordField, RecordSchema,
+    Schema, UnionSchema,
 };
 use log::{debug, error};
 use std::{fmt::Debug, sync::OnceLock};
@@ -252,7 +270,8 @@ pub(crate) fn compare_schemata(schema_one: &Schema, schema_two: &Schema) -> bool
 #[allow(non_snake_case)]
 mod tests {
     use super::*;
-    use crate::schema::{Name, RecordFieldOrder};
+    use crate::schema::Name;
+    use crate::schema::RecordFieldOrder;
     use apache_avro_test_helper::TestResult;
     use serde_json::Value;
     use std::collections::BTreeMap;
@@ -585,3 +604,4 @@ mod tests {
         Ok(())
     }
 }
+// }
