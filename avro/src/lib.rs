@@ -864,12 +864,12 @@ mod bytes;
 mod codec;
 mod de;
 mod decimal;
-mod decode;
 mod duration;
 mod encode;
 mod reader;
 mod ser;
 mod ser_schema;
+pub mod state_machines;
 mod util;
 mod writer;
 
@@ -918,6 +918,12 @@ pub use apache_avro_derive::*;
 
 /// A convenience type alias for `Result`s with `Error`s.
 pub type AvroResult<T> = Result<T, Error>;
+
+/// Async versions of the types and functions.
+pub mod not_sync {
+    #[doc(inline)]
+    pub use crate::reader::async_reader::*;
+}
 
 #[cfg(test)]
 mod tests {
