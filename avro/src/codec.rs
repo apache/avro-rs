@@ -123,8 +123,8 @@ impl Codec {
             }
             #[cfg(feature = "xz")]
             Codec::Xz(settings) => {
-                use std::io::Read;
                 use liblzma::read::XzEncoder;
+                use std::io::Read;
 
                 let mut encoder = XzEncoder::new(&stream[..], settings.compression_level as u32);
                 let mut buffer = Vec::new();
