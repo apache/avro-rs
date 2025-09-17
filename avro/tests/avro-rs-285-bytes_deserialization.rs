@@ -4,6 +4,9 @@ use std::fs::File;
 use std::io::BufReader;
 
 
+//UPDATE: For byte deserialization to work, you need to add the serde attribute #[serde(with = "apache_avro::serde_avro_bytes_opt")] in this case. There are a lot of other options as well documented in bytes.rs
+
+
 // This is the schema that was used to write
 // schema = {
 //     "type": "record",
@@ -23,6 +26,10 @@ use std::io::BufReader;
 #[derive(Debug, Deserialize, Serialize, Clone)]
 
 struct ExampleByteArray{
+    
+    
+    //update I have discovered that this is the fix
+    #[serde(with = "apache_avro::serde_avro_bytes_opt")]
     data_bytes: Option<Vec<u8>>,
     description: Option<String>
 }

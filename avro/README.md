@@ -748,6 +748,50 @@ registered and used!
 
 <!-- cargo-rdme end -->
 
+
+### Deserializing Avro Byte Arrays
+
+if using the Serde way to deserialize avro files, there are sometimes special derive statements that need to be applied in the case of byte arrays.
+
+Here is an example of deserializing an avro file containing a nullable byte array. 
+
+
+```rust
+use apache_avro::{from_value, Reader};
+use serde::{Serialize,Deserialize};
+use std::fs::File;
+use std::io::BufReader;
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+struct ExampleByteArray{
+    
+    #[serde(with = "apache_avro::serde_avro_bytes_opt")]
+    data_bytes: Option<Vec<u8>>,
+    description: Option<String>
+}
+
+fn deserialize_byte_array(){
+
+    // Load the example file into reader
+    let file = File::open("somefile.avro".to_string()).unwrap();
+    let reader = BufReader::new(file);
+    let avro_reader = Reader::new(reader).unwrap();
+
+
+    // Deserialize into struct with byte array field
+    for value in avro_reader{
+        let value = value.unwrap();
+        let deserialized = from_value::<ExampleByteArray>(&value).unwrap();
+        println!("{:?}", deserialized);
+    }
+
+}
+```
+
+Full implementation and other options for things like fixed byte arrays can found in src/bytes.rs
+
+
+
 ## License
 
 This project is licensed under [Apache License 2.0](https://github.com/apache/avro/blob/main/LICENSE.txt).
