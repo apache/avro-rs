@@ -748,6 +748,79 @@ registered and used!
 
 <!-- cargo-rdme end -->
 
+
+### Deserializing Avro Byte Arrays
+
+if using the Serde way to deserialize avro files, there are sometimes special derive statements that need to be applied in the case of byte arrays.
+
+Here is an example of deserializing an avro file containing a nullable byte array. 
+
+
+```rust
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+struct ExampleByteArray {
+    #[serde(with = "apache_avro::serde_avro_bytes_opt")]
+    data_bytes: Option<Vec<u8>>,
+    description: Option<String>,
+}
+
+fn serialize_then_deserialize_byte_array(){
+
+  //Example Schema
+  let raw_schema = r#"
+      {
+          "type": "record",
+          "name": "SimpleRecord",
+          "fields": [
+              {"name": "data_bytes", "type": ["null", "bytes"], "default": null},
+              {"name": "description", "type": ["null", "string"], "default": null}
+          ]
+      }
+      "#;
+
+
+  let schema = apache_avro::Schema::parse_str(raw_schema).unwrap();
+
+  // Create vector of ExampleByteArray
+  let records = vec![
+      ExampleByteArray {
+          data_bytes: Some(vec![1, 2, 3, 4, 5]),
+          description: Some("First record".to_string()),
+      },
+      ExampleByteArray {
+          data_bytes: None,
+          description: Some("Second record".to_string()),
+      },
+      ExampleByteArray {
+          data_bytes: Some(vec![10, 20, 30]),
+          description: None,
+      },
+  ];
+
+  // Serialize records to Avro binary format with the schema
+  let mut writer = apache_avro::Writer::new(&schema, Vec::new());
+  for record in &records {
+      writer.append_ser(record).unwrap();
+  }
+
+  let avro_data = writer.into_inner().unwrap();
+
+
+  // Deserialize Avro binary data back into ExampleByteArray structs
+  let reader = apache_avro::Reader::new(&avro_data[..]).unwrap();
+  let _deserialized_records: Vec<ExampleByteArray> = reader
+      .map(|value| apache_avro::from_value::<ExampleByteArray>(&value.unwrap()).unwrap())
+      .collect();
+
+}
+```
+
+Full implementation and other options for things like fixed byte arrays can found in src/bytes.rs
+
+
+
 ## License
 
 This project is licensed under [Apache License 2.0](https://github.com/apache/avro/blob/main/LICENSE.txt).
