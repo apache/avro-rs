@@ -757,33 +757,62 @@ Here is an example of deserializing an avro file containing a nullable byte arra
 
 
 ```rust
-use apache_avro::{from_value, Reader};
-use serde::{Serialize,Deserialize};
-use std::fs::File;
-use std::io::BufReader;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-struct ExampleByteArray{
-    
+struct ExampleByteArray {
     #[serde(with = "apache_avro::serde_avro_bytes_opt")]
     data_bytes: Option<Vec<u8>>,
-    description: Option<String>
+    description: Option<String>,
 }
 
-fn deserialize_byte_array(){
+fn serialize_then_deserialize_byte_array(){
 
-    // Load the example file into reader
-    let file = File::open("somefile.avro".to_string()).unwrap();
-    let reader = BufReader::new(file);
-    let avro_reader = Reader::new(reader).unwrap();
+  //Example Schema
+  let raw_schema = r#"
+      {
+          "type": "record",
+          "name": "SimpleRecord",
+          "fields": [
+              {"name": "data_bytes", "type": ["null", "bytes"], "default": null},
+              {"name": "description", "type": ["null", "string"], "default": null}
+          ]
+      }
+      "#;
 
 
-    // Deserialize into struct with byte array field
-    for value in avro_reader{
-        let value = value.unwrap();
-        let deserialized = from_value::<ExampleByteArray>(&value).unwrap();
-        println!("{:?}", deserialized);
-    }
+  let schema = apache_avro::Schema::parse_str(raw_schema).unwrap();
+
+  // Create vector of ExampleByteArray
+  let records = vec![
+      ExampleByteArray {
+          data_bytes: Some(vec![1, 2, 3, 4, 5]),
+          description: Some("First record".to_string()),
+      },
+      ExampleByteArray {
+          data_bytes: None,
+          description: Some("Second record".to_string()),
+      },
+      ExampleByteArray {
+          data_bytes: Some(vec![10, 20, 30]),
+          description: None,
+      },
+  ];
+
+  // Serialize records to Avro binary format with the schema
+  let mut writer = apache_avro::Writer::new(&schema, Vec::new());
+  for record in &records {
+      writer.append_ser(record).unwrap();
+  }
+
+  let avro_data = writer.into_inner().unwrap();
+
+
+  // Deserialize Avro binary data back into ExampleByteArray structs
+  let reader = apache_avro::Reader::new(&avro_data[..]).unwrap();
+  let _deserialized_records: Vec<ExampleByteArray> = reader
+      .map(|value| apache_avro::from_value::<ExampleByteArray>(&value.unwrap()).unwrap())
+      .collect();
 
 }
 ```
