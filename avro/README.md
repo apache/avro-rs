@@ -772,7 +772,7 @@ Here is a complete example of a serde round trip of a struct with a nullable byt
 ```rust
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 struct ExampleByteArray {
     #[serde(with = "apache_avro::serde_avro_bytes_opt")]
     data_bytes: Option<Vec<u8>>,
