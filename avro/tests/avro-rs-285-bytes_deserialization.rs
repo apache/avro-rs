@@ -1,24 +1,20 @@
+use apache_avro_test_helper::TestResult;
 use serde::{Deserialize, Serialize};
 
-// Here is an example struct that matches the schema, and another with filtered out byte array field
-// The reason this is very useful is that in extremely large deeply nested avro files, structs mapped to grab fields of interest in deserialization
-// is really effecient and effective. The issue is that when I'm trying to deserialize a byte array field I get the error below no matter how I approach.
-// Bytes enum under value doesn't implement Deserialize in that way so I can't just make it a Value::Bytes
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 struct ExampleByteArray {
     #[serde(with = "apache_avro::serde_avro_bytes_opt")]
     data_bytes: Option<Vec<u8>>,
     description: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize)]
 struct ExampleByteArrayFiltered {
     description: Option<String>,
 }
 
 #[test]
-fn avro_rs_285_bytes_deserialization_round_trip() {
+fn avro_rs_285_bytes_deserialization_round_trip() -> TestResult {
     // define schema
     let raw_schema = r#"
     {
@@ -31,9 +27,8 @@ fn avro_rs_285_bytes_deserialization_round_trip() {
     }
     "#;
 
-    let schema = apache_avro::Schema::parse_str(raw_schema).unwrap();
+    let schema = apache_avro::Schema::parse_str(raw_schema)?;
 
-    // create vector of ExampleByteArray
     let records = vec![
         ExampleByteArray {
             data_bytes: Some(vec![1, 2, 3, 4, 5]),
@@ -52,21 +47,24 @@ fn avro_rs_285_bytes_deserialization_round_trip() {
     // serialize records to Avro binary format with schema
     let mut writer = apache_avro::Writer::new(&schema, Vec::new());
     for record in &records {
-        writer.append_ser(record).unwrap();
+        writer.append_ser(record)?;
     }
 
-    let avro_data = writer.into_inner().unwrap();
+    let avro_data = writer.into_inner()?;
 
     // deserialize Avro binary data back into ExampleByteArray structs
-    let reader = apache_avro::Reader::new(&avro_data[..]).unwrap();
-    let _deserialized_records: Vec<ExampleByteArray> = reader
+    let reader = apache_avro::Reader::new(&avro_data[..])?;
+    let deserialized_records: Vec<ExampleByteArray> = reader
         .map(|value| apache_avro::from_value::<ExampleByteArray>(&value.unwrap()).unwrap())
         .collect();
+
+    assert_eq!(records, deserialized_records);
+    Ok(())
 }
 
 #[test]
-fn avro_rs_285_bytes_deserialization_filtered_round_trip() {
-    // define schema
+fn avro_rs_285_bytes_deserialization_filtered_round_trip() ->TestResult {
+
     let raw_schema = r#"
     {
         "type": "record",
@@ -78,9 +76,8 @@ fn avro_rs_285_bytes_deserialization_filtered_round_trip() {
     }
     "#;
 
-    let schema = apache_avro::Schema::parse_str(raw_schema).unwrap();
+    let schema = apache_avro::Schema::parse_str(raw_schema)?;
 
-    // create vector of ExampleByteArray
     let records = vec![
         ExampleByteArray {
             data_bytes: Some(vec![1, 2, 3, 4, 5]),
@@ -99,14 +96,18 @@ fn avro_rs_285_bytes_deserialization_filtered_round_trip() {
     // serialize records to Avro binary format with schema
     let mut writer = apache_avro::Writer::new(&schema, Vec::new());
     for record in &records {
-        writer.append_ser(record).unwrap();
+        writer.append_ser(record)?;
     }
 
-    let avro_data = writer.into_inner().unwrap();
+    let avro_data = writer.into_inner()?;
 
-    // deserialize Avro binary data back into ExampleByteArray structs
-    let reader = apache_avro::Reader::new(&avro_data[..]).unwrap();
-    let _deserialized_records: Vec<ExampleByteArrayFiltered> = reader
+    // deserialize Avro binary data back into ExampleByteArrayFiltered structs
+    let reader = apache_avro::Reader::new(&avro_data[..])?;
+    let deserialized_records: Vec<ExampleByteArrayFiltered> = reader
         .map(|value| apache_avro::from_value::<ExampleByteArrayFiltered>(&value.unwrap()).unwrap())
         .collect();
+
+    assert_eq!(records.len(), deserialized_records.len());
+
+    Ok(())
 }
