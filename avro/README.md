@@ -748,7 +748,7 @@ registered and used!
 
 ### Deserializing Avro Byte Arrays
 
-if using the Serde way to deserialize avro files, there are sometimes special derive statements
+If using the Serde way to deserialize avro files, there are sometimes special derive statements
 that need to be applied in the case of byte arrays.
 
 ```rust
