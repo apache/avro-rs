@@ -63,8 +63,7 @@ fn avro_rs_285_bytes_deserialization_round_trip() -> TestResult {
 }
 
 #[test]
-fn avro_rs_285_bytes_deserialization_filtered_round_trip() ->TestResult {
-
+fn avro_rs_285_bytes_deserialization_filtered_round_trip() -> TestResult {
     let raw_schema = r#"
     {
         "type": "record",

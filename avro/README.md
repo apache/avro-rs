@@ -746,45 +746,54 @@ set_schemata_equality_comparator(Box::new(MyCustomSchemataEq));
 If the application parses schemas before setting a comparator, the default comparator will be
 registered and used!
 
-<!-- cargo-rdme end -->
-
-
 ### Deserializing Avro Byte Arrays
 
-if using the Serde way to deserialize avro files, there are sometimes special derive statements that need to be applied in the case of byte arrays.
+if using the Serde way to deserialize avro files, there are sometimes special derive statements
+that need to be applied in the case of byte arrays.
 
-Here is an example of deserializing an avro file containing a nullable byte array. 
+```rust
+ use serde::{Deserialize, Serialize};
 
+ #[derive(Debug, Deserialize, Serialize)]
+ struct SampleStruct {
+  #[serde(with = "apache_avro::serde_avro_bytes")]
+  non_optional_bytes: Vec<u8>,
+  #[serde(with = "apache_avro::serde_avro_bytes_opt")]
+  optional_bytes: Option<Vec<u8>>,
+  #[serde(with = "apache_avro::serde_avro_fixed")]
+  non_optional_fixed: [u8; 6],
+  #[serde(with = "apache_avro::serde_avro_fixed_opt")]
+  optional_fixed: Option<[u8; 6]>,
+ }
+```
+
+Here is a complete example of a serde round trip of a struct with a nullable byte array:
 
 ```rust
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize)]
 struct ExampleByteArray {
     #[serde(with = "apache_avro::serde_avro_bytes_opt")]
     data_bytes: Option<Vec<u8>>,
     description: Option<String>,
 }
 
-fn serialize_then_deserialize_byte_array(){
-
-  //Example Schema
+fn serde_byte_array() {
   let raw_schema = r#"
-      {
-          "type": "record",
-          "name": "SimpleRecord",
-          "fields": [
-              {"name": "data_bytes", "type": ["null", "bytes"], "default": null},
-              {"name": "description", "type": ["null", "string"], "default": null}
-          ]
-      }
-      "#;
+  {
+   "type": "record",
+   "name": "SimpleRecord",
+   "fields": [
+     {"name": "data_bytes", "type": ["null", "bytes"], "default": null},
+     {"name": "description", "type": ["null", "string"], "default": null}
+   ]
+  }"#;
 
+ let schema = apache_avro::Schema::parse_str(raw_schema).unwrap();
 
-  let schema = apache_avro::Schema::parse_str(raw_schema).unwrap();
-
-  // Create vector of ExampleByteArray
-  let records = vec![
+ // Create vector of ExampleByteArray
+ let records = vec![
       ExampleByteArray {
           data_bytes: Some(vec![1, 2, 3, 4, 5]),
           description: Some("First record".to_string()),
@@ -810,16 +819,17 @@ fn serialize_then_deserialize_byte_array(){
 
   // Deserialize Avro binary data back into ExampleByteArray structs
   let reader = apache_avro::Reader::new(&avro_data[..]).unwrap();
-  let _deserialized_records: Vec<ExampleByteArray> = reader
+  let deserialized_records: Vec<ExampleByteArray> = reader
       .map(|value| apache_avro::from_value::<ExampleByteArray>(&value.unwrap()).unwrap())
       .collect();
 
+  assert_eq!(records, deserialized_records);
 }
 ```
 
 Full implementation and other options for things like fixed byte arrays can found in src/bytes.rs
 
-
+<!-- cargo-rdme end -->
 
 ## License
 
