@@ -251,7 +251,7 @@ jobs:
 
       - name: Install wasm-pack
         shell: /usr/bin/bash -o pipefail -e {0}
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+        run: curl --retry 5 https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Build the Web Assembly demo app
         run: wasm-pack build wasm-demo
