@@ -250,6 +250,7 @@ jobs:
           key: ${{ runner.os }}-target-cache1-stable-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install wasm-pack
+        shell: /usr/bin/bash -o pipefail -e {0}
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Build the Web Assembly demo app
