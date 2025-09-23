@@ -639,6 +639,7 @@ impl Value {
         mut self,
         schema: &Schema,
         names: &HashMap<Name, S>,
+        // TODO: These two should be Option<&T> instead of &Option<T>
         enclosing_namespace: &Namespace,
         field_default: &Option<JsonValue>,
     ) -> AvroResult<Self> {
