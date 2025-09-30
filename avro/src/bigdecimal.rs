@@ -15,122 +15,164 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::{
-    AvroResult,
-    decode::{decode_len, decode_long},
-    encode::{encode_bytes, encode_long},
-    error::Details,
-    types::Value,
-};
 pub use bigdecimal::BigDecimal;
-use num_bigint::BigInt;
-use std::io::Read;
 
-pub(crate) fn big_decimal_as_bytes(decimal: &BigDecimal) -> AvroResult<Vec<u8>> {
-    let mut buffer: Vec<u8> = Vec::new();
-    let (big_int, exponent): (BigInt, i64) = decimal.as_bigint_and_exponent();
-    let big_endian_value: Vec<u8> = big_int.to_signed_bytes_be();
-    encode_bytes(&big_endian_value, &mut buffer)?;
-    encode_long(exponent, &mut buffer)?;
-
-    Ok(buffer)
-}
-
-pub(crate) fn serialize_big_decimal(decimal: &BigDecimal) -> AvroResult<Vec<u8>> {
-    // encode big decimal, without global size
-    let buffer = big_decimal_as_bytes(decimal)?;
-
-    // encode global size and content
-    let mut final_buffer: Vec<u8> = Vec::new();
-    encode_bytes(&buffer, &mut final_buffer)?;
-
-    Ok(final_buffer)
-}
-
-pub(crate) fn deserialize_big_decimal(bytes: &Vec<u8>) -> AvroResult<BigDecimal> {
-    let mut bytes: &[u8] = bytes.as_slice();
-    let mut big_decimal_buffer = match decode_len(&mut bytes) {
-        Ok(size) => vec![0u8; size],
-        Err(err) => return Err(Details::BigDecimalLen(Box::new(err)).into()),
+#[synca::synca(
+  #[cfg(feature = "asynch")]
+  pub mod asynch { },
+  #[cfg(feature = "synch")]
+  pub mod synch {
+    sync!();
+    replace!(
+      crate::bigdecimal::asynch => crate::bigdecimal::synch,
+      crate::decode::asynch => crate::decode::synch,
+      crate::encode::asynch => crate::encode::synch,
+      crate::error::asynch => crate::error::synch,
+      crate::schema::asynch => crate::schema::synch,
+      crate::reader::asynch => crate::reader::synch,
+      crate::util::asynch => crate::util::synch,
+      crate::types::asynch => crate::types::synch,
+      crate::writer::asynch => crate::writer::synch,
+      #[tokio::test] => #[test]
+    );
+  }
+)]
+mod bigdecimal {
+    use crate::AvroResult;
+    use crate::{
+        decode::asynch::{decode_len, decode_long},
+        encode::asynch::{encode_bytes, encode_long},
+        error::Details,
+        types::Value,
     };
+    use bigdecimal::BigDecimal;
+    use num_bigint::BigInt;
 
-    bytes
-        .read_exact(&mut big_decimal_buffer[..])
-        .map_err(Details::ReadDouble)?;
+    pub(crate) async fn big_decimal_as_bytes(decimal: &BigDecimal) -> AvroResult<Vec<u8>> {
+        let mut buffer: Vec<u8> = Vec::new();
+        let (big_int, exponent): (BigInt, i64) = decimal.as_bigint_and_exponent();
+        let big_endian_value: Vec<u8> = big_int.to_signed_bytes_be();
+        encode_bytes(&big_endian_value, &mut buffer).await?;
+        encode_long(exponent, &mut buffer).await?;
 
-    match decode_long(&mut bytes) {
-        Ok(Value::Long(scale_value)) => {
-            let big_int: BigInt = BigInt::from_signed_bytes_be(&big_decimal_buffer);
-            let decimal = BigDecimal::new(big_int, scale_value);
-            Ok(decimal)
-        }
-        _ => Err(Details::BigDecimalScale.into()),
+        Ok(buffer)
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{Codec, Reader, Schema, Writer, error::Error, types::Record};
-    use apache_avro_test_helper::TestResult;
-    use bigdecimal::{One, Zero};
-    use pretty_assertions::assert_eq;
-    use std::{
-        fs::File,
-        io::BufReader,
-        ops::{Div, Mul},
-        str::FromStr,
-    };
+    pub(crate) async fn serialize_big_decimal(decimal: &BigDecimal) -> AvroResult<Vec<u8>> {
+        // encode big decimal, without global size
+        let buffer = big_decimal_as_bytes(decimal).await?;
 
-    #[test]
-    fn test_avro_3779_bigdecimal_serial() -> TestResult {
-        let value: BigDecimal =
-            bigdecimal::BigDecimal::from(-1421).div(bigdecimal::BigDecimal::from(2));
-        let mut current: BigDecimal = BigDecimal::one();
+        // encode global size and content
+        let mut final_buffer: Vec<u8> = Vec::new();
+        encode_bytes(&buffer, &mut final_buffer).await?;
 
-        for iter in 1..180 {
-            let buffer: Vec<u8> = serialize_big_decimal(&current)?;
+        Ok(final_buffer)
+    }
 
+    pub(crate) async fn deserialize_big_decimal(bytes: &Vec<u8>) -> AvroResult<BigDecimal> {
+        let mut bytes: &[u8] = bytes.as_slice();
+        let mut big_decimal_buffer = match decode_len(&mut bytes).await {
+            Ok(size) => vec![0u8; size],
+            Err(err) => return Err(Details::BigDecimalLen(Box::new(err)).into()),
+        };
+
+        #[synca::cfg(asynch)]
+        use futures::AsyncReadExt;
+        #[synca::cfg(synch)]
+        use std::io::Read;
+
+        bytes
+            .read_exact(&mut big_decimal_buffer[..])
+            .await
+            .map_err(Details::ReadDouble)?;
+
+        match decode_long(&mut bytes).await {
+            Ok(Value::Long(scale_value)) => {
+                let big_int: BigInt = BigInt::from_signed_bytes_be(&big_decimal_buffer);
+                let decimal = BigDecimal::new(big_int, scale_value);
+                Ok(decimal)
+            }
+            _ => Err(Details::BigDecimalScale.into()),
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::{
+            codec::Codec, error::Error, reader::asynch::Reader, schema::asynch::SchemaExt,
+            types::Record, writer::asynch::Writer,
+        };
+        use apache_avro_test_helper::TestResult;
+        use bigdecimal::{One, Zero};
+        #[synca::cfg(asynch)]
+        use futures::StreamExt;
+        #[synca::cfg(asynch)]
+        use futures::io::BufReader;
+        use pretty_assertions::assert_eq;
+        #[synca::cfg(synch)]
+        use std::fs::File;
+        #[synca::cfg(synch)]
+        use std::io::BufReader;
+        use std::{
+            ops::{Div, Mul},
+            str::FromStr,
+        };
+        #[synca::cfg(asynch)]
+        use tokio::fs::File;
+        #[synca::cfg(asynch)]
+        use tokio_util::compat::TokioAsyncReadCompatExt;
+
+        #[tokio::test]
+        async fn test_avro_3779_bigdecimal_serial() -> TestResult {
+            let value: BigDecimal =
+                bigdecimal::BigDecimal::from(-1421).div(bigdecimal::BigDecimal::from(2));
+            let mut current: BigDecimal = BigDecimal::one();
+
+            for iter in 1..180 {
+                let buffer: Vec<u8> = serialize_big_decimal(&current).await?;
+
+                let mut as_slice = buffer.as_slice();
+                decode_long(&mut as_slice).await?;
+
+                let mut result: Vec<u8> = Vec::new();
+                result.extend_from_slice(as_slice);
+
+                let deserialize_big_decimal: Result<BigDecimal, Error> =
+                    deserialize_big_decimal(&result).await;
+                assert!(
+                    deserialize_big_decimal.is_ok(),
+                    "can't deserialize for iter {iter}"
+                );
+                assert_eq!(current, deserialize_big_decimal?, "not equals for {iter}");
+                current = current.mul(&value);
+            }
+
+            let buffer: Vec<u8> = serialize_big_decimal(&BigDecimal::zero()).await?;
             let mut as_slice = buffer.as_slice();
-            decode_long(&mut as_slice)?;
+            decode_long(&mut as_slice).await?;
 
             let mut result: Vec<u8> = Vec::new();
             result.extend_from_slice(as_slice);
 
             let deserialize_big_decimal: Result<BigDecimal, Error> =
-                deserialize_big_decimal(&result);
+                deserialize_big_decimal(&result).await;
             assert!(
                 deserialize_big_decimal.is_ok(),
-                "can't deserialize for iter {iter}"
+                "can't deserialize for zero"
             );
-            assert_eq!(current, deserialize_big_decimal?, "not equals for {iter}");
-            current = current.mul(&value);
+            assert_eq!(
+                BigDecimal::zero(),
+                deserialize_big_decimal?,
+                "not equals for zero"
+            );
+
+            Ok(())
         }
 
-        let buffer: Vec<u8> = serialize_big_decimal(&BigDecimal::zero())?;
-        let mut as_slice = buffer.as_slice();
-        decode_long(&mut as_slice)?;
-
-        let mut result: Vec<u8> = Vec::new();
-        result.extend_from_slice(as_slice);
-
-        let deserialize_big_decimal: Result<BigDecimal, Error> = deserialize_big_decimal(&result);
-        assert!(
-            deserialize_big_decimal.is_ok(),
-            "can't deserialize for zero"
-        );
-        assert_eq!(
-            BigDecimal::zero(),
-            deserialize_big_decimal?,
-            "not equals for zero"
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_avro_3779_record_with_bg() -> TestResult {
-        let schema_str = r#"
+        #[tokio::test]
+        async fn test_avro_3779_record_with_bg() -> TestResult {
+            let schema_str = r#"
         {
           "type": "record",
           "name": "test",
@@ -143,66 +185,70 @@ mod tests {
           ]
         }
         "#;
-        let schema = Schema::parse_str(schema_str)?;
+            let schema = SchemaExt::parse_str(schema_str).await?;
 
-        // build record with big decimal value
-        let mut record = Record::new(&schema).unwrap();
-        let val = BigDecimal::new(BigInt::from(12), 2);
-        record.put("field_name", val.clone());
+            // build record with big decimal value
+            let mut record = Record::new(&schema).unwrap();
+            let val = BigDecimal::new(BigInt::from(12), 2);
+            record.put("field_name", val.clone());
 
-        // write a record
-        let codec = Codec::Null;
-        let mut writer = Writer::builder()
-            .schema(&schema)
-            .codec(codec)
-            .writer(Vec::new())
-            .build();
+            // write a record
+            let codec = Codec::Null;
+            let mut writer = Writer::builder()
+                .schema(&schema)
+                .codec(codec)
+                .writer(Vec::new())
+                .build();
 
-        writer.append(record.clone())?;
-        writer.flush()?;
+            writer.append(record.clone()).await?;
+            writer.flush().await?;
 
-        // read record
-        let wrote_data = writer.into_inner()?;
-        let mut reader = Reader::new(&wrote_data[..])?;
+            // read record
+            let wrote_data = writer.into_inner().await?;
+            let mut reader = Reader::new(&wrote_data[..]).await?;
 
-        let value = reader.next().unwrap()?;
+            let value = reader.next().await.unwrap()?;
 
-        // extract field value
-        let big_decimal_value: &Value = match value {
-            Value::Record(ref fields) => Ok(&fields[0].1),
-            other => Err(format!("Expected a Value::Record, got: {other:?}")),
-        }?;
+            // extract field value
+            let big_decimal_value: &Value = match value {
+                Value::Record(ref fields) => Ok(&fields[0].1),
+                other => Err(format!("Expected a Value::Record, got: {other:?}")),
+            }?;
 
-        let x1res: &BigDecimal = match big_decimal_value {
-            Value::BigDecimal(s) => Ok(s),
-            other => Err(format!("Expected Value::BigDecimal, got: {other:?}")),
-        }?;
-        assert_eq!(&val, x1res);
+            let x1res: &BigDecimal = match big_decimal_value {
+                Value::BigDecimal(s) => Ok(s),
+                other => Err(format!("Expected Value::BigDecimal, got: {other:?}")),
+            }?;
+            assert_eq!(&val, x1res);
 
-        Ok(())
-    }
+            Ok(())
+        }
 
-    #[test]
-    fn test_avro_3779_from_java_file() -> TestResult {
-        // Open file generated with Java code to ensure compatibility
-        // with Java big decimal logical type.
-        let file: File = File::open("./tests/bigdec.avro")?;
-        let mut reader = Reader::new(BufReader::new(&file))?;
-        let next_element = reader.next();
-        assert!(next_element.is_some());
-        let value = next_element.unwrap()?;
-        let bg = match value {
-            Value::Record(ref fields) => Ok(&fields[0].1),
-            other => Err(format!("Expected a Value::Record, got: {other:?}")),
-        }?;
-        let value_big_decimal = match bg {
-            Value::BigDecimal(val) => Ok(val),
-            other => Err(format!("Expected a Value::BigDecimal, got: {other:?}")),
-        }?;
+        #[tokio::test]
+        async fn test_avro_3779_from_java_file() -> TestResult {
+            // Open file generated with Java code to ensure compatibility
+            // with Java big decimal logical type.
+            let file = File::open("./tests/bigdec.avro").await?;
+            #[synca::cfg(asynch)]
+            let file = file.compat();
+            let buf_reader = BufReader::new(file);
+            let mut reader = Reader::new(buf_reader).await?;
+            let next_element = reader.next().await;
+            assert!(next_element.is_some());
+            let value = next_element.unwrap()?;
+            let bg = match value {
+                Value::Record(ref fields) => Ok(&fields[0].1),
+                other => Err(format!("Expected a Value::Record, got: {other:?}")),
+            }?;
+            let value_big_decimal = match bg {
+                Value::BigDecimal(val) => Ok(val),
+                other => Err(format!("Expected a Value::BigDecimal, got: {other:?}")),
+            }?;
 
-        let ref_value = BigDecimal::from_str("2.24")?;
-        assert_eq!(&ref_value, value_big_decimal);
+            let ref_value = BigDecimal::from_str("2.24")?;
+            assert_eq!(&ref_value, value_big_decimal);
 
-        Ok(())
+            Ok(())
+        }
     }
 }

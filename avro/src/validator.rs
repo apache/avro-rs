@@ -15,7 +15,31 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::{AvroResult, error::Details, schema::Namespace};
+// #[synca::synca(
+//   #[cfg(feature = "asynch")]
+//   pub mod asynch { },
+//   #[cfg(feature = "synch")]
+//   pub mod synch {
+//     sync!();
+//     replace!(
+//       crate::bigdecimal::asynch => crate::bigdecimal::synch,
+//       crate::decode::asynch => crate::decode::synch,
+//       crate::encode::asynch => crate::encode::synch,
+//       crate::error::asynch => crate::error::synch,
+//       crate::schema::asynch => crate::schema::synch,
+//       crate::util::asynch => crate::util::synch,
+//       crate::types::asynch => crate::types::synch,
+//       crate::schema_equality::asynch => crate::schema_equality::synch,
+//       crate::util::asynch => crate::util::synch,
+//       crate::validator::asynch => crate::validator::synch,
+//       #[tokio::test] => #[test]
+//     );
+//   }
+// )]
+// mod validator {
+
+use crate::AvroResult;
+use crate::{error::Details, schema::Namespace};
 use log::debug;
 use regex_lite::Regex;
 use std::sync::OnceLock;
@@ -317,3 +341,4 @@ mod tests {
         Ok(())
     }
 }
+// }
