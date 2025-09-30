@@ -778,6 +778,8 @@ impl RecordField {
                 | "logicalType" => continue,
                 key if key == "symbols" && matches!(schema, Schema::Enum(_)) => continue,
                 key if key == "size" && matches!(schema, Schema::Fixed(_)) => continue,
+                key if key == "items" && matches!(schema, Schema::Array(_)) => continue,
+                key if key == "values" && matches!(schema, Schema::Map(_)) => continue,
                 _ => custom_attributes.insert(key.clone(), value.clone()),
             };
         }
@@ -2315,11 +2317,10 @@ fn parsing_canonical_form(schema: &Value, defined_names: &mut HashSet<String>) -
 }
 
 fn pcf_map(schema: &Map<String, Value>, defined_names: &mut HashSet<String>) -> String {
-    // Look for the namespace variant up front.
-    let ns = schema.get("namespace").and_then(|v| v.as_str());
     let typ = schema.get("type").and_then(|v| v.as_str());
-    let raw_name = schema.get("name").and_then(|v| v.as_str());
     let name = if is_named_type(typ) {
+        let ns = schema.get("namespace").and_then(|v| v.as_str());
+        let raw_name = schema.get("name").and_then(|v| v.as_str());
         Some(format!(
             "{}{}",
             ns.map_or("".to_string(), |n| { format!("{n}.") }),
@@ -7224,6 +7225,143 @@ mod tests {
         }"#;
         let schema = Schema::parse_str(valid_schema);
         assert!(schema.is_ok());
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_292_array_items_should_be_ignored_in_custom_attributes() -> TestResult {
+        let raw_schema = r#"{
+                    "type": "array",
+                    "items": {
+                        "name": "foo",
+                        "type": "record",
+                        "fields": [
+                            {
+                                "name": "bar",
+                                "type": "array",
+                                "items": {
+                                    "type": "record",
+                                    "name": "baz",
+                                    "fields": [
+                                        {
+                                            "name": "quux",
+                                            "type": "int"
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }"#;
+
+        let schema1 = Schema::parse_str(raw_schema)?;
+        match &schema1 {
+            Schema::Array(ArraySchema { items, attributes }) => {
+                assert!(attributes.is_empty());
+
+                match **items {
+                    Schema::Record(RecordSchema {
+                        ref name,
+                        aliases: _,
+                        doc: _,
+                        ref fields,
+                        lookup: _,
+                        ref attributes,
+                    }) => {
+                        assert_eq!(name.to_string(), "foo");
+                        assert_eq!(fields.len(), 1);
+                        assert!(attributes.is_empty());
+
+                        match &fields[0].schema {
+                            Schema::Array(ArraySchema {
+                                items: _,
+                                attributes,
+                            }) => {
+                                assert!(attributes.is_empty());
+                            }
+                            _ => panic!("Expected ArraySchema. got: {}", &fields[0].schema),
+                        }
+                    }
+                    _ => panic!("Expected RecordSchema. got: {}", &items),
+                }
+            }
+            _ => panic!("Expected ArraySchema. got: {}", &schema1),
+        }
+        let canonical_form1 = schema1.canonical_form();
+        let schema2 = Schema::parse_str(&canonical_form1)?;
+        let canonical_form2 = schema2.canonical_form();
+
+        assert_eq!(canonical_form1, canonical_form2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_292_map_values_should_be_ignored_in_custom_attributes() -> TestResult {
+        let raw_schema = r#"{
+                    "type": "array",
+                    "items": {
+                        "name": "foo",
+                        "type": "record",
+                        "fields": [
+                            {
+                                "name": "bar",
+                                "type": "map",
+                                "values": {
+                                    "type": "record",
+                                    "name": "baz",
+                                    "fields": [
+                                        {
+                                            "name": "quux",
+                                            "type": "int"
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }"#;
+
+        let schema1 = Schema::parse_str(raw_schema)?;
+        match &schema1 {
+            Schema::Array(ArraySchema { items, attributes }) => {
+                assert!(attributes.is_empty());
+
+                match **items {
+                    Schema::Record(RecordSchema {
+                        ref name,
+                        aliases: _,
+                        doc: _,
+                        ref fields,
+                        lookup: _,
+                        ref attributes,
+                    }) => {
+                        assert_eq!(name.to_string(), "foo");
+                        assert_eq!(fields.len(), 1);
+                        assert!(attributes.is_empty());
+
+                        match &fields[0].schema {
+                            Schema::Map(MapSchema {
+                                types: _,
+                                attributes,
+                            }) => {
+                                assert!(attributes.is_empty());
+                            }
+                            _ => panic!("Expected MapSchema. got: {}", &fields[0].schema),
+                        }
+                    }
+                    _ => panic!("Expected RecordSchema. got: {}", &items),
+                }
+            }
+            _ => panic!("Expected ArraySchema. got: {}", &schema1),
+        }
+        let canonical_form1 = schema1.canonical_form();
+        println!("Canonical Form 1: {}", &canonical_form1);
+        let schema2 = Schema::parse_str(&canonical_form1)?;
+        let canonical_form2 = schema2.canonical_form();
+
+        assert_eq!(canonical_form1, canonical_form2);
 
         Ok(())
     }
