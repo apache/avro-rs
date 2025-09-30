@@ -313,7 +313,7 @@
 //!   You must enable the `zstandard` feature to use this codec.
 //! * **Bzip2**: uses [BZip2](https://sourceware.org/bzip2/) compression library.
 //!   You must enable the `bzip` feature to use this codec.
-//! * **Xz**: uses [xz2](https://github.com/alexcrichton/xz2-rs) compression library.
+//! * **Xz**: uses [liblzma](https://github.com/portable-network-archive/liblzma-rs) compression library.
 //!   You must enable the `xz` feature to use this codec.
 //!
 //! To specify a codec to use to compress data, just specify it while creating a `Writer`:
