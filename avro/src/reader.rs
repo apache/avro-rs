@@ -16,10 +16,11 @@
 // under the License.
 
 //! Logic handling reading from Avro format at user level.
+use crate::error::Details;
 use crate::{
     AvroResult, Codec, Error,
+    de_schema::SchemaAwareReadDeserializer,
     decode::{decode, decode_internal},
-    error::Details,
     from_value,
     headers::{HeaderBuilder, RabinFingerprintHeader},
     schema::{
@@ -595,6 +596,16 @@ pub fn read_marker(bytes: &[u8]) -> [u8; 16] {
     let mut marker = [0_u8; 16];
     marker.clone_from_slice(&bytes[(bytes.len() - 16)..]);
     marker
+}
+
+#[allow(dead_code)] // TODO: remove! It is used in de_schema.rs tests
+pub fn read_avro_datum_ref<D: DeserializeOwned, R: Read>(
+    schema: &Schema,
+    reader: &mut R,
+) -> AvroResult<D> {
+    // let names: NamesRef = NamesRef::default();
+    let deserializer = SchemaAwareReadDeserializer::new(reader, schema);
+    D::deserialize(deserializer)
 }
 
 #[cfg(test)]
