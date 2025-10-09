@@ -1676,4 +1676,56 @@ mod test_derive {
             panic!("Unexpected schema type for Foo")
         }
     }
+
+    #[test]
+    fn avro_311_serde_flatten_support() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct Nested {
+            a: bool,
+        }
+
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct Foo {
+            #[serde(flatten)]
+            nested: Nested,
+            b: i32,
+        }
+
+        let schema = r#"
+        {
+            "type":"record",
+            "name":"Foo",
+            "fields": [
+                {
+                    "name":"a1",
+                    "type":"boolean"
+                },
+                {
+                    "name":"b",
+                    "type":"int"
+                }
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        let derived_schema = Foo::get_schema();
+        if let Schema::Record(RecordSchema { name, fields, .. }) = &derived_schema {
+            assert_eq!("Foo", name.fullname(None));
+            for field in fields {
+                match field.name.as_str() {
+                    "a" | "b" => (), // expected
+                    name => panic!("Unexpected field name '{name}'"),
+                }
+            }
+        } else {
+            panic!("Foo schema must be a record schema: {derived_schema:?}")
+        }
+        assert_eq!(schema, derived_schema);
+
+        serde_assert(Foo {
+            nested: Nested { a: true },
+            b: 321,
+        });
+    }
 }
