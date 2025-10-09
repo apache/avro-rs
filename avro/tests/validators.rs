@@ -79,7 +79,7 @@ fn avro_3900_custom_validator_with_spec_invalid_names() -> TestResult {
         ]
     }"#;
 
-    apache_avro::Schema::parse_str(invalid_schema)?;
+    apache_avro::SchemaExt::parse_str(invalid_schema)?;
 
     Ok(())
 }

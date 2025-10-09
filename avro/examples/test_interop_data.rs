@@ -70,7 +70,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn test_user_metadata<R: Read>(
+fn test_user_metadata<R: Read + Unpin>(
     reader: &Reader<BufReader<R>>,
     expected_user_metadata: &HashMap<String, Vec<u8>>,
 ) {

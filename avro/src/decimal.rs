@@ -15,7 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::{AvroResult, Error, error::Details};
+use crate::AvroResult;
+use crate::error::{Details, Error};
 use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize, Serializer, de::SeqAccess};
 

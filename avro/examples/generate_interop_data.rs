@@ -16,8 +16,7 @@
 // under the License.
 
 use apache_avro::{
-    Codec, Writer,
-    schema::Schema,
+    Codec, Schema, SchemaExt, Writer,
     types::{Record, Value},
 };
 use std::{
@@ -82,7 +81,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         &interop_root_folder
     ))
     .expect("Unable to read the interop Avro schema");
-    let schema = Schema::parse_str(schema_str.as_str())?;
+    let schema = SchemaExt::parse_str(schema_str.as_str())?;
     let data_folder = format!("{interop_root_folder}/build/interop/data");
     std::fs::create_dir_all(&data_folder)?;
 
@@ -109,7 +108,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn write_user_metadata<W: Write>(writer: &mut Writer<BufWriter<W>>) -> Result<(), Box<dyn Error>> {
+fn write_user_metadata<W: Write + Unpin>(
+    writer: &mut Writer<BufWriter<W>>,
+) -> Result<(), Box<dyn Error>> {
     writer.add_user_metadata("user_metadata".to_string(), b"someByteArray")?;
 
     Ok(())
