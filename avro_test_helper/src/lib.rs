@@ -51,7 +51,7 @@ fn after_all() {
 
 /// A custom error type for tests.
 #[derive(Debug)]
-pub enum TestError {}
+pub struct TestError {}
 
 /// A converter of any error into [TestError].
 /// It is used to print better error messages in the tests.
