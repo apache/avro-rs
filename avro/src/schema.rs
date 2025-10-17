@@ -816,6 +816,21 @@ pub struct RecordSchema {
     pub attributes: BTreeMap<String, Value>,
 }
 
+impl RecordSchema {
+    const SERDE_FLATTEN_SUPPORT: &str = "avro_rs_serde_flatten_support";
+
+    pub fn has_serde_flatten_support(&self) -> bool {
+        self.attributes
+            .get(Self::SERDE_FLATTEN_SUPPORT)
+            .is_some_and(|value| value.as_bool().unwrap_or(false))
+    }
+
+    pub fn set_serde_flatten_support(&mut self) {
+        self.attributes
+            .insert(Self::SERDE_FLATTEN_SUPPORT.into(), true.into());
+    }
+}
+
 /// A description of an Enum schema.
 #[derive(bon::Builder, Debug, Clone)]
 pub struct EnumSchema {
