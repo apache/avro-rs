@@ -23,7 +23,8 @@ use crate::{
     headers::{HeaderBuilder, RabinFingerprintHeader},
     schema::{AvroSchema, Name, ResolvedOwnedSchema, ResolvedSchema, Schema},
     ser_schema::SchemaAwareWriteSerializer,
-    types::Value,
+    to_value,
+    types::{Record, Value},
 };
 use serde::Serialize;
 use std::{
@@ -211,22 +212,36 @@ impl<'a, W: Write> Writer<'a, W> {
         let n = self.maybe_write_header()?;
 
         match self.resolved_schema {
-            Some(ref rs) => {
-                let mut serializer = SchemaAwareWriteSerializer::new(
-                    &mut self.buffer,
-                    self.schema,
-                    rs.get_names(),
-                    None,
-                );
-                value.serialize(&mut serializer)?;
-                self.num_values += 1;
-
-                if self.buffer.len() >= self.block_size {
-                    return self.flush().map(|b| b + n);
+            Some(ref rs) => match self.schema {
+                Schema::Record(record_schema) if record_schema.has_serde_flatten_support() => {
+                    match to_value(value)? {
+                        Value::Map(m) => {
+                            let mut record = Record::new(self.schema).unwrap();
+                            for (key, value) in m.into_iter() {
+                                record.put(&key, value)
+                            }
+                            self.append(record)
+                        }
+                        value => panic!("expected a map, got {value:?}"),
+                    }
                 }
+                _ => {
+                    let mut serializer = SchemaAwareWriteSerializer::new(
+                        &mut self.buffer,
+                        self.schema,
+                        rs.get_names(),
+                        None,
+                    );
+                    value.serialize(&mut serializer)?;
+                    self.num_values += 1;
 
-                Ok(n)
-            }
+                    if self.buffer.len() >= self.block_size {
+                        return self.flush().map(|b| b + n);
+                    }
+
+                    Ok(n)
+                }
+            },
             None => {
                 let rs = ResolvedSchema::try_from(self.schema)?;
                 self.resolved_schema = Some(rs);
