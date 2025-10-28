@@ -15,6 +15,26 @@
 // specific language governing permissions and limitations
 // under the License.
 
+// #[synca::synca(
+//   #[cfg(feature = "asynch")]
+//   pub mod asynch { },
+//   #[cfg(feature = "synch")]
+//   pub mod synch {
+//     sync!();
+//     replace!(
+//       crate::bigdecimal::asynch => crate::bigdecimal::synch,
+//       crate::decimal::asynch => crate::decimal::synch,
+//       crate::decode::asynch => crate::decode::synch,
+//       crate::encode::asynch => crate::encode::synch,
+//       crate::error::asynch => crate::error::synch,
+//       crate::schema::asynch => crate::schema::synch,
+//       crate::util::asynch => crate::util::synch,
+//       crate::types::asynch => crate::types::synch,
+//       #[tokio::test] => #[test]
+//     );
+//   }
+// )]
+// mod error {
 use crate::{
     schema::{Name, Schema, SchemaKind, UnionSchema},
     types::{Value, ValueKind},
@@ -238,10 +258,12 @@ pub enum Details {
     #[error("Expected Value::Long or Value::Int, got: {0:?}")]
     GetLong(Value),
 
-    #[error(r#"Expected Value::Double, Value::Float, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: {0:?}"#)]
+    #[error(r#"Expected Value::Double, Value::Float, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: {0:?}"#
+        )]
     GetDouble(Value),
 
-    #[error(r#"Expected Value::Float, Value::Double, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: {0:?}"#)]
+    #[error(r#"Expected Value::Float, Value::Double, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: {0:?}"#
+        )]
     GetFloat(Value),
 
     #[error("Expected Value::Bytes, got: {0:?}")]
@@ -656,3 +678,4 @@ impl fmt::Debug for CompatibilityError {
         write!(f, "{msg}")
     }
 }
+// }
