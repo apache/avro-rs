@@ -16,6 +16,10 @@
 // under the License.
 
 //! Implementation of the Rabin fingerprint algorithm
+#[expect(
+    deprecated,
+    reason = "https://github.com/RustCrypto/traits/issues/2036"
+)]
 use digest::{
     FixedOutput, FixedOutputReset, HashMarker, Output, Reset, Update, consts::U8,
     core_api::OutputSizeUser, generic_array::GenericArray,
@@ -101,6 +105,10 @@ impl Update for Rabin {
 }
 
 impl FixedOutput for Rabin {
+    #[expect(
+        deprecated,
+        reason = "https://github.com/RustCrypto/traits/issues/2036"
+    )]
     fn finalize_into(self, out: &mut GenericArray<u8, Self::OutputSize>) {
         out.copy_from_slice(&self.result.to_le_bytes());
     }
