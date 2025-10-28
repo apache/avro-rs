@@ -1,6 +1,6 @@
 use crate::{
     Codec,
-    state_machines::reading::{StateMachine, StateMachineControlFlow, StateMachineResult},
+    decode::{StateMachine, StateMachineControlFlow, StateMachineResult},
 };
 use oval::Buffer;
 
@@ -36,7 +36,7 @@ pub enum Decoder {
     #[cfg(feature = "bzip")]
     Bzip2(bzip2::Decompress),
     #[cfg(feature = "xz")]
-    Xz(xz2::stream::Stream),
+    Xz(liblzma::stream::Stream),
 }
 
 impl From<Codec> for Decoder {
@@ -54,7 +54,9 @@ impl From<Codec> for Decoder {
             #[cfg(feature = "bzip")]
             Codec::Bzip2(_) => Self::Bzip2(bzip2::Decompress::new(false)),
             #[cfg(feature = "xz")]
-            Codec::Xz(_) => Self::Xz(xz2::stream::Stream::new_auto_decoder(u64::MAX, 0).unwrap()),
+            Codec::Xz(_) => {
+                Self::Xz(liblzma::stream::Stream::new_auto_decoder(u64::MAX, 0).unwrap())
+            }
         }
     }
 }
@@ -80,7 +82,7 @@ impl Decoder {
                 // No reset/reinit API available
                 let _drop = std::mem::replace(
                     decoder,
-                    xz2::stream::Stream::new_auto_decoder(u64::MAX, 0).unwrap(),
+                    liblzma::stream::Stream::new_auto_decoder(u64::MAX, 0).unwrap(),
                 );
             }
         }
@@ -144,7 +146,7 @@ impl<T: StateMachine> StateMachine for CodecStateMachine<T> {
             }
             #[cfg(feature = "xz")]
             Decoder::Xz(decoder) => {
-                use xz2::stream::Action::Run;
+                use liblzma::stream::Action::Run;
 
                 let prev_total_in = decoder.total_in();
                 let prev_total_out = decoder.total_out();

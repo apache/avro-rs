@@ -1,11 +1,11 @@
 use crate::{
     Codec, Error, Schema,
-    error::Details,
-    schema::{Names, ResolvedSchema, resolve_names, resolve_names_with_schemata},
-    state_machines::reading::{
+    decode::{
         CommandTape, ItemRead, StateMachine, StateMachineControlFlow, StateMachineResult,
         codec::CodecStateMachine, datum::DatumStateMachine, decode_zigzag_buffer,
     },
+    error::Details,
+    schema::{Names, ResolvedSchema, resolve_names, resolve_names_with_schemata},
 };
 use log::warn;
 use oval::Buffer;
@@ -59,7 +59,7 @@ impl ObjectContainerFileHeader {
     /// # Panics
     /// Will panic if the tape was not produced from [`Self::command_tape()`].
     pub fn from_tape(mut tape: Vec<ItemRead>, mut schemata: Vec<&Schema>) -> Result<Self, Error> {
-        // We want to read the tape from front to back
+        // Vec::remove(0) is an O(N) operation, so we use `drain` to read from front to back
         let mut tape = tape.drain(..);
 
         let mut schema = None;
@@ -303,7 +303,7 @@ mod tests {
 
     use crate::{
         Schema,
-        state_machines::reading::{
+        decode::{
             commands::CommandTape,
             object_container_file::{HEADER_JSON, HEADER_TAPE},
         },

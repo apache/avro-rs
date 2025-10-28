@@ -6,9 +6,7 @@ use std::collections::HashMap;
 
 use crate::{
     AvroResult, Error, Schema,
-    error::Details,
-    schema::{resolve_names, resolve_names_with_schemata},
-    state_machines::reading::{
+    decode::{
         ItemRead, StateMachine, StateMachineControlFlow,
         commands::CommandTape,
         datum::DatumStateMachine,
@@ -19,6 +17,8 @@ use crate::{
         },
         value_from_tape,
     },
+    error::Details,
+    schema::{resolve_names, resolve_names_with_schemata},
     types::Value,
 };
 

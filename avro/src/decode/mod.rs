@@ -1,14 +1,14 @@
 use crate::{
     Decimal, Duration, Error, Schema,
     bigdecimal::deserialize_big_decimal,
+    decode::{
+        block::BlockStateMachine, bytes::BytesStateMachine, commands::CommandTape,
+        datum::DatumStateMachine, error::ValueFromTapeError, union::UnionStateMachine,
+    },
     error::Details,
     schema::{
         ArraySchema, EnumSchema, FixedSchema, MapSchema, Name, Names, Namespace, RecordSchema,
         ResolvedSchema, UnionSchema,
-    },
-    state_machines::reading::{
-        block::BlockStateMachine, bytes::BytesStateMachine, commands::CommandTape,
-        datum::DatumStateMachine, error::ValueFromTapeError, union::UnionStateMachine,
     },
     types::Value,
     util::decode_variable,
@@ -18,15 +18,13 @@ use serde::Deserialize;
 use std::{borrow::Borrow, collections::HashMap, io::Read, ops::Deref, str::FromStr};
 use uuid::Uuid;
 
-pub mod async_impl;
 pub mod block;
 pub mod bytes;
 pub mod codec;
-mod commands;
+pub mod commands;
 pub mod datum;
 pub mod error;
-mod object_container_file;
-pub mod sync;
+pub mod object_container_file;
 mod union;
 
 pub trait StateMachine: Sized {
@@ -43,7 +41,7 @@ pub trait StateMachine: Sized {
 pub enum StateMachineControlFlow<StateMachine, Output> {
     /// The state machine needs more data before it can continue.
     NeedMore(StateMachine),
-    /// The state machine is done and the result is returned.s
+    /// The state machine is done and the result is returned.
     Done(Output),
 }
 
@@ -52,9 +50,9 @@ pub type StateMachineResult<StateMachine, Output> =
 
 /// The sub state machine that is currently being driven.
 ///
-/// The `Int`, `Long`, `Float`, `Double`, and `Enum` statemachines don't have state, as
+/// The `Int`, `Long`, `Float`, `Double`, and `Enum` state machines don't have state, as
 /// they don't consume the buffer if there are not enough bytes. This means that the only
-/// thing these statemachines are keeping track of is which type we're actually decoding.
+/// thing these state machines are keeping track of is which type we're actually decoding.
 pub enum SubStateMachine {
     Null(Vec<ItemRead>),
     Bool(Vec<ItemRead>),

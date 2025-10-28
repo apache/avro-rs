@@ -16,8 +16,8 @@
 // under the License.
 
 use crate::{
+    decode::error::ValueFromTapeError,
     schema::{Name, Schema, SchemaKind, UnionSchema},
-    state_machines::reading::error::ValueFromTapeError,
     types::{Value, ValueKind},
 };
 use std::{error::Error as _, fmt};

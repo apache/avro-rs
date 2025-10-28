@@ -1,8 +1,8 @@
 use oval::Buffer;
 
 use crate::{
+    decode::{StateMachine, StateMachineControlFlow, decode_zigzag_buffer},
     error::Details,
-    state_machines::reading::{StateMachine, StateMachineControlFlow, decode_zigzag_buffer},
 };
 
 use super::StateMachineResult;

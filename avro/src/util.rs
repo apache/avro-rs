@@ -104,7 +104,7 @@ fn encode_variable<W: Write>(mut z: u64, mut writer: W) -> AvroResult<usize> {
 /// enough bytes and does not return the amount of bytes read.
 ///
 /// See [`decode_len`] for more details.
-pub fn decode_len_simple(buffer: &[u8]) -> AvroResult<(usize, usize)> {
+pub(crate) fn decode_len_simple(buffer: &[u8]) -> AvroResult<(usize, usize)> {
     decode_len(buffer)?.ok_or_else(|| {
         Details::ReadVariableIntegerBytes(std::io::ErrorKind::UnexpectedEof.into()).into()
     })
@@ -117,7 +117,7 @@ pub fn decode_len_simple(buffer: &[u8]) -> AvroResult<(usize, usize)> {
 /// # Returns
 /// `Some(integer, bytes read)` if it completely read an integer, `None` if it did not have enough
 /// bytes in the slice.
-pub fn decode_len(buffer: &[u8]) -> AvroResult<Option<(usize, usize)>> {
+pub(crate) fn decode_len(buffer: &[u8]) -> AvroResult<Option<(usize, usize)>> {
     if let Some((integer, bytes)) = decode_variable(buffer)? {
         let length =
             usize::try_from(integer).map_err(|e| Details::ConvertI64ToUsize(e, integer))?;
@@ -133,7 +133,7 @@ pub fn decode_len(buffer: &[u8]) -> AvroResult<Option<(usize, usize)>> {
 /// # Returns
 /// `Some(integer, bytes read)` if it completely read an integer, `None` if it did not have enough
 /// bytes in the slice.
-pub fn decode_variable(buffer: &[u8]) -> Result<Option<(i64, usize)>, Error> {
+pub(crate) fn decode_variable(buffer: &[u8]) -> Result<Option<(i64, usize)>, Error> {
     let mut decoded = 0;
     let mut loops_done = 0;
     let mut last_byte = 0;

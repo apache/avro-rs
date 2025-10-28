@@ -2,11 +2,11 @@ use oval::Buffer;
 
 use crate::{
     Error,
-    error::Details,
-    state_machines::reading::{
+    decode::{
         CommandTape, ItemRead, StateMachine, StateMachineControlFlow, datum::DatumStateMachine,
         decode_zigzag_buffer,
     },
+    error::Details,
 };
 
 /// Are we currently parsing an object or just finished/reading a block header

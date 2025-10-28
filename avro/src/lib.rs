@@ -949,21 +949,22 @@ mod de;
 mod decimal;
 mod duration;
 mod encode;
-mod reader;
 mod ser;
 mod ser_schema;
-mod writer;
 
+pub mod decode;
+pub mod encode2;
 pub mod error;
 pub mod headers;
 pub mod rabin;
+pub mod reader;
 pub mod schema;
 pub mod schema_compatibility;
 pub mod schema_equality;
-pub mod state_machines;
 pub mod types;
 pub mod util;
 pub mod validator;
+pub mod writer;
 
 pub use crate::{
     bigdecimal::BigDecimal,
@@ -1041,7 +1042,7 @@ pub fn set_serde_human_readable(human_readable: bool) -> bool {
 /// Async versions of the types and functions.
 pub mod not_sync {
     #[doc(inline)]
-    pub use crate::reader::async_reader::*;
+    pub use crate::reader::asynch::*;
 }
 
 #[cfg(test)]

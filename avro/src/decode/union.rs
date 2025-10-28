@@ -1,9 +1,9 @@
 use crate::{
-    error::Details,
-    state_machines::reading::{
+    decode::{
         ItemRead, StateMachine, StateMachineControlFlow, StateMachineResult, SubStateMachine,
         commands::CommandTape, decode_zigzag_buffer,
     },
+    error::Details,
 };
 use oval::Buffer;
 

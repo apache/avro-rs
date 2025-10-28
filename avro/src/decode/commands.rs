@@ -1,13 +1,13 @@
 use crate::{
     Error, Schema,
+    decode::{
+        ItemRead, SubStateMachine, block::BlockStateMachine, bytes::BytesStateMachine,
+        datum::DatumStateMachine, union::UnionStateMachine,
+    },
     error::Details,
     schema::{
         ArraySchema, DecimalSchema, EnumSchema, FixedSchema, MapSchema, Name, Names, RecordSchema,
         UnionSchema,
-    },
-    state_machines::reading::{
-        ItemRead, SubStateMachine, block::BlockStateMachine, bytes::BytesStateMachine,
-        datum::DatumStateMachine, union::UnionStateMachine,
     },
 };
 use std::{collections::HashMap, ops::Range, sync::Arc};
