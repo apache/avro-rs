@@ -63,7 +63,7 @@ pub struct Writer<'a, W: Write> {
     user_metadata: HashMap<String, Value>,
 }
 
-pub struct AvroSerializedBuffer {
+struct AvroSerializedBuffer {
     buffer: Vec<u8>,
     num_values: usize,
 }
