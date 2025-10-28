@@ -1538,14 +1538,14 @@ mod tests {
     }
 
     #[test]
-    fn avro_3747_human_readable_true() -> TestResult {
+    fn avro_3747_human_readable_false() -> TestResult {
         use serde::de::Deserializer as SerdeDeserializer;
 
-        assert!(crate::util::is_human_readable());
+        assert!(!crate::util::is_human_readable());
 
         let deser = &Deserializer::new(&Value::Null);
 
-        assert!(deser.is_human_readable());
+        assert!(!deser.is_human_readable());
 
         Ok(())
     }

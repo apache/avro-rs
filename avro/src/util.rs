@@ -35,7 +35,7 @@ static MAX_ALLOCATION_BYTES: OnceLock<usize> = OnceLock::new();
 // crate-visible for testing
 pub(crate) static SERDE_HUMAN_READABLE: OnceLock<bool> = OnceLock::new();
 /// Whether the serializer and deserializer should indicate to types that the format is human-readable.
-pub const DEFAULT_SERDE_HUMAN_READABLE: bool = true;
+pub const DEFAULT_SERDE_HUMAN_READABLE: bool = false;
 
 pub trait MapHelper {
     fn string(&self, key: &str) -> Option<String>;

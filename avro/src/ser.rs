@@ -1019,13 +1019,13 @@ mod tests {
     }
 
     #[test]
-    fn avro_3747_human_readable_true() {
+    fn avro_3747_human_readable_false() {
         use serde::ser::Serializer as SerdeSerializer;
 
-        assert!(crate::util::is_human_readable());
+        assert!(!crate::util::is_human_readable());
 
         let ser = &mut Serializer {};
 
-        assert!(ser.is_human_readable());
+        assert!(!ser.is_human_readable());
     }
 }
