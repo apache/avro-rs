@@ -498,15 +498,6 @@ impl<'a, W: Write> Writer<'a, W> {
         }
     }
 
-    /// Disables writing the header into the writer.
-    /// This is useful for contexts when you just want to serialize blocks of Avro data
-    /// without creating a well formed Avro file.
-    /// 
-    /// Please use at your own risk
-    pub fn disable_header_write(&mut self) {
-        self.has_header = true;
-    }
-
     /// Create an Avro header based on schema, codec and sync marker.
     fn header(&self) -> Result<Vec<u8>, Error> {
         let schema_bytes = serde_json::to_string(self.schema)

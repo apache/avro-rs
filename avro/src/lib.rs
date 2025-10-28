@@ -868,6 +868,7 @@ mod decode;
 mod duration;
 mod encode;
 mod reader;
+mod ser;
 mod ser_schema;
 mod util;
 mod writer;
@@ -878,7 +879,6 @@ pub mod rabin;
 pub mod schema;
 pub mod schema_compatibility;
 pub mod schema_equality;
-pub mod ser;
 pub mod types;
 pub mod validator;
 
