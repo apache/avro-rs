@@ -115,7 +115,7 @@ fn test_folder(folder: &str) -> Result<(), ErrorsDesc> {
         let reader =
             Reader::with_schema(&schema, BufReader::new(&file)).expect("Can't read data.avro");
 
-        let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Null);
+        let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Null).unwrap();
 
         let mut records: Vec<Value> = vec![];
 

@@ -25,7 +25,7 @@ where
     T: Serialize + DeserializeOwned + Debug + PartialEq + Clone,
 {
     let record2 = record.clone();
-    let mut writer = Writer::new(schema, vec![]);
+    let mut writer = Writer::new(schema, vec![])?;
     writer.append_ser(record)?;
     let bytes_written = writer.into_inner()?;
 

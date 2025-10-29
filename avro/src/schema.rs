@@ -5249,7 +5249,7 @@ mod tests {
         let avro_value = crate::to_value(foo)?;
         assert!(avro_value.validate(&schema));
 
-        let mut writer = crate::Writer::new(&schema, Vec::new());
+        let mut writer = crate::Writer::new(&schema, Vec::new())?;
 
         // schema validation happens here
         writer.append(avro_value)?;

@@ -59,7 +59,7 @@ fn benchmark(
         let records = records.clone();
 
         let start = Instant::now();
-        let mut writer = Writer::new(schema, BufWriter::new(Vec::new()));
+        let mut writer = Writer::new(schema, BufWriter::new(Vec::new()))?;
         writer.extend(records)?;
 
         let duration = Instant::now().duration_since(start);

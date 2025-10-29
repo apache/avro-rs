@@ -97,7 +97,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let file_name = format!("{}/rust{suffix}.avro", &data_folder);
         let output_file = std::fs::File::create(&file_name)?;
 
-        let mut writer = Writer::with_codec(&schema, BufWriter::new(output_file), codec);
+        let mut writer = Writer::with_codec(&schema, BufWriter::new(output_file), codec)?;
         write_user_metadata(&mut writer)?;
 
         let datum = create_datum(&schema);

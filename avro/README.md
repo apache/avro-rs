@@ -206,7 +206,7 @@ associated type provided by the library to specify the data we want to serialize
 use apache_avro::types::Record;
 use apache_avro::Writer;
 // a writer needs a schema and something to write to
-let mut writer = Writer::new(&schema, Vec::new());
+let mut writer = Writer::new(&schema, Vec::new()).unwrap();
 
 // the Record type models our Record schema
 let mut record = Record::new(writer.schema()).unwrap();
@@ -248,7 +248,7 @@ struct Test {
 }
 
 // a writer needs a schema and something to write to
-let mut writer = Writer::new(&schema, Vec::new());
+let mut writer = Writer::new(&schema, Vec::new()).unwrap();
 
 // the structure models our Record schema
 let test = Test {
@@ -421,7 +421,7 @@ fn main() -> Result<(), Error> {
 
     println!("{:?}", schema);
 
-    let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default()));
+    let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default())).unwrap();
 
     let mut record = Record::new(writer.schema()).unwrap();
     record.put("a", 27i64);
@@ -547,7 +547,7 @@ fn main() -> Result<(), Error> {
 
     println!("{:?}", schema);
 
-    let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default()));
+    let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default())).unwrap()   ;
 
     let mut record = Record::new(writer.schema()).unwrap();
     record.put("decimal_fixed", Decimal::from(9936.to_bigint().unwrap().to_signed_bytes_be()));
@@ -809,7 +809,7 @@ fn serde_byte_array() {
   ];
 
   // Serialize records to Avro binary format with the schema
-  let mut writer = apache_avro::Writer::new(&schema, Vec::new());
+  let mut writer = apache_avro::Writer::new(&schema, Vec::new()).unwrap();
   for record in &records {
       writer.append_ser(record).unwrap();
   }

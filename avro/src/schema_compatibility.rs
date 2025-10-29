@@ -1451,7 +1451,7 @@ mod tests {
       "#;
         let writer_schema = Schema::parse_str(writer_raw_schema)?;
         let reader_schema = Schema::parse_str(reader_raw_schema)?;
-        let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null);
+        let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null)?;
         let mut record = Record::new(writer.schema()).unwrap();
         record.put("a", 27i64);
         record.put("b", "foo");
@@ -1515,7 +1515,7 @@ mod tests {
       "#;
         let writer_schema = Schema::parse_str(writer_raw_schema)?;
         let reader_schema = Schema::parse_str(reader_raw_schema)?;
-        let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null);
+        let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null)?;
         let mut record = Record::new(writer.schema()).unwrap();
         record.put("a", 27i64);
         record.put("b", "foo");
