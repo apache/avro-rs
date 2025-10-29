@@ -953,7 +953,6 @@ mod encode;
 mod reader;
 mod ser;
 mod ser_schema;
-mod util;
 mod writer;
 
 pub mod error;
@@ -963,6 +962,7 @@ pub mod schema;
 pub mod schema_compatibility;
 pub mod schema_equality;
 pub mod types;
+pub mod util;
 pub mod validator;
 
 pub use crate::{
@@ -989,7 +989,6 @@ pub use reader::{
 };
 pub use schema::{AvroSchema, Schema};
 pub use ser::to_value;
-pub use util::{max_allocation_bytes, set_serde_human_readable};
 pub use uuid::Uuid;
 pub use writer::{
     GenericSingleObjectWriter, SpecificSingleObjectWriter, Writer, WriterBuilder, to_avro_datum,
@@ -1001,6 +1000,43 @@ pub use apache_avro_derive::*;
 
 /// A convenience type alias for `Result`s with `Error`s.
 pub type AvroResult<T> = Result<T, Error>;
+
+/// Set the maximum number of bytes that can be allocated when decoding data.
+///
+/// This function only changes the setting once. On subsequent calls the value will stay the same
+/// as the first time it is called. It is automatically called on first allocation and defaults to
+/// [`util::DEFAULT_MAX_ALLOCATION_BYTES`].
+///
+/// # Returns
+/// The configured maximum, which might be different from what the function was called with if the
+/// value was already set before.
+#[deprecated(
+    since = "0.21.0",
+    note = "Please use apache_avro::util::max_allocation_bytes"
+)]
+pub fn max_allocation_bytes(num_bytes: usize) -> usize {
+    util::max_allocation_bytes(num_bytes)
+}
+
+/// Set whether the serializer and deserializer should indicate to types that the format is human-readable.
+///
+/// This function only changes the setting once. On subsequent calls the value will stay the same
+/// as the first time it is called. It is automatically called on first allocation and defaults to
+/// [`util::DEFAULT_SERDE_HUMAN_READABLE`].
+///
+/// *NOTE*: Changing this setting can change the output of [`from_value`] and the
+/// accepted input of [`to_value`].
+///
+/// # Returns
+/// The configured human-readable value, which might be different from what the function was called
+/// with if the value was already set before.
+#[deprecated(
+    since = "0.21.0",
+    note = "Please use apache_avro::util::set_serde_human_readable"
+)]
+pub fn set_serde_human_readable(human_readable: bool) -> bool {
+    util::set_serde_human_readable(human_readable)
+}
 
 #[cfg(test)]
 mod tests {
