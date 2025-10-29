@@ -309,11 +309,9 @@ impl<'a, W: Write> Writer<'a, W> {
         Ok(num_bytes)
     }
 
-    /**
-     * Writes a previously serialized bundle of rows directly to the writer (see self::serialize_ser).
-     * This will not flush any intermediate buffers - only write the provided buffer
-     * directly to the underlying writer.
-     */
+    /// Writes a previously serialized bundle of rows directly to the writer (see self::serialize_ser).
+    /// This will not flush any intermediate buffers - only write the provided buffer
+    /// directly to the underlying writer.
     pub fn extend_avro_serialized_buffer(
         &mut self,
         avro_serialized_buffer: AvroSerializedBuffer,
