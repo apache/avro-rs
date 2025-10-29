@@ -63,6 +63,8 @@ pub struct Writer<'a, W: Write> {
     user_metadata: HashMap<String, Value>,
 }
 
+/// A buffer containing Avro serialized data ready to be written to a Writer
+/// See [Writer::serialize_ser] and [Writer::extend_avro_serialized_buffer]
 pub struct AvroSerializedBuffer {
     buffer: Vec<u8>,
     num_values: usize,
@@ -309,7 +311,7 @@ impl<'a, W: Write> Writer<'a, W> {
         Ok(num_bytes)
     }
 
-    /// Writes a previously serialized bundle of rows directly to the writer (see self::serialize_ser).
+    /// Writes a previously serialized bundle of rows directly to the writer (see [serialize_ser](Self::serialize_ser)).
     /// This will not flush any intermediate buffers - only write the provided buffer
     /// directly to the underlying writer.
     pub fn extend_avro_serialized_buffer(
@@ -334,11 +336,9 @@ impl<'a, W: Write> Writer<'a, W> {
         Ok(num_bytes)
     }
 
-    /**
-     * Serialize an iterator of serde::Serialize objects into an AvroSerializedBuffer. This call
-     * does not need a `mut` self - so it is safe to call from multiple threads to prepare data
-     * for writing.
-     */
+    /// Serialize an iterator of serde::Serialize objects into an AvroSerializedBuffer. This call
+    /// does not need a `mut` self - so it is safe to call from multiple threads to prepare data
+    /// for writing.
     pub fn serialize_ser<I, T: Serialize>(&self, values: I) -> AvroResult<AvroSerializedBuffer>
     where
         I: IntoIterator<Item = T>,
@@ -350,12 +350,8 @@ impl<'a, W: Write> Writer<'a, W> {
 
         let mut buffer = Vec::new();
         let mut count = 0;
-        let mut serializer = SchemaAwareWriteSerializer::new(
-            &mut buffer,
-            self.schema,
-            rs.get_names(),
-            None,
-        );
+        let mut serializer =
+            SchemaAwareWriteSerializer::new(&mut buffer, self.schema, rs.get_names(), None);
 
         for value in values {
             value.serialize(&mut serializer)?;
