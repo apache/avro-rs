@@ -1050,7 +1050,7 @@ mod tests {
             Val4(u64),
         }
 
-        let data = vec![
+        let data = [
             (
                 TestNullExternalEnum {
                     a: NullExternalEnum::Val1,
