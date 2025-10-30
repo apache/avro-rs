@@ -812,7 +812,7 @@ mod tests {
         use crate::writer::Writer;
 
         let schema = Schema::parse_str(SCHEMA)?;
-        let mut writer = Writer::new(&schema, Vec::new());
+        let mut writer = Writer::new(&schema, Vec::new())?;
 
         let mut user_meta_data: HashMap<String, Vec<u8>> = HashMap::new();
         user_meta_data.insert(

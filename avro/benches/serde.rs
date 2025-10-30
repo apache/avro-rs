@@ -239,13 +239,13 @@ fn make_records_ser<T: Serialize + Clone>(record: T, count: usize) -> Vec<T> {
 }
 
 fn write(schema: &Schema, records: &[Value]) -> AvroResult<Vec<u8>> {
-    let mut writer = Writer::new(schema, Vec::new());
+    let mut writer = Writer::new(schema, Vec::new())?;
     writer.extend_from_slice(records).unwrap();
     writer.into_inner()
 }
 
 fn write_ser<T: Serialize>(schema: &Schema, records: &[T]) -> AvroResult<Vec<u8>> {
-    let mut writer = Writer::new(schema, Vec::new());
+    let mut writer = Writer::new(schema, Vec::new())?;
     writer.extend_ser(records)?;
     writer.into_inner()
 }

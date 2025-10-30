@@ -52,7 +52,7 @@ mod test_derive {
         T: Serialize + AvroSchema,
     {
         let schema = T::get_schema();
-        let mut writer = Writer::new(&schema, Vec::new());
+        let mut writer = Writer::new(&schema, Vec::new()).unwrap();
         if let Err(e) = writer.append_ser(obj) {
             panic!("{e:?}");
         }

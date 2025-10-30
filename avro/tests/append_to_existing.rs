@@ -37,7 +37,7 @@ fn avro_3630_append_to_an_existing_file() -> TestResult {
 
     let marker = read_marker(&bytes[..]);
 
-    let mut writer = Writer::append_to(&schema, bytes, marker);
+    let mut writer = Writer::append_to(&schema, bytes, marker)?;
 
     writer
         .append(create_datum(&schema, 2))
@@ -59,7 +59,10 @@ fn avro_3630_append_to_an_existing_file() -> TestResult {
 fn avro_4031_append_to_file_using_multiple_writers() -> TestResult {
     let schema = Schema::parse_str(SCHEMA).expect("Cannot parse the schema");
 
-    let mut first_writer = Writer::builder().schema(&schema).writer(Vec::new()).build();
+    let mut first_writer = Writer::builder()
+        .schema(&schema)
+        .writer(Vec::new())
+        .build()?;
     first_writer.append(create_datum(&schema, -42))?;
     let mut resulting_bytes = first_writer.into_inner()?;
     let first_marker = read_marker(&resulting_bytes);
@@ -69,7 +72,7 @@ fn avro_4031_append_to_file_using_multiple_writers() -> TestResult {
         .has_header(true)
         .marker(first_marker)
         .writer(Vec::new())
-        .build();
+        .build()?;
     second_writer.append(create_datum(&schema, 42))?;
     resulting_bytes.append(&mut second_writer.into_inner()?);
 
@@ -81,7 +84,7 @@ fn avro_4031_append_to_file_using_multiple_writers() -> TestResult {
 
 /// Simulates reading from a pre-existing .avro file and returns its bytes
 fn get_avro_bytes(schema: &Schema) -> Vec<u8> {
-    let mut writer = Writer::new(schema, Vec::new());
+    let mut writer = Writer::new(schema, Vec::new()).unwrap();
     writer
         .append(create_datum(schema, 1))
         .expect("An error while appending data");

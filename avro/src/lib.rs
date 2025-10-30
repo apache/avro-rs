@@ -208,7 +208,7 @@
 //! # "#;
 //! # let schema = Schema::parse_str(raw_schema).unwrap();
 //! // a writer needs a schema and something to write to
-//! let mut writer = Writer::new(&schema, Vec::new());
+//! let mut writer = Writer::new(&schema, Vec::new()).unwrap();
 //!
 //! // the Record type models our Record schema
 //! let mut record = Record::new(writer.schema()).unwrap();
@@ -263,7 +263,7 @@
 //! # "#;
 //! # let schema = Schema::parse_str(raw_schema).unwrap();
 //! // a writer needs a schema and something to write to
-//! let mut writer = Writer::new(&schema, Vec::new());
+//! let mut writer = Writer::new(&schema, Vec::new()).unwrap();
 //!
 //! // the structure models our Record schema
 //! let test = Test {
@@ -353,7 +353,7 @@
 //! #     }
 //! # "#;
 //! # let schema = Schema::parse_str(raw_schema).unwrap();
-//! # let mut writer = Writer::new(&schema, Vec::new());
+//! # let mut writer = Writer::new(&schema, Vec::new()).unwrap();
 //! # let mut record = Record::new(writer.schema()).unwrap();
 //! # record.put("a", 27i64);
 //! # record.put("b", "foo");
@@ -382,7 +382,7 @@
 //! #     }
 //! # "#;
 //! # let writer_schema = Schema::parse_str(writer_raw_schema).unwrap();
-//! # let mut writer = Writer::new(&writer_schema, Vec::new());
+//! # let mut writer = Writer::new(&writer_schema, Vec::new()).unwrap();
 //! # let mut record = Record::new(writer.schema()).unwrap();
 //! # record.put("a", 27i64);
 //! # record.put("b", "foo");
@@ -442,7 +442,7 @@
 //! # "#;
 //! # let schema = Schema::parse_str(raw_schema).unwrap();
 //! # let schema = Schema::parse_str(raw_schema).unwrap();
-//! # let mut writer = Writer::new(&schema, Vec::new());
+//! # let mut writer = Writer::new(&schema, Vec::new()).unwrap();
 //! # let mut record = Record::new(writer.schema()).unwrap();
 //! # record.put("a", 27i64);
 //! # record.put("b", "foo");
@@ -487,7 +487,7 @@
 //! #     }
 //! # "#;
 //! # let schema = Schema::parse_str(raw_schema).unwrap();
-//! # let mut writer = Writer::new(&schema, Vec::new());
+//! # let mut writer = Writer::new(&schema, Vec::new()).unwrap();
 //! # let test = Test {
 //! #     a: 27,
 //! #     b: "foo".to_owned(),
@@ -533,7 +533,7 @@
 //!
 //!     println!("{:?}", schema);
 //!
-//!     let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default()));
+//!     let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default())).unwrap();
 //!
 //!     let mut record = Record::new(writer.schema()).unwrap();
 //!     record.put("a", 27i64);
@@ -659,7 +659,7 @@
 //!
 //!     println!("{:?}", schema);
 //!
-//!     let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default()));
+//!     let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Deflate(DeflateSettings::default())).unwrap()   ;
 //!
 //!     let mut record = Record::new(writer.schema()).unwrap();
 //!     record.put("decimal_fixed", Decimal::from(9936.to_bigint().unwrap().to_signed_bytes_be()));
@@ -921,7 +921,7 @@
 //!   ];
 //!
 //!   // Serialize records to Avro binary format with the schema
-//!   let mut writer = apache_avro::Writer::new(&schema, Vec::new());
+//!   let mut writer = apache_avro::Writer::new(&schema, Vec::new()).unwrap();
 //!   for record in &records {
 //!       writer.append_ser(record).unwrap();
 //!   }
@@ -1080,7 +1080,7 @@ mod tests {
         "#;
         let writer_schema = Schema::parse_str(writer_raw_schema).unwrap();
         let reader_schema = Schema::parse_str(reader_raw_schema).unwrap();
-        let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null);
+        let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null).unwrap();
         let mut record = Record::new(writer.schema()).unwrap();
         record.put("a", 27i64);
         record.put("b", "foo");
@@ -1121,7 +1121,7 @@ mod tests {
             }
         "#;
         let schema = Schema::parse_str(raw_schema).unwrap();
-        let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Null);
+        let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Null).unwrap();
         let mut record = Record::new(writer.schema()).unwrap();
         record.put("a", 27i64);
         record.put("b", "foo");
@@ -1163,7 +1163,7 @@ mod tests {
             }
         "#;
         let writer_schema = Schema::parse_str(writer_raw_schema).unwrap();
-        let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null);
+        let mut writer = Writer::with_codec(&writer_schema, Vec::new(), Codec::Null).unwrap();
         let mut record = Record::new(writer.schema()).unwrap();
         record.put("a", 27i64);
         record.put("b", "foo");
@@ -1196,7 +1196,7 @@ mod tests {
 
         let schema = Schema::parse_str(raw_schema).unwrap();
 
-        // Would allocated 18446744073709551605 bytes
+        // Would allocate 18446744073709551605 bytes
         let illformed: &[u8] = &[0x3e, 0x15, 0xff, 0x1f, 0x15, 0xff];
 
         let value = from_avro_datum(&schema, &mut &*illformed, None);

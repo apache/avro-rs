@@ -156,7 +156,7 @@ mod tests {
             .schema(&schema)
             .codec(codec)
             .writer(Vec::new())
-            .build();
+            .build()?;
 
         writer.append(record.clone())?;
         writer.flush()?;

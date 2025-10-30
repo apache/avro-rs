@@ -45,7 +45,7 @@ fn avro_rs_285_bytes_deserialization_round_trip() -> TestResult {
     ];
 
     // serialize records to Avro binary format with schema
-    let mut writer = apache_avro::Writer::new(&schema, Vec::new());
+    let mut writer = apache_avro::Writer::new(&schema, Vec::new())?;
     for record in &records {
         writer.append_ser(record)?;
     }
@@ -93,7 +93,7 @@ fn avro_rs_285_bytes_deserialization_filtered_round_trip() -> TestResult {
     ];
 
     // serialize records to Avro binary format with schema
-    let mut writer = apache_avro::Writer::new(&schema, Vec::new());
+    let mut writer = apache_avro::Writer::new(&schema, Vec::new())?;
     for record in &records {
         writer.append_ser(record)?;
     }

@@ -71,7 +71,7 @@ where
 {
     let mut encoded: Vec<u8> = Vec::new();
     let mut writer =
-        Writer::with_schemata(schema, schemata.iter().collect(), &mut encoded, Codec::Null);
+        Writer::with_schemata(schema, schemata.iter().collect(), &mut encoded, Codec::Null)?;
     writer.append_ser(input)?;
     writer.flush()?;
     drop(writer); //drop the writer so that `encoded` is no more referenced mutably
