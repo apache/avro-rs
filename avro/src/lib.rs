@@ -939,7 +939,7 @@
 //! }
 //! ```
 //!
-//! Full implementation and other options for things like fixed byte arrays can found in src/bytes.rs
+//! Full implementation and other options for things like fixed byte arrays can be found in src/bytes.rs
 //!
 
 mod bigdecimal;

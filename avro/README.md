@@ -827,7 +827,7 @@ fn serde_byte_array() {
 }
 ```
 
-Full implementation and other options for things like fixed byte arrays can found in src/bytes.rs
+Full implementation and other options for things like fixed byte arrays can be found in src/bytes.rs
 
 <!-- cargo-rdme end -->
 
