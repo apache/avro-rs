@@ -2565,7 +2565,7 @@ pub mod derive {
             let inner_schema = T::get_schema_in_ctxt(named_schemas, enclosing_namespace);
             Schema::Union(UnionSchema {
                 schemas: vec![Schema::Null, inner_schema.clone()],
-                variant_index: vec![Schema::Null, inner_schema]
+                variant_index: [Schema::Null, inner_schema]
                     .iter()
                     .enumerate()
                     .map(|(idx, s)| (SchemaKind::from(s), idx))
