@@ -232,7 +232,11 @@ impl<'r, R: Read> Block<'r, R> {
                 .map(|(name, schema)| (name.clone(), (*schema).clone()))
                 .collect();
             self.writer_schema = Schema::parse_with_names(&json, names)?;
-            resolve_names_with_schemata(&self.schemata, &mut self.names_refs, &None)?;
+            resolve_names_with_schemata(
+                self.schemata.iter().copied(),
+                &mut self.names_refs,
+                &None,
+            )?;
         } else {
             self.writer_schema = Schema::parse(&json)?;
             resolve_names(&self.writer_schema, &mut self.names_refs, &None)?;
