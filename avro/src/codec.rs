@@ -30,7 +30,9 @@ impl DeflateSettings {
         DeflateSettings { compression_level }
     }
 
-    fn compression_level(&self) -> u8 {
+    /// Get the compression level as a `u8`, note that this means the [`miniz_oxide::deflate::CompressionLevel::DefaultCompression`] variant
+    /// will appear as `255`, this is normalized by the [`miniz_oxide`] crate later.
+    pub fn compression_level(&self) -> u8 {
         self.compression_level as u8
     }
 }
