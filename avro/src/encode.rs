@@ -39,6 +39,9 @@ pub fn encode<W: Write>(value: &Value, schema: &Schema, writer: &mut W) -> AvroR
     encode_internal(value, schema, rs.get_names(), &None, writer)
 }
 
+/// Encode `s` as the _bytes_ primitive type.
+///
+/// This writes the length as the _long_ primitive and then the raw bytes.
 pub(crate) fn encode_bytes<B: AsRef<[u8]> + ?Sized, W: Write>(
     s: &B,
     mut writer: W,
