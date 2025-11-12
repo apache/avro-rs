@@ -22,7 +22,7 @@ use crate::{
         UnionSchema,
     },
 };
-use log::{debug, error};
+use log::debug;
 use std::{fmt::Debug, sync::OnceLock};
 
 /// A trait that compares two schemata for equality.
@@ -54,43 +54,11 @@ pub struct StructFieldEq {
 }
 
 impl SchemataEq for StructFieldEq {
+    #[rustfmt::skip]
     fn compare(&self, schema_one: &Schema, schema_two: &Schema) -> bool {
-        macro_rules! compare_primitive {
-            ($primitive:ident) => {
-                if let Schema::$primitive = schema_one {
-                    if let Schema::$primitive = schema_two {
-                        return true;
-                    }
-                    return false;
-                }
-            };
-        }
-
         if schema_one.name() != schema_two.name() {
             return false;
         }
-
-        compare_primitive!(Null);
-        compare_primitive!(Boolean);
-        compare_primitive!(Int);
-        compare_primitive!(Int);
-        compare_primitive!(Long);
-        compare_primitive!(Float);
-        compare_primitive!(Double);
-        compare_primitive!(Bytes);
-        compare_primitive!(String);
-        compare_primitive!(Uuid);
-        compare_primitive!(BigDecimal);
-        compare_primitive!(Date);
-        compare_primitive!(Duration);
-        compare_primitive!(TimeMicros);
-        compare_primitive!(TimeMillis);
-        compare_primitive!(TimestampMicros);
-        compare_primitive!(TimestampMillis);
-        compare_primitive!(TimestampNanos);
-        compare_primitive!(LocalTimestampMicros);
-        compare_primitive!(LocalTimestampMillis);
-        compare_primitive!(LocalTimestampNanos);
 
         if self.include_attributes
             && schema_one.custom_attributes() != schema_two.custom_attributes()
@@ -98,116 +66,108 @@ impl SchemataEq for StructFieldEq {
             return false;
         }
 
-        if let Schema::Record(RecordSchema {
-            fields: fields_one, ..
-        }) = schema_one
-        {
-            if let Schema::Record(RecordSchema {
-                fields: fields_two, ..
-            }) = schema_two
-            {
-                return self.compare_fields(fields_one, fields_two);
+        match (schema_one, schema_two) {
+            (Schema::Null, Schema::Null) => true,
+            (Schema::Null, _) => false,
+            (Schema::Boolean, Schema::Boolean) => true,
+            (Schema::Boolean, _) => false,
+            (Schema::Int, Schema::Int) => true,
+            (Schema::Int, _) => false,
+            (Schema::Long, Schema::Long) => true,
+            (Schema::Long, _) => false,
+            (Schema::Float, Schema::Float) => true,
+            (Schema::Float, _) => false,
+            (Schema::Double, Schema::Double) => true,
+            (Schema::Double, _) => false,
+            (Schema::Bytes, Schema::Bytes) => true,
+            (Schema::Bytes, _) => false,
+            (Schema::String, Schema::String) => true,
+            (Schema::String, _) => false,
+            (Schema::Uuid, Schema::Uuid) => true,
+            (Schema::Uuid, _) => false,
+            (Schema::BigDecimal, Schema::BigDecimal) => true,
+            (Schema::BigDecimal, _) => false,
+            (Schema::Date, Schema::Date) => true,
+            (Schema::Date, _) => false,
+            (Schema::Duration, Schema::Duration) => true,
+            (Schema::Duration, _) => false,
+            (Schema::TimeMicros, Schema::TimeMicros) => true,
+            (Schema::TimeMicros, _) => false,
+            (Schema::TimeMillis, Schema::TimeMillis) => true,
+            (Schema::TimeMillis, _) => false,
+            (Schema::TimestampMicros, Schema::TimestampMicros) => true,
+            (Schema::TimestampMicros, _) => false,
+            (Schema::TimestampMillis, Schema::TimestampMillis) => true,
+            (Schema::TimestampMillis, _) => false,
+            (Schema::TimestampNanos, Schema::TimestampNanos) => true,
+            (Schema::TimestampNanos, _) => false,
+            (Schema::LocalTimestampMicros, Schema::LocalTimestampMicros) => true,
+            (Schema::LocalTimestampMicros, _) => false,
+            (Schema::LocalTimestampMillis, Schema::LocalTimestampMillis) => true,
+            (Schema::LocalTimestampMillis, _) => false,
+            (Schema::LocalTimestampNanos, Schema::LocalTimestampNanos) => true,
+            (Schema::LocalTimestampNanos, _) => false,
+            (
+                Schema::Record(RecordSchema { fields: fields_one, ..}),
+                Schema::Record(RecordSchema { fields: fields_two, ..})
+            ) => {
+                self.compare_fields(fields_one, fields_two)
             }
-            return false;
-        }
-
-        if let Schema::Enum(EnumSchema {
-            symbols: symbols_one,
-            ..
-        }) = schema_one
-        {
-            if let Schema::Enum(EnumSchema {
-                symbols: symbols_two,
-                ..
-            }) = schema_two
-            {
-                return symbols_one == symbols_two;
+            (Schema::Record(_), _) => false,
+            (
+                Schema::Enum(EnumSchema { symbols: symbols_one, ..}),
+                Schema::Enum(EnumSchema { symbols: symbols_two, .. })
+            ) => {
+                symbols_one == symbols_two
             }
-            return false;
-        }
-
-        if let Schema::Fixed(FixedSchema { size: size_one, .. }) = schema_one {
-            if let Schema::Fixed(FixedSchema { size: size_two, .. }) = schema_two {
-                return size_one == size_two;
+            (Schema::Enum(_), _) => false,
+            (
+                Schema::Fixed(FixedSchema { size: size_one, ..}),
+                Schema::Fixed(FixedSchema { size: size_two, .. })
+            ) => {
+                size_one == size_two
             }
-            return false;
-        }
-
-        if let Schema::Union(UnionSchema {
-            schemas: schemas_one,
-            ..
-        }) = schema_one
-        {
-            if let Schema::Union(UnionSchema {
-                schemas: schemas_two,
-                ..
-            }) = schema_two
-            {
-                return schemas_one.len() == schemas_two.len()
+            (Schema::Fixed(_), _) => false,
+            (
+                Schema::Union(UnionSchema { schemas: schemas_one, ..}),
+                Schema::Union(UnionSchema { schemas: schemas_two, .. })
+            ) => {
+                schemas_one.len() == schemas_two.len()
                     && schemas_one
-                        .iter()
-                        .zip(schemas_two.iter())
-                        .all(|(s1, s2)| self.compare(s1, s2));
+                    .iter()
+                    .zip(schemas_two.iter())
+                    .all(|(s1, s2)| self.compare(s1, s2))
             }
-            return false;
-        }
-
-        if let Schema::Decimal(DecimalSchema {
-            precision: precision_one,
-            scale: scale_one,
-            ..
-        }) = schema_one
-        {
-            if let Schema::Decimal(DecimalSchema {
-                precision: precision_two,
-                scale: scale_two,
-                ..
-            }) = schema_two
-            {
-                return precision_one == precision_two && scale_one == scale_two;
+            (Schema::Union(_), _) => false,
+            (
+                Schema::Decimal(DecimalSchema { precision: precision_one, scale: scale_one, ..}),
+                Schema::Decimal(DecimalSchema { precision: precision_two, scale: scale_two, .. })
+            ) => {
+                precision_one == precision_two && scale_one == scale_two
             }
-            return false;
-        }
-
-        if let Schema::Array(ArraySchema {
-            items: items_one, ..
-        }) = schema_one
-        {
-            if let Schema::Array(ArraySchema {
-                items: items_two, ..
-            }) = schema_two
-            {
-                return items_one == items_two;
+            (Schema::Decimal(_), _) => false,
+            (
+                Schema::Array(ArraySchema { items: items_one, ..}),
+                Schema::Array(ArraySchema { items: items_two, ..})
+            ) => {
+                items_one == items_two
             }
-            return false;
-        }
-
-        if let Schema::Map(MapSchema {
-            types: types_one, ..
-        }) = schema_one
-        {
-            if let Schema::Map(MapSchema {
-                types: types_two, ..
-            }) = schema_two
-            {
-                return self.compare(types_one, types_two);
+            (Schema::Array(_), _) => false,
+            (
+                Schema::Map(MapSchema { types: types_one, ..}),
+                Schema::Map(MapSchema { types: types_two, ..})
+            ) => {
+                self.compare(types_one, types_two)
             }
-            return false;
-        }
-
-        if let Schema::Ref { name: name_one } = schema_one {
-            if let Schema::Ref { name: name_two } = schema_two {
-                return name_one == name_two;
+            (Schema::Map(_), _) => false,
+            (
+                Schema::Ref { name: name_one },
+                Schema::Ref { name: name_two }
+            ) => {
+                name_one == name_two
             }
-            return false;
+            (Schema::Ref { .. }, _) => false,
         }
-
-        error!(
-            "This is a bug in schema_equality.rs! The following schemata types are not checked! \
-            Please report it to the Avro library maintainers! \
-            \n{schema_one:?}\n\n{schema_two:?}"
-        );
-        false
     }
 }
 
