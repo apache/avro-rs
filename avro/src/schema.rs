@@ -795,7 +795,7 @@ impl RecordField {
     }
 }
 
-/// A description of an Enum schema.
+/// A description of a Record schema.
 #[derive(bon::Builder, Debug, Clone)]
 pub struct RecordSchema {
     /// The name of the schema
@@ -836,7 +836,7 @@ pub struct EnumSchema {
     pub attributes: BTreeMap<String, Value>,
 }
 
-/// A description of a Union schema.
+/// A description of a Fixed schema.
 #[derive(bon::Builder, Debug, Clone)]
 pub struct FixedSchema {
     /// The name of the schema
@@ -883,7 +883,7 @@ impl FixedSchema {
     }
 }
 
-/// A description of a Union schema.
+/// A description of a Decimal schema.
 ///
 /// `scale` defaults to 0 and is an integer greater than or equal to 0 and `precision` is an
 /// integer greater than 0.
