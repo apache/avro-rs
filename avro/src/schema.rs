@@ -612,12 +612,12 @@ pub(crate) fn resolve_names(
 }
 
 pub(crate) fn resolve_names_with_schemata(
-    schemata: &Vec<&Schema>,
+    schemata: impl IntoIterator<Item = impl Borrow<Schema>>,
     names: &mut Names,
     enclosing_namespace: &Namespace,
 ) -> AvroResult<()> {
     for schema in schemata {
-        resolve_names(schema, names, enclosing_namespace)?;
+        resolve_names(schema.borrow(), names, enclosing_namespace)?;
     }
     Ok(())
 }
