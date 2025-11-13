@@ -29,7 +29,7 @@ exclude = [
 resolver = "2"
 
 [workspace.package]
-version = "0.20.0"
+version = "0.21.0"
 license = "Apache-2.0"
 repository = "https://github.com/apache/avro-rs"
 edition = "2024"
