@@ -140,17 +140,17 @@ impl SchemataEq for StructFieldEq {
             }
             (Schema::Union(_), _) => false,
             (
-                Schema::Decimal(DecimalSchema { precision: precision_one, scale: scale_one, ..}),
-                Schema::Decimal(DecimalSchema { precision: precision_two, scale: scale_two, .. })
+                Schema::Decimal(DecimalSchema { precision: precision_one, scale: scale_one, inner: inner_one }),
+                Schema::Decimal(DecimalSchema { precision: precision_two, scale: scale_two, inner: inner_two })
             ) => {
-                precision_one == precision_two && scale_one == scale_two
+                precision_one == precision_two && scale_one == scale_two && self.compare(inner_one, inner_two)
             }
             (Schema::Decimal(_), _) => false,
             (
                 Schema::Array(ArraySchema { items: items_one, ..}),
                 Schema::Array(ArraySchema { items: items_two, ..})
             ) => {
-                items_one == items_two
+                self.compare(items_one, items_two)
             }
             (Schema::Array(_), _) => false,
             (
@@ -177,7 +177,7 @@ impl StructFieldEq {
             && fields_one
                 .iter()
                 .zip(fields_two.iter())
-                .all(|(f1, f2)| self.compare(&f1.schema, &f2.schema))
+                .all(|(f1, f2)| f1.name == f2.name && self.compare(&f1.schema, &f2.schema))
     }
 }
 
