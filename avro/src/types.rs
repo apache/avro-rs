@@ -38,6 +38,7 @@ use std::{
     str::FromStr,
 };
 use uuid::Uuid;
+use crate::schema::UuidSchema;
 
 /// Compute the maximum decimal value precision of a byte array of length `len` could hold.
 fn max_prec_for_len(len: usize) -> Result<usize, Error> {
@@ -441,14 +442,14 @@ impl Value {
             (&Value::Decimal(_), &Schema::Decimal { .. }) => None,
             (&Value::BigDecimal(_), &Schema::BigDecimal) => None,
             (&Value::Duration(_), &Schema::Duration) => None,
-            (&Value::Uuid(_), &Schema::Uuid) => None,
+            (&Value::Uuid(_), &Schema::Uuid(_)) => None,
             (&Value::Float(_), &Schema::Float) => None,
             (&Value::Float(_), &Schema::Double) => None,
             (&Value::Double(_), &Schema::Double) => None,
             (&Value::Bytes(_), &Schema::Bytes) => None,
             (&Value::Bytes(_), &Schema::Decimal { .. }) => None,
             (&Value::String(_), &Schema::String) => None,
-            (&Value::String(_), &Schema::Uuid) => None,
+            (&Value::String(_), &Schema::Uuid(UuidSchema::String)) => None,
             (&Value::Fixed(n, _), &Schema::Fixed(FixedSchema { size, .. })) => {
                 if n != size {
                     Some(format!(
@@ -473,6 +474,15 @@ impl Value {
                 if n != 12 {
                     Some(format!(
                         "The value's size ('{n}') must be exactly 12 to be a Duration"
+                    ))
+                } else {
+                    None
+                }
+            }
+            (&Value::Fixed(n, _), &Schema::Uuid(UuidSchema::Fixed(_))) => {
+                if n != 16 {
+                    Some(format!(
+                        "The value's size ('{n}') must be exactly 16 to be a UUID"
                     ))
                 } else {
                     None
@@ -706,7 +716,7 @@ impl Value {
             Schema::LocalTimestampMicros => self.resolve_local_timestamp_micros(),
             Schema::LocalTimestampNanos => self.resolve_local_timestamp_nanos(),
             Schema::Duration => self.resolve_duration(),
-            Schema::Uuid => self.resolve_uuid(),
+            Schema::Uuid(_) => self.resolve_uuid(),
         }
     }
 
@@ -715,6 +725,9 @@ impl Value {
             uuid @ Value::Uuid(_) => uuid,
             Value::String(ref string) => {
                 Value::Uuid(Uuid::from_str(string).map_err(Details::ConvertStrToUuid)?)
+            }
+            Value::Fixed(16, ref bytes) => {
+                Value::Uuid(Uuid::from_slice(bytes).unwrap_or_else(|_| unreachable!()))
             }
             other => return Err(Details::GetUuid(other).into()),
         })
@@ -1871,7 +1884,7 @@ Field with name '"b"' is not a member of the map items"#,
     #[test]
     fn resolve_uuid() -> TestResult {
         let value = Value::Uuid(Uuid::parse_str("1481531d-ccc9-46d9-a56f-5b67459c0537")?);
-        assert!(value.clone().resolve(&Schema::Uuid).is_ok());
+        assert!(value.clone().resolve(&Schema::Uuid(UuidSchema::String)).is_ok());
         assert!(value.resolve(&Schema::TimestampMicros).is_err());
 
         Ok(())

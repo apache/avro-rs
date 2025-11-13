@@ -529,6 +529,7 @@ mod tests {
     };
     use apache_avro_test_helper::TestResult;
     use rstest::*;
+    use crate::schema::UuidSchema;
 
     fn int_array_schema() -> Schema {
         Schema::parse_str(r#"{"type":"array", "items":"int"}"#).unwrap()
@@ -1017,8 +1018,9 @@ mod tests {
             (Schema::String, Schema::Bytes),
             (Schema::Bytes, Schema::String),
             // logical types
-            (Schema::Uuid, Schema::Uuid),
-            (Schema::Uuid, Schema::String),
+            // TODO: Add UuidSchema::Fixed
+            (Schema::Uuid(UuidSchema::String), Schema::Uuid(UuidSchema::String)),
+            (Schema::Uuid(UuidSchema::String), Schema::String),
             (Schema::Date, Schema::Int),
             (Schema::TimeMillis, Schema::Int),
             (Schema::TimeMicros, Schema::Long),
@@ -1028,7 +1030,7 @@ mod tests {
             (Schema::LocalTimestampMillis, Schema::Long),
             (Schema::LocalTimestampMicros, Schema::Long),
             (Schema::LocalTimestampNanos, Schema::Long),
-            (Schema::String, Schema::Uuid),
+            (Schema::String, Schema::Uuid(UuidSchema::String)),
             (Schema::Int, Schema::Date),
             (Schema::Int, Schema::TimeMillis),
             (Schema::Long, Schema::TimeMicros),

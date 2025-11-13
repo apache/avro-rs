@@ -20,6 +20,7 @@
 use crate::{AvroResult, Error, error::Details, schema::Documentation};
 use serde_json::{Map, Value};
 use std::{io::Write, sync::OnceLock};
+use oval::Buffer;
 
 /// Maximum number of bytes that can be allocated when decoding
 /// Avro-encoded values. This is a protection against ill-formed
@@ -76,10 +77,41 @@ pub(crate) fn zig_i32<W: Write>(n: i32, buffer: W) -> AvroResult<usize> {
 }
 
 pub(crate) fn zig_i64<W: Write>(n: i64, writer: W) -> AvroResult<usize> {
-    encode_variable(((n << 1) ^ (n >> 63)) as u64, writer)
+    encode_variable(n, writer)
 }
 
-fn encode_variable<W: Write>(mut z: u64, mut writer: W) -> AvroResult<usize> {
+/// Zigzag encode an integer.
+///
+/// Will only consume the buffer if the entire number could be written. This needs at most 10 bytes.
+///
+/// # Returns
+/// If there was not enough room for the number in the buffer it will return `None`, otherwise
+/// `Some` is returned.
+pub(crate) fn encode_variable_buffer(n: impl Into<i64>, buffer: &mut Buffer) -> Option<()> {
+    let n = n.into().to_le() as u64;
+    let mut z = (n << 1) ^ (n >> 63);
+    let mut i: usize = 0;
+    loop {
+        // Get a mutable reference to location i, returning if that is past the buffer
+        let mut buffer_i = buffer.space().get_mut(i)?;
+        if z <= 0x7F {
+            *buffer_i = (z & 0x7F) as u8;
+            i += 1;
+            break;
+        } else {
+            *buffer_i = (0x80 | (z & 0x7F)) as u8;
+            i += 1;
+            z >>= 7;
+        }
+    }
+    // Only consume the buffer if the whole number has been written
+    buffer.consume(i);
+    Some(())
+}
+
+fn encode_variable<W: Write>(n: i64, mut writer: W) -> AvroResult<usize> {
+    let n = n.to_le() as u64;
+    let mut z = (n << 1) ^ (n >> 63);
     let mut buffer = [0u8; 10];
     let mut i: usize = 0;
     loop {

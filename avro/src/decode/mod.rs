@@ -450,7 +450,7 @@ pub fn value_from_tape_internal(
             }
             .into()),
         },
-        Schema::Uuid => match tape.next().ok_or(ValueFromTapeError::UnexpectedEndOfTape)? {
+        Schema::Uuid(_) => match tape.next().ok_or(ValueFromTapeError::UnexpectedEndOfTape)? {
             ItemRead::String(string) => Uuid::from_str(&string)
                 .map(Value::Uuid)
                 .map_err(|e| Details::ConvertStrToUuid(e).into()),
@@ -605,6 +605,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use std::collections::HashMap;
     use uuid::Uuid;
+    use crate::schema::UuidSchema;
 
     #[test]
     fn test_decode_array_without_size() -> TestResult {
@@ -1116,7 +1117,7 @@ mod tests {
         let mut buffer = Vec::new();
         encode(&value, &schema, &mut buffer).expect(&success(&value, &schema));
 
-        let result = from_avro_datum(&Schema::Uuid, &mut &buffer[..], None)?;
+        let result = from_avro_datum(&Schema::Uuid(UuidSchema::String), &mut &buffer[..], None)?;
         assert_eq!(result, value);
 
         Ok(())

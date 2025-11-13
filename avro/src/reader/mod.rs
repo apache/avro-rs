@@ -14,9 +14,6 @@ use serde::de::DeserializeOwned;
 use std::{io::Read, marker::PhantomData};
 pub use sync::*;
 
-// This is for API compatibility with previous versions
-pub use sync::*;
-
 /// Reads the marker bytes from Avro bytes generated earlier by a [`Writer`].
 ///
 /// [`Writer`]: crate::Writer

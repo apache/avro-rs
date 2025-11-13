@@ -27,6 +27,7 @@ use crate::{
 use bigdecimal::BigDecimal;
 use serde::{Serialize, ser};
 use std::{borrow::Cow, io::Write, str::FromStr};
+use crate::schema::UuidSchema;
 
 const COLLECTION_SERIALIZER_ITEM_LIMIT: usize = 1024;
 const COLLECTION_SERIALIZER_DEFAULT_INIT_ITEM_CAPACITY: usize = 32;
@@ -885,7 +886,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         };
 
         match schema {
-            Schema::String | Schema::Bytes | Schema::Uuid => self.write_bytes(value.as_bytes()),
+            Schema::String | Schema::Bytes | Schema::Uuid(UuidSchema::String) => self.write_bytes(value.as_bytes()),
             Schema::BigDecimal => {
                 // If we get a string for a `BigDecimal` type, expect a display string representation, such as "12.75"
                 let decimal_val =
@@ -893,7 +894,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 let decimal_bytes = big_decimal_as_bytes(&decimal_val)?;
                 self.write_bytes(decimal_bytes.as_slice())
             }
-            Schema::Fixed(fixed_schema) => {
+            Schema::Uuid(UuidSchema::Fixed(fixed_schema)) | Schema::Fixed(fixed_schema) => {
                 if value.len() == fixed_schema.size {
                     self.writer
                         .write(value.as_bytes())
@@ -915,7 +916,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     match variant_schema {
                         Schema::String
                         | Schema::Bytes
-                        | Schema::Uuid
+                        | Schema::Uuid(_)
                         | Schema::Fixed(_)
                         | Schema::Ref { name: _ } => {
                             encode_int(i as i32, &mut *self.writer)?;
@@ -954,10 +955,10 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         };
 
         match schema {
-            Schema::String | Schema::Bytes | Schema::Uuid | Schema::BigDecimal => {
+            Schema::String | Schema::Bytes | Schema::Uuid(UuidSchema::String) | Schema::BigDecimal => {
                 self.write_bytes(value)
             }
-            Schema::Fixed(fixed_schema) => {
+            Schema::Uuid(UuidSchema::Fixed(fixed_schema)) | Schema::Fixed(fixed_schema) => {
                 if value.len() == fixed_schema.size {
                     self.writer
                         .write(value)
@@ -1017,7 +1018,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     match variant_schema {
                         Schema::String
                         | Schema::Bytes
-                        | Schema::Uuid
+                        | Schema::Uuid(_)
                         | Schema::BigDecimal
                         | Schema::Fixed(_)
                         | Schema::Duration

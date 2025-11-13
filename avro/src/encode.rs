@@ -28,6 +28,7 @@ use crate::{
 };
 use log::error;
 use std::{borrow::Borrow, collections::HashMap, io::Write};
+use crate::schema::UuidSchema;
 
 /// Encode a `Value` into avro format.
 ///
@@ -39,6 +40,9 @@ pub fn encode<W: Write>(value: &Value, schema: &Schema, writer: &mut W) -> AvroR
     encode_internal(value, schema, rs.get_names(), &None, writer)
 }
 
+/// Encode `s` as the _bytes_ primitive type.
+///
+/// This writes the length as the _long_ primitive and then the bytes.
 pub(crate) fn encode_bytes<B: AsRef<[u8]> + ?Sized, W: Write>(
     s: &B,
     mut writer: W,
@@ -133,13 +137,13 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                 .map_err(|e| Details::WriteBytes(e).into())
         }
         Value::Uuid(uuid) => match *schema {
-            Schema::Uuid | Schema::String => encode_bytes(
+            Schema::Uuid(UuidSchema::String) | Schema::String => encode_bytes(
                 // we need the call .to_string() to properly convert ASCII to UTF-8
                 #[allow(clippy::unnecessary_to_owned)]
                 &uuid.to_string(),
                 writer,
             ),
-            Schema::Fixed(FixedSchema { size, .. }) => {
+            Schema::Uuid(UuidSchema::Fixed(FixedSchema { size, .. })) | Schema::Fixed(FixedSchema { size, .. }) => {
                 if size != 16 {
                     return Err(Details::ConvertFixedToUuid(size).into());
                 }
@@ -171,7 +175,7 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
             .into()),
         },
         Value::String(s) => match *schema {
-            Schema::String | Schema::Uuid => encode_bytes(s, writer),
+            Schema::String | Schema::Uuid(UuidSchema::String) => encode_bytes(s, writer),
             Schema::Enum(EnumSchema { ref symbols, .. }) => {
                 if let Some(index) = symbols.iter().position(|item| item == s) {
                     encode_int(index as i32, writer)
@@ -934,7 +938,7 @@ pub(crate) mod tests {
     #[test]
     fn test_avro_3585_encode_uuids() {
         let value = Value::String(String::from("00000000-0000-0000-0000-000000000000"));
-        let schema = Schema::Uuid;
+        let schema = Schema::Uuid(UuidSchema::String);
         let mut buffer = Vec::new();
         let encoded = encode(&value, &schema, &mut buffer);
         assert!(encoded.is_ok());

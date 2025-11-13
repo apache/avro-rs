@@ -2,7 +2,7 @@ use oval::Buffer;
 
 use crate::{
     Error,
-    decode::{
+    encode2::{
         CommandTape, ItemRead, StateMachine, StateMachineControlFlow, datum::DatumStateMachine,
         decode_zigzag_buffer,
     },
@@ -25,6 +25,7 @@ pub struct BlockStateMachine {
 impl BlockStateMachine {
     pub fn new_with_tape(command_tape: CommandTape, tape: Vec<ItemRead>) -> Self {
         Self {
+            // This clone is *cheap*
             command_tape,
             tape_or_fsm: TapeOrFsm::Tape(tape),
             left_in_current_block: 0,

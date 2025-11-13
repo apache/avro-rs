@@ -24,6 +24,7 @@ use crate::{
 };
 use log::{debug, error};
 use std::{fmt::Debug, sync::OnceLock};
+use crate::schema::UuidSchema;
 
 /// A trait that compares two schemata for equality.
 /// To register a custom one use [set_schemata_equality_comparator].
@@ -79,7 +80,6 @@ impl SchemataEq for StructFieldEq {
         compare_primitive!(Double);
         compare_primitive!(Bytes);
         compare_primitive!(String);
-        compare_primitive!(Uuid);
         compare_primitive!(BigDecimal);
         compare_primitive!(Date);
         compare_primitive!(Duration);
@@ -97,6 +97,8 @@ impl SchemataEq for StructFieldEq {
         {
             return false;
         }
+
+        // TODO: These nested if-let statements can be improved with match
 
         if let Schema::Record(RecordSchema {
             fields: fields_one, ..
@@ -122,6 +124,20 @@ impl SchemataEq for StructFieldEq {
             }) = schema_two
             {
                 return symbols_one == symbols_two;
+            }
+            return false;
+        }
+
+        if let Schema::Uuid(UuidSchema::String) = schema_one {
+            if let Schema::Uuid(UuidSchema::String) = schema_two {
+                return true;
+            }
+            return false;
+        }
+
+        if let Schema::Uuid(UuidSchema::Fixed(FixedSchema { size: size_one, .. })) = schema_one {
+            if let Schema::Uuid(UuidSchema::Fixed(FixedSchema { size: size_two, .. })) = schema_two {
+                return size_one == size_two;
             }
             return false;
         }
@@ -283,7 +299,6 @@ mod tests {
     test_primitives!(Double);
     test_primitives!(Bytes);
     test_primitives!(String);
-    test_primitives!(Uuid);
     test_primitives!(BigDecimal);
     test_primitives!(Date);
     test_primitives!(Duration);
@@ -446,6 +461,61 @@ mod tests {
         assert!(
             struct_field_eq_res,
             "StructFieldEq: Equality of two Schema::Fixed failed!"
+        );
+        assert_eq!(specification_eq_res, struct_field_eq_res);
+    }
+
+    #[test]
+    fn test_avro_3939_compare_uuid_schemata() {
+        let schema_one = Schema::Uuid(UuidSchema::Fixed(FixedSchema {
+            name: Name::from("fixed"),
+            doc: None,
+            size: 16,
+            default: None,
+            aliases: None,
+            attributes: BTreeMap::new(),
+        }));
+        assert!(!SPECIFICATION_EQ.compare(&schema_one, &Schema::Boolean));
+        assert!(!STRUCT_FIELD_EQ.compare(&schema_one, &Schema::Boolean));
+
+        let schema_two = Schema::Fixed(FixedSchema {
+            name: Name::from("fixed"),
+            doc: None,
+            size: 16,
+            default: None,
+            aliases: None,
+            attributes: BTreeMap::new(),
+        });
+
+        let specification_eq_res = SPECIFICATION_EQ.compare(&schema_one, &schema_two);
+        let struct_field_eq_res = STRUCT_FIELD_EQ.compare(&schema_one, &schema_two);
+        assert!(
+            specification_eq_res,
+            "SpecificationEq: Equality of two Schema::Uuid(Fixed) failed!"
+        );
+        assert!(
+            struct_field_eq_res,
+            "StructFieldEq: Equality of two Schema::Uuid(Fixed) failed!"
+        );
+        assert_eq!(specification_eq_res, struct_field_eq_res);
+
+        let schema_three = Schema::Uuid(UuidSchema::String);
+        assert!(!SPECIFICATION_EQ.compare(&schema_three, &Schema::Boolean));
+        assert!(!STRUCT_FIELD_EQ.compare(&schema_three, &Schema::Boolean));
+        assert!(!SPECIFICATION_EQ.compare(&schema_three, &schema_one));
+        assert!(!STRUCT_FIELD_EQ.compare(&schema_three, &schema_one));
+
+        let schema_four = Schema::Uuid(UuidSchema::String);
+
+        let specification_eq_res = SPECIFICATION_EQ.compare(&schema_three, &schema_four);
+        let struct_field_eq_res = STRUCT_FIELD_EQ.compare(&schema_three, &schema_four);
+        assert!(
+            specification_eq_res,
+            "SpecificationEq: Equality of two Schema::Uuid(String) failed!"
+        );
+        assert!(
+            struct_field_eq_res,
+            "StructFieldEq: Equality of two Schema::Uuid(String) failed!"
         );
         assert_eq!(specification_eq_res, struct_field_eq_res);
     }

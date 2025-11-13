@@ -965,6 +965,7 @@ pub mod types;
 pub mod util;
 pub mod validator;
 pub mod writer;
+pub mod decode2;
 
 pub use crate::{
     bigdecimal::BigDecimal,

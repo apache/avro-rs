@@ -1,6 +1,6 @@
 use crate::{
     Error, Schema,
-    decode::{
+    encode2::{
         ItemRead, SubStateMachine, block::BlockStateMachine, bytes::BytesStateMachine,
         datum::DatumStateMachine, union::UnionStateMachine,
     },
@@ -385,7 +385,7 @@ impl<'a> CommandTapeBuilder<'a> {
                 self.tape.push(CommandTape::BYTES);
                 Ok(1)
             }
-            Schema::String | Schema::Uuid(_) => {
+            Schema::String | Schema::Uuid => {
                 self.tape.push(CommandTape::STRING);
                 Ok(1)
             }
@@ -512,7 +512,6 @@ impl<'a> CommandTapeBuilder<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::schema::UuidSchema;
     use super::*;
 
     #[test]
@@ -637,7 +636,7 @@ mod tests {
             &[CommandTape::STRING]
         );
         assert_eq!(
-            CommandTape::build_from_schema(&Schema::Uuid(UuidSchema::String), &HashMap::new())
+            CommandTape::build_from_schema(&Schema::Uuid, &HashMap::new())
                 .unwrap()
                 .inner
                 .as_ref(),

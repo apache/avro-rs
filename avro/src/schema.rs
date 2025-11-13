@@ -110,8 +110,8 @@ pub enum Schema {
     /// Logical type which represents `Decimal` values without predefined scale.
     /// The underlying type is serialized and deserialized as `Schema::Bytes`
     BigDecimal,
-    /// A universally unique identifier, annotating a string.
-    Uuid,
+    /// A universally unique identifier.
+    Uuid(UuidSchema),
     /// Logical type which represents the number of days since the unix epoch.
     /// Serialization format is `Schema::Int`.
     Date,
@@ -566,6 +566,7 @@ pub(crate) fn resolve_names(
     enclosing_namespace: &Namespace,
 ) -> AvroResult<()> {
     match schema {
+        // TODO: Shouldn't Fixed (and thus Uuid/Decimal) also be in here?
         Schema::Array(schema) => resolve_names(&schema.items, names, enclosing_namespace),
         Schema::Map(schema) => resolve_names(&schema.types, names, enclosing_namespace),
         Schema::Union(UnionSchema { schemas, .. }) => {
@@ -612,7 +613,7 @@ pub(crate) fn resolve_names(
 }
 
 pub(crate) fn resolve_names_with_schemata(
-    schemata: &Vec<&Schema>,
+    schemata: &[&Schema],
     names: &mut Names,
     enclosing_namespace: &Namespace,
 ) -> AvroResult<()> {
@@ -883,7 +884,7 @@ impl FixedSchema {
     }
 }
 
-/// A description of a Union schema.
+/// A description of a Decimal schema.
 ///
 /// `scale` defaults to 0 and is an integer greater than or equal to 0 and `precision` is an
 /// integer greater than 0.
@@ -993,6 +994,17 @@ impl PartialEq for UnionSchema {
     fn eq(&self, other: &UnionSchema) -> bool {
         self.schemas.eq(&other.schemas)
     }
+}
+
+/// The schema of the UUID.
+#[derive(Debug, Clone)]
+pub enum UuidSchema {
+    /// The UUID is embedded as a human-readable string.
+    String,
+    /// The UUID is in the 16-byte binary form.
+    Fixed(FixedSchema),
+    // TODO: I think avro-rs also supports a Bytes variant, but not sure
+    // TODO: Add tests for Fixed
 }
 
 type DecimalMetadata = usize;
@@ -1571,8 +1583,8 @@ impl Parser {
                         parse_as_native_complex(complex, self, enclosing_namespace)?,
                         &[SchemaKind::String, SchemaKind::Fixed],
                         |schema| match schema {
-                            Schema::String => Ok(Schema::Uuid),
-                            Schema::Fixed(FixedSchema { size: 16, .. }) => Ok(Schema::Uuid),
+                            Schema::String => Ok(Schema::Uuid(UuidSchema::String)),
+                            Schema::Fixed(fixed @ FixedSchema { size: 16, .. }) => Ok(Schema::Uuid(UuidSchema::Fixed(fixed))),
                             Schema::Fixed(FixedSchema { size, .. }) => {
                                 warn!(
                                     "Ignoring uuid logical type for a Fixed schema because its size ({size:?}) is not 16! Schema: {schema:?}"
@@ -2199,8 +2211,16 @@ impl Serialize for Schema {
                 map.serialize_entry("logicalType", "big-decimal")?;
                 map.end()
             }
-            Schema::Uuid => {
+            Schema::Uuid(ref uuid_schema) => {
                 let mut map = serializer.serialize_map(None)?;
+                match uuid_schema {
+                    UuidSchema::String => {
+                        map.serialize_entry("type", "string")?;
+                    }
+                    UuidSchema::Fixed(fixed_schema) => {
+                        map = fixed_schema.serialize_to_map::<S>(map)?;
+                    }
+                }
                 map.serialize_entry("type", "string")?;
                 map.serialize_entry("logicalType", "uuid")?;
                 map.end()
@@ -2539,7 +2559,8 @@ pub mod derive {
     impl_schema!(f32, Schema::Float);
     impl_schema!(f64, Schema::Double);
     impl_schema!(String, Schema::String);
-    impl_schema!(uuid::Uuid, Schema::Uuid);
+    // TODO: Maybe change to UuidSchema::Fixed
+    impl_schema!(uuid::Uuid, Schema::Uuid(UuidSchema::String));
     impl_schema!(core::time::Duration, Schema::Duration);
 
     impl<T> AvroSchemaComponent for Vec<T>
@@ -6698,7 +6719,7 @@ mod tests {
           "logicalType": "uuid"
         });
         let parse_result = Schema::parse(&schema)?;
-        assert_eq!(parse_result, Schema::Uuid);
+        assert_eq!(parse_result, Schema::Uuid(UuidSchema::String));
 
         Ok(())
     }
@@ -6713,7 +6734,7 @@ mod tests {
             "logicalType": "uuid"
         });
         let parse_result = Schema::parse(&schema)?;
-        assert_eq!(parse_result, Schema::Uuid);
+        assert!(matches!(parse_result, Schema::Uuid(UuidSchema::Fixed(_))));
         assert_not_logged(
             r#"Ignoring uuid logical type for a Fixed schema because its size (6) is not 16! Schema: Fixed(FixedSchema { name: Name { name: "FixedUUID", namespace: None }, aliases: None, doc: None, size: 6, attributes: {"logicalType": String("uuid")} })"#,
         );
