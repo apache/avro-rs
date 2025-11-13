@@ -947,23 +947,25 @@ mod bytes;
 mod codec;
 mod de;
 mod decimal;
-mod decode;
 mod duration;
 mod encode;
-mod reader;
 mod ser;
 mod ser_schema;
-mod writer;
 
+pub mod decode;
+pub mod encode2;
 pub mod error;
 pub mod headers;
 pub mod rabin;
+pub mod reader;
 pub mod schema;
 pub mod schema_compatibility;
 pub mod schema_equality;
 pub mod types;
 pub mod util;
 pub mod validator;
+pub mod writer;
+pub mod decode2;
 
 pub use crate::{
     bigdecimal::BigDecimal,
@@ -1036,6 +1038,12 @@ pub fn max_allocation_bytes(num_bytes: usize) -> usize {
 )]
 pub fn set_serde_human_readable(human_readable: bool) -> bool {
     util::set_serde_human_readable(human_readable)
+}
+
+/// Async versions of the types and functions.
+pub mod not_sync {
+    #[doc(inline)]
+    pub use crate::reader::asynch::*;
 }
 
 #[cfg(test)]

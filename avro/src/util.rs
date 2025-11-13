@@ -17,12 +17,10 @@
 
 //! Utility functions, like configuring various global settings.
 
-use crate::{AvroResult, error::Details, schema::Documentation};
+use crate::{AvroResult, Error, error::Details, schema::Documentation};
 use serde_json::{Map, Value};
-use std::{
-    io::{Read, Write},
-    sync::OnceLock,
-};
+use std::{io::Write, sync::OnceLock};
+use oval::Buffer;
 
 /// Maximum number of bytes that can be allocated when decoding
 /// Avro-encoded values. This is a protection against ill-formed
@@ -74,33 +72,46 @@ impl MapHelper for Map<String, Value> {
     }
 }
 
-pub(crate) fn read_long<R: Read>(reader: &mut R) -> AvroResult<i64> {
-    zag_i64(reader)
-}
-
 pub(crate) fn zig_i32<W: Write>(n: i32, buffer: W) -> AvroResult<usize> {
     zig_i64(n as i64, buffer)
 }
 
 pub(crate) fn zig_i64<W: Write>(n: i64, writer: W) -> AvroResult<usize> {
-    encode_variable(((n << 1) ^ (n >> 63)) as u64, writer)
+    encode_variable(n, writer)
 }
 
-pub(crate) fn zag_i32<R: Read>(reader: &mut R) -> AvroResult<i32> {
-    let i = zag_i64(reader)?;
-    i32::try_from(i).map_err(|e| Details::ZagI32(e, i).into())
+/// Zigzag encode an integer.
+///
+/// Will only consume the buffer if the entire number could be written. This needs at most 10 bytes.
+///
+/// # Returns
+/// If there was not enough room for the number in the buffer it will return `None`, otherwise
+/// `Some` is returned.
+pub(crate) fn encode_variable_buffer(n: impl Into<i64>, buffer: &mut Buffer) -> Option<()> {
+    let n = n.into().to_le() as u64;
+    let mut z = (n << 1) ^ (n >> 63);
+    let mut i: usize = 0;
+    loop {
+        // Get a mutable reference to location i, returning if that is past the buffer
+        let mut buffer_i = buffer.space().get_mut(i)?;
+        if z <= 0x7F {
+            *buffer_i = (z & 0x7F) as u8;
+            i += 1;
+            break;
+        } else {
+            *buffer_i = (0x80 | (z & 0x7F)) as u8;
+            i += 1;
+            z >>= 7;
+        }
+    }
+    // Only consume the buffer if the whole number has been written
+    buffer.consume(i);
+    Some(())
 }
 
-pub(crate) fn zag_i64<R: Read>(reader: &mut R) -> AvroResult<i64> {
-    let z = decode_variable(reader)?;
-    Ok(if z & 0x1 == 0 {
-        (z >> 1) as i64
-    } else {
-        !(z >> 1) as i64
-    })
-}
-
-fn encode_variable<W: Write>(mut z: u64, mut writer: W) -> AvroResult<usize> {
+fn encode_variable<W: Write>(n: i64, mut writer: W) -> AvroResult<usize> {
+    let n = n.to_le() as u64;
+    let mut z = (n << 1) ^ (n >> 63);
     let mut buffer = [0u8; 10];
     let mut i: usize = 0;
     loop {
@@ -119,28 +130,66 @@ fn encode_variable<W: Write>(mut z: u64, mut writer: W) -> AvroResult<usize> {
         .map_err(|e| Details::WriteBytes(e).into())
 }
 
-fn decode_variable<R: Read>(reader: &mut R) -> AvroResult<u64> {
-    let mut i = 0u64;
-    let mut buf = [0u8; 1];
+/// Decode a zigzag encoded length.
+///
+/// This version of [`decode_len`] will return a [`Details::ReadVariableIntegerBytes`] error if there are not
+/// enough bytes and does not return the amount of bytes read.
+///
+/// See [`decode_len`] for more details.
+pub(crate) fn decode_len_simple(buffer: &[u8]) -> AvroResult<(usize, usize)> {
+    decode_len(buffer)?.ok_or_else(|| {
+        Details::ReadVariableIntegerBytes(std::io::ErrorKind::UnexpectedEof.into()).into()
+    })
+}
 
-    let mut j = 0;
-    loop {
-        if j > 9 {
-            // if j * 7 > 64
-            return Err(Details::IntegerOverflow.into());
-        }
-        reader
-            .read_exact(&mut buf[..])
-            .map_err(Details::ReadVariableIntegerBytes)?;
-        i |= (u64::from(buf[0] & 0x7F)) << (j * 7);
-        if (buf[0] >> 7) == 0 {
+/// Decode a zigzag encoded length.
+///
+/// This will use [`safe_len`] to check if the length is in allowed bounds.
+///
+/// # Returns
+/// `Some(integer, bytes read)` if it completely read an integer, `None` if it did not have enough
+/// bytes in the slice.
+pub(crate) fn decode_len(buffer: &[u8]) -> AvroResult<Option<(usize, usize)>> {
+    if let Some((integer, bytes)) = decode_variable(buffer)? {
+        let length =
+            usize::try_from(integer).map_err(|e| Details::ConvertI64ToUsize(e, integer))?;
+        let safe = safe_len(length)?;
+        Ok(Some((safe, bytes)))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Decode a zigzag encoded integer.
+///
+/// # Returns
+/// `Some(integer, bytes read)` if it completely read an integer, `None` if it did not have enough
+/// bytes in the slice.
+pub(crate) fn decode_variable(buffer: &[u8]) -> Result<Option<(i64, usize)>, Error> {
+    let mut decoded = 0;
+    let mut loops_done = 0;
+    let mut last_byte = 0;
+
+    for (counter, &byte) in buffer.iter().take(10).enumerate() {
+        decoded |= u64::from(byte & 0x7F) << (counter * 7);
+        loops_done = counter;
+        last_byte = byte;
+        if byte >> 7 == 0 {
             break;
-        } else {
-            j += 1;
         }
     }
 
-    Ok(i)
+    if last_byte >> 7 != 0 {
+        if loops_done == 10 {
+            Err(Details::IntegerOverflow.into())
+        } else {
+            Ok(None)
+        }
+    } else if decoded & 0x1 == 0 {
+        Ok(Some(((decoded >> 1) as i64, loops_done + 1)))
+    } else {
+        Ok(Some((!(decoded >> 1) as i64, loops_done + 1)))
+    }
 }
 
 /// Set the maximum number of bytes that can be allocated when decoding data.
@@ -282,8 +331,8 @@ mod tests {
 
     #[test]
     fn test_overflow() {
-        let causes_left_shift_overflow: &[u8] = &[0xe1, 0xe1, 0xe1, 0xe1, 0xe1];
-        assert!(decode_variable(&mut &*causes_left_shift_overflow).is_err());
+        let not_enough_bytes: &[u8] = &[0xe1, 0xe1, 0xe1, 0xe1, 0xe1];
+        assert!(decode_variable(not_enough_bytes).unwrap().is_none());
     }
 
     #[test]

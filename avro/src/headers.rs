@@ -110,6 +110,20 @@ impl HeaderBuilder for GlueSchemaUuidHeader {
     }
 }
 
+/// No header is used in the file
+///
+/// This is useful if you want to use `from_avro_datum` without resolving the
+/// schema every call, instead you can use this with [`GenericSingleObjectReader::new_with_header_builder`].
+///
+/// [`GenericSingleObjectReader::new_with_header_builder`]: crate::reader::GenericSingleObjectReader::new_with_header_builder
+pub struct NoHeader;
+
+impl HeaderBuilder for NoHeader {
+    fn build_header(&self) -> Vec<u8> {
+        Vec::new()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
