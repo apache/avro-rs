@@ -53,7 +53,7 @@ harness = false
 name = "single"
 
 [dependencies]
-apache-avro-derive = { default-features = false, version = "0.20.0", path = "../avro_derive", optional = true }
+apache-avro-derive = { default-features = false, version = "0.21.0", path = "../avro_derive", optional = true }
 bigdecimal = { default-features = false, version = "0.4.9", features = ["std", "serde"] }
 bon = { default-features = false, version = "3.8.1" }
 bzip2 = { version = "0.6.1", optional = true }
@@ -83,7 +83,7 @@ rand = { default-features = false, version = "0.9.2", features = ["default"] }
 
 [dev-dependencies]
 anyhow = { default-features = false, version = "1.0.100", features = ["std"] }
-apache-avro-test-helper = { default-features = false, version = "0.20.0", path = "../avro_test_helper" }
+apache-avro-test-helper = { default-features = false, version = "0.21.0", path = "../avro_test_helper" }
 criterion = { default-features = false, version = "0.7.0" }
 hex-literal = { default-features = false, version = "1.0.0" }
 md-5 = { default-features = false, version = "0.10.6" }
