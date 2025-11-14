@@ -18,6 +18,7 @@
 //! Logic for serde-compatible schema-aware serialization
 //! which writes directly to a `Write` stream
 
+use crate::schema::InnerDecimalSchema;
 use crate::{
     bigdecimal::big_decimal_as_bytes,
     encode::{encode_int, encode_long},
@@ -1151,31 +1152,31 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     )))
                 }
             }
-            Schema::Decimal(decimal_schema) => match decimal_schema.inner.as_ref() {
-                Schema::Bytes => self.write_bytes(value),
-                Schema::Fixed(fixed_schema) => match fixed_schema.size.checked_sub(value.len()) {
-                    Some(pad) => {
-                        let pad_val = match value.len() {
-                            0 => 0,
-                            _ => value[0],
-                        };
-                        let padding = vec![pad_val; pad];
-                        self.writer
-                            .write(padding.as_slice())
-                            .map_err(Details::WriteBytes)?;
-                        self.writer
-                            .write(value)
-                            .map_err(|e| Details::WriteBytes(e).into())
+            Schema::Decimal(decimal_schema) => match &decimal_schema.inner {
+                InnerDecimalSchema::Bytes => self.write_bytes(value),
+                InnerDecimalSchema::Fixed(fixed_schema) => {
+                    match fixed_schema.size.checked_sub(value.len()) {
+                        Some(pad) => {
+                            let pad_val = match value.len() {
+                                0 => 0,
+                                _ => value[0],
+                            };
+                            let padding = vec![pad_val; pad];
+                            let mut bytes_written = self
+                                .writer
+                                .write(padding.as_slice())
+                                .map_err(Details::WriteBytes)?;
+                            bytes_written +=
+                                self.writer.write(value).map_err(Details::WriteBytes)?;
+                            Ok(bytes_written)
+                        }
+                        None => Err(Details::CompareFixedSizes {
+                            size: fixed_schema.size,
+                            n: value.len(),
+                        }
+                        .into()),
                     }
-                    None => Err(Details::CompareFixedSizes {
-                        size: fixed_schema.size,
-                        n: value.len(),
-                    }
-                    .into()),
-                },
-                unsupported => Err(create_error(format!(
-                    "Decimal schema's inner should be Bytes or Fixed schema. Got: {unsupported}"
-                ))),
+                }
             },
             Schema::Ref { name } => {
                 let ref_schema = self.get_ref_schema(name)?;

@@ -881,6 +881,23 @@ impl FixedSchema {
 
         Ok(map)
     }
+
+    /// Create a new `FixedSchema` copying only the size.
+    ///
+    /// All other fields are `None` or empty.
+    pub(crate) fn copy_only_size(&self) -> Self {
+        Self {
+            name: Name {
+                name: String::new(),
+                namespace: None,
+            },
+            aliases: None,
+            doc: None,
+            size: self.size,
+            default: None,
+            attributes: Default::default(),
+        }
+    }
 }
 
 /// A description of a Decimal schema.
@@ -894,7 +911,26 @@ pub struct DecimalSchema {
     /// The number of digits to the right of the decimal point
     pub scale: DecimalMetadata,
     /// The inner schema of the decimal (fixed or bytes)
-    pub inner: Box<Schema>,
+    pub inner: InnerDecimalSchema,
+}
+
+/// The inner schema of the Decimal type.
+#[derive(Debug, Clone)]
+pub enum InnerDecimalSchema {
+    Bytes,
+    Fixed(FixedSchema),
+}
+
+impl TryFrom<Schema> for InnerDecimalSchema {
+    type Error = Error;
+
+    fn try_from(value: Schema) -> Result<Self, Self::Error> {
+        match value {
+            Schema::Bytes => Ok(InnerDecimalSchema::Bytes),
+            Schema::Fixed(fixed) => Ok(InnerDecimalSchema::Fixed(fixed)),
+            _ => Err(Details::ResolveDecimalSchema(value.into()).into()),
+        }
+    }
 }
 
 /// A description of a Union schema
@@ -1547,7 +1583,7 @@ impl Parser {
                                 Ok((precision, scale)) => Ok(Schema::Decimal(DecimalSchema {
                                     precision,
                                     scale,
-                                    inner: Box::new(inner),
+                                    inner: inner.try_into().unwrap_or_else(|_| unreachable!()),
                                 })),
                                 Err(err) => {
                                     warn!("Ignoring invalid decimal logical type: {err}");
@@ -2173,18 +2209,12 @@ impl Serialize for Schema {
                 ref inner,
             }) => {
                 let mut map = serializer.serialize_map(None)?;
-                match inner.as_ref() {
-                    Schema::Fixed(fixed_schema) => {
+                match inner {
+                    InnerDecimalSchema::Fixed(fixed_schema) => {
                         map = fixed_schema.serialize_to_map::<S>(map)?;
                     }
-                    Schema::Bytes => {
+                    InnerDecimalSchema::Bytes => {
                         map.serialize_entry("type", "bytes")?;
-                    }
-                    others => {
-                        return Err(serde::ser::Error::custom(format!(
-                            "DecimalSchema inner type must be Fixed or Bytes, got {:?}",
-                            SchemaKind::from(others)
-                        )));
                     }
                 }
                 map.serialize_entry("logicalType", "decimal")?;
@@ -6883,14 +6913,14 @@ mod tests {
         let schema = Schema::Decimal(DecimalSchema {
             precision: 36,
             scale: 10,
-            inner: Box::new(Schema::Fixed(FixedSchema {
+            inner: InnerDecimalSchema::Fixed(FixedSchema {
                 name: Name::new("decimal_36_10").unwrap(),
                 aliases: None,
                 doc: None,
                 size: 16,
                 default: None,
                 attributes: Default::default(),
-            })),
+            }),
         });
 
         let serialized_json = serde_json::to_string_pretty(&schema)?;
@@ -6914,7 +6944,7 @@ mod tests {
         let schema = Schema::Decimal(DecimalSchema {
             precision: 36,
             scale: 10,
-            inner: Box::new(Schema::Bytes),
+            inner: InnerDecimalSchema::Bytes,
         });
 
         let serialized_json = serde_json::to_string_pretty(&schema)?;
@@ -6927,21 +6957,6 @@ mod tests {
 }"#;
 
         assert_eq!(serialized_json, expected_json);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_avro_3925_serialize_decimal_inner_invalid() -> TestResult {
-        let schema = Schema::Decimal(DecimalSchema {
-            precision: 36,
-            scale: 10,
-            inner: Box::new(Schema::String),
-        });
-
-        let serialized_json = serde_json::to_string_pretty(&schema);
-
-        assert!(serialized_json.is_err());
 
         Ok(())
     }

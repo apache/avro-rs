@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::schema::InnerDecimalSchema;
 use crate::{
     Schema,
     schema::{
@@ -143,7 +144,13 @@ impl SchemataEq for StructFieldEq {
                 Schema::Decimal(DecimalSchema { precision: precision_one, scale: scale_one, inner: inner_one }),
                 Schema::Decimal(DecimalSchema { precision: precision_two, scale: scale_two, inner: inner_two })
             ) => {
-                precision_one == precision_two && scale_one == scale_two && self.compare(inner_one, inner_two)
+                precision_one == precision_two && scale_one == scale_two && match (inner_one, inner_two) {
+                    (InnerDecimalSchema::Bytes, InnerDecimalSchema::Bytes) => true,
+                    (InnerDecimalSchema::Fixed(FixedSchema { size: size_one, .. }), InnerDecimalSchema::Fixed(FixedSchema { size: size_two, ..})) => {
+                        size_one == size_two
+                    }
+                    _ => false,
+                }
             }
             (Schema::Decimal(_), _) => false,
             (
@@ -212,7 +219,7 @@ pub(crate) fn compare_schemata(schema_one: &Schema, schema_two: &Schema) -> bool
 #[allow(non_snake_case)]
 mod tests {
     use super::*;
-    use crate::schema::{Name, RecordFieldOrder};
+    use crate::schema::{InnerDecimalSchema, Name, RecordFieldOrder};
     use apache_avro_test_helper::TestResult;
     use serde_json::Value;
     use std::collections::BTreeMap;
@@ -351,7 +358,7 @@ mod tests {
         let schema_one = Schema::Decimal(DecimalSchema {
             precision: 10,
             scale: 2,
-            inner: Box::new(Schema::Bytes),
+            inner: InnerDecimalSchema::Bytes,
         });
         assert!(!SPECIFICATION_EQ.compare(&schema_one, &Schema::Boolean));
         assert!(!STRUCT_FIELD_EQ.compare(&schema_one, &Schema::Boolean));
@@ -359,7 +366,7 @@ mod tests {
         let schema_two = Schema::Decimal(DecimalSchema {
             precision: 10,
             scale: 2,
-            inner: Box::new(Schema::Bytes),
+            inner: InnerDecimalSchema::Bytes,
         });
 
         let specification_eq_res = SPECIFICATION_EQ.compare(&schema_one, &schema_two);

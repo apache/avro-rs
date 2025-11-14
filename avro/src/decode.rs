@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::schema::InnerDecimalSchema;
 use crate::{
     AvroResult, Error,
     bigdecimal::deserialize_big_decimal,
@@ -101,18 +102,24 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                 }
             }
         }
-        Schema::Decimal(DecimalSchema { ref inner, .. }) => match &**inner {
-            Schema::Fixed { .. } => {
-                match decode_internal(inner, names, enclosing_namespace, reader)? {
+        Schema::Decimal(DecimalSchema { ref inner, .. }) => match inner {
+            InnerDecimalSchema::Fixed(fixed) => {
+                match decode_internal(
+                    &Schema::Fixed(fixed.copy_only_size()),
+                    names,
+                    enclosing_namespace,
+                    reader,
+                )? {
                     Value::Fixed(_, bytes) => Ok(Value::Decimal(Decimal::from(bytes))),
                     value => Err(Details::FixedValue(value).into()),
                 }
             }
-            Schema::Bytes => match decode_internal(inner, names, enclosing_namespace, reader)? {
-                Value::Bytes(bytes) => Ok(Value::Decimal(Decimal::from(bytes))),
-                value => Err(Details::BytesValue(value).into()),
-            },
-            schema => Err(Details::ResolveDecimalSchema(schema.into()).into()),
+            InnerDecimalSchema::Bytes => {
+                match decode_internal(&Schema::Bytes, names, enclosing_namespace, reader)? {
+                    Value::Bytes(bytes) => Ok(Value::Decimal(Decimal::from(bytes))),
+                    value => Err(Details::BytesValue(value).into()),
+                }
+            }
         },
         Schema::BigDecimal => {
             match decode_internal(&Schema::Bytes, names, enclosing_namespace, reader)? {
@@ -321,6 +328,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
 #[cfg(test)]
 #[allow(clippy::expect_fun_call)]
 mod tests {
+    use crate::schema::InnerDecimalSchema;
     use crate::{
         Decimal,
         decode::decode,
@@ -380,14 +388,13 @@ mod tests {
     fn test_negative_decimal_value() -> TestResult {
         use crate::{encode::encode, schema::Name};
         use num_bigint::ToBigInt;
-        let inner = Box::new(Schema::Fixed(
-            FixedSchema::builder()
-                .name(Name::new("decimal")?)
-                .size(2)
-                .build(),
-        ));
         let schema = Schema::Decimal(DecimalSchema {
-            inner,
+            inner: InnerDecimalSchema::Fixed(
+                FixedSchema::builder()
+                    .name(Name::new("decimal")?)
+                    .size(2)
+                    .build(),
+            ),
             precision: 4,
             scale: 2,
         });
@@ -408,16 +415,15 @@ mod tests {
     fn test_decode_decimal_with_bigger_than_necessary_size() -> TestResult {
         use crate::{encode::encode, schema::Name};
         use num_bigint::ToBigInt;
-        let inner = Box::new(Schema::Fixed(FixedSchema {
-            size: 13,
-            name: Name::new("decimal")?,
-            aliases: None,
-            doc: None,
-            default: None,
-            attributes: Default::default(),
-        }));
         let schema = Schema::Decimal(DecimalSchema {
-            inner,
+            inner: InnerDecimalSchema::Fixed(FixedSchema {
+                size: 13,
+                name: Name::new("decimal")?,
+                aliases: None,
+                doc: None,
+                default: None,
+                attributes: Default::default(),
+            }),
             precision: 4,
             scale: 2,
         });

@@ -16,6 +16,7 @@
 // under the License.
 
 //! Logic handling the intermediate representation of Avro values.
+use crate::schema::InnerDecimalSchema;
 use crate::{
     AvroResult, Error,
     bigdecimal::{deserialize_big_decimal, serialize_big_decimal},
@@ -747,19 +748,18 @@ impl Value {
         self,
         precision: Precision,
         scale: Scale,
-        inner: &Schema,
+        inner: &InnerDecimalSchema,
     ) -> Result<Self, Error> {
         if scale > precision {
             return Err(Details::GetScaleAndPrecision { scale, precision }.into());
         }
         match inner {
-            &Schema::Fixed(FixedSchema { size, .. }) => {
+            &InnerDecimalSchema::Fixed(FixedSchema { size, .. }) => {
                 if max_prec_for_len(size)? < precision {
                     return Err(Details::GetScaleWithFixedSize { size, precision }.into());
                 }
             }
-            Schema::Bytes => (),
-            _ => return Err(Details::ResolveDecimalSchema(inner.into()).into()),
+            InnerDecimalSchema::Bytes => (),
         };
         match self {
             Value::Decimal(num) => {
@@ -1716,7 +1716,7 @@ Field with name '"b"' is not a member of the map items"#,
         value.clone().resolve(&Schema::Decimal(DecimalSchema {
             precision: 10,
             scale: 4,
-            inner: Box::new(Schema::Bytes),
+            inner: InnerDecimalSchema::Bytes,
         }))?;
         assert!(value.resolve(&Schema::String).is_err());
 
@@ -1731,7 +1731,7 @@ Field with name '"b"' is not a member of the map items"#,
                 .resolve(&Schema::Decimal(DecimalSchema {
                     precision: 2,
                     scale: 3,
-                    inner: Box::new(Schema::Bytes),
+                    inner: InnerDecimalSchema::Bytes,
                 }))
                 .is_err()
         );
@@ -1745,7 +1745,7 @@ Field with name '"b"' is not a member of the map items"#,
                 .resolve(&Schema::Decimal(DecimalSchema {
                     precision: 1,
                     scale: 0,
-                    inner: Box::new(Schema::Bytes),
+                    inner: InnerDecimalSchema::Bytes,
                 }))
                 .is_ok()
         );
@@ -1760,14 +1760,14 @@ Field with name '"b"' is not a member of the map items"#,
                 .resolve(&Schema::Decimal(DecimalSchema {
                     precision: 10,
                     scale: 1,
-                    inner: Box::new(Schema::Fixed(FixedSchema {
+                    inner: InnerDecimalSchema::Fixed(FixedSchema {
                         name: Name::new("decimal").unwrap(),
                         aliases: None,
                         size: 20,
                         doc: None,
                         default: None,
                         attributes: Default::default(),
-                    }))
+                    })
                 }))
                 .is_ok()
         );
