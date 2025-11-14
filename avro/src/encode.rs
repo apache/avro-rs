@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::schema::InnerDecimalSchema;
 use crate::{
     AvroResult,
     bigdecimal::serialize_big_decimal,
@@ -111,17 +112,24 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
             .write(&x.to_le_bytes())
             .map_err(|e| Details::WriteBytes(e).into()),
         Value::Decimal(decimal) => match schema {
-            Schema::Decimal(DecimalSchema { inner, .. }) => match *inner.clone() {
-                Schema::Fixed(FixedSchema { size, .. }) => {
-                    let bytes = decimal.to_sign_extended_bytes_with_len(size).unwrap();
+            Schema::Decimal(DecimalSchema { inner, .. }) => match inner {
+                InnerDecimalSchema::Fixed(fixed) => {
+                    let bytes = decimal.to_sign_extended_bytes_with_len(fixed.size)?;
                     let num_bytes = bytes.len();
-                    if num_bytes != size {
-                        return Err(Details::EncodeDecimalAsFixedError(num_bytes, size).into());
+                    if num_bytes != fixed.size {
+                        return Err(
+                            Details::EncodeDecimalAsFixedError(num_bytes, fixed.size).into()
+                        );
                     }
-                    encode(&Value::Fixed(size, bytes), inner, writer)
+                    encode(
+                        &Value::Fixed(fixed.size, bytes),
+                        &Schema::Fixed(fixed.copy_only_size()),
+                        writer,
+                    )
                 }
-                Schema::Bytes => encode(&Value::Bytes(decimal.try_into()?), inner, writer),
-                _ => Err(Details::ResolveDecimalSchema(SchemaKind::from(*inner.clone())).into()),
+                InnerDecimalSchema::Bytes => {
+                    encode(&Value::Bytes(decimal.try_into()?), &Schema::Bytes, writer)
+                }
             },
             _ => Err(Details::EncodeValueAsSchemaError {
                 value_kind: ValueKind::Decimal,
