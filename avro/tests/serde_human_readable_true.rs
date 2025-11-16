@@ -18,8 +18,7 @@ fn avro_rs_53_uuid_with_fixed_true() -> TestResult {
                         "fields" : [ {
                           "name" : "id",
                           "type" : {
-                            "type" : "fixed",
-                            "size" : 16,
+                            "type" : "string",
                             "logicalType" : "uuid",
                             "name": "FixedUUID"
                           }

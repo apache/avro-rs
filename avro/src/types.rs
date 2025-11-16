@@ -16,7 +16,7 @@
 // under the License.
 
 //! Logic handling the intermediate representation of Avro values.
-use crate::schema::InnerDecimalSchema;
+use crate::schema::{InnerDecimalSchema, UuidSchema};
 use crate::{
     AvroResult, Error,
     bigdecimal::{deserialize_big_decimal, serialize_big_decimal},
@@ -442,14 +442,15 @@ impl Value {
             (&Value::Decimal(_), &Schema::Decimal { .. }) => None,
             (&Value::BigDecimal(_), &Schema::BigDecimal) => None,
             (&Value::Duration(_), &Schema::Duration) => None,
-            (&Value::Uuid(_), &Schema::Uuid) => None,
+            (&Value::Uuid(_), &Schema::Uuid(_)) => None,
             (&Value::Float(_), &Schema::Float) => None,
             (&Value::Float(_), &Schema::Double) => None,
             (&Value::Double(_), &Schema::Double) => None,
             (&Value::Bytes(_), &Schema::Bytes) => None,
             (&Value::Bytes(_), &Schema::Decimal { .. }) => None,
+            (&Value::Bytes(_), &Schema::Uuid(UuidSchema::Bytes)) => None,
             (&Value::String(_), &Schema::String) => None,
-            (&Value::String(_), &Schema::Uuid) => None,
+            (&Value::String(_), &Schema::Uuid(UuidSchema::String)) => None,
             (&Value::Fixed(n, _), &Schema::Fixed(FixedSchema { size, .. })) => {
                 if n != size {
                     Some(format!(
@@ -474,6 +475,15 @@ impl Value {
                 if n != 12 {
                     Some(format!(
                         "The value's size ('{n}') must be exactly 12 to be a Duration"
+                    ))
+                } else {
+                    None
+                }
+            }
+            (&Value::Fixed(n, _), &Schema::Uuid(UuidSchema::Fixed(_))) => {
+                if n != 16 {
+                    Some(format!(
+                        "The value's size ('{n}') must be exactly 16 to be a Uuid"
                     ))
                 } else {
                     None
@@ -654,8 +664,8 @@ impl Value {
             };
             self = v;
         }
-        match *schema {
-            Schema::Ref { ref name } => {
+        match schema {
+            Schema::Ref { name } => {
                 let name = name.fully_qualified_name(enclosing_namespace);
 
                 if let Some(resolved) = names.get(&name) {
@@ -674,27 +684,23 @@ impl Value {
             Schema::Double => self.resolve_double(),
             Schema::Bytes => self.resolve_bytes(),
             Schema::String => self.resolve_string(),
-            Schema::Fixed(FixedSchema { size, .. }) => self.resolve_fixed(size),
-            Schema::Union(ref inner) => {
+            Schema::Fixed(FixedSchema { size, .. }) => self.resolve_fixed(*size),
+            Schema::Union(inner) => {
                 self.resolve_union(inner, names, enclosing_namespace, field_default)
             }
             Schema::Enum(EnumSchema {
-                ref symbols,
-                ref default,
-                ..
+                symbols, default, ..
             }) => self.resolve_enum(symbols, default, field_default),
-            Schema::Array(ref inner) => {
-                self.resolve_array(&inner.items, names, enclosing_namespace)
-            }
-            Schema::Map(ref inner) => self.resolve_map(&inner.types, names, enclosing_namespace),
-            Schema::Record(RecordSchema { ref fields, .. }) => {
+            Schema::Array(inner) => self.resolve_array(&inner.items, names, enclosing_namespace),
+            Schema::Map(inner) => self.resolve_map(&inner.types, names, enclosing_namespace),
+            Schema::Record(RecordSchema { fields, .. }) => {
                 self.resolve_record(fields, names, enclosing_namespace)
             }
             Schema::Decimal(DecimalSchema {
                 scale,
                 precision,
-                ref inner,
-            }) => self.resolve_decimal(precision, scale, inner),
+                inner,
+            }) => self.resolve_decimal(*precision, *scale, inner),
             Schema::BigDecimal => self.resolve_bigdecimal(),
             Schema::Date => self.resolve_date(),
             Schema::TimeMillis => self.resolve_time_millis(),
@@ -706,18 +712,28 @@ impl Value {
             Schema::LocalTimestampMicros => self.resolve_local_timestamp_micros(),
             Schema::LocalTimestampNanos => self.resolve_local_timestamp_nanos(),
             Schema::Duration => self.resolve_duration(),
-            Schema::Uuid => self.resolve_uuid(),
+            Schema::Uuid(inner) => self.resolve_uuid(inner),
         }
     }
 
-    fn resolve_uuid(self) -> Result<Self, Error> {
-        Ok(match self {
-            uuid @ Value::Uuid(_) => uuid,
-            Value::String(ref string) => {
+    fn resolve_uuid(self, inner: &UuidSchema) -> Result<Self, Error> {
+        let value = match (self, inner) {
+            (uuid @ Value::Uuid(_), _) => uuid,
+            (Value::String(ref string), UuidSchema::String) => {
                 Value::Uuid(Uuid::from_str(string).map_err(Details::ConvertStrToUuid)?)
             }
-            other => return Err(Details::GetUuid(other).into()),
-        })
+            (Value::Bytes(ref bytes), UuidSchema::Bytes) => {
+                Value::Uuid(Uuid::from_slice(bytes).map_err(Details::ConvertSliceToUuid)?)
+            }
+            (Value::Fixed(n, ref bytes), UuidSchema::Fixed(_)) => {
+                if n != 16 {
+                    return Err(Details::ConvertFixedToUuid(n).into());
+                }
+                Value::Uuid(Uuid::from_slice(bytes).map_err(Details::ConvertSliceToUuid)?)
+            }
+            (other, _) => return Err(Details::GetUuid(other).into()),
+        };
+        Ok(value)
     }
 
     fn resolve_bigdecimal(self) -> Result<Self, Error> {
@@ -1870,7 +1886,34 @@ Field with name '"b"' is not a member of the map items"#,
     #[test]
     fn resolve_uuid() -> TestResult {
         let value = Value::Uuid(Uuid::parse_str("1481531d-ccc9-46d9-a56f-5b67459c0537")?);
-        assert!(value.clone().resolve(&Schema::Uuid).is_ok());
+        assert!(
+            value
+                .clone()
+                .resolve(&Schema::Uuid(UuidSchema::String))
+                .is_ok()
+        );
+        assert!(
+            value
+                .clone()
+                .resolve(&Schema::Uuid(UuidSchema::Bytes))
+                .is_ok()
+        );
+        assert!(
+            value
+                .clone()
+                .resolve(&Schema::Uuid(UuidSchema::Fixed(FixedSchema {
+                    name: Name {
+                        name: String::new(),
+                        namespace: None
+                    },
+                    aliases: None,
+                    doc: None,
+                    size: 16,
+                    default: None,
+                    attributes: Default::default(),
+                })))
+                .is_ok()
+        );
         assert!(value.resolve(&Schema::TimestampMicros).is_err());
 
         Ok(())
