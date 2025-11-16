@@ -18,7 +18,7 @@
 //! Logic for serde-compatible schema-aware serialization
 //! which writes directly to a `Write` stream
 
-use crate::schema::InnerDecimalSchema;
+use crate::schema::{InnerDecimalSchema, UuidSchema};
 use crate::{
     bigdecimal::big_decimal_as_bytes,
     encode::{encode_int, encode_long},
@@ -962,7 +962,9 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         };
 
         match schema {
-            Schema::String | Schema::Bytes | Schema::Uuid => self.write_bytes(value.as_bytes()),
+            Schema::String | Schema::Bytes | Schema::Uuid(UuidSchema::String) => {
+                self.write_bytes(value.as_bytes())
+            }
             Schema::BigDecimal => {
                 // If we get a string for a `BigDecimal` type, expect a display string representation, such as "12.75"
                 let decimal_val =
@@ -992,7 +994,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     match variant_schema {
                         Schema::String
                         | Schema::Bytes
-                        | Schema::Uuid
+                        | Schema::Uuid(UuidSchema::String)
                         | Schema::Fixed(_)
                         | Schema::Ref { name: _ } => {
                             encode_int(i as i32, &mut *self.writer)?;
@@ -1031,10 +1033,11 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         };
 
         match schema {
-            Schema::String | Schema::Bytes | Schema::Uuid | Schema::BigDecimal => {
-                self.write_bytes(value)
-            }
-            Schema::Fixed(fixed_schema) => {
+            Schema::String
+            | Schema::Bytes
+            | Schema::Uuid(UuidSchema::Bytes)
+            | Schema::BigDecimal => self.write_bytes(value),
+            Schema::Fixed(fixed_schema) | Schema::Uuid(UuidSchema::Fixed(fixed_schema)) => {
                 if value.len() == fixed_schema.size {
                     self.writer
                         .write(value)
@@ -1094,7 +1097,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     match variant_schema {
                         Schema::String
                         | Schema::Bytes
-                        | Schema::Uuid
+                        | Schema::Uuid(UuidSchema::Bytes)
                         | Schema::BigDecimal
                         | Schema::Fixed(_)
                         | Schema::Duration
@@ -2493,8 +2496,10 @@ mod tests {
     fn test_serialize_uuid() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
-            "type": "string",
-            "logicalType": "uuid"
+            "type": "fixed",
+            "size": 16,
+            "logicalType": "uuid",
+            "name": "FixedUuid"
         }"#,
         )?;
 
@@ -2523,7 +2528,7 @@ mod tests {
         assert_eq!(
             buffer.as_slice(),
             &[
-                32, 140, 40, 218, 129, 35, 140, 67, 38, 189, 221, 78, 61, 0, 204, 80, 153
+                140, 40, 218, 129, 35, 140, 67, 38, 189, 221, 78, 61, 0, 204, 80, 153
             ]
         );
 
@@ -2814,10 +2819,10 @@ mod tests {
         assert_eq!(
             buffer.as_slice(),
             &[
-                8, 116, 101, 115, 116, 20, 10, 6, 0, 195, 104, 4, 32, 140, 40, 218, 129, 35, 140,
-                67, 38, 189, 221, 78, 61, 0, 204, 80, 152, 2, 20, 105, 110, 110, 101, 114, 95, 116,
-                101, 115, 116, 200, 1, 8, 4, 78, 70, 4, 32, 140, 40, 218, 129, 35, 140, 67, 38,
-                189, 221, 78, 61, 0, 204, 80, 153, 0
+                8, 116, 101, 115, 116, 20, 10, 6, 0, 195, 104, 4, 140, 40, 218, 129, 35, 140, 67,
+                38, 189, 221, 78, 61, 0, 204, 80, 152, 2, 20, 105, 110, 110, 101, 114, 95, 116,
+                101, 115, 116, 200, 1, 8, 4, 78, 70, 4, 140, 40, 218, 129, 35, 140, 67, 38, 189,
+                221, 78, 61, 0, 204, 80, 153, 0
             ]
         );
 
