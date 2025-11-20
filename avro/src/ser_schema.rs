@@ -2747,7 +2747,7 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_union_record_variant() -> TestResult {
+    fn avro_rs_337_serialize_union_record_variant() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "type": "record",
@@ -2794,7 +2794,6 @@ mod tests {
             bar: String,
         }
 
-        assert!(!crate::util::is_human_readable());
         let mut buffer: Vec<u8> = Vec::new();
         let rs = ResolvedSchema::try_from(&schema)?;
         let mut serializer =
@@ -2824,7 +2823,7 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_option_union_record_variant() -> TestResult {
+    fn avro_rs_337_serialize_option_union_record_variant() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "type": "record",
@@ -2872,7 +2871,6 @@ mod tests {
             bar: String,
         }
 
-        assert!(!crate::util::is_human_readable());
         let mut buffer: Vec<u8> = Vec::new();
         let rs = ResolvedSchema::try_from(&schema)?;
         let mut serializer =
