@@ -1072,38 +1072,13 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     where
         T: ?Sized + ser::Serialize,
     {
-        let create_error = |cause: String| {
-            Error::new(Details::SerializeValueWithSchema {
-                value_type: "some",
-                value: format!("Some(?). Cause: {cause}"),
-                schema: schema.clone(),
-            })
-        };
-
-        match schema {
-            Schema::Union(union_schema) => {
-                for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
-                    match variant_schema {
-                        Schema::Null => { /* skip */ }
-                        _ => {
-                            encode_long(i as i64, &mut *self.writer)?;
-                            let mut variant_ser = SchemaAwareWriteSerializer::new(
-                                &mut *self.writer,
-                                variant_schema,
-                                self.names,
-                                self.enclosing_namespace.clone(),
-                            );
-                            return value.serialize(&mut variant_ser);
-                        }
-                    }
-                }
-                Err(create_error(format!(
-                    "Cannot find a matching Null schema in {:?}",
-                    union_schema.schemas
-                )))
-            }
-            _ => value.serialize(self),
-        }
+        let mut inner_ser = SchemaAwareWriteSerializer::new(
+            &mut *self.writer,
+            schema,
+            self.names,
+            self.enclosing_namespace.clone(),
+        );
+        value.serialize(&mut inner_ser)
     }
 
     fn serialize_unit_struct_with_schema(
@@ -2768,6 +2743,163 @@ mod tests {
             ]
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_serialize_union_record_variant() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "record",
+            "name": "TestRecord",
+            "fields": [{
+                "name": "innerUnion", "type": [
+                    {"type": "record", "name": "innerRecordFoo", "fields": [
+                        {"name": "foo", "type": "string"}
+                    ]},
+                    {"type": "record", "name": "innerRecordBar", "fields": [
+                        {"name": "bar", "type": "string"}
+                    ]},
+                    {"name": "intField", "type": "int"},
+                    {"name": "stringField", "type": "string"}
+                ]
+            }]
+        }"#,
+        )?;
+
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct TestRecord {
+            inner_union: InnerUnion,
+        }
+
+        #[derive(Serialize)]
+        #[serde(untagged)]
+        enum InnerUnion {
+            InnerVariantFoo(InnerRecordFoo),
+            InnerVariantBar(InnerRecordBar),
+            IntField(i32),
+            StringField(String),
+        }
+
+        #[derive(Serialize)]
+        #[serde(rename = "innerRecordFoo")]
+        struct InnerRecordFoo {
+            foo: String,
+        }
+
+        #[derive(Serialize)]
+        #[serde(rename = "innerRecordBar")]
+        struct InnerRecordBar {
+            bar: String,
+        }
+
+        assert!(!crate::util::is_human_readable());
+        let mut buffer: Vec<u8> = Vec::new();
+        let rs = ResolvedSchema::try_from(&schema)?;
+        let mut serializer =
+            SchemaAwareWriteSerializer::new(&mut buffer, &schema, rs.get_names(), None);
+
+        let foo_record = TestRecord {
+            inner_union: InnerUnion::InnerVariantFoo(InnerRecordFoo {
+                foo: String::from("foo"),
+            }),
+        };
+        foo_record.serialize(&mut serializer)?;
+        let bar_record = TestRecord {
+            inner_union: InnerUnion::InnerVariantBar(InnerRecordBar {
+                bar: String::from("bar"),
+            }),
+        };
+        bar_record.serialize(&mut serializer)?;
+        let int_record = TestRecord {
+            inner_union: InnerUnion::IntField(1),
+        };
+        int_record.serialize(&mut serializer)?;
+        let string_record = TestRecord {
+            inner_union: InnerUnion::StringField(String::from("string")),
+        };
+        string_record.serialize(&mut serializer)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_serialize_option_union_record_variant() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "record",
+            "name": "TestRecord",
+            "fields": [{
+                "name": "innerUnion", "type": [
+                    "null",
+                    {"type": "record", "name": "innerRecordFoo", "fields": [
+                        {"name": "foo", "type": "string"}
+                    ]},
+                    {"type": "record", "name": "innerRecordBar", "fields": [
+                        {"name": "bar", "type": "string"}
+                    ]},
+                    {"name": "intField", "type": "int"},
+                    {"name": "stringField", "type": "string"}
+                ]
+            }]
+        }"#,
+        )?;
+
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct TestRecord {
+            inner_union: Option<InnerUnion>,
+        }
+
+        #[derive(Serialize)]
+        #[serde(untagged)]
+        enum InnerUnion {
+            InnerVariantFoo(InnerRecordFoo),
+            InnerVariantBar(InnerRecordBar),
+            IntField(i32),
+            StringField(String),
+        }
+
+        #[derive(Serialize)]
+        #[serde(rename = "innerRecordFoo")]
+        struct InnerRecordFoo {
+            foo: String,
+        }
+
+        #[derive(Serialize)]
+        #[serde(rename = "innerRecordBar")]
+        struct InnerRecordBar {
+            bar: String,
+        }
+
+        assert!(!crate::util::is_human_readable());
+        let mut buffer: Vec<u8> = Vec::new();
+        let rs = ResolvedSchema::try_from(&schema)?;
+        let mut serializer =
+            SchemaAwareWriteSerializer::new(&mut buffer, &schema, rs.get_names(), None);
+
+        let null_record = TestRecord { inner_union: None };
+        null_record.serialize(&mut serializer)?;
+        let foo_record = TestRecord {
+            inner_union: Some(InnerUnion::InnerVariantFoo(InnerRecordFoo {
+                foo: String::from("foo"),
+            })),
+        };
+        foo_record.serialize(&mut serializer)?;
+        let bar_record = TestRecord {
+            inner_union: Some(InnerUnion::InnerVariantBar(InnerRecordBar {
+                bar: String::from("bar"),
+            })),
+        };
+        bar_record.serialize(&mut serializer)?;
+        let int_record = TestRecord {
+            inner_union: Some(InnerUnion::IntField(1)),
+        };
+        int_record.serialize(&mut serializer)?;
+        let string_record = TestRecord {
+            inner_union: Some(InnerUnion::StringField(String::from("string"))),
+        };
+        string_record.serialize(&mut serializer)?;
         Ok(())
     }
 }
