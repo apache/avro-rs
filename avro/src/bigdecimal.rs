@@ -71,7 +71,7 @@ pub(crate) fn deserialize_big_decimal(bytes: &Vec<u8>) -> AvroResult<BigDecimal>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Codec, Reader, Schema, Writer, error::Error, types::Record};
+    use crate::{Codec, Reader, Schema, Writer, error::Error, from_value, types::Record};
     use apache_avro_test_helper::TestResult;
     use bigdecimal::{One, Zero};
     use pretty_assertions::assert_eq;
@@ -178,6 +178,46 @@ mod tests {
             other => Err(format!("Expected Value::BigDecimal, got: {other:?}")),
         }?;
         assert_eq!(&val, x1res);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_avro_3779_record_with_bg_ser() -> TestResult {
+        #[derive(Clone, PartialEq, Eq, Debug, Default, serde::Deserialize, serde::Serialize)]
+        struct Test {
+            big_decimal: BigDecimal,
+        }
+
+        let schema_str = r#"
+        {
+          "type": "record",
+          "name": "test",
+          "fields": [
+            {
+              "name": "big_decimal",
+              "type": "bytes",
+              "logicalType": "big-decimal"
+            }
+          ]
+        }
+        "#;
+        let schema = Schema::parse_str(schema_str)?;
+
+        let test = Test::default();
+
+        // write a record
+        let mut writer = Writer::new(&schema, Vec::new())?;
+        writer.append_ser(test.clone())?;
+
+        let wrote_data = writer.into_inner()?;
+
+        // read record
+        let mut reader = Reader::new(&wrote_data[..])?;
+
+        let value = reader.next().unwrap()?;
+
+        assert_eq!(test, from_value::<Test>(&value)?);
 
         Ok(())
     }
