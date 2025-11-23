@@ -183,7 +183,7 @@ mod tests {
     }
 
     #[test]
-    fn test_avro_3779_record_with_bg_ser() -> TestResult {
+    fn avro_rs_338_deserialize_serde_way() -> TestResult {
         #[derive(Clone, PartialEq, Eq, Debug, Default, serde::Deserialize, serde::Serialize)]
         struct Test {
             big_decimal: BigDecimal,
