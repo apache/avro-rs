@@ -351,6 +351,9 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
                 Value::Bytes(ref bytes) | Value::Fixed(_, ref bytes) => visitor.visit_bytes(bytes),
                 Value::Decimal(ref d) => visitor.visit_bytes(&d.to_vec()?),
                 Value::Enum(_, ref s) => visitor.visit_borrowed_str(s),
+                Value::BigDecimal(ref big_decimal) => {
+                    visitor.visit_str(big_decimal.to_plain_string().as_str())
+                }
                 _ => Err(de::Error::custom(format!(
                     "unsupported union: {:?}",
                     self.input
@@ -364,6 +367,9 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
             Value::Bytes(bytes) | Value::Fixed(_, bytes) => visitor.visit_bytes(bytes),
             Value::Decimal(d) => visitor.visit_bytes(&d.to_vec()?),
             Value::Enum(_, s) => visitor.visit_borrowed_str(s),
+            Value::BigDecimal(big_decimal) => {
+                visitor.visit_str(big_decimal.to_plain_string().as_str())
+            }
             value => Err(de::Error::custom(format!(
                 "incorrect value of type: {:?}",
                 crate::schema::SchemaKind::from(value)
