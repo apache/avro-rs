@@ -16,6 +16,7 @@
 // under the License.
 
 //! Logic for checking schema compatibility
+use crate::schema::UuidSchema;
 use crate::{
     error::CompatibilityError,
     schema::{EnumSchema, FixedSchema, RecordSchema, Schema, SchemaKind},
@@ -426,13 +427,48 @@ impl SchemaCompatibility {
                         }
                     }
                 }
-                SchemaKind::Uuid => {
-                    return check_writer_type(
-                        writers_schema,
-                        readers_schema,
-                        vec![r_type, SchemaKind::String],
-                    );
-                }
+                SchemaKind::Uuid => match readers_schema {
+                    Schema::Uuid(UuidSchema::Bytes) => {
+                        return check_writer_type(
+                            writers_schema,
+                            readers_schema,
+                            vec![r_type, SchemaKind::Bytes],
+                        );
+                    }
+                    Schema::Uuid(UuidSchema::String) => {
+                        return check_writer_type(
+                            writers_schema,
+                            readers_schema,
+                            vec![r_type, SchemaKind::String],
+                        );
+                    }
+                    Schema::Uuid(UuidSchema::Fixed(FixedSchema {
+                        name: r_name,
+                        size: r_size,
+                        ..
+                    })) => {
+                        if let Schema::Uuid(UuidSchema::Fixed(FixedSchema {
+                            name: w_name,
+                            size: w_size,
+                            ..
+                        })) = writers_schema
+                        {
+                            return (w_name.name == r_name.name && w_size == r_size)
+                                .then_some(())
+                                .ok_or(CompatibilityError::FixedMismatch);
+                        } else if let Schema::Fixed(FixedSchema {
+                            name: w_name,
+                            size: w_size,
+                            ..
+                        }) = writers_schema
+                        {
+                            return (w_name.name == r_name.name && w_size == r_size)
+                                .then_some(())
+                                .ok_or(CompatibilityError::FixedMismatch);
+                        }
+                    }
+                    _ => unreachable!("Schema::Uuid(UuidSchema) only has 3 different variants"),
+                },
                 SchemaKind::Date | SchemaKind::TimeMillis => {
                     return check_writer_type(
                         writers_schema,
@@ -499,8 +535,19 @@ impl SchemaCompatibility {
             SchemaKind::String => {
                 check_reader_type_multi(r_type, vec![SchemaKind::Bytes, SchemaKind::Uuid], w_type)
             }
-            SchemaKind::Bytes => check_reader_type(r_type, SchemaKind::String, w_type),
-            SchemaKind::Uuid => check_reader_type(r_type, SchemaKind::String, w_type),
+            SchemaKind::Bytes => {
+                check_reader_type_multi(r_type, vec![SchemaKind::String, SchemaKind::Uuid], w_type)
+            }
+            SchemaKind::Uuid => check_reader_type_multi(
+                r_type,
+                vec![SchemaKind::String, SchemaKind::Bytes, SchemaKind::Fixed],
+                w_type,
+            ),
+            SchemaKind::Fixed => check_reader_type_multi(
+                r_type,
+                vec![SchemaKind::Duration, SchemaKind::Uuid],
+                w_type,
+            ),
             SchemaKind::Date | SchemaKind::TimeMillis => {
                 check_reader_type(r_type, SchemaKind::Int, w_type)
             }
@@ -523,6 +570,7 @@ impl SchemaCompatibility {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::schema::{Name, UuidSchema};
     use crate::{
         Codec, Reader, Writer,
         types::{Record, Value},
@@ -1006,6 +1054,18 @@ mod tests {
 
     #[test]
     fn test_compatible_reader_writer_pairs() {
+        let uuid_fixed = FixedSchema {
+            name: Name {
+                name: String::new(),
+                namespace: None,
+            },
+            aliases: None,
+            doc: None,
+            size: 16,
+            default: None,
+            attributes: Default::default(),
+        };
+
         let compatible_schemas = vec![
             (Schema::Null, Schema::Null),
             (Schema::Long, Schema::Int),
@@ -1017,8 +1077,30 @@ mod tests {
             (Schema::String, Schema::Bytes),
             (Schema::Bytes, Schema::String),
             // logical types
-            (Schema::Uuid, Schema::Uuid),
-            (Schema::Uuid, Schema::String),
+            (
+                Schema::Uuid(UuidSchema::String),
+                Schema::Uuid(UuidSchema::String),
+            ),
+            (Schema::Uuid(UuidSchema::String), Schema::String),
+            (Schema::String, Schema::Uuid(UuidSchema::String)),
+            (
+                Schema::Uuid(UuidSchema::Bytes),
+                Schema::Uuid(UuidSchema::Bytes),
+            ),
+            (Schema::Uuid(UuidSchema::Bytes), Schema::Bytes),
+            (Schema::Bytes, Schema::Uuid(UuidSchema::Bytes)),
+            (
+                Schema::Uuid(UuidSchema::Fixed(uuid_fixed.clone())),
+                Schema::Uuid(UuidSchema::Fixed(uuid_fixed.clone())),
+            ),
+            (
+                Schema::Uuid(UuidSchema::Fixed(uuid_fixed.clone())),
+                Schema::Fixed(uuid_fixed.clone()),
+            ),
+            (
+                Schema::Fixed(uuid_fixed.clone()),
+                Schema::Uuid(UuidSchema::Fixed(uuid_fixed.clone())),
+            ),
             (Schema::Date, Schema::Int),
             (Schema::TimeMillis, Schema::Int),
             (Schema::TimeMicros, Schema::Long),
@@ -1028,7 +1110,6 @@ mod tests {
             (Schema::LocalTimestampMillis, Schema::Long),
             (Schema::LocalTimestampMicros, Schema::Long),
             (Schema::LocalTimestampNanos, Schema::Long),
-            (Schema::String, Schema::Uuid),
             (Schema::Int, Schema::Date),
             (Schema::Int, Schema::TimeMillis),
             (Schema::Long, Schema::TimeMicros),
@@ -1070,11 +1151,10 @@ mod tests {
             (nested_optional_record(), nested_record()),
         ];
 
-        assert!(
-            compatible_schemas
-                .iter()
-                .all(|(reader, writer)| SchemaCompatibility::can_read(writer, reader).is_ok())
-        );
+        for (reader, writer) in compatible_schemas {
+            println!("{reader:?}, {writer:?}");
+            SchemaCompatibility::can_read(&writer, &reader).unwrap();
+        }
     }
 
     fn writer_schema() -> Schema {

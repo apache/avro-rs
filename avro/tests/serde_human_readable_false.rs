@@ -35,11 +35,11 @@ fn avro_rs_53_uuid_with_fixed() -> TestResult {
     };
     let mut buffer = Vec::new();
 
-    // serialize the Uuid as Bytes
+    // serialize the Uuid as Fixed
     assert!(!apache_avro::util::set_serde_human_readable(false));
     let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)?
         .write_ref(&payload, &mut buffer)?;
-    assert_eq!(bytes, 27);
+    assert_eq!(bytes, 26);
 
     Ok(())
 }
