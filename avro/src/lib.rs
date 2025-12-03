@@ -104,7 +104,7 @@
 //!
 //! # Minimum supported Rust version
 //!
-//! 1.85.0
+//! 1.86.0
 //!
 //! # Defining a schema
 //!
