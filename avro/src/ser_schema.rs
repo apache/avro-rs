@@ -1741,12 +1741,13 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut SchemaAwareWriteSerializer<'s
 mod tests {
     use super::*;
     use crate::{
-        Days, Duration, Millis, Months, decimal::Decimal, error::Details, schema::ResolvedSchema,
+        Days, Duration, Millis, Months, Reader, Writer, decimal::Decimal, error::Details,
+        from_value, schema::ResolvedSchema,
     };
     use apache_avro_test_helper::TestResult;
     use bigdecimal::BigDecimal;
     use num_bigint::{BigInt, Sign};
-    use serde::Serialize;
+    use serde::{Deserialize, Serialize};
     use serde_bytes::{ByteArray, Bytes};
     use std::{
         collections::{BTreeMap, HashMap},
@@ -2898,6 +2899,52 @@ mod tests {
             inner_union: Some(InnerUnion::StringField(String::from("string"))),
         };
         string_record.serialize(&mut serializer)?;
+        Ok(())
+    }
+
+    #[test]
+    fn different_field_order_serde_vs_schema() -> TestResult {
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        struct Foo {
+            a: String,
+            b: String,
+        }
+        let schema = Schema::parse_str(
+            r#"
+        {
+            "type":"record",
+            "name":"Foo",
+            "fields": [
+                {
+                    "name":"b",
+                    "type":"string"
+                },
+                {
+                    "name":"a",
+                    "type":"string"
+                }
+            ]
+        }
+        "#,
+        )?;
+
+        let mut writer = Writer::new(&schema, Vec::new())?;
+        if let Err(e) = writer.append_ser(Foo {
+            a: "Hello".into(),
+            b: "World".into(),
+        }) {
+            panic!("{e:?}");
+        }
+        let encoded = writer.into_inner()?;
+        let mut reader = Reader::with_schema(&schema, &encoded[..])?;
+        let decoded = from_value::<Foo>(&reader.next().unwrap()?)?;
+        assert_eq!(
+            decoded,
+            Foo {
+                a: "Hello".into(),
+                b: "World".into(),
+            }
+        );
         Ok(())
     }
 }
