@@ -579,6 +579,9 @@ pub enum Details {
 
     #[error("Cannot convert a slice to Uuid: {0}")]
     UuidFromSlice(#[source] uuid::Error),
+
+    #[error("Expected String for Map key")]
+    MapFieldExpectedString,
 }
 
 #[derive(thiserror::Error, PartialEq)]

@@ -479,7 +479,12 @@ impl ser::SerializeStructVariant for StructVariantSerializer<'_> {
 /// Interpret a serializeable instance as a `Value`.
 ///
 /// This conversion can fail if the value is not valid as per the Avro specification.
-/// e.g: HashMap with non-string keys
+/// e.g: `HashMap` with non-string keys.
+///
+/// This function does not work if `S` has any fields (recursively) that have the `#[serde(flatten)]`
+/// attribute. Please use [`Writer::append_ser`] if that's the case.
+///
+/// [`Writer::append_ser`]: crate::Writer::append_ser
 pub fn to_value<S: Serialize>(value: S) -> Result<Value, Error> {
     let mut serializer = Serializer::default();
     value.serialize(&mut serializer)

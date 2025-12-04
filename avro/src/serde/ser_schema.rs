@@ -23,9 +23,10 @@ use crate::{
     encode::{encode_int, encode_long},
     error::{Details, Error},
     schema::{Name, NamesRef, Namespace, RecordField, RecordSchema, Schema},
+    serde::util::StringSerializer,
 };
 use bigdecimal::BigDecimal;
-use serde::ser;
+use serde::{Serialize, ser};
 use std::{borrow::Cow, cmp::Ordering, collections::HashMap, io::Write, str::FromStr};
 
 const COLLECTION_SERIALIZER_ITEM_LIMIT: usize = 1024;
@@ -251,6 +252,8 @@ pub struct SchemaAwareWriteSerializeStruct<'a, 's, W: Write> {
     record_schema: &'s RecordSchema,
     /// Fields we received in the wrong order
     field_cache: HashMap<usize, Vec<u8>>,
+    /// The current field name when serializing from a map (for `flatten` support).
+    map_field_name: Option<String>,
     field_position: usize,
     bytes_written: usize,
 }
@@ -264,6 +267,7 @@ impl<'a, 's, W: Write> SchemaAwareWriteSerializeStruct<'a, 's, W> {
             ser,
             record_schema,
             field_cache: HashMap::new(),
+            map_field_name: None,
             field_position: 0,
             bytes_written: 0,
         }
@@ -352,6 +356,10 @@ impl<'a, 's, W: Write> SchemaAwareWriteSerializeStruct<'a, 's, W> {
             "There should be no more unwritten fields at this point: {:?}",
             self.field_cache
         );
+        assert!(
+            self.map_field_name.is_none(),
+            "There should be no field name at this point"
+        );
         Ok(self.bytes_written)
     }
 }
@@ -371,17 +379,14 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
             .and_then(|idx| self.record_schema.fields.get(*idx));
 
         match record_field {
-            Some(field) => {
-                // self.item_count += 1;
-                self.serialize_next_field(field, value).map_err(|e| {
-                    Details::SerializeRecordFieldWithSchema {
-                        field_name: key.to_string(),
-                        record_schema: Schema::Record(self.record_schema.clone()),
-                        error: Box::new(e),
-                    }
-                    .into()
-                })
-            }
+            Some(field) => self.serialize_next_field(field, value).map_err(|e| {
+                Details::SerializeRecordFieldWithSchema {
+                    field_name: key.to_string(),
+                    record_schema: Schema::Record(self.record_schema.clone()),
+                    error: Box::new(e),
+                }
+                .into()
+            }),
             None => Err(Details::FieldName(String::from(key)).into()),
         }
     }
@@ -420,6 +425,50 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
     }
 }
 
+impl<W: Write> ser::SerializeMap for SchemaAwareWriteSerializeStruct<'_, '_, W> {
+    type Ok = usize;
+    type Error = Error;
+
+    fn serialize_key<T>(&mut self, key: &T) -> Result<(), Self::Error>
+    where
+        T: ?Sized + Serialize,
+    {
+        let name = key.serialize(StringSerializer)?;
+        assert!(
+            self.map_field_name.replace(name).is_none(),
+            "Got two keys in a row"
+        );
+        Ok(())
+    }
+
+    fn serialize_value<T>(&mut self, value: &T) -> Result<(), Self::Error>
+    where
+        T: ?Sized + Serialize,
+    {
+        let key = self.map_field_name.take().expect("Got value without key");
+        let record_field = self
+            .record_schema
+            .lookup
+            .get(&key)
+            .and_then(|idx| self.record_schema.fields.get(*idx));
+        match record_field {
+            Some(field) => self.serialize_next_field(field, value).map_err(|e| {
+                Details::SerializeRecordFieldWithSchema {
+                    field_name: key.to_string(),
+                    record_schema: Schema::Record(self.record_schema.clone()),
+                    error: Box::new(e),
+                }
+                .into()
+            }),
+            None => Err(Details::FieldName(key).into()),
+        }
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        self.end()
+    }
+}
+
 impl<W: Write> ser::SerializeStructVariant for SchemaAwareWriteSerializeStruct<'_, '_, W> {
     type Ok = usize;
     type Error = Error;
@@ -433,6 +482,46 @@ impl<W: Write> ser::SerializeStructVariant for SchemaAwareWriteSerializeStruct<'
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
         ser::SerializeStruct::end(self)
+    }
+}
+
+/// Map serializer that switches between Struct or Map.
+///
+/// This exists because when `#[serde(flatten)]` is used, struct fields are serialized as a map.
+pub enum SchemaAwareWriteSerializeMapOrStruct<'a, 's, W: Write> {
+    Struct(SchemaAwareWriteSerializeStruct<'a, 's, W>),
+    Map(SchemaAwareWriteSerializeMap<'a, 's, W>),
+}
+
+impl<W: Write> ser::SerializeMap for SchemaAwareWriteSerializeMapOrStruct<'_, '_, W> {
+    type Ok = usize;
+    type Error = Error;
+
+    fn serialize_key<T>(&mut self, key: &T) -> Result<(), Self::Error>
+    where
+        T: ?Sized + Serialize,
+    {
+        match self {
+            Self::Struct(s) => s.serialize_key(key),
+            Self::Map(s) => s.serialize_key(key),
+        }
+    }
+
+    fn serialize_value<T>(&mut self, value: &T) -> Result<(), Self::Error>
+    where
+        T: ?Sized + Serialize,
+    {
+        match self {
+            Self::Struct(s) => s.serialize_value(value),
+            Self::Map(s) => s.serialize_value(value),
+        }
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        match self {
+            Self::Struct(s) => s.end(),
+            Self::Map(s) => s.end(),
+        }
     }
 }
 
@@ -1499,7 +1588,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         &'a mut self,
         len: Option<usize>,
         schema: &'s Schema,
-    ) -> Result<SchemaAwareWriteSerializeMap<'a, 's, W>, Error> {
+    ) -> Result<SchemaAwareWriteSerializeMapOrStruct<'a, 's, W>, Error> {
         let create_error = |cause: String| {
             let len_str = len
                 .map(|l| format!("{l}"))
@@ -1513,10 +1602,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         };
 
         match schema {
-            Schema::Map(map_schema) => Ok(SchemaAwareWriteSerializeMap::new(
-                self,
-                map_schema.types.as_ref(),
-                len,
+            Schema::Map(map_schema) => Ok(SchemaAwareWriteSerializeMapOrStruct::Map(
+                SchemaAwareWriteSerializeMap::new(self, map_schema.types.as_ref(), len),
             )),
             Schema::Union(union_schema) => {
                 for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
@@ -1532,6 +1619,9 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     "Expected a Map schema in {union_schema:?}"
                 )))
             }
+            Schema::Record(record_schema) => Ok(SchemaAwareWriteSerializeMapOrStruct::Struct(
+                SchemaAwareWriteSerializeStruct::new(self, record_schema),
+            )),
             _ => Err(create_error(format!(
                 "Expected Map or Union schema. Got: {schema}"
             ))),
@@ -1630,7 +1720,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut SchemaAwareWriteSerializer<'s
     type SerializeTuple = SchemaAwareWriteSerializeSeq<'a, 's, W>;
     type SerializeTupleStruct = SchemaAwareWriteSerializeTupleStruct<'a, 's, W>;
     type SerializeTupleVariant = SchemaAwareWriteSerializeTupleStruct<'a, 's, W>;
-    type SerializeMap = SchemaAwareWriteSerializeMap<'a, 's, W>;
+    type SerializeMap = SchemaAwareWriteSerializeMapOrStruct<'a, 's, W>;
     type SerializeStruct = SchemaAwareWriteSerializeStruct<'a, 's, W>;
     type SerializeStructVariant = SchemaAwareWriteSerializeStruct<'a, 's, W>;
 
