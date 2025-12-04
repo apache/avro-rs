@@ -25,8 +25,8 @@ use crate::{
     schema::{Name, NamesRef, Namespace, RecordField, RecordSchema, Schema},
 };
 use bigdecimal::BigDecimal;
-use serde::{Serialize, ser};
-use std::{borrow::Cow, io::Write, str::FromStr};
+use serde::ser;
+use std::{borrow::Cow, collections::HashMap, io::Write, str::FromStr};
 
 const COLLECTION_SERIALIZER_ITEM_LIMIT: usize = 1024;
 const COLLECTION_SERIALIZER_DEFAULT_INIT_ITEM_CAPACITY: usize = 32;
@@ -249,6 +249,9 @@ impl<W: Write> ser::SerializeMap for SchemaAwareWriteSerializeMap<'_, '_, W> {
 pub struct SchemaAwareWriteSerializeStruct<'a, 's, W: Write> {
     ser: &'a mut SchemaAwareWriteSerializer<'s, W>,
     record_schema: &'s RecordSchema,
+    /// Fields we received in the wrong order
+    field_cache: HashMap<usize, Vec<u8>>,
+    field_position: usize,
     bytes_written: usize,
 }
 
@@ -260,6 +263,8 @@ impl<'a, 's, W: Write> SchemaAwareWriteSerializeStruct<'a, 's, W> {
         SchemaAwareWriteSerializeStruct {
             ser,
             record_schema,
+            field_cache: HashMap::new(),
+            field_position: 0,
             bytes_written: 0,
         }
     }
@@ -268,19 +273,79 @@ impl<'a, 's, W: Write> SchemaAwareWriteSerializeStruct<'a, 's, W> {
     where
         T: ?Sized + ser::Serialize,
     {
-        // If we receive fields in order, write them directly to the main writer
-        let mut value_ser = SchemaAwareWriteSerializer::new(
-            &mut *self.ser.writer,
-            &field.schema,
-            self.ser.names,
-            self.ser.enclosing_namespace.clone(),
-        );
-        self.bytes_written += value.serialize(&mut value_ser)?;
+        if field.position == self.field_position {
+            // If we receive fields in order, write them directly to the main writer
+            let mut value_ser = SchemaAwareWriteSerializer::new(
+                &mut *self.ser.writer,
+                &field.schema,
+                self.ser.names,
+                self.ser.enclosing_namespace.clone(),
+            );
+            self.bytes_written += value.serialize(&mut value_ser)?;
 
+            self.field_position += 1;
+            while let Some(bytes) = self.field_cache.remove(&self.field_position) {
+                self.ser
+                    .writer
+                    .write_all(&bytes)
+                    .map_err(Details::WriteBytes)?;
+                self.bytes_written += bytes.len();
+                self.field_position += 1;
+            }
+        } else {
+            // This field is in the wrong order, write it to a temporary buffer so we can add it at the right time
+            let mut bytes = Vec::new();
+            let mut value_ser = SchemaAwareWriteSerializer::new(
+                &mut bytes,
+                &field.schema,
+                self.ser.names,
+                self.ser.enclosing_namespace.clone(),
+            );
+            value.serialize(&mut value_ser)?;
+            if self.field_cache.insert(field.position, bytes).is_some() {
+                return Err(Details::FieldNameDuplicate(field.name.clone()).into());
+            }
+        }
         Ok(())
     }
 
-    fn end(self) -> Result<usize, Error> {
+    fn end(mut self) -> Result<usize, Error> {
+        // Write any fields that are `serde(skip)` or `serde(skip_serializing)`
+        while self.field_position != self.record_schema.fields.len() {
+            let field_info = &self.record_schema.fields[self.field_position];
+            if let Some(bytes) = self.field_cache.remove(&self.field_position) {
+                self.ser
+                    .writer
+                    .write_all(&bytes)
+                    .map_err(Details::WriteBytes)?;
+                self.bytes_written += bytes.len();
+                self.field_position += 1;
+            } else if let Some(default) = &field_info.default {
+                self.serialize_next_field(field_info, default)
+                    .map_err(|e| Details::SerializeRecordFieldWithSchema {
+                        field_name: field_info.name.clone(),
+                        record_schema: Schema::Record(self.record_schema.clone()),
+                        error: Box::new(e),
+                    })?;
+            } else {
+                return Err(Details::MissingDefaultForSkippedField {
+                    field_name: field_info.name.clone(),
+                    schema: Schema::Record(self.record_schema.clone()),
+                }
+                .into());
+            }
+        }
+
+        // Check if all fields were written
+        if self.field_position != self.record_schema.fields.len() {
+            let name = self.record_schema.fields[self.field_position].name.clone();
+            return Err(Details::GetField(name).into());
+        }
+        assert!(
+            self.field_cache.is_empty(),
+            "There should be no more unwritten fields at this point: {:?}",
+            self.field_cache
+        );
         Ok(self.bytes_written)
     }
 }
@@ -304,7 +369,7 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
                 // self.item_count += 1;
                 self.serialize_next_field(field, value).map_err(|e| {
                     Details::SerializeRecordFieldWithSchema {
-                        field_name: key,
+                        field_name: key.to_string(),
                         record_schema: Schema::Record(self.record_schema.clone()),
                         error: Box::new(e),
                     }
@@ -323,15 +388,20 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
             .and_then(|idx| self.record_schema.fields.get(*idx));
 
         if let Some(skipped_field) = skipped_field {
-            // self.item_count += 1;
-            skipped_field
-                .default
-                .serialize(&mut SchemaAwareWriteSerializer::new(
-                    self.ser.writer,
-                    &skipped_field.schema,
-                    self.ser.names,
-                    self.ser.enclosing_namespace.clone(),
-                ))?;
+            if let Some(default) = &skipped_field.default {
+                self.serialize_next_field(skipped_field, default)
+                    .map_err(|e| Details::SerializeRecordFieldWithSchema {
+                        field_name: key.to_string(),
+                        record_schema: Schema::Record(self.record_schema.clone()),
+                        error: Box::new(e),
+                    })?;
+            } else {
+                return Err(Details::MissingDefaultForSkippedField {
+                    field_name: key.to_string(),
+                    schema: Schema::Record(self.record_schema.clone()),
+                }
+                .into());
+            }
         } else {
             return Err(Details::GetField(key.to_string()).into());
         }
@@ -1741,12 +1811,13 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut SchemaAwareWriteSerializer<'s
 mod tests {
     use super::*;
     use crate::{
-        Days, Duration, Millis, Months, decimal::Decimal, error::Details, schema::ResolvedSchema,
+        Days, Duration, Millis, Months, Reader, Writer, decimal::Decimal, error::Details,
+        from_value, schema::ResolvedSchema,
     };
     use apache_avro_test_helper::TestResult;
     use bigdecimal::BigDecimal;
     use num_bigint::{BigInt, Sign};
-    use serde::Serialize;
+    use serde::{Deserialize, Serialize};
     use serde_bytes::{ByteArray, Bytes};
     use std::{
         collections::{BTreeMap, HashMap},
@@ -2898,6 +2969,71 @@ mod tests {
             inner_union: Some(InnerUnion::StringField(String::from("string"))),
         };
         string_record.serialize(&mut serializer)?;
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_351_different_field_order_serde_vs_schema() -> TestResult {
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        struct Foo {
+            a: String,
+            b: String,
+            c: usize,
+            d: f64,
+            e: usize,
+        }
+        let schema = Schema::parse_str(
+            r#"
+        {
+            "type":"record",
+            "name":"Foo",
+            "fields": [
+                {
+                    "name":"b",
+                    "type":"string"
+                },
+                {
+                    "name":"a",
+                    "type":"string"
+                },
+                {
+                    "name":"d",
+                    "type":"double"
+                },
+                {
+                    "name":"e",
+                    "type":"long"
+                },
+                {
+                    "name":"c",
+                    "type":"long"
+                }
+            ]
+        }
+        "#,
+        )?;
+
+        let mut writer = Writer::new(&schema, Vec::new())?;
+        writer.append_ser(Foo {
+            a: "Hello".into(),
+            b: "World".into(),
+            c: 42,
+            d: std::f64::consts::PI,
+            e: 5,
+        })?;
+        let encoded = writer.into_inner()?;
+        let mut reader = Reader::with_schema(&schema, &encoded[..])?;
+        let decoded = from_value::<Foo>(&reader.next().unwrap()?)?;
+        assert_eq!(
+            decoded,
+            Foo {
+                a: "Hello".into(),
+                b: "World".into(),
+                c: 42,
+                d: std::f64::consts::PI,
+                e: 5
+            }
+        );
         Ok(())
     }
 }

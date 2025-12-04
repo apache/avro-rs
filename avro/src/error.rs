@@ -516,10 +516,13 @@ pub enum Details {
 
     #[error("Failed to serialize field '{field_name}' for record {record_schema:?}: {error}")]
     SerializeRecordFieldWithSchema {
-        field_name: &'static str,
+        field_name: String,
         record_schema: Schema,
         error: Box<Error>,
     },
+
+    #[error("Missing default for skipped field '{field_name}' for schema {schema:?}")]
+    MissingDefaultForSkippedField { field_name: String, schema: Schema },
 
     #[error("Failed to deserialize Avro value into value: {0}")]
     DeserializeValue(String),
