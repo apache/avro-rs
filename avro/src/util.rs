@@ -296,8 +296,13 @@ mod tests {
 
     #[test]
     fn test_overflow() {
-        let causes_left_shift_overflow: &[u8] = &[0xe1, 0xe1, 0xe1, 0xe1, 0xe1];
-        assert!(decode_variable(&mut &*causes_left_shift_overflow).is_err());
+        let causes_left_shift_overflow: &[u8] = &[0xe1; 10];
+        assert!(matches!(
+            decode_variable(&mut &*causes_left_shift_overflow)
+                .unwrap_err()
+                .details(),
+            Details::IntegerOverflow
+        ));
     }
 
     #[test]
