@@ -439,7 +439,9 @@ impl<'a, W: Write> Writer<'a, W> {
 
         let mut metadata = HashMap::with_capacity(2);
         metadata.insert("avro.schema", Value::Bytes(schema_bytes));
-        metadata.insert("avro.codec", self.codec.into());
+        if self.codec != Codec::Null {
+            metadata.insert("avro.codec", self.codec.into());
+        }
         match self.codec {
             #[cfg(feature = "bzip")]
             Codec::Bzip2(settings) => {
@@ -865,7 +867,7 @@ mod tests {
         let mut writer = Writer::new(&schema, Vec::new())?;
         writer.flush()?;
         let result = writer.into_inner()?;
-        assert_eq!(result.len(), 163);
+        assert_eq!(result.len(), 147);
 
         // Unless the user indicates via the builder that the header has already been written
         let mut writer = Writer::builder()
@@ -1341,7 +1343,7 @@ mod tests {
         writer.flush()?;
         let result = writer.into_inner()?;
 
-        assert_eq!(result.len(), 260);
+        assert_eq!(result.len(), 244);
 
         Ok(())
     }
@@ -1617,7 +1619,7 @@ mod tests {
 
         let bytes = writer.append_ser(conf)?;
 
-        assert_eq!(198, bytes);
+        assert_eq!(182, bytes);
 
         Ok(())
     }
@@ -1707,7 +1709,7 @@ mod tests {
 
         assert_eq!(
             shared_buffer.len(),
-            167,
+            151,
             "the test buffer was not fully written to after Writer::flush was called"
         );
 

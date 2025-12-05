@@ -816,7 +816,7 @@ fn test_record_schema_with_cyclic_references() -> TestResult {
         panic!("An error occurred while writing datum: {err:?}")
     }
     let bytes = writer.into_inner()?;
-    assert_eq!(316, bytes.len());
+    assert_eq!(300, bytes.len());
 
     match Reader::new(&mut bytes.as_slice()) {
         Ok(mut reader) => match reader.next() {
