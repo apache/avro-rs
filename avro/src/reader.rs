@@ -766,8 +766,8 @@ mod tests {
     #[test]
     fn test_reader_invalid_header() -> TestResult {
         let schema = Schema::parse_str(SCHEMA)?;
-        let invalid = ENCODED.iter().copied().skip(1).collect::<Vec<u8>>();
-        assert!(Reader::with_schema(&schema, &invalid[..]).is_err());
+        let mut invalid = &ENCODED[1..];
+        assert!(Reader::with_schema(&schema, &mut invalid).is_err());
 
         Ok(())
     }
@@ -775,16 +775,8 @@ mod tests {
     #[test]
     fn test_reader_invalid_block() -> TestResult {
         let schema = Schema::parse_str(SCHEMA)?;
-        let invalid = ENCODED
-            .iter()
-            .copied()
-            .rev()
-            .skip(19)
-            .collect::<Vec<u8>>()
-            .into_iter()
-            .rev()
-            .collect::<Vec<u8>>();
-        let reader = Reader::with_schema(&schema, &invalid[..])?;
+        let mut invalid = &ENCODED[0..ENCODED.len() - 19];
+        let reader = Reader::with_schema(&schema, &mut invalid)?;
         for value in reader {
             assert!(value.is_err());
         }
@@ -802,8 +794,8 @@ mod tests {
 
     #[test]
     fn test_reader_only_header() -> TestResult {
-        let invalid = ENCODED.iter().copied().take(165).collect::<Vec<u8>>();
-        let reader = Reader::new(&invalid[..])?;
+        let mut invalid = &ENCODED[..165];
+        let reader = Reader::new(&mut invalid)?;
         for value in reader {
             assert!(value.is_err());
         }
