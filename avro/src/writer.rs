@@ -22,7 +22,7 @@ use crate::{
     error::Details,
     headers::{HeaderBuilder, RabinFingerprintHeader},
     schema::{AvroSchema, Name, ResolvedOwnedSchema, ResolvedSchema, Schema},
-    ser_schema::SchemaAwareWriteSerializer,
+    serde::ser_schema::SchemaAwareWriteSerializer,
     types::Value,
 };
 use serde::Serialize;

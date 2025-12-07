@@ -945,14 +945,12 @@
 mod bigdecimal;
 mod bytes;
 mod codec;
-mod de;
 mod decimal;
 mod decode;
 mod duration;
 mod encode;
 mod reader;
-mod ser;
-mod ser_schema;
+mod serde;
 mod writer;
 
 pub mod error;
@@ -979,7 +977,6 @@ pub use codec::xz::XzSettings;
 #[cfg(feature = "zstandard")]
 pub use codec::zstandard::ZstandardSettings;
 pub use codec::{Codec, DeflateSettings};
-pub use de::from_value;
 pub use decimal::Decimal;
 pub use duration::{Days, Duration, Millis, Months};
 pub use error::Error;
@@ -988,7 +985,7 @@ pub use reader::{
     from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
 };
 pub use schema::{AvroSchema, Schema};
-pub use ser::to_value;
+pub use serde::{de::from_value, ser::to_value};
 pub use uuid::Uuid;
 pub use writer::{
     GenericSingleObjectWriter, SpecificSingleObjectWriter, Writer, WriterBuilder, to_avro_datum,
