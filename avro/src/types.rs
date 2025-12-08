@@ -1903,7 +1903,7 @@ Field with name '"b"' is not a member of the map items"#,
                 .clone()
                 .resolve(&Schema::Uuid(UuidSchema::Fixed(FixedSchema {
                     name: Name {
-                        name: String::new(),
+                        name: "some_name".to_string(),
                         namespace: None
                     },
                     aliases: None,
