@@ -563,7 +563,7 @@ mod tests {
         let bytes = Schema::Uuid(UuidSchema::Bytes);
         let mut fixed_schema = FixedSchema {
             name: Name {
-                name: String::new(),
+                name: "some_name".to_string(),
                 namespace: None,
             },
             aliases: None,
@@ -572,11 +572,11 @@ mod tests {
             default: None,
             attributes: Default::default(),
         };
-        let fixed = Schema::Fixed(fixed_schema.clone());
+        let fixed = Schema::Uuid(UuidSchema::Fixed(fixed_schema.clone()));
         fixed_schema
             .attributes
             .insert("Something".to_string(), Value::Null);
-        let fixed_different = Schema::Fixed(fixed_schema);
+        let fixed_different = Schema::Uuid(UuidSchema::Fixed(fixed_schema));
 
         assert!(SPECIFICATION_EQ.compare(&string, &string));
         assert!(STRUCT_FIELD_EQ.compare(&string, &string));

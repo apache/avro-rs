@@ -2618,20 +2618,7 @@ pub mod derive {
     impl_schema!(f32, Schema::Float);
     impl_schema!(f64, Schema::Double);
     impl_schema!(String, Schema::String);
-    impl_schema!(
-        uuid::Uuid,
-        Schema::Uuid(UuidSchema::Fixed(FixedSchema {
-            name: Name {
-                name: String::new(),
-                namespace: None
-            },
-            aliases: None,
-            doc: None,
-            size: 16,
-            default: None,
-            attributes: Default::default()
-        }))
-    );
+    impl_schema!(uuid::Uuid, Schema::Uuid(UuidSchema::String));
     impl_schema!(core::time::Duration, Schema::Duration);
 
     impl<T> AvroSchemaComponent for Vec<T>

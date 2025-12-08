@@ -446,28 +446,57 @@ impl SchemaCompatibility {
                         name: r_name,
                         size: r_size,
                         ..
-                    })) => {
-                        if let Schema::Uuid(UuidSchema::Fixed(FixedSchema {
+                    })) => match writers_schema {
+                        Schema::Uuid(UuidSchema::Fixed(FixedSchema {
                             name: w_name,
                             size: w_size,
                             ..
-                        })) = writers_schema
-                        {
-                            return (w_name.name == r_name.name && w_size == r_size)
-                                .then_some(())
-                                .ok_or(CompatibilityError::FixedMismatch);
-                        } else if let Schema::Fixed(FixedSchema {
+                        }))
+                        | Schema::Fixed(FixedSchema {
                             name: w_name,
                             size: w_size,
                             ..
-                        }) = writers_schema
-                        {
+                        }) => {
                             return (w_name.name == r_name.name && w_size == r_size)
                                 .then_some(())
                                 .ok_or(CompatibilityError::FixedMismatch);
                         }
+                        _ => {
+                            return Err(CompatibilityError::TypeExpected {
+                                schema_type: String::from("writers_schema"),
+                                expected_type: vec![SchemaKind::Uuid, SchemaKind::Fixed],
+                            });
+                        }
+                    },
+                    Schema::Null
+                    | Schema::Boolean
+                    | Schema::Int
+                    | Schema::Long
+                    | Schema::Float
+                    | Schema::Double
+                    | Schema::Bytes
+                    | Schema::String
+                    | Schema::Array(_)
+                    | Schema::Map(_)
+                    | Schema::Union(_)
+                    | Schema::Record(_)
+                    | Schema::Enum(_)
+                    | Schema::Fixed(_)
+                    | Schema::Decimal(_)
+                    | Schema::BigDecimal
+                    | Schema::Date
+                    | Schema::TimeMillis
+                    | Schema::TimeMicros
+                    | Schema::TimestampMillis
+                    | Schema::TimestampMicros
+                    | Schema::TimestampNanos
+                    | Schema::LocalTimestampMillis
+                    | Schema::LocalTimestampMicros
+                    | Schema::LocalTimestampNanos
+                    | Schema::Duration
+                    | Schema::Ref { .. } => {
+                        unreachable!("SchemaKind::Uuid can only be a Schema::Uuid")
                     }
-                    _ => unreachable!("Schema::Uuid(UuidSchema) only has 3 different variants"),
                 },
                 SchemaKind::Date | SchemaKind::TimeMillis => {
                     return check_writer_type(
