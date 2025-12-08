@@ -1198,10 +1198,11 @@ impl Value {
 
     fn try_u8(self) -> AvroResult<u8> {
         let int = self.resolve(&Schema::Int)?;
-        if let Value::Int(n) = int {
-            if n >= 0 && n <= i32::from(u8::MAX) {
-                return Ok(n as u8);
-            }
+        if let Value::Int(n) = int
+            && n >= 0
+            && n <= i32::from(u8::MAX)
+        {
+            return Ok(n as u8);
         }
 
         Err(Details::GetU8(int).into())
