@@ -26,7 +26,7 @@ use crate::{
 };
 use bigdecimal::BigDecimal;
 use serde::ser;
-use std::{borrow::Cow, collections::HashMap, io::Write, str::FromStr};
+use std::{borrow::Cow, cmp::Ordering, collections::HashMap, io::Write, str::FromStr};
 
 const COLLECTION_SERIALIZER_ITEM_LIMIT: usize = 1024;
 const COLLECTION_SERIALIZER_DEFAULT_INIT_ITEM_CAPACITY: usize = 32;
@@ -273,40 +273,51 @@ impl<'a, 's, W: Write> SchemaAwareWriteSerializeStruct<'a, 's, W> {
     where
         T: ?Sized + ser::Serialize,
     {
-        if field.position == self.field_position {
-            // If we receive fields in order, write them directly to the main writer
-            let mut value_ser = SchemaAwareWriteSerializer::new(
-                &mut *self.ser.writer,
-                &field.schema,
-                self.ser.names,
-                self.ser.enclosing_namespace.clone(),
-            );
-            self.bytes_written += value.serialize(&mut value_ser)?;
+        match self.field_position.cmp(&field.position) {
+            Ordering::Equal => {
+                // If we receive fields in order, write them directly to the main writer
+                let mut value_ser = SchemaAwareWriteSerializer::new(
+                    &mut *self.ser.writer,
+                    &field.schema,
+                    self.ser.names,
+                    self.ser.enclosing_namespace.clone(),
+                );
+                self.bytes_written += value.serialize(&mut value_ser)?;
 
-            self.field_position += 1;
-            while let Some(bytes) = self.field_cache.remove(&self.field_position) {
-                self.ser
-                    .writer
-                    .write_all(&bytes)
-                    .map_err(Details::WriteBytes)?;
-                self.bytes_written += bytes.len();
                 self.field_position += 1;
+                while let Some(bytes) = self.field_cache.remove(&self.field_position) {
+                    self.ser
+                        .writer
+                        .write_all(&bytes)
+                        .map_err(Details::WriteBytes)?;
+                    self.bytes_written += bytes.len();
+                    self.field_position += 1;
+                }
+                Ok(())
             }
-        } else {
-            // This field is in the wrong order, write it to a temporary buffer so we can add it at the right time
-            let mut bytes = Vec::new();
-            let mut value_ser = SchemaAwareWriteSerializer::new(
-                &mut bytes,
-                &field.schema,
-                self.ser.names,
-                self.ser.enclosing_namespace.clone(),
-            );
-            value.serialize(&mut value_ser)?;
-            if self.field_cache.insert(field.position, bytes).is_some() {
-                return Err(Details::FieldNameDuplicate(field.name.clone()).into());
+            Ordering::Less => {
+                // Current field position is smaller than this field position,
+                // so we're still missing at least one field, save this field temporarily
+                let mut bytes = Vec::new();
+                let mut value_ser = SchemaAwareWriteSerializer::new(
+                    &mut bytes,
+                    &field.schema,
+                    self.ser.names,
+                    self.ser.enclosing_namespace.clone(),
+                );
+                value.serialize(&mut value_ser)?;
+                if self.field_cache.insert(field.position, bytes).is_some() {
+                    Err(Details::FieldNameDuplicate(field.name.clone()).into())
+                } else {
+                    Ok(())
+                }
+            }
+            Ordering::Greater => {
+                // Current field position is greater than this field position,
+                // so we've already had this field
+                Err(Details::FieldNameDuplicate(field.name.clone()).into())
             }
         }
-        Ok(())
     }
 
     fn end(mut self) -> Result<usize, Error> {
@@ -336,12 +347,7 @@ impl<'a, 's, W: Write> SchemaAwareWriteSerializeStruct<'a, 's, W> {
             }
         }
 
-        // Check if all fields were written
-        if self.field_position != self.record_schema.fields.len() {
-            let name = self.record_schema.fields[self.field_position].name.clone();
-            return Err(Details::GetField(name).into());
-        }
-        assert!(
+        debug_assert!(
             self.field_cache.is_empty(),
             "There should be no more unwritten fields at this point: {:?}",
             self.field_cache
