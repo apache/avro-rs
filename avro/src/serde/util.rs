@@ -266,6 +266,7 @@ impl SerializeMap for StringSerializer {
         Err(Details::MapFieldExpectedString.into())
     }
 }
+
 impl SerializeStruct for StringSerializer {
     type Ok = String;
     type Error = Error;
@@ -281,6 +282,7 @@ impl SerializeStruct for StringSerializer {
         Err(Details::MapFieldExpectedString.into())
     }
 }
+
 impl SerializeStructVariant for StringSerializer {
     type Ok = String;
     type Error = Error;

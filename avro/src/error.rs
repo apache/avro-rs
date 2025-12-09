@@ -580,8 +580,11 @@ pub enum Details {
     #[error("Cannot convert a slice to Uuid: {0}")]
     UuidFromSlice(#[source] uuid::Error),
 
-    #[error("Expected String for Map key")]
+    #[error("Expected String for Map key when serializing a flattened struct")]
     MapFieldExpectedString,
+
+    #[error("No key for value when serializing a map")]
+    MapNoKey,
 }
 
 #[derive(thiserror::Error, PartialEq)]

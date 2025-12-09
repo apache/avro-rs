@@ -179,7 +179,7 @@ fn get_data_struct_schema_def(
                                 schema_fields.push(field)
                             }
                         } else {
-                            panic!("Can only flatten RecordSchema")
+                            panic!("Can only flatten RecordSchema, got {:?}", #flatten_ty::get_schema())
                         }
                     });
 
@@ -238,6 +238,8 @@ fn get_data_struct_schema_def(
     Ok(quote! {
         let mut schema_fields = Vec::with_capacity(#minimum_fields);
         #(#record_field_exprs)*
+        let schema_field_set: ::std::collections::HashSet<_> = schema_fields.iter().map(|rf| &rf.name).collect();
+        assert_eq!(schema_fields.len(), schema_field_set.len(), "Duplicate field names found: {schema_fields:?}");
         let name = apache_avro::schema::Name::new(#full_schema_name).expect(&format!("Unable to parse struct name for schema {}", #full_schema_name)[..]);
         let lookup: std::collections::BTreeMap<String, usize> = schema_fields
             .iter()

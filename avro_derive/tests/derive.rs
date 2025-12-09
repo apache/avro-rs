@@ -1688,7 +1688,7 @@ mod test_derive {
     }
 
     #[test]
-    fn avro_247_serde_flatten_support() {
+    fn avro_rs_247_serde_flatten_support() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
         struct Nested {
             a: bool,
@@ -1720,19 +1720,7 @@ mod test_derive {
         "#;
 
         let schema = Schema::parse_str(schema).unwrap();
-        let derived_schema = Foo::get_schema();
-        if let Schema::Record(RecordSchema { name, fields, .. }) = &derived_schema {
-            assert_eq!("Foo", name.fullname(None));
-            for field in fields {
-                match field.name.as_str() {
-                    "a" | "b" => (), // expected
-                    name => panic!("Unexpected field name '{name}'"),
-                }
-            }
-        } else {
-            panic!("Foo schema must be a record schema: {derived_schema:?}")
-        }
-        assert_eq!(schema, derived_schema);
+        assert_eq!(schema, Foo::get_schema());
 
         serde_assert(Foo {
             nested: Nested { a: true },
@@ -1741,48 +1729,125 @@ mod test_derive {
     }
 
     #[test]
-    fn avro_247_serde_nested_flatten_support() {
-        use apache_avro::{AvroSchema, Reader, Writer, from_value};
+    fn avro_rs_247_serde_nested_flatten_support() {
+        use apache_avro::AvroSchema;
         use serde::{Deserialize, Serialize};
 
-        #[derive(AvroSchema, Serialize, Deserialize, PartialEq, Debug)]
+        #[derive(AvroSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
         pub struct NestedFoo {
             one: u32,
         }
 
-        #[derive(AvroSchema, Debug, Serialize, Deserialize, PartialEq)]
+        #[derive(AvroSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
         pub struct Foo {
             #[serde(flatten)]
             #[avro(flatten)]
             nested_foo: NestedFoo,
         }
 
-        #[derive(AvroSchema, Serialize, Debug, Deserialize, PartialEq)]
+        #[derive(AvroSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
         struct Bar {
             foo: Foo,
             two: u32,
         }
 
-        let bar = Bar {
+        let schema = r#"
+        {
+            "type":"record",
+            "name":"Bar",
+            "fields": [
+                {
+                    "name":"foo",
+                    "type": {
+                        "type": "record",
+                        "name": "Foo",
+                        "fields": [
+                            {
+                                "name": "one",
+                                "type": "long"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name":"two",
+                    "type":"long"
+                }
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Bar::get_schema());
+
+        serde_assert(Bar {
             foo: Foo {
                 nested_foo: NestedFoo { one: 42 },
             },
             two: 2,
-            // test_enum: TestEnum::B,
-        };
+        });
+    }
 
-        let schema = Bar::get_schema();
-        println!("Generated schema: {:#?}", schema);
+    #[test]
+    #[should_panic(expected = "Duplicate field names found")]
+    fn avro_rs_247_serde_flatten_support_duplicate_field_name() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct Nested {
+            a: i32,
+        }
 
-        // When appending a value, use this crate's special extension method
-        let mut writer = Writer::new(&schema, Vec::new()).unwrap();
-        writer.append_ser(&bar).unwrap();
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct Foo {
+            #[serde(flatten)]
+            #[avro(flatten)]
+            nested: Nested,
+            a: i32,
+        }
 
-        // Check that it was correctly serialized and is deserializable
-        let encoded = writer.into_inner().unwrap();
-        let mut reader = Reader::new(&encoded[..]).unwrap();
-        let value = reader.next().unwrap().unwrap();
-        let result: Bar = from_value(&value).unwrap();
-        assert_eq!(result, bar);
+        Foo::get_schema();
+    }
+
+    #[test]
+    fn avro_rs_247_serde_flatten_support_with_skip() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct Nested {
+            a: bool,
+            #[serde(skip)]
+            #[avro(skip)]
+            c: f64,
+        }
+
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct Foo {
+            #[serde(flatten)]
+            #[avro(flatten)]
+            nested: Nested,
+            b: i32,
+        }
+
+        let schema = r#"
+        {
+            "type":"record",
+            "name":"Foo",
+            "fields": [
+                {
+                    "name":"a",
+                    "type":"boolean"
+                },
+                {
+                    "name":"b",
+                    "type":"int"
+                }
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo {
+            nested: Nested { a: true, c: 0.0 },
+            b: 321,
+        });
     }
 }

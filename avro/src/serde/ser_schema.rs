@@ -356,9 +356,10 @@ impl<'a, 's, W: Write> SchemaAwareWriteSerializeStruct<'a, 's, W> {
             "There should be no more unwritten fields at this point: {:?}",
             self.field_cache
         );
-        assert!(
+        debug_assert!(
             self.map_field_name.is_none(),
-            "There should be no field name at this point"
+            "There should be no field name at this point: field {:?}",
+            self.map_field_name
         );
         Ok(self.bytes_written)
     }
@@ -425,6 +426,7 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
     }
 }
 
+/// This implementation is used to support `#[serde(flatten)]` as that uses SerializeMap instead of SerializeStruct.
 impl<W: Write> ser::SerializeMap for SchemaAwareWriteSerializeStruct<'_, '_, W> {
     type Ok = usize;
     type Error = Error;
@@ -434,9 +436,11 @@ impl<W: Write> ser::SerializeMap for SchemaAwareWriteSerializeStruct<'_, '_, W> 
         T: ?Sized + Serialize,
     {
         let name = key.serialize(StringSerializer)?;
-        assert!(
-            self.map_field_name.replace(name).is_none(),
-            "Got two keys in a row"
+        let old = self.map_field_name.replace(name);
+        debug_assert!(
+            old.is_none(),
+            "Expected a value instead of a key: old key: {old:?}, new key: {:?}",
+            self.map_field_name
         );
         Ok(())
     }
@@ -445,7 +449,7 @@ impl<W: Write> ser::SerializeMap for SchemaAwareWriteSerializeStruct<'_, '_, W> 
     where
         T: ?Sized + Serialize,
     {
-        let key = self.map_field_name.take().expect("Got value without key");
+        let key = self.map_field_name.take().ok_or(Details::MapNoKey)?;
         let record_field = self
             .record_schema
             .lookup
@@ -1605,10 +1609,14 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
             Schema::Map(map_schema) => Ok(SchemaAwareWriteSerializeMapOrStruct::Map(
                 SchemaAwareWriteSerializeMap::new(self, map_schema.types.as_ref(), len),
             )),
+            Schema::Ref { name: ref_name } => {
+                let ref_schema = self.get_ref_schema(ref_name)?;
+                self.serialize_map_with_schema(len, ref_schema)
+            }
             Schema::Union(union_schema) => {
                 for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
                     match variant_schema {
-                        Schema::Map(_) => {
+                        Schema::Map(_) | Schema::Record(_) | Schema::Ref { .. } => {
                             encode_int(i as i32, &mut *self.writer)?;
                             return self.serialize_map_with_schema(len, variant_schema);
                         }
