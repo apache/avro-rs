@@ -30,7 +30,7 @@ use apache_avro::{
 };
 use apache_avro_test_helper::{
     TestResult,
-    data::{DOC_EXAMPLES, examples, valid_examples},
+    data::{DOC_EXAMPLES, OTHER_ATTRIBUTES_EXAMPLES, examples, valid_examples},
     init,
 };
 
@@ -708,39 +708,41 @@ fn test_doc_attributes() -> TestResult {
     Ok(())
 }
 
-/*
-TODO: (#94) add support for user-defined attributes and uncomment (may need some tweaks to compile)
+// https://github.com/flavray/avro-rs/issues/93
 #[test]
-fn test_other_attributes() {
-    fn assert_attribute_type(attribute: (String, serde_json::Value)) {
-        match attribute.1.as_ref() {
-            "cp_boolean" => assert!(attribute.2.is_bool()),
-            "cp_int" => assert!(attribute.2.is_i64()),
-            "cp_object" => assert!(attribute.2.is_object()),
-            "cp_float" => assert!(attribute.2.is_f64()),
-            "cp_array" => assert!(attribute.2.is_array()),
+fn test_avro_old_93_other_attributes() -> TestResult {
+    fn assert_attribute_type(attribute: (&String, &serde_json::Value)) {
+        match attribute.0.as_str() {
+            "cp_boolean" => assert!(attribute.1.is_boolean()),
+            "cp_int" => assert!(attribute.1.is_i64()),
+            "cp_object" => assert!(attribute.1.is_object()),
+            "cp_float" => assert!(attribute.1.is_f64()),
+            "cp_array" => assert!(attribute.1.is_array()),
+            "cp_string" => assert!(attribute.1.is_string()),
+            "cp_null" => assert!(attribute.1.is_null()),
+            _ => panic!("Unexpected attribute name: {attribute:?}"),
         }
     }
 
     for (raw_schema, _) in OTHER_ATTRIBUTES_EXAMPLES.iter() {
         let schema = Schema::parse_str(raw_schema)?;
         // all inputs have at least some user-defined attributes
-        assert!(schema.other_attributes.is_some());
-        for prop in schema.other_attributes?.iter() {
+        assert!(schema.custom_attributes().is_some());
+        for prop in schema.custom_attributes().unwrap().iter() {
             assert_attribute_type(prop);
         }
-        if let Schema::Record { fields, .. } = schema {
-           for f in fields {
-               // all fields in the record have at least some user-defined attributes
-               assert!(f.schema.other_attributes.is_some());
-               for prop in f.schema.other_attributes?.iter() {
-                   assert_attribute_type(prop);
-               }
-           }
+        if let Schema::Record(RecordSchema { fields, .. }) = schema {
+            for f in fields {
+                // all fields in the record have at least some user-defined attributes
+                assert!(!f.custom_attributes.is_empty());
+                for prop in f.custom_attributes.iter() {
+                    assert_attribute_type(prop);
+                }
+            }
         }
     }
+    Ok(())
 }
-*/
 
 #[test]
 fn test_root_error_is_not_swallowed_on_parse_error() -> Result<(), String> {
@@ -827,22 +829,6 @@ fn test_record_schema_with_cyclic_references() -> TestResult {
     }
     Ok(())
 }
-
-/*
-// TODO: (#93) add support for logical type and attributes and uncomment (may need some tweaks to compile)
-#[test]
-fn test_decimal_valid_type_attributes() {
-    init();
-    let fixed_decimal = Schema::parse_str(DECIMAL_LOGICAL_TYPE_ATTRIBUTES[0])?;
-    assert_eq!(4, fixed_decimal.get_attribute("precision"));
-    assert_eq!(2, fixed_decimal.get_attribute("scale"));
-    assert_eq!(2, fixed_decimal.get_attribute("size"));
-
-    let bytes_decimal = Schema::parse_str(DECIMAL_LOGICAL_TYPE_ATTRIBUTES[1])?;
-    assert_eq!(4, bytes_decimal.get_attribute("precision"));
-    assert_eq!(0, bytes_decimal.get_attribute("scale"));
-}
-*/
 
 // https://github.com/flavray/avro-rs/issues/47
 #[test]
