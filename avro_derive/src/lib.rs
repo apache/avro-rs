@@ -39,6 +39,8 @@ struct FieldOptions {
     rename: Option<String>,
     #[darling(default)]
     skip: Option<bool>,
+    #[darling(default)]
+    flatten: Option<bool>,
 }
 
 #[derive(darling::FromAttributes)]
@@ -142,26 +144,46 @@ fn get_data_struct_schema_def(
     let mut record_field_exprs = vec![];
     match s.fields {
         syn::Fields::Named(ref a) => {
-            let mut index: usize = 0;
             for field in a.named.iter() {
-                let mut name = field.ident.as_ref().unwrap().to_string(); // we know everything has a name
+                let mut name = field
+                    .ident
+                    .as_ref()
+                    .expect("Field must have a name")
+                    .to_string();
                 if let Some(raw_name) = name.strip_prefix("r#") {
                     name = raw_name.to_string();
                 }
                 let field_attrs =
-                    FieldOptions::from_attributes(&field.attrs[..]).map_err(darling_to_syn)?;
+                    FieldOptions::from_attributes(&field.attrs).map_err(darling_to_syn)?;
                 let doc =
                     preserve_optional(field_attrs.doc.or_else(|| extract_outer_doc(&field.attrs)));
                 match (field_attrs.rename, rename_all) {
                     (Some(rename), _) => {
                         name = rename;
                     }
-                    (None, rename_all) if !matches!(rename_all, RenameRule::None) => {
+                    (None, rename_all) if rename_all != RenameRule::None => {
                         name = rename_all.apply_to_field(&name);
                     }
                     _ => {}
                 }
-                if let Some(true) = field_attrs.skip {
+                if Some(true) == field_attrs.skip {
+                    continue;
+                } else if Some(true) == field_attrs.flatten {
+                    // Inline the fields of the child record at runtime, as we don't have access to
+                    // the schema here.
+                    let flatten_ty = &field.ty;
+                    record_field_exprs.push(quote! {
+                        if let ::apache_avro::schema::Schema::Record(::apache_avro::schema::RecordSchema { fields, .. }) = #flatten_ty::get_schema() {
+                            for mut field in fields {
+                                field.position = schema_fields.len();
+                                schema_fields.push(field)
+                            }
+                        } else {
+                            panic!("Can only flatten RecordSchema, got {:?}", #flatten_ty::get_schema())
+                        }
+                    });
+
+                    // Don't add this field as it's been replaced by the child record fields
                     continue;
                 }
                 let default_value = match field_attrs.default {
@@ -181,20 +203,18 @@ fn get_data_struct_schema_def(
                 };
                 let aliases = preserve_vec(field_attrs.alias);
                 let schema_expr = type_to_schema_expr(&field.ty)?;
-                let position = index;
                 record_field_exprs.push(quote! {
-                    apache_avro::schema::RecordField {
-                            name: #name.to_string(),
-                            doc: #doc,
-                            default: #default_value,
-                            aliases: #aliases,
-                            schema: #schema_expr,
-                            order: apache_avro::schema::RecordFieldOrder::Ascending,
-                            position: #position,
-                            custom_attributes: Default::default(),
-                        }
+                    schema_fields.push(::apache_avro::schema::RecordField {
+                        name: #name.to_string(),
+                        doc: #doc,
+                        default: #default_value,
+                        aliases: #aliases,
+                        schema: #schema_expr,
+                        order: ::apache_avro::schema::RecordFieldOrder::Ascending,
+                        position: schema_fields.len(),
+                        custom_attributes: Default::default(),
+                    });
                 });
-                index += 1;
             }
         }
         syn::Fields::Unnamed(_) => {
@@ -212,8 +232,14 @@ fn get_data_struct_schema_def(
     }
     let record_doc = preserve_optional(record_doc);
     let record_aliases = preserve_vec(aliases);
+    // When flatten is involved, there will be more but we don't know how many. This optimises for
+    // the most common case where there is no flatten.
+    let minimum_fields = record_field_exprs.len();
     Ok(quote! {
-        let schema_fields = vec![#(#record_field_exprs),*];
+        let mut schema_fields = Vec::with_capacity(#minimum_fields);
+        #(#record_field_exprs)*
+        let schema_field_set: ::std::collections::HashSet<_> = schema_fields.iter().map(|rf| &rf.name).collect();
+        assert_eq!(schema_fields.len(), schema_field_set.len(), "Duplicate field names found: {schema_fields:?}");
         let name = apache_avro::schema::Name::new(#full_schema_name).expect(&format!("Unable to parse struct name for schema {}", #full_schema_name)[..]);
         let lookup: std::collections::BTreeMap<String, usize> = schema_fields
             .iter()
@@ -683,7 +709,7 @@ mod tests {
         match syn::parse2::<DeriveInput>(test_struct) {
             Ok(mut input) => {
                 let schema_res = derive_avro_schema(&mut input);
-                let expected_token_stream = r#"let schema_fields = vec ! [apache_avro :: schema :: RecordField { name : "a3" . to_string () , doc : Some ("a doc" . into ()) , default : Some (serde_json :: from_str ("123") . expect (format ! ("Invalid JSON: {:?}" , "123") . as_str ())) , aliases : Some (vec ! ["a1" . into () , "a2" . into ()]) , schema : apache_avro :: schema :: Schema :: Int , order : apache_avro :: schema :: RecordFieldOrder :: Ascending , position : 0usize , custom_attributes : Default :: default () , }] ;"#;
+                let expected_token_stream = r#"let mut schema_fields = Vec :: with_capacity (1usize) ; schema_fields . push (:: apache_avro :: schema :: RecordField { name : "a3" . to_string () , doc : Some ("a doc" . into ()) , default : Some (serde_json :: from_str ("123") . expect (format ! ("Invalid JSON: {:?}" , "123") . as_str ())) , aliases : Some (vec ! ["a1" . into () , "a2" . into ()]) , schema : apache_avro :: schema :: Schema :: Int , order : :: apache_avro :: schema :: RecordFieldOrder :: Ascending , position : schema_fields . len () , custom_attributes : Default :: default () , }) ;"#;
                 let schema_token_stream = schema_res.unwrap().to_string();
                 assert!(schema_token_stream.contains(expected_token_stream));
             }
@@ -725,7 +751,7 @@ mod tests {
         match syn::parse2::<DeriveInput>(test_struct) {
             Ok(mut input) => {
                 let schema_res = derive_avro_schema(&mut input);
-                let expected_token_stream = r#"let name = apache_avro :: schema :: Name :: new ("A") . expect (& format ! ("Unable to parse schema name {}" , "A") [..]) . fully_qualified_name (enclosing_namespace) ; let enclosing_namespace = & name . namespace ; if named_schemas . contains_key (& name) { apache_avro :: schema :: Schema :: Ref { name : name . clone () } } else { named_schemas . insert (name . clone () , apache_avro :: schema :: Schema :: Ref { name : name . clone () }) ; let schema_fields = vec ! [apache_avro :: schema :: RecordField { name : "ITEM" . to_string () , doc : None , default : None , aliases : None , schema : apache_avro :: schema :: Schema :: Int , order : apache_avro :: schema :: RecordFieldOrder :: Ascending , position : 0usize , custom_attributes : Default :: default () , } , apache_avro :: schema :: RecordField { name : "DOUBLE_ITEM" . to_string () , doc : None , default : None , aliases : None , schema : apache_avro :: schema :: Schema :: Int , order : apache_avro :: schema :: RecordFieldOrder :: Ascending , position : 1usize , custom_attributes : Default :: default () , }] ;"#;
+                let expected_token_stream = r#"let name = apache_avro :: schema :: Name :: new ("A") . expect (& format ! ("Unable to parse schema name {}" , "A") [..]) . fully_qualified_name (enclosing_namespace) ; let enclosing_namespace = & name . namespace ; if named_schemas . contains_key (& name) { apache_avro :: schema :: Schema :: Ref { name : name . clone () } } else { named_schemas . insert (name . clone () , apache_avro :: schema :: Schema :: Ref { name : name . clone () }) ; let mut schema_fields = Vec :: with_capacity (2usize) ; schema_fields . push (:: apache_avro :: schema :: RecordField { name : "ITEM" . to_string () , doc : None , default : None , aliases : None , schema : apache_avro :: schema :: Schema :: Int , order : :: apache_avro :: schema :: RecordFieldOrder :: Ascending , position : schema_fields . len () , custom_attributes : Default :: default () , }) ; schema_fields . push (:: apache_avro :: schema :: RecordField { name : "DOUBLE_ITEM" . to_string () , doc : None , default : None , aliases : None , schema : apache_avro :: schema :: Schema :: Int , order : :: apache_avro :: schema :: RecordFieldOrder :: Ascending , position : schema_fields . len () , custom_attributes : Default :: default () , }) ;"#;
                 let schema_token_stream = schema_res.unwrap().to_string();
                 assert!(schema_token_stream.contains(expected_token_stream));
             }
@@ -769,7 +795,7 @@ mod tests {
         match syn::parse2::<DeriveInput>(test_struct) {
             Ok(mut input) => {
                 let schema_res = derive_avro_schema(&mut input);
-                let expected_token_stream = r#"let name = apache_avro :: schema :: Name :: new ("A") . expect (& format ! ("Unable to parse schema name {}" , "A") [..]) . fully_qualified_name (enclosing_namespace) ; let enclosing_namespace = & name . namespace ; if named_schemas . contains_key (& name) { apache_avro :: schema :: Schema :: Ref { name : name . clone () } } else { named_schemas . insert (name . clone () , apache_avro :: schema :: Schema :: Ref { name : name . clone () }) ; let schema_fields = vec ! [apache_avro :: schema :: RecordField { name : "ITEM" . to_string () , doc : None , default : None , aliases : None , schema : apache_avro :: schema :: Schema :: Int , order : apache_avro :: schema :: RecordFieldOrder :: Ascending , position : 0usize , custom_attributes : Default :: default () , } , apache_avro :: schema :: RecordField { name : "DoubleItem" . to_string () , doc : None , default : None , aliases : None , schema : apache_avro :: schema :: Schema :: Int , order : apache_avro :: schema :: RecordFieldOrder :: Ascending , position : 1usize , custom_attributes : Default :: default () , }] ;"#;
+                let expected_token_stream = r#"let name = apache_avro :: schema :: Name :: new ("A") . expect (& format ! ("Unable to parse schema name {}" , "A") [..]) . fully_qualified_name (enclosing_namespace) ; let enclosing_namespace = & name . namespace ; if named_schemas . contains_key (& name) { apache_avro :: schema :: Schema :: Ref { name : name . clone () } } else { named_schemas . insert (name . clone () , apache_avro :: schema :: Schema :: Ref { name : name . clone () }) ; let mut schema_fields = Vec :: with_capacity (2usize) ; schema_fields . push (:: apache_avro :: schema :: RecordField { name : "ITEM" . to_string () , doc : None , default : None , aliases : None , schema : apache_avro :: schema :: Schema :: Int , order : :: apache_avro :: schema :: RecordFieldOrder :: Ascending , position : schema_fields . len () , custom_attributes : Default :: default () , }) ; schema_fields . push (:: apache_avro :: schema :: RecordField { name : "DoubleItem" . to_string () , doc : None , default : None , aliases : None , schema : apache_avro :: schema :: Schema :: Int , order : :: apache_avro :: schema :: RecordFieldOrder :: Ascending , position : schema_fields . len () , custom_attributes : Default :: default () , }) ;"#;
                 let schema_token_stream = schema_res.unwrap().to_string();
                 assert!(schema_token_stream.contains(expected_token_stream));
             }

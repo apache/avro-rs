@@ -1686,4 +1686,168 @@ mod test_derive {
             panic!("Unexpected schema type for Foo")
         }
     }
+
+    #[test]
+    fn avro_rs_247_serde_flatten_support() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct Nested {
+            a: bool,
+        }
+
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct Foo {
+            #[serde(flatten)]
+            #[avro(flatten)]
+            nested: Nested,
+            b: i32,
+        }
+
+        let schema = r#"
+        {
+            "type":"record",
+            "name":"Foo",
+            "fields": [
+                {
+                    "name":"a",
+                    "type":"boolean"
+                },
+                {
+                    "name":"b",
+                    "type":"int"
+                }
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo {
+            nested: Nested { a: true },
+            b: 321,
+        });
+    }
+
+    #[test]
+    fn avro_rs_247_serde_nested_flatten_support() {
+        use apache_avro::AvroSchema;
+        use serde::{Deserialize, Serialize};
+
+        #[derive(AvroSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
+        pub struct NestedFoo {
+            one: u32,
+        }
+
+        #[derive(AvroSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
+        pub struct Foo {
+            #[serde(flatten)]
+            #[avro(flatten)]
+            nested_foo: NestedFoo,
+        }
+
+        #[derive(AvroSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
+        struct Bar {
+            foo: Foo,
+            two: u32,
+        }
+
+        let schema = r#"
+        {
+            "type":"record",
+            "name":"Bar",
+            "fields": [
+                {
+                    "name":"foo",
+                    "type": {
+                        "type": "record",
+                        "name": "Foo",
+                        "fields": [
+                            {
+                                "name": "one",
+                                "type": "long"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name":"two",
+                    "type":"long"
+                }
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Bar::get_schema());
+
+        serde_assert(Bar {
+            foo: Foo {
+                nested_foo: NestedFoo { one: 42 },
+            },
+            two: 2,
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "Duplicate field names found")]
+    fn avro_rs_247_serde_flatten_support_duplicate_field_name() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct Nested {
+            a: i32,
+        }
+
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct Foo {
+            #[serde(flatten)]
+            #[avro(flatten)]
+            nested: Nested,
+            a: i32,
+        }
+
+        Foo::get_schema();
+    }
+
+    #[test]
+    fn avro_rs_247_serde_flatten_support_with_skip() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct Nested {
+            a: bool,
+            #[serde(skip)]
+            #[avro(skip)]
+            c: f64,
+        }
+
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct Foo {
+            #[serde(flatten)]
+            #[avro(flatten)]
+            nested: Nested,
+            b: i32,
+        }
+
+        let schema = r#"
+        {
+            "type":"record",
+            "name":"Foo",
+            "fields": [
+                {
+                    "name":"a",
+                    "type":"boolean"
+                },
+                {
+                    "name":"b",
+                    "type":"int"
+                }
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo {
+            nested: Nested { a: true, c: 0.0 },
+            b: 321,
+        });
+    }
 }
