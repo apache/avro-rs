@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::schema::{InnerDecimalSchema, UuidSchema};
 use crate::{
     Schema,
     schema::{
@@ -83,8 +84,6 @@ impl SchemataEq for StructFieldEq {
             (Schema::Bytes, _) => false,
             (Schema::String, Schema::String) => true,
             (Schema::String, _) => false,
-            (Schema::Uuid, Schema::Uuid) => true,
-            (Schema::Uuid, _) => false,
             (Schema::BigDecimal, Schema::BigDecimal) => true,
             (Schema::BigDecimal, _) => false,
             (Schema::Date, Schema::Date) => true,
@@ -143,9 +142,23 @@ impl SchemataEq for StructFieldEq {
                 Schema::Decimal(DecimalSchema { precision: precision_one, scale: scale_one, inner: inner_one }),
                 Schema::Decimal(DecimalSchema { precision: precision_two, scale: scale_two, inner: inner_two })
             ) => {
-                precision_one == precision_two && scale_one == scale_two && self.compare(inner_one, inner_two)
+                precision_one == precision_two && scale_one == scale_two && match (inner_one, inner_two) {
+                    (InnerDecimalSchema::Bytes, InnerDecimalSchema::Bytes) => true,
+                    (InnerDecimalSchema::Fixed(FixedSchema { size: size_one, .. }), InnerDecimalSchema::Fixed(FixedSchema { size: size_two, ..})) => {
+                        size_one == size_two
+                    }
+                    _ => false,
+                }
             }
             (Schema::Decimal(_), _) => false,
+            (Schema::Uuid(UuidSchema::Bytes), Schema::Uuid(UuidSchema::Bytes)) => true,
+            (Schema::Uuid(UuidSchema::Bytes), _) => false,
+            (Schema::Uuid(UuidSchema::String), Schema::Uuid(UuidSchema::String)) => true,
+            (Schema::Uuid(UuidSchema::String), _) => false,
+            (Schema::Uuid(UuidSchema::Fixed(FixedSchema { size: size_one, ..})), Schema::Uuid(UuidSchema::Fixed(FixedSchema { size: size_two, ..}))) => {
+                size_one == size_two
+            },
+            (Schema::Uuid(UuidSchema::Fixed(_)), _) => false,
             (
                 Schema::Array(ArraySchema { items: items_one, ..}),
                 Schema::Array(ArraySchema { items: items_two, ..})
@@ -212,7 +225,7 @@ pub(crate) fn compare_schemata(schema_one: &Schema, schema_two: &Schema) -> bool
 #[allow(non_snake_case)]
 mod tests {
     use super::*;
-    use crate::schema::{Name, RecordFieldOrder};
+    use crate::schema::{InnerDecimalSchema, Name, RecordFieldOrder};
     use apache_avro_test_helper::TestResult;
     use serde_json::Value;
     use std::collections::BTreeMap;
@@ -243,7 +256,6 @@ mod tests {
     test_primitives!(Double);
     test_primitives!(Bytes);
     test_primitives!(String);
-    test_primitives!(Uuid);
     test_primitives!(BigDecimal);
     test_primitives!(Date);
     test_primitives!(Duration);
@@ -351,7 +363,7 @@ mod tests {
         let schema_one = Schema::Decimal(DecimalSchema {
             precision: 10,
             scale: 2,
-            inner: Box::new(Schema::Bytes),
+            inner: InnerDecimalSchema::Bytes,
         });
         assert!(!SPECIFICATION_EQ.compare(&schema_one, &Schema::Boolean));
         assert!(!STRUCT_FIELD_EQ.compare(&schema_one, &Schema::Boolean));
@@ -359,7 +371,7 @@ mod tests {
         let schema_two = Schema::Decimal(DecimalSchema {
             precision: 10,
             scale: 2,
-            inner: Box::new(Schema::Bytes),
+            inner: InnerDecimalSchema::Bytes,
         });
 
         let specification_eq_res = SPECIFICATION_EQ.compare(&schema_one, &schema_two);
@@ -542,6 +554,62 @@ mod tests {
             "StructFieldEq: Equality of two Schema::Union failed!"
         );
         assert_eq!(specification_eq_res, struct_field_eq_res);
+        Ok(())
+    }
+
+    #[test]
+    fn test_uuid_compare_uuid() -> TestResult {
+        let string = Schema::Uuid(UuidSchema::String);
+        let bytes = Schema::Uuid(UuidSchema::Bytes);
+        let mut fixed_schema = FixedSchema {
+            name: Name {
+                name: "some_name".to_string(),
+                namespace: None,
+            },
+            aliases: None,
+            doc: None,
+            size: 16,
+            default: None,
+            attributes: Default::default(),
+        };
+        let fixed = Schema::Uuid(UuidSchema::Fixed(fixed_schema.clone()));
+        fixed_schema
+            .attributes
+            .insert("Something".to_string(), Value::Null);
+        let fixed_different = Schema::Uuid(UuidSchema::Fixed(fixed_schema));
+
+        assert!(SPECIFICATION_EQ.compare(&string, &string));
+        assert!(STRUCT_FIELD_EQ.compare(&string, &string));
+        assert!(SPECIFICATION_EQ.compare(&bytes, &bytes));
+        assert!(STRUCT_FIELD_EQ.compare(&bytes, &bytes));
+        assert!(SPECIFICATION_EQ.compare(&fixed, &fixed));
+        assert!(STRUCT_FIELD_EQ.compare(&fixed, &fixed));
+
+        assert!(!SPECIFICATION_EQ.compare(&string, &bytes));
+        assert!(!STRUCT_FIELD_EQ.compare(&string, &bytes));
+        assert!(!SPECIFICATION_EQ.compare(&bytes, &string));
+        assert!(!STRUCT_FIELD_EQ.compare(&bytes, &string));
+        assert!(!SPECIFICATION_EQ.compare(&string, &fixed));
+        assert!(!STRUCT_FIELD_EQ.compare(&string, &fixed));
+        assert!(!SPECIFICATION_EQ.compare(&fixed, &string));
+        assert!(!STRUCT_FIELD_EQ.compare(&fixed, &string));
+        assert!(!SPECIFICATION_EQ.compare(&bytes, &fixed));
+        assert!(!STRUCT_FIELD_EQ.compare(&bytes, &fixed));
+        assert!(!SPECIFICATION_EQ.compare(&fixed, &bytes));
+        assert!(!STRUCT_FIELD_EQ.compare(&fixed, &bytes));
+
+        assert!(SPECIFICATION_EQ.compare(&fixed, &fixed_different));
+        assert!(STRUCT_FIELD_EQ.compare(&fixed, &fixed_different));
+        assert!(SPECIFICATION_EQ.compare(&fixed_different, &fixed));
+        assert!(STRUCT_FIELD_EQ.compare(&fixed_different, &fixed));
+
+        let strict = StructFieldEq {
+            include_attributes: true,
+        };
+
+        assert!(!strict.compare(&fixed, &fixed_different));
+        assert!(!strict.compare(&fixed_different, &fixed));
+
         Ok(())
     }
 }
