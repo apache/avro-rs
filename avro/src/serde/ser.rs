@@ -18,14 +18,14 @@
 //! Logic for serde-compatible serialization.
 use crate::{
     Error,
-    bytes::{BytesType, SER_BYTES_TYPE},
+    serde::serde_with::{BytesType, SER_BYTES_TYPE},
     types::Value,
 };
 use serde::{Serialize, ser};
 use std::{collections::HashMap, iter::once};
 
-#[derive(Clone, Default)]
-pub struct Serializer {}
+#[derive(Clone, Copy)]
+pub struct Serializer;
 
 pub struct SeqSerializer {
     items: Vec<Value>,
@@ -192,7 +192,7 @@ impl<'b> ser::Serializer for &'b mut Serializer {
     where
         T: Serialize + ?Sized,
     {
-        let v = value.serialize(&mut Serializer::default())?;
+        let v = value.serialize(&mut Serializer)?;
         Ok(Value::from(Some(v)))
     }
 
@@ -304,8 +304,7 @@ impl ser::SerializeSeq for SeqSerializer {
     where
         T: Serialize + ?Sized,
     {
-        self.items
-            .push(value.serialize(&mut Serializer::default())?);
+        self.items.push(value.serialize(&mut Serializer)?);
         Ok(())
     }
 
@@ -356,7 +355,7 @@ impl ser::SerializeSeq for SeqVariantSerializer<'_> {
     {
         self.items.push(Value::Union(
             self.index,
-            Box::new(value.serialize(&mut Serializer::default())?),
+            Box::new(value.serialize(&mut Serializer)?),
         ));
         Ok(())
     }
@@ -396,7 +395,7 @@ impl ser::SerializeMap for MapSerializer {
     where
         T: Serialize + ?Sized,
     {
-        let key = key.serialize(&mut Serializer::default())?;
+        let key = key.serialize(&mut Serializer)?;
 
         if let Value::String(key) = key {
             self.indices.insert(key, self.values.len());
@@ -410,8 +409,7 @@ impl ser::SerializeMap for MapSerializer {
     where
         T: Serialize + ?Sized,
     {
-        self.values
-            .push(value.serialize(&mut Serializer::default())?);
+        self.values.push(value.serialize(&mut Serializer)?);
         Ok(())
     }
 
@@ -435,10 +433,8 @@ impl ser::SerializeStruct for StructSerializer {
     where
         T: Serialize + ?Sized,
     {
-        self.fields.push((
-            name.to_owned(),
-            value.serialize(&mut Serializer::default())?,
-        ));
+        self.fields
+            .push((name.to_owned(), value.serialize(&mut Serializer)?));
         Ok(())
     }
 
@@ -455,10 +451,8 @@ impl ser::SerializeStructVariant for StructVariantSerializer<'_> {
     where
         T: Serialize + ?Sized,
     {
-        self.fields.push((
-            name.to_owned(),
-            value.serialize(&mut Serializer::default())?,
-        ));
+        self.fields
+            .push((name.to_owned(), value.serialize(&mut Serializer)?));
         Ok(())
     }
 
@@ -476,17 +470,17 @@ impl ser::SerializeStructVariant for StructVariantSerializer<'_> {
     }
 }
 
-/// Interpret a serializeable instance as a `Value`.
+/// Serialize to a [`Value`].
 ///
 /// This conversion can fail if the value is not valid as per the Avro specification.
 /// e.g: `HashMap` with non-string keys.
 ///
 /// This function does not work if `S` has any fields (recursively) that have the `#[serde(flatten)]`
-/// attribute. Please use [`Writer::append_ser`] if that's the case.
+/// attribute. Please use [`Writer::append_ser`] instead.
 ///
 /// [`Writer::append_ser`]: crate::Writer::append_ser
 pub fn to_value<S: Serialize>(value: S) -> Result<Value, Error> {
-    let mut serializer = Serializer::default();
+    let mut serializer = Serializer;
     value.serialize(&mut serializer)
 }
 

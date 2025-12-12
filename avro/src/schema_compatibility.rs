@@ -103,7 +103,7 @@ impl Checker {
         hasher.finish()
     }
 
-    /// The actual implementation of [`full_match_schemas`] but without the recursion protection.
+    /// The actual implementation of [`Self::full_match_schemas`] but without the recursion protection.
     ///
     /// This function should never be called directly as it can recurse infinitely on recursive types.
     #[rustfmt::skip]
