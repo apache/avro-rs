@@ -16,7 +16,7 @@
 // under the License.
 
 //! Logic for serde-compatible deserialization.
-use crate::{Error, bytes::DE_BYTES_BORROWED, error::Details, types::Value};
+use crate::{Error, error::Details, serde::bytes::DE_BYTES_BORROWED, types::Value};
 use serde::{
     Deserialize,
     de::{self, DeserializeSeed, Deserializer as _, Visitor},
@@ -758,7 +758,7 @@ impl<'de> de::Deserializer<'de> for StringDeserializer {
     }
 }
 
-/// Interpret a `Value` as an instance of type `D`.
+/// Deserialize from a [`Value`].
 ///
 /// This conversion can fail if the structure of the `Value` does not match the
 /// structure expected by `D`.

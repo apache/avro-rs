@@ -18,14 +18,14 @@
 use std::cell::Cell;
 
 thread_local! {
-    /// A thread local that is used to decide how to serialize Rust bytes into an Avro
-    /// `types::Value` of type bytes.
+    /// A thread local that is used to decide if Rust bytes need to be serialized to
+    /// [`Value::Bytes`] or [`Value::Fixed`].
     ///
     /// Relies on the fact that serde's serialization process is single-threaded.
     pub(crate) static SER_BYTES_TYPE: Cell<BytesType> = const { Cell::new(BytesType::Bytes) };
 
-    /// A thread local that is used to decide how to deserialize an Avro `types::Value`
-    /// of type bytes into Rust bytes.
+    /// A thread local that is used to decide if a `Value::Bytes` needs to be deserialized to
+    /// a `Vec` or slice.
     ///
     /// Relies on the fact that serde's deserialization process is single-threaded.
     pub(crate) static DE_BYTES_BORROWED: Cell<bool> = const { Cell::new(false) };
@@ -40,23 +40,22 @@ pub(crate) enum BytesType {
 /// Efficient (de)serialization of Avro bytes values.
 ///
 /// This module is intended to be used through the Serde `with` attribute. Use
-/// [`serde_avro_bytes_opt`](crate::serde_avro_bytes_opt) for optional bytes.
+/// [`avro_bytes_opt`] for optional bytes.
 ///
-/// See usage with below example:
 /// ```rust
-/// use apache_avro::{serde_avro_bytes, serde_avro_fixed};
+/// use apache_avro::serde::bytes::{avro_bytes, avro_fixed};
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Serialize, Deserialize)]
 /// struct StructWithBytes {
-///     #[serde(with = "serde_avro_bytes")]
+///     #[serde(with = "avro_bytes")]
 ///     vec_field: Vec<u8>,
 ///
-///     #[serde(with = "serde_avro_fixed")]
+///     #[serde(with = "avro_fixed")]
 ///     fixed_field: [u8; 6],
 /// }
 /// ```
-pub mod serde_avro_bytes {
+pub mod avro_bytes {
     use serde::{Deserializer, Serializer};
 
     pub fn serialize<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
@@ -77,23 +76,22 @@ pub mod serde_avro_bytes {
 /// Efficient (de)serialization of optional Avro bytes values.
 ///
 /// This module is intended to be used through the Serde `with` attribute. Use
-/// [`serde_avro_bytes`](crate::serde_avro_bytes) for non optional bytes.
+/// [`avro_bytes`] for non optional bytes.
 ///
-/// See usage with below example:
 /// ```rust
-/// use apache_avro::{serde_avro_bytes_opt, serde_avro_fixed_opt};
+/// use apache_avro::serde::bytes::{avro_bytes_opt, avro_fixed_opt};
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Serialize, Deserialize)]
 /// struct StructWithBytes {
-///     #[serde(with = "serde_avro_bytes_opt")]
+///     #[serde(with = "avro_bytes_opt")]
 ///     vec_field: Option<Vec<u8>>,
 ///
-///     #[serde(with = "serde_avro_fixed_opt")]
+///     #[serde(with = "avro_fixed_opt")]
 ///     fixed_field: Option<[u8; 6]>,
 /// }
 /// ```
-pub mod serde_avro_bytes_opt {
+pub mod avro_bytes_opt {
     use serde::{Deserializer, Serializer};
     use std::borrow::Borrow;
 
@@ -116,23 +114,22 @@ pub mod serde_avro_bytes_opt {
 /// Efficient (de)serialization of Avro fixed values.
 ///
 /// This module is intended to be used through the Serde `with` attribute. Use
-/// [`serde_avro_fixed_opt`](crate::serde_avro_fixed_opt) for optional fixed values.
+/// [`avro_fixed_opt`] for optional fixed values.
 ///
-/// See usage with below example:
 /// ```rust
-/// use apache_avro::{serde_avro_bytes, serde_avro_fixed};
+/// use apache_avro::serde::bytes::{avro_bytes, avro_fixed};
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Serialize, Deserialize)]
 /// struct StructWithBytes {
-///     #[serde(with = "serde_avro_bytes")]
+///     #[serde(with = "avro_bytes")]
 ///     vec_field: Vec<u8>,
 ///
-///     #[serde(with = "serde_avro_fixed")]
+///     #[serde(with = "avro_fixed")]
 ///     fixed_field: [u8; 6],
 /// }
 /// ```
-pub mod serde_avro_fixed {
+pub mod avro_fixed {
     use super::{BytesType, SER_BYTES_TYPE};
     use serde::{Deserializer, Serializer};
 
@@ -157,23 +154,22 @@ pub mod serde_avro_fixed {
 /// Efficient (de)serialization of optional Avro fixed values.
 ///
 /// This module is intended to be used through the Serde `with` attribute. Use
-/// [`serde_avro_fixed`](crate::serde_avro_fixed) for non optional fixed values.
+/// [`avro_fixed`] for non optional fixed values.
 ///
-/// See usage with below example:
 /// ```rust
-/// use apache_avro::{serde_avro_bytes_opt, serde_avro_fixed_opt};
+/// use apache_avro::serde::bytes::{avro_bytes_opt, avro_fixed_opt};
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Serialize, Deserialize)]
 /// struct StructWithBytes {
-///     #[serde(with = "serde_avro_bytes_opt")]
+///     #[serde(with = "avro_bytes_opt")]
 ///     vec_field: Option<Vec<u8>>,
 ///
-///     #[serde(with = "serde_avro_fixed_opt")]
+///     #[serde(with = "avro_fixed_opt")]
 ///     fixed_field: Option<[u8; 6]>,
 /// }
 /// ```
-pub mod serde_avro_fixed_opt {
+pub mod avro_fixed_opt {
     use super::{BytesType, SER_BYTES_TYPE};
     use serde::{Deserializer, Serializer};
     use std::borrow::Borrow;
@@ -199,26 +195,27 @@ pub mod serde_avro_fixed_opt {
 
 /// Efficient (de)serialization of Avro bytes/fixed borrowed values.
 ///
-/// This module is intended to be used through the Serde `with` attribute. Note that
-/// `bytes: &[u8]` are always serialized as
-/// [`Value::Bytes`](crate::types::Value::Bytes). However, both
-/// [`Value::Bytes`](crate::types::Value::Bytes) and
-/// [`Value::Fixed`](crate::types::Value::Fixed) can be deserialized as `bytes:
-/// &[u8]`. Use [`serde_avro_slice_opt`](crate::serde_avro_slice_opt) for optional
-/// bytes/fixed borrowed values.
+/// This module is intended to be used through the Serde `with` attribute.
 ///
-/// See usage with below example:
+/// Note that `&[u8]` are always serialized as [`Value::Bytes`]. However,
+/// both [`Value::Bytes`] and [`Value::Fixed`] can be deserialized as `&[u8]`.
+///
+/// Use [`avro_slice_opt`] for optional bytes/fixed borrowed values.
+///
 /// ```rust
-/// use apache_avro::serde_avro_slice;
+/// use apache_avro::serde::bytes::avro_slice;
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Serialize, Deserialize)]
 /// struct StructWithBytes<'a> {
-///     #[serde(with = "serde_avro_slice")]
+///     #[serde(with = "avro_slice")]
 ///     slice_field: &'a [u8],
 /// }
 /// ```
-pub mod serde_avro_slice {
+///
+/// [`Value::Bytes`]: crate::types::Value::Bytes
+/// [`Value::Fixed`]: crate::types::Value::Fixed
+pub mod avro_slice {
     use super::DE_BYTES_BORROWED;
     use serde::{Deserializer, Serializer};
 
@@ -242,26 +239,28 @@ pub mod serde_avro_slice {
 
 /// Efficient (de)serialization of optional Avro bytes/fixed borrowed values.
 ///
-/// This module is intended to be used through the Serde `with` attribute. Note that
-/// `bytes: &[u8]` are always serialized as
-/// [`Value::Bytes`](crate::types::Value::Bytes). However, both
-/// [`Value::Bytes`](crate::types::Value::Bytes) and
-/// [`Value::Fixed`](crate::types::Value::Fixed) can be deserialized as `bytes:
-/// &[u8]`. Use [`serde_avro_slice`](crate::serde_avro_slice) for non optional
-/// bytes/fixed borrowed values.
+/// This module is intended to be used through the Serde `with` attribute.
+///
+/// Note that `&[u8]` are always serialized as [`Value::Bytes`]. However,
+/// both [`Value::Bytes`] and [`Value::Fixed`] can be deserialized as `&[u8]`.
+///
+/// Use [`avro_slice`] for non optional bytes/fixed borrowed values.
 ///
 /// See usage with below example:
 /// ```rust
-/// use apache_avro::serde_avro_slice_opt;
+/// use apache_avro::serde::bytes::avro_slice_opt;
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Serialize, Deserialize)]
 /// struct StructWithBytes<'a> {
-///     #[serde(with = "serde_avro_slice_opt")]
+///     #[serde(with = "avro_slice_opt")]
 ///     slice_field: Option<&'a [u8]>,
 /// }
 /// ```
-pub mod serde_avro_slice_opt {
+///
+/// [`Value::Bytes`]: crate::types::Value::Bytes
+/// [`Value::Fixed`]: crate::types::Value::Fixed
+pub mod avro_slice_opt {
     use super::DE_BYTES_BORROWED;
     use serde::{Deserializer, Serializer};
     use std::borrow::Borrow;
@@ -295,19 +294,19 @@ mod tests {
     fn avro_3631_validate_schema_for_struct_with_byte_types() {
         #[derive(Debug, Serialize)]
         struct TestStructWithBytes<'a> {
-            #[serde(with = "serde_avro_bytes")]
+            #[serde(with = "avro_bytes")]
             vec_field: Vec<u8>,
-            #[serde(with = "serde_avro_bytes_opt")]
+            #[serde(with = "avro_bytes_opt")]
             vec_field_opt: Option<Vec<u8>>,
 
-            #[serde(with = "serde_avro_fixed")]
+            #[serde(with = "avro_fixed")]
             fixed_field: [u8; 6],
-            #[serde(with = "serde_avro_fixed_opt")]
+            #[serde(with = "avro_fixed_opt")]
             fixed_field_opt: Option<[u8; 7]>,
 
-            #[serde(with = "serde_avro_slice")]
+            #[serde(with = "avro_slice")]
             slice_field: &'a [u8],
-            #[serde(with = "serde_avro_slice_opt")]
+            #[serde(with = "avro_slice_opt")]
             slice_field_opt: Option<&'a [u8]>,
         }
 
@@ -362,32 +361,32 @@ mod tests {
     fn avro_3631_deserialize_value_to_struct_with_byte_types() {
         #[derive(Debug, Deserialize, PartialEq)]
         struct TestStructWithBytes<'a> {
-            #[serde(with = "serde_avro_bytes")]
+            #[serde(with = "avro_bytes")]
             vec_field: Vec<u8>,
-            #[serde(with = "serde_avro_bytes_opt")]
+            #[serde(with = "avro_bytes_opt")]
             vec_field_opt: Option<Vec<u8>>,
-            #[serde(with = "serde_avro_bytes_opt")]
+            #[serde(with = "avro_bytes_opt")]
             vec_field_opt2: Option<Vec<u8>>,
 
-            #[serde(with = "serde_avro_fixed")]
+            #[serde(with = "avro_fixed")]
             fixed_field: [u8; 6],
-            #[serde(with = "serde_avro_fixed_opt")]
+            #[serde(with = "avro_fixed_opt")]
             fixed_field_opt: Option<[u8; 7]>,
-            #[serde(with = "serde_avro_fixed_opt")]
+            #[serde(with = "avro_fixed_opt")]
             fixed_field_opt2: Option<[u8; 8]>,
 
-            #[serde(with = "serde_avro_slice")]
+            #[serde(with = "avro_slice")]
             slice_bytes_field: &'a [u8],
-            #[serde(with = "serde_avro_slice_opt")]
+            #[serde(with = "avro_slice_opt")]
             slice_bytes_field_opt: Option<&'a [u8]>,
-            #[serde(with = "serde_avro_slice_opt")]
+            #[serde(with = "avro_slice_opt")]
             slice_bytes_field_opt2: Option<&'a [u8]>,
 
-            #[serde(with = "serde_avro_slice")]
+            #[serde(with = "avro_slice")]
             slice_fixed_field: &'a [u8],
-            #[serde(with = "serde_avro_slice_opt")]
+            #[serde(with = "avro_slice_opt")]
             slice_fixed_field_opt: Option<&'a [u8]>,
-            #[serde(with = "serde_avro_slice_opt")]
+            #[serde(with = "avro_slice_opt")]
             slice_fixed_field_opt2: Option<&'a [u8]>,
         }
 
@@ -491,46 +490,46 @@ mod tests {
             array_field: &'a [u8],
             vec_field: Vec<u8>,
 
-            #[serde(with = "serde_avro_fixed")]
+            #[serde(with = "avro_fixed")]
             vec_field2: Vec<u8>,
-            #[serde(with = "serde_avro_fixed_opt")]
+            #[serde(with = "avro_fixed_opt")]
             vec_field2_opt: Option<Vec<u8>>,
-            #[serde(with = "serde_avro_fixed_opt")]
+            #[serde(with = "avro_fixed_opt")]
             vec_field2_opt2: Option<Vec<u8>>,
 
-            #[serde(with = "serde_avro_bytes")]
+            #[serde(with = "avro_bytes")]
             vec_field3: Vec<u8>,
-            #[serde(with = "serde_avro_bytes_opt")]
+            #[serde(with = "avro_bytes_opt")]
             vec_field3_opt: Option<Vec<u8>>,
-            #[serde(with = "serde_avro_bytes_opt")]
+            #[serde(with = "avro_bytes_opt")]
             vec_field3_opt2: Option<Vec<u8>>,
 
-            #[serde(with = "serde_avro_fixed")]
+            #[serde(with = "avro_fixed")]
             fixed_field: [u8; 6],
-            #[serde(with = "serde_avro_fixed_opt")]
+            #[serde(with = "avro_fixed_opt")]
             fixed_field_opt: Option<[u8; 5]>,
-            #[serde(with = "serde_avro_fixed_opt")]
+            #[serde(with = "avro_fixed_opt")]
             fixed_field_opt2: Option<[u8; 4]>,
 
-            #[serde(with = "serde_avro_fixed")]
+            #[serde(with = "avro_fixed")]
             fixed_field2: &'a [u8],
-            #[serde(with = "serde_avro_fixed_opt")]
+            #[serde(with = "avro_fixed_opt")]
             fixed_field2_opt: Option<&'a [u8]>,
-            #[serde(with = "serde_avro_fixed_opt")]
+            #[serde(with = "avro_fixed_opt")]
             fixed_field2_opt2: Option<&'a [u8]>,
 
-            #[serde(with = "serde_avro_bytes")]
+            #[serde(with = "avro_bytes")]
             bytes_field: &'a [u8],
-            #[serde(with = "serde_avro_bytes_opt")]
+            #[serde(with = "avro_bytes_opt")]
             bytes_field_opt: Option<&'a [u8]>,
-            #[serde(with = "serde_avro_bytes_opt")]
+            #[serde(with = "avro_bytes_opt")]
             bytes_field_opt2: Option<&'a [u8]>,
 
-            #[serde(with = "serde_avro_bytes")]
+            #[serde(with = "avro_bytes")]
             bytes_field2: [u8; 6],
-            #[serde(with = "serde_avro_bytes_opt")]
+            #[serde(with = "avro_bytes_opt")]
             bytes_field2_opt: Option<[u8; 7]>,
-            #[serde(with = "serde_avro_bytes_opt")]
+            #[serde(with = "avro_bytes_opt")]
             bytes_field2_opt2: Option<[u8; 8]>,
         }
 

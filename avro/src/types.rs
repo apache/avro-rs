@@ -2749,7 +2749,7 @@ Field with name '"b"' is not a member of the map items"#,
 
     #[test]
     fn test_avro_3460_validation_with_refs_real_struct() -> TestResult {
-        use crate::serde::ser::Serializer;
+        use crate::serde::to_value;
         use serde::Serialize;
 
         #[derive(Serialize, Clone)]
@@ -2814,12 +2814,9 @@ Field with name '"b"' is not a member of the map items"#,
             b: None,
         };
 
-        let mut ser = Serializer::default();
-        let test_outer1: Value = test_outer1.serialize(&mut ser)?;
-        let mut ser = Serializer::default();
-        let test_outer2: Value = test_outer2.serialize(&mut ser)?;
-        let mut ser = Serializer::default();
-        let test_outer3: Value = test_outer3.serialize(&mut ser)?;
+        let test_outer1 = to_value(test_outer1)?;
+        let test_outer2 = to_value(test_outer2)?;
+        let test_outer3 = to_value(test_outer3)?;
 
         assert!(
             !test_outer1.validate(&schema),
@@ -2838,7 +2835,7 @@ Field with name '"b"' is not a member of the map items"#,
     }
 
     fn avro_3674_with_or_without_namespace(with_namespace: bool) -> TestResult {
-        use crate::serde::ser::Serializer;
+        use crate::serde::to_value;
         use serde::Serialize;
 
         let schema_str = r#"
@@ -2909,8 +2906,7 @@ Field with name '"b"' is not a member of the map items"#,
             },
         };
 
-        let mut ser = Serializer::default();
-        let test_value: Value = msg.serialize(&mut ser)?;
+        let test_value = to_value(msg)?;
         assert!(test_value.validate(&schema), "test_value should validate");
         assert!(
             test_value.resolve(&schema).is_ok(),
@@ -2931,7 +2927,7 @@ Field with name '"b"' is not a member of the map items"#,
     }
 
     fn avro_3688_schema_resolution_panic(set_field_b: bool) -> TestResult {
-        use crate::serde::ser::Serializer;
+        use crate::serde::to_value;
         use serde::{Deserialize, Serialize};
 
         let schema_str = r#"{
@@ -2992,8 +2988,7 @@ Field with name '"b"' is not a member of the map items"#,
             },
         };
 
-        let mut ser = Serializer::default();
-        let test_value: Value = msg.serialize(&mut ser)?;
+        let test_value = to_value(msg)?;
         assert!(test_value.validate(&schema), "test_value should validate");
         assert!(
             test_value.resolve(&schema).is_ok(),
