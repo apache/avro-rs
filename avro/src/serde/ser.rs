@@ -31,9 +31,8 @@ pub struct SeqSerializer {
     items: Vec<Value>,
 }
 
-pub struct SeqVariantSerializer<'a> {
+pub struct SeqVariantSerializer {
     index: u32,
-    variant: &'a str,
     items: Vec<Value>,
 }
 
@@ -46,9 +45,8 @@ pub struct StructSerializer {
     fields: Vec<(String, Value)>,
 }
 
-pub struct StructVariantSerializer<'a> {
+pub struct StructVariantSerializer {
     index: u32,
-    variant: &'a str,
     fields: Vec<(String, Value)>,
 }
 
@@ -63,17 +61,13 @@ impl SeqSerializer {
     }
 }
 
-impl<'a> SeqVariantSerializer<'a> {
-    pub fn new(index: u32, variant: &'a str, len: Option<usize>) -> SeqVariantSerializer<'a> {
+impl SeqVariantSerializer {
+    pub fn new(index: u32, len: Option<usize>) -> SeqVariantSerializer {
         let items = match len {
             Some(len) => Vec::with_capacity(len),
             None => Vec::new(),
         };
-        SeqVariantSerializer {
-            index,
-            variant,
-            items,
-        }
+        SeqVariantSerializer { index, items }
     }
 }
 
@@ -96,26 +90,25 @@ impl StructSerializer {
     }
 }
 
-impl<'a> StructVariantSerializer<'a> {
-    pub fn new(index: u32, variant: &'a str, len: usize) -> StructVariantSerializer<'a> {
+impl StructVariantSerializer {
+    pub fn new(index: u32, len: usize) -> StructVariantSerializer {
         StructVariantSerializer {
             index,
-            variant,
             fields: Vec::with_capacity(len),
         }
     }
 }
 
-impl<'b> ser::Serializer for &'b mut Serializer {
+impl ser::Serializer for &mut Serializer {
     type Ok = Value;
     type Error = Error;
     type SerializeSeq = SeqSerializer;
     type SerializeTuple = SeqSerializer;
     type SerializeTupleStruct = SeqSerializer;
-    type SerializeTupleVariant = SeqVariantSerializer<'b>;
+    type SerializeTupleVariant = SeqVariantSerializer;
     type SerializeMap = MapSerializer;
     type SerializeStruct = StructSerializer;
-    type SerializeStructVariant = StructVariantSerializer<'b>;
+    type SerializeStructVariant = StructVariantSerializer;
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
         Ok(Value::Boolean(v))
@@ -226,21 +219,15 @@ impl<'b> ser::Serializer for &'b mut Serializer {
 
     fn serialize_newtype_variant<T>(
         self,
-        _: &'static str,
+        _name: &'static str,
         index: u32,
-        variant: &'static str,
+        _variant: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize + ?Sized,
     {
-        Ok(Value::Record(vec![
-            ("type".to_owned(), Value::Enum(index, variant.to_owned())),
-            (
-                "value".to_owned(),
-                Value::Union(index, Box::new(value.serialize(self)?)),
-            ),
-        ]))
+        Ok(Value::Union(index, Box::new(value.serialize(self)?)))
     }
 
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
@@ -261,12 +248,12 @@ impl<'b> ser::Serializer for &'b mut Serializer {
 
     fn serialize_tuple_variant(
         self,
-        _: &'static str,
+        _name: &'static str,
         index: u32,
-        variant: &'static str,
+        _variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        Ok(SeqVariantSerializer::new(index, variant, Some(len)))
+        Ok(SeqVariantSerializer::new(index, Some(len)))
     }
 
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
@@ -283,12 +270,12 @@ impl<'b> ser::Serializer for &'b mut Serializer {
 
     fn serialize_struct_variant(
         self,
-        _: &'static str,
+        _name: &'static str,
         index: u32,
-        variant: &'static str,
+        _variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        Ok(StructVariantSerializer::new(index, variant, len))
+        Ok(StructVariantSerializer::new(index, len))
     }
 
     fn is_human_readable(&self) -> bool {
@@ -346,11 +333,11 @@ impl ser::SerializeTupleStruct for SeqSerializer {
     }
 }
 
-impl ser::SerializeSeq for SeqVariantSerializer<'_> {
+impl ser::SerializeTupleVariant for SeqVariantSerializer {
     type Ok = Value;
     type Error = Error;
 
-    fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
+    fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + ?Sized,
     {
@@ -362,29 +349,7 @@ impl ser::SerializeSeq for SeqVariantSerializer<'_> {
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        Ok(Value::Record(vec![
-            (
-                "type".to_owned(),
-                Value::Enum(self.index, self.variant.to_owned()),
-            ),
-            ("value".to_owned(), Value::Array(self.items)),
-        ]))
-    }
-}
-
-impl ser::SerializeTupleVariant for SeqVariantSerializer<'_> {
-    type Ok = Value;
-    type Error = Error;
-
-    fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
-    where
-        T: Serialize + ?Sized,
-    {
-        ser::SerializeSeq::serialize_element(self, value)
-    }
-
-    fn end(self) -> Result<Self::Ok, Self::Error> {
-        ser::SerializeSeq::end(self)
+        Ok(Value::Union(self.index, Box::new(Value::Array(self.items))))
     }
 }
 
@@ -447,7 +412,7 @@ impl ser::SerializeStruct for StructSerializer {
     }
 }
 
-impl ser::SerializeStructVariant for StructVariantSerializer<'_> {
+impl ser::SerializeStructVariant for StructVariantSerializer {
     type Ok = Value;
     type Error = Error;
 
@@ -463,16 +428,10 @@ impl ser::SerializeStructVariant for StructVariantSerializer<'_> {
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        Ok(Value::Record(vec![
-            (
-                "type".to_owned(),
-                Value::Enum(self.index, self.variant.to_owned()),
-            ),
-            (
-                "value".to_owned(),
-                Value::Union(self.index, Box::new(Value::Record(self.fields))),
-            ),
-        ]))
+        Ok(Value::Union(
+            self.index,
+            Box::new(Value::Record(self.fields)),
+        ))
     }
 }
 
@@ -789,13 +748,7 @@ mod tests {
 
         let expected = Value::Record(vec![(
             "a".to_owned(),
-            Value::Record(vec![
-                ("type".to_owned(), Value::Enum(0, "Double".to_owned())),
-                (
-                    "value".to_owned(),
-                    Value::Union(0, Box::new(Value::Double(64.0))),
-                ),
-            ]),
+            Value::Union(0, Box::new(Value::Double(64.0))),
         )]);
 
         assert_eq!(
@@ -851,19 +804,13 @@ mod tests {
         };
         let expected = Value::Record(vec![(
             "a".to_owned(),
-            Value::Record(vec![
-                ("type".to_owned(), Value::Enum(0, "Val1".to_owned())),
-                (
-                    "value".to_owned(),
-                    Value::Union(
-                        0,
-                        Box::new(Value::Record(vec![
-                            ("x".to_owned(), Value::Float(1.0)),
-                            ("y".to_owned(), Value::Float(2.0)),
-                        ])),
-                    ),
-                ),
-            ]),
+            Value::Union(
+                0,
+                Box::new(Value::Record(vec![
+                    ("x".to_owned(), Value::Float(1.0)),
+                    ("y".to_owned(), Value::Float(2.0)),
+                ])),
+            ),
         )]);
 
         assert_eq!(
@@ -965,17 +912,14 @@ mod tests {
 
         let expected = Value::Record(vec![(
             "a".to_owned(),
-            Value::Record(vec![
-                ("type".to_owned(), Value::Enum(1, "Val2".to_owned())),
-                (
-                    "value".to_owned(),
-                    Value::Array(vec![
-                        Value::Union(1, Box::new(Value::Float(1.0))),
-                        Value::Union(1, Box::new(Value::Float(2.0))),
-                        Value::Union(1, Box::new(Value::Float(3.0))),
-                    ]),
-                ),
-            ]),
+            Value::Union(
+                1,
+                Box::new(Value::Array(vec![
+                    Value::Union(1, Box::new(Value::Float(1.0))),
+                    Value::Union(1, Box::new(Value::Float(2.0))),
+                    Value::Union(1, Box::new(Value::Float(3.0))),
+                ])),
+            ),
         )]);
 
         assert_eq!(
