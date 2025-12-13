@@ -1024,18 +1024,32 @@ impl Value {
         enclosing_namespace: &Namespace,
         field_default: &Option<JsonValue>,
     ) -> Result<Self, Error> {
-        let v = match self {
+        let (i, inner, v) = match self {
             // Both are unions case.
-            Value::Union(_i, v) => *v,
+            Value::Union(i, v) => {
+                let index = i as usize;
+                let inner = schema.schemas.get(index)
+                    .ok_or_else(|| Details::UnionIndexOutOfBounds {
+                        schema: schema.clone(),
+                        value: *v.clone(),
+                        index,
+                        num_variants: schema.schemas.len()
+                    })?;
+
+                (index, inner, *v)
+            },
             // Reader is a union, but writer is not.
-            v => v,
+            v => {
+                let (i, inner) = schema
+                    .find_schema_with_known_schemata(&v, Some(names), enclosing_namespace)
+                    .ok_or_else(|| Details::FindUnionVariant {
+                        schema: schema.clone(),
+                        value: v.clone(),
+                    })?;
+
+                (i, inner, v)
+            },
         };
-        let (i, inner) = schema
-            .find_schema_with_known_schemata(&v, Some(names), enclosing_namespace)
-            .ok_or_else(|| Details::FindUnionVariant {
-                schema: schema.clone(),
-                value: v.clone(),
-            })?;
 
         Ok(Value::Union(
             i as u32,
