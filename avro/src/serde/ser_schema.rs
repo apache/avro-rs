@@ -1128,7 +1128,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         match schema {
             Schema::String
             | Schema::Bytes
-            | Schema::Uuid(UuidSchema::Bytes)
+            | Schema::Uuid(UuidSchema::Bytes | UuidSchema::String)
             | Schema::BigDecimal => self.write_bytes(value),
             Schema::Fixed(fixed_schema) | Schema::Uuid(UuidSchema::Fixed(fixed_schema)) => {
                 if value.len() == fixed_schema.size {
@@ -1190,7 +1190,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     match variant_schema {
                         Schema::String
                         | Schema::Bytes
-                        | Schema::Uuid(UuidSchema::Bytes)
+                        | Schema::Uuid(_)
                         | Schema::BigDecimal
                         | Schema::Fixed(_)
                         | Schema::Duration

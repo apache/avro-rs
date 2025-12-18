@@ -1006,7 +1006,7 @@ mod tests {
             &Schema::Decimal(DecimalSchema {
                 precision: 20,
                 scale: 5,
-                inner: inner.clone(),
+                inner,
             }),
             Value::Decimal(Decimal::from(value.clone())),
             &Schema::Fixed(fixed),

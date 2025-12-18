@@ -1181,7 +1181,6 @@ mod tests {
         ];
 
         for (reader, writer) in compatible_schemas {
-            println!("{reader:?}, {writer:?}");
             SchemaCompatibility::can_read(&writer, &reader).unwrap();
         }
     }

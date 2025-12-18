@@ -20,7 +20,7 @@ fn avro_rs_53_uuid_with_string_true() -> TestResult {
                           "type" : {
                             "type" : "string",
                             "logicalType" : "uuid",
-                            "name": "FixedUUID"
+                            "name": "StringUUID"
                           }
                         } ]
                      }"#,

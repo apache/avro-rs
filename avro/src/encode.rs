@@ -167,7 +167,12 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
             }
             _ => Err(Details::EncodeValueAsSchemaError {
                 value_kind: ValueKind::Uuid,
-                supported_schema: vec![SchemaKind::Uuid, SchemaKind::Fixed, SchemaKind::Bytes],
+                supported_schema: vec![
+                    SchemaKind::Uuid,
+                    SchemaKind::Fixed,
+                    SchemaKind::Bytes,
+                    SchemaKind::String,
+                ],
             }
             .into()),
         },

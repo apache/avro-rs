@@ -110,7 +110,7 @@ pub enum Schema {
     /// Logical type which represents `Decimal` values without predefined scale.
     /// The underlying type is serialized and deserialized as `Schema::Bytes`
     BigDecimal,
-    /// A universally unique identifier, annotating a string.
+    /// A universally unique identifier, annotating a string, bytes or fixed.
     Uuid(UuidSchema),
     /// Logical type which represents the number of days since the unix epoch.
     /// Serialization format is `Schema::Int`.
@@ -487,7 +487,13 @@ impl<'s> ResolvedSchema<'s> {
                         self.resolve(vec![schema], enclosing_namespace, known_schemata)?
                     }
                 }
-                Schema::Enum(EnumSchema { name, .. }) | Schema::Fixed(FixedSchema { name, .. }) => {
+                Schema::Enum(EnumSchema { name, .. })
+                | Schema::Fixed(FixedSchema { name, .. })
+                | Schema::Uuid(UuidSchema::Fixed(FixedSchema { name, .. }))
+                | Schema::Decimal(DecimalSchema {
+                    inner: InnerDecimalSchema::Fixed(FixedSchema { name, .. }),
+                    ..
+                }) => {
                     let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
                     if self
                         .names_ref
@@ -574,7 +580,13 @@ pub(crate) fn resolve_names(
             }
             Ok(())
         }
-        Schema::Enum(EnumSchema { name, .. }) | Schema::Fixed(FixedSchema { name, .. }) => {
+        Schema::Enum(EnumSchema { name, .. })
+        | Schema::Fixed(FixedSchema { name, .. })
+        | Schema::Uuid(UuidSchema::Fixed(FixedSchema { name, .. }))
+        | Schema::Decimal(DecimalSchema {
+            inner: InnerDecimalSchema::Fixed(FixedSchema { name, .. }),
+            ..
+        }) => {
             let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
             if names
                 .insert(fully_qualified_name.clone(), schema.clone())
@@ -938,7 +950,7 @@ impl TryFrom<Schema> for InnerDecimalSchema {
 pub enum UuidSchema {
     /// [`Schema::Bytes`] with size of 16.
     ///
-    /// This is according to specification, but was what happened in `0.21.0` and earlier when
+    /// This is not according to specification, but was what happened in `0.21.0` and earlier when
     /// a schema with logical type `uuid` and inner type `fixed` was used.
     Bytes,
     /// [`Schema::String`].
@@ -1617,9 +1629,7 @@ impl Parser {
                                 Ok((precision, scale)) => Ok(Schema::Decimal(DecimalSchema {
                                     precision,
                                     scale,
-                                    inner: inner.try_into().unwrap_or_else(|_| {
-                                        unreachable!("inner is Fixed or Bytes")
-                                    }),
+                                    inner: inner.try_into()?,
                                 })),
                                 Err(err) => {
                                     warn!("Ignoring invalid decimal logical type: {err}");
@@ -7401,5 +7411,63 @@ mod tests {
         assert_eq!(canonical_form1, canonical_form2);
 
         Ok(())
+    }
+
+    #[test]
+    fn avro_rs_339_schema_ref_uuid() {
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "foo",
+            "type": "record",
+            "fields": [
+                {
+                    "name": "a",
+                    "type": {
+                        "type": "fixed",
+                        "size": 16,
+                        "logicalType": "uuid",
+                        "name": "bar"
+                    }
+                },
+                {
+                    "name": "b",
+                    "type": "bar"
+                }
+            ]
+        }"#,
+        )
+        .unwrap();
+        let _resolved = ResolvedSchema::try_from(&schema).unwrap();
+        let _resolved_owned = ResolvedOwnedSchema::try_from(schema).unwrap();
+    }
+
+    #[test]
+    fn avro_rs_339_schema_ref_decimal() {
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "foo",
+            "type": "record",
+            "fields": [
+                {
+                    "name": "a",
+                    "type": {
+                        "type": "fixed",
+                        "size": 16,
+                        "logicalType": "decimal",
+                        "precision": 4,
+                        "scale": 2,
+                        "name": "bar"
+                    }
+                },
+                {
+                    "name": "b",
+                    "type": "bar"
+                }
+            ]
+        }"#,
+        )
+        .unwrap();
+        let _resolved = ResolvedSchema::try_from(&schema).unwrap();
+        let _resolved_owned = ResolvedOwnedSchema::try_from(schema).unwrap();
     }
 }
