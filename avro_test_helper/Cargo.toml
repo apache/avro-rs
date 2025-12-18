@@ -35,3 +35,6 @@ better-panic = { default-features = false, version = "0.3.0" }
 ctor = { default-features = false, version = "0.6.3", features = ["dtor", "proc_macro"]  }
 env_logger = { default-features = false, version = "0.11.8" }
 log = { workspace = true }
+
+[lints]
+workspace = true
