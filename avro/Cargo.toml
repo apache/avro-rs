@@ -95,3 +95,6 @@ rstest = { default-features = false, version = "0.26.1" }
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
