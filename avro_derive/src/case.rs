@@ -18,13 +18,17 @@
 //! Code to convert the Rust-styled field/variant (e.g. `my_field`, `MyType`) to the
 //! case of the source (e.g. `my-field`, `MY_FIELD`).
 //! Code copied from serde <https://github.com/serde-rs/serde/blob/master/serde_derive/src/internals/case.rs>
+use darling::FromMeta;
+use syn::Lit;
+
 use self::RenameRule::*;
 use std::fmt::{self, Debug, Display};
 
 /// The different possible ways to change case of fields in a struct, or variants in an enum.
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
 pub enum RenameRule {
     /// Don't apply a default rename rule.
+    #[default]
     None,
     /// Rename direct children to "lowercase" style.
     LowerCase,
@@ -47,6 +51,15 @@ pub enum RenameRule {
     ScreamingKebabCase,
 }
 
+impl FromMeta for RenameRule {
+    fn from_value(value: &Lit) -> darling::Result<Self> {
+        let Lit::Str(litstr) = value else {
+            return Err(darling::Error::unexpected_lit_type(value));
+        };
+        Self::from_str(&litstr.value()).map_err(darling::Error::custom)
+    }
+}
+
 static RENAME_RULES: &[(&str, RenameRule)] = &[
     ("lowercase", LowerCase),
     ("UPPERCASE", UpperCase),
@@ -59,15 +72,20 @@ static RENAME_RULES: &[(&str, RenameRule)] = &[
 ];
 
 impl RenameRule {
-    pub fn from_str(rename_all_str: &str) -> Result<Self, ParseError<'_>> {
-        for (name, rule) in RENAME_RULES {
-            if rename_all_str == *name {
-                return Ok(*rule);
-            }
+    pub fn from_str(rename_all_str: &str) -> Result<Self, ParseError> {
+        match rename_all_str {
+            "lowercase" => Ok(Self::LowerCase),
+            "UPPERCASE" => Ok(Self::UpperCase),
+            "PascalCase" => Ok(Self::PascalCase),
+            "camelCase" => Ok(Self::CamelCase),
+            "snake_case" => Ok(Self::SnakeCase),
+            "SCREAMING_SNAKE_CASE" => Ok(Self::ScreamingSnakeCase),
+            "kebab-case" => Ok(Self::KebabCase),
+            "SCREAMING-KEBAB-CASE" => Ok(Self::ScreamingKebabCase),
+            _ => Err(ParseError {
+                unknown: rename_all_str.to_string(),
+            }),
         }
-        Err(ParseError {
-            unknown: rename_all_str,
-        })
     }
 
     /// Apply a renaming rule to an enum variant, returning the version expected in the source.
@@ -126,14 +144,14 @@ impl RenameRule {
     }
 }
 
-pub struct ParseError<'a> {
-    unknown: &'a str,
+pub struct ParseError {
+    unknown: String,
 }
 
-impl Display for ParseError<'_> {
+impl Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str("unknown rename rule `rename_all = ")?;
-        Debug::fmt(self.unknown, f)?;
+        Debug::fmt(&self.unknown, f)?;
         f.write_str("`, expected one of ")?;
         for (i, (name, _rule)) in RENAME_RULES.iter().enumerate() {
             if i > 0 {

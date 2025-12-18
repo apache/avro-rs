@@ -1,0 +1,9 @@
+error: AvroSchema derive does not support the Serde `remote` attribute
+  --> tests/ui/avro_rs_373_remote.rs:10:1
+   |
+10 | / #[serde(remote = "Foo")]
+11 | | struct FooRemote {
+12 | |     a: String,
+13 | |     b: i32,
+14 | | }
+   | |_^

@@ -1,0 +1,9 @@
+error: AvroSchema derive does not support changing the tagging Serde generates (`tag`, `content`, `untagged`, `variant_identifier`, `field_identifier`)
+ --> tests/ui/avro_rs_373_tag_content_enum.rs:4:1
+  |
+4 | / #[serde(tag = "bar", content = "spam")]
+5 | | enum Foo {
+6 | |     One,
+7 | |     Two,
+8 | | }
+  | |_^
