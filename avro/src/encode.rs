@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::schema::{InnerDecimalSchema, UuidSchema};
 use crate::{
     AvroResult,
     bigdecimal::serialize_big_decimal,
@@ -111,17 +112,24 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
             .write(&x.to_le_bytes())
             .map_err(|e| Details::WriteBytes(e).into()),
         Value::Decimal(decimal) => match schema {
-            Schema::Decimal(DecimalSchema { inner, .. }) => match *inner.clone() {
-                Schema::Fixed(FixedSchema { size, .. }) => {
-                    let bytes = decimal.to_sign_extended_bytes_with_len(size).unwrap();
+            Schema::Decimal(DecimalSchema { inner, .. }) => match inner {
+                InnerDecimalSchema::Fixed(fixed) => {
+                    let bytes = decimal.to_sign_extended_bytes_with_len(fixed.size)?;
                     let num_bytes = bytes.len();
-                    if num_bytes != size {
-                        return Err(Details::EncodeDecimalAsFixedError(num_bytes, size).into());
+                    if num_bytes != fixed.size {
+                        return Err(
+                            Details::EncodeDecimalAsFixedError(num_bytes, fixed.size).into()
+                        );
                     }
-                    encode(&Value::Fixed(size, bytes), inner, writer)
+                    encode(
+                        &Value::Fixed(fixed.size, bytes),
+                        &Schema::Fixed(fixed.copy_only_size()),
+                        writer,
+                    )
                 }
-                Schema::Bytes => encode(&Value::Bytes(decimal.try_into()?), inner, writer),
-                _ => Err(Details::ResolveDecimalSchema(SchemaKind::from(*inner.clone())).into()),
+                InnerDecimalSchema::Bytes => {
+                    encode(&Value::Bytes(decimal.try_into()?), &Schema::Bytes, writer)
+                }
             },
             _ => Err(Details::EncodeValueAsSchemaError {
                 value_kind: ValueKind::Decimal,
@@ -136,23 +144,35 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                 .map_err(|e| Details::WriteBytes(e).into())
         }
         Value::Uuid(uuid) => match *schema {
-            Schema::Uuid | Schema::String => encode_bytes(
+            Schema::Uuid(UuidSchema::String) | Schema::String => encode_bytes(
                 // we need the call .to_string() to properly convert ASCII to UTF-8
                 #[allow(clippy::unnecessary_to_owned)]
                 &uuid.to_string(),
                 writer,
             ),
-            Schema::Fixed(FixedSchema { size, .. }) => {
+            Schema::Uuid(UuidSchema::Bytes) | Schema::Bytes => {
+                let bytes = uuid.as_bytes();
+                encode_bytes(bytes, writer)
+            }
+            Schema::Uuid(UuidSchema::Fixed(FixedSchema { size, .. }))
+            | Schema::Fixed(FixedSchema { size, .. }) => {
                 if size != 16 {
                     return Err(Details::ConvertFixedToUuid(size).into());
                 }
 
                 let bytes = uuid.as_bytes();
-                encode_bytes(bytes, writer)
+                writer
+                    .write(bytes.as_slice())
+                    .map_err(|e| Details::WriteBytes(e).into())
             }
             _ => Err(Details::EncodeValueAsSchemaError {
                 value_kind: ValueKind::Uuid,
-                supported_schema: vec![SchemaKind::Uuid, SchemaKind::Fixed],
+                supported_schema: vec![
+                    SchemaKind::Uuid,
+                    SchemaKind::Fixed,
+                    SchemaKind::Bytes,
+                    SchemaKind::String,
+                ],
             }
             .into()),
         },
@@ -163,18 +183,18 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                 .map_err(|e| Details::WriteBytes(e).into())
         }
         Value::Bytes(bytes) => match *schema {
-            Schema::Bytes => encode_bytes(bytes, writer),
+            Schema::Bytes | Schema::Uuid(UuidSchema::Bytes) => encode_bytes(bytes, writer),
             Schema::Fixed { .. } => writer
                 .write(bytes.as_slice())
                 .map_err(|e| Details::WriteBytes(e).into()),
             _ => Err(Details::EncodeValueAsSchemaError {
                 value_kind: ValueKind::Bytes,
-                supported_schema: vec![SchemaKind::Bytes, SchemaKind::Fixed],
+                supported_schema: vec![SchemaKind::Bytes, SchemaKind::Fixed, SchemaKind::Uuid],
             }
             .into()),
         },
         Value::String(s) => match *schema {
-            Schema::String | Schema::Uuid => encode_bytes(s, writer),
+            Schema::String | Schema::Uuid(UuidSchema::String) => encode_bytes(s, writer),
             Schema::Enum(EnumSchema { ref symbols, .. }) => {
                 if let Some(index) = symbols.iter().position(|item| item == s) {
                     encode_int(index as i32, writer)
@@ -937,7 +957,7 @@ pub(crate) mod tests {
     #[test]
     fn test_avro_3585_encode_uuids() {
         let value = Value::String(String::from("00000000-0000-0000-0000-000000000000"));
-        let schema = Schema::Uuid;
+        let schema = Schema::Uuid(UuidSchema::String);
         let mut buffer = Vec::new();
         let encoded = encode(&value, &schema, &mut buffer);
         assert!(encoded.is_ok());

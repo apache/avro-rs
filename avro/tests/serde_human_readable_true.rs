@@ -3,7 +3,7 @@ use apache_avro_test_helper::TestResult;
 use serde::{Deserialize, Serialize};
 
 #[test]
-fn avro_rs_53_uuid_with_fixed_true() -> TestResult {
+fn avro_rs_53_uuid_with_string_true() -> TestResult {
     #[derive(Debug, Serialize, Deserialize)]
     struct Comment {
         id: apache_avro::Uuid,
@@ -18,10 +18,9 @@ fn avro_rs_53_uuid_with_fixed_true() -> TestResult {
                         "fields" : [ {
                           "name" : "id",
                           "type" : {
-                            "type" : "fixed",
-                            "size" : 16,
+                            "type" : "string",
                             "logicalType" : "uuid",
-                            "name": "FixedUUID"
+                            "name": "StringUUID"
                           }
                         } ]
                      }"#,

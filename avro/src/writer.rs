@@ -789,6 +789,7 @@ mod tests {
     use serde::{Deserialize, Serialize};
     use uuid::Uuid;
 
+    use crate::schema::InnerDecimalSchema;
     use crate::{codec::DeflateSettings, error::Details};
     use apache_avro_test_helper::TestResult;
 
@@ -990,41 +991,41 @@ mod tests {
     #[test]
     fn decimal_fixed() -> TestResult {
         let size = 30;
-        let inner = Schema::Fixed(FixedSchema {
+        let fixed = FixedSchema {
             name: Name::new("decimal")?,
             aliases: None,
             doc: None,
             size,
             default: None,
             attributes: Default::default(),
-        });
+        };
+        let inner = InnerDecimalSchema::Fixed(fixed.clone());
         let value = vec![0u8; size];
         logical_type_test(
             r#"{"type": {"type": "fixed", "size": 30, "name": "decimal"}, "logicalType": "decimal", "precision": 20, "scale": 5}"#,
             &Schema::Decimal(DecimalSchema {
                 precision: 20,
                 scale: 5,
-                inner: Box::new(inner.clone()),
+                inner,
             }),
             Value::Decimal(Decimal::from(value.clone())),
-            &inner,
+            &Schema::Fixed(fixed),
             Value::Fixed(size, value),
         )
     }
 
     #[test]
     fn decimal_bytes() -> TestResult {
-        let inner = Schema::Bytes;
         let value = vec![0u8; 10];
         logical_type_test(
             r#"{"type": "bytes", "logicalType": "decimal", "precision": 4, "scale": 3}"#,
             &Schema::Decimal(DecimalSchema {
                 precision: 4,
                 scale: 3,
-                inner: Box::new(inner.clone()),
+                inner: InnerDecimalSchema::Bytes,
             }),
             Value::Decimal(Decimal::from(value.clone())),
-            &inner,
+            &Schema::Bytes,
             value,
         )
     }

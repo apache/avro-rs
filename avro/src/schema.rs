@@ -110,8 +110,8 @@ pub enum Schema {
     /// Logical type which represents `Decimal` values without predefined scale.
     /// The underlying type is serialized and deserialized as `Schema::Bytes`
     BigDecimal,
-    /// A universally unique identifier, annotating a string.
-    Uuid,
+    /// A universally unique identifier, annotating a string, bytes or fixed.
+    Uuid(UuidSchema),
     /// Logical type which represents the number of days since the unix epoch.
     /// Serialization format is `Schema::Int`.
     Date,
@@ -487,7 +487,13 @@ impl<'s> ResolvedSchema<'s> {
                         self.resolve(vec![schema], enclosing_namespace, known_schemata)?
                     }
                 }
-                Schema::Enum(EnumSchema { name, .. }) | Schema::Fixed(FixedSchema { name, .. }) => {
+                Schema::Enum(EnumSchema { name, .. })
+                | Schema::Fixed(FixedSchema { name, .. })
+                | Schema::Uuid(UuidSchema::Fixed(FixedSchema { name, .. }))
+                | Schema::Decimal(DecimalSchema {
+                    inner: InnerDecimalSchema::Fixed(FixedSchema { name, .. }),
+                    ..
+                }) => {
                     let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
                     if self
                         .names_ref
@@ -574,7 +580,13 @@ pub(crate) fn resolve_names(
             }
             Ok(())
         }
-        Schema::Enum(EnumSchema { name, .. }) | Schema::Fixed(FixedSchema { name, .. }) => {
+        Schema::Enum(EnumSchema { name, .. })
+        | Schema::Fixed(FixedSchema { name, .. })
+        | Schema::Uuid(UuidSchema::Fixed(FixedSchema { name, .. }))
+        | Schema::Decimal(DecimalSchema {
+            inner: InnerDecimalSchema::Fixed(FixedSchema { name, .. }),
+            ..
+        }) => {
             let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
             if names
                 .insert(fully_qualified_name.clone(), schema.clone())
@@ -881,6 +893,23 @@ impl FixedSchema {
 
         Ok(map)
     }
+
+    /// Create a new `FixedSchema` copying only the size.
+    ///
+    /// All other fields are `None` or empty.
+    pub(crate) fn copy_only_size(&self) -> Self {
+        Self {
+            name: Name {
+                name: String::new(),
+                namespace: None,
+            },
+            aliases: None,
+            doc: None,
+            size: self.size,
+            default: None,
+            attributes: Default::default(),
+        }
+    }
 }
 
 /// A description of a Decimal schema.
@@ -894,7 +923,40 @@ pub struct DecimalSchema {
     /// The number of digits to the right of the decimal point
     pub scale: DecimalMetadata,
     /// The inner schema of the decimal (fixed or bytes)
-    pub inner: Box<Schema>,
+    pub inner: InnerDecimalSchema,
+}
+
+/// The inner schema of the Decimal type.
+#[derive(Debug, Clone)]
+pub enum InnerDecimalSchema {
+    Bytes,
+    Fixed(FixedSchema),
+}
+
+impl TryFrom<Schema> for InnerDecimalSchema {
+    type Error = Error;
+
+    fn try_from(value: Schema) -> Result<Self, Self::Error> {
+        match value {
+            Schema::Bytes => Ok(InnerDecimalSchema::Bytes),
+            Schema::Fixed(fixed) => Ok(InnerDecimalSchema::Fixed(fixed)),
+            _ => Err(Details::ResolveDecimalSchema(value.into()).into()),
+        }
+    }
+}
+
+/// The inner schema of the Uuid type.
+#[derive(Debug, Clone)]
+pub enum UuidSchema {
+    /// [`Schema::Bytes`] with size of 16.
+    ///
+    /// This is not according to specification, but was what happened in `0.21.0` and earlier when
+    /// a schema with logical type `uuid` and inner type `fixed` was used.
+    Bytes,
+    /// [`Schema::String`].
+    String,
+    /// [`Schema::Fixed`] with size of 16.
+    Fixed(FixedSchema),
 }
 
 /// A description of a Union schema
@@ -1199,7 +1261,12 @@ impl Schema {
             | Schema::Enum(EnumSchema { attributes, .. })
             | Schema::Fixed(FixedSchema { attributes, .. })
             | Schema::Array(ArraySchema { attributes, .. })
-            | Schema::Map(MapSchema { attributes, .. }) => Some(attributes),
+            | Schema::Map(MapSchema { attributes, .. })
+            | Schema::Decimal(DecimalSchema {
+                inner: InnerDecimalSchema::Fixed(FixedSchema { attributes, .. }),
+                ..
+            })
+            | Schema::Uuid(UuidSchema::Fixed(FixedSchema { attributes, .. })) => Some(attributes),
             _ => None,
         }
     }
@@ -1210,7 +1277,12 @@ impl Schema {
             Schema::Ref { name, .. }
             | Schema::Record(RecordSchema { name, .. })
             | Schema::Enum(EnumSchema { name, .. })
-            | Schema::Fixed(FixedSchema { name, .. }) => Some(name),
+            | Schema::Fixed(FixedSchema { name, .. })
+            | Schema::Decimal(DecimalSchema {
+                inner: InnerDecimalSchema::Fixed(FixedSchema { name, .. }),
+                ..
+            })
+            | Schema::Uuid(UuidSchema::Fixed(FixedSchema { name, .. })) => Some(name),
             _ => None,
         }
     }
@@ -1225,7 +1297,12 @@ impl Schema {
         match self {
             Schema::Record(RecordSchema { aliases, .. })
             | Schema::Enum(EnumSchema { aliases, .. })
-            | Schema::Fixed(FixedSchema { aliases, .. }) => aliases.as_ref(),
+            | Schema::Fixed(FixedSchema { aliases, .. })
+            | Schema::Decimal(DecimalSchema {
+                inner: InnerDecimalSchema::Fixed(FixedSchema { aliases, .. }),
+                ..
+            })
+            | Schema::Uuid(UuidSchema::Fixed(FixedSchema { aliases, .. })) => aliases.as_ref(),
             _ => None,
         }
     }
@@ -1235,7 +1312,12 @@ impl Schema {
         match self {
             Schema::Record(RecordSchema { doc, .. })
             | Schema::Enum(EnumSchema { doc, .. })
-            | Schema::Fixed(FixedSchema { doc, .. }) => doc.as_ref(),
+            | Schema::Fixed(FixedSchema { doc, .. })
+            | Schema::Decimal(DecimalSchema {
+                inner: InnerDecimalSchema::Fixed(FixedSchema { doc, .. }),
+                ..
+            })
+            | Schema::Uuid(UuidSchema::Fixed(FixedSchema { doc, .. })) => doc.as_ref(),
             _ => None,
         }
     }
@@ -1547,7 +1629,7 @@ impl Parser {
                                 Ok((precision, scale)) => Ok(Schema::Decimal(DecimalSchema {
                                     precision,
                                     scale,
-                                    inner: Box::new(inner),
+                                    inner: inner.try_into()?,
                                 })),
                                 Err(err) => {
                                     warn!("Ignoring invalid decimal logical type: {err}");
@@ -1569,16 +1651,19 @@ impl Parser {
                     return try_convert_to_logical_type(
                         "uuid",
                         parse_as_native_complex(complex, self, enclosing_namespace)?,
-                        &[SchemaKind::String, SchemaKind::Fixed],
+                        &[SchemaKind::String, SchemaKind::Fixed, SchemaKind::Bytes],
                         |schema| match schema {
-                            Schema::String => Ok(Schema::Uuid),
-                            Schema::Fixed(FixedSchema { size: 16, .. }) => Ok(Schema::Uuid),
+                            Schema::String => Ok(Schema::Uuid(UuidSchema::String)),
+                            Schema::Fixed(fixed @ FixedSchema { size: 16, .. }) => {
+                                Ok(Schema::Uuid(UuidSchema::Fixed(fixed)))
+                            }
                             Schema::Fixed(FixedSchema { size, .. }) => {
                                 warn!(
                                     "Ignoring uuid logical type for a Fixed schema because its size ({size:?}) is not 16! Schema: {schema:?}"
                                 );
                                 Ok(schema)
                             }
+                            Schema::Bytes => Ok(Schema::Uuid(UuidSchema::Bytes)),
                             _ => {
                                 warn!("Ignoring invalid uuid logical type for schema: {schema:?}");
                                 Ok(schema)
@@ -2077,8 +2162,8 @@ impl Serialize for Schema {
     where
         S: Serializer,
     {
-        match *self {
-            Schema::Ref { ref name } => serializer.serialize_str(&name.fullname(None)),
+        match &self {
+            Schema::Ref { name } => serializer.serialize_str(&name.fullname(None)),
             Schema::Null => serializer.serialize_str("null"),
             Schema::Boolean => serializer.serialize_str("boolean"),
             Schema::Int => serializer.serialize_str("int"),
@@ -2087,7 +2172,7 @@ impl Serialize for Schema {
             Schema::Double => serializer.serialize_str("double"),
             Schema::Bytes => serializer.serialize_str("bytes"),
             Schema::String => serializer.serialize_str("string"),
-            Schema::Array(ref inner) => {
+            Schema::Array(inner) => {
                 let mut map = serializer.serialize_map(Some(2 + inner.attributes.len()))?;
                 map.serialize_entry("type", "array")?;
                 map.serialize_entry("items", &*inner.items.clone())?;
@@ -2096,7 +2181,7 @@ impl Serialize for Schema {
                 }
                 map.end()
             }
-            Schema::Map(ref inner) => {
+            Schema::Map(inner) => {
                 let mut map = serializer.serialize_map(Some(2 + inner.attributes.len()))?;
                 map.serialize_entry("type", "map")?;
                 map.serialize_entry("values", &*inner.types.clone())?;
@@ -2105,7 +2190,7 @@ impl Serialize for Schema {
                 }
                 map.end()
             }
-            Schema::Union(ref inner) => {
+            Schema::Union(inner) => {
                 let variants = inner.variants();
                 let mut seq = serializer.serialize_seq(Some(variants.len()))?;
                 for v in variants {
@@ -2114,11 +2199,11 @@ impl Serialize for Schema {
                 seq.end()
             }
             Schema::Record(RecordSchema {
-                ref name,
-                ref aliases,
-                ref doc,
-                ref fields,
-                ref attributes,
+                name,
+                aliases,
+                doc,
+                fields,
+                attributes,
                 ..
             }) => {
                 let mut map = serializer.serialize_map(None)?;
@@ -2140,10 +2225,10 @@ impl Serialize for Schema {
                 map.end()
             }
             Schema::Enum(EnumSchema {
-                ref name,
-                ref symbols,
-                ref aliases,
-                ref attributes,
+                name,
+                symbols,
+                aliases,
+                attributes,
                 ..
             }) => {
                 let mut map = serializer.serialize_map(None)?;
@@ -2162,29 +2247,23 @@ impl Serialize for Schema {
                 }
                 map.end()
             }
-            Schema::Fixed(ref fixed_schema) => {
+            Schema::Fixed(fixed_schema) => {
                 let mut map = serializer.serialize_map(None)?;
                 map = fixed_schema.serialize_to_map::<S>(map)?;
                 map.end()
             }
             Schema::Decimal(DecimalSchema {
-                ref scale,
-                ref precision,
-                ref inner,
+                scale,
+                precision,
+                inner,
             }) => {
                 let mut map = serializer.serialize_map(None)?;
-                match inner.as_ref() {
-                    Schema::Fixed(fixed_schema) => {
+                match inner {
+                    InnerDecimalSchema::Fixed(fixed_schema) => {
                         map = fixed_schema.serialize_to_map::<S>(map)?;
                     }
-                    Schema::Bytes => {
+                    InnerDecimalSchema::Bytes => {
                         map.serialize_entry("type", "bytes")?;
-                    }
-                    others => {
-                        return Err(serde::ser::Error::custom(format!(
-                            "DecimalSchema inner type must be Fixed or Bytes, got {:?}",
-                            SchemaKind::from(others)
-                        )));
                     }
                 }
                 map.serialize_entry("logicalType", "decimal")?;
@@ -2199,9 +2278,19 @@ impl Serialize for Schema {
                 map.serialize_entry("logicalType", "big-decimal")?;
                 map.end()
             }
-            Schema::Uuid => {
+            Schema::Uuid(inner) => {
                 let mut map = serializer.serialize_map(None)?;
-                map.serialize_entry("type", "string")?;
+                match inner {
+                    UuidSchema::Bytes => {
+                        map.serialize_entry("type", "bytes")?;
+                    }
+                    UuidSchema::String => {
+                        map.serialize_entry("type", "string")?;
+                    }
+                    UuidSchema::Fixed(fixed_schema) => {
+                        map = fixed_schema.serialize_to_map::<S>(map)?;
+                    }
+                }
                 map.serialize_entry("logicalType", "uuid")?;
                 map.end()
             }
@@ -2539,7 +2628,7 @@ pub mod derive {
     impl_schema!(f32, Schema::Float);
     impl_schema!(f64, Schema::Double);
     impl_schema!(String, Schema::String);
-    impl_schema!(uuid::Uuid, Schema::Uuid);
+    impl_schema!(uuid::Uuid, Schema::Uuid(UuidSchema::String));
     impl_schema!(core::time::Duration, Schema::Duration);
 
     impl<T> AvroSchemaComponent for Vec<T>
@@ -6698,7 +6787,7 @@ mod tests {
           "logicalType": "uuid"
         });
         let parse_result = Schema::parse(&schema)?;
-        assert_eq!(parse_result, Schema::Uuid);
+        assert_eq!(parse_result, Schema::Uuid(UuidSchema::String));
 
         Ok(())
     }
@@ -6713,10 +6802,34 @@ mod tests {
             "logicalType": "uuid"
         });
         let parse_result = Schema::parse(&schema)?;
-        assert_eq!(parse_result, Schema::Uuid);
+        assert_eq!(
+            parse_result,
+            Schema::Uuid(UuidSchema::Fixed(FixedSchema {
+                name: Name::new("FixedUUID")?,
+                aliases: None,
+                doc: None,
+                size: 16,
+                default: None,
+                attributes: Default::default(),
+            }))
+        );
         assert_not_logged(
             r#"Ignoring uuid logical type for a Fixed schema because its size (6) is not 16! Schema: Fixed(FixedSchema { name: Name { name: "FixedUUID", namespace: None }, aliases: None, doc: None, size: 6, attributes: {"logicalType": String("uuid")} })"#,
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn uuid_schema_bytes() -> TestResult {
+        let schema = json!(
+        {
+          "type": "bytes",
+          "name": "BytesUUID",
+          "logicalType": "uuid"
+        });
+        let parse_result = Schema::parse(&schema)?;
+        assert_eq!(parse_result, Schema::Uuid(UuidSchema::Bytes));
 
         Ok(())
     }
@@ -6883,14 +6996,14 @@ mod tests {
         let schema = Schema::Decimal(DecimalSchema {
             precision: 36,
             scale: 10,
-            inner: Box::new(Schema::Fixed(FixedSchema {
+            inner: InnerDecimalSchema::Fixed(FixedSchema {
                 name: Name::new("decimal_36_10").unwrap(),
                 aliases: None,
                 doc: None,
                 size: 16,
                 default: None,
                 attributes: Default::default(),
-            })),
+            }),
         });
 
         let serialized_json = serde_json::to_string_pretty(&schema)?;
@@ -6914,7 +7027,7 @@ mod tests {
         let schema = Schema::Decimal(DecimalSchema {
             precision: 36,
             scale: 10,
-            inner: Box::new(Schema::Bytes),
+            inner: InnerDecimalSchema::Bytes,
         });
 
         let serialized_json = serde_json::to_string_pretty(&schema)?;
@@ -6927,21 +7040,6 @@ mod tests {
 }"#;
 
         assert_eq!(serialized_json, expected_json);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_avro_3925_serialize_decimal_inner_invalid() -> TestResult {
-        let schema = Schema::Decimal(DecimalSchema {
-            precision: 36,
-            scale: 10,
-            inner: Box::new(Schema::String),
-        });
-
-        let serialized_json = serde_json::to_string_pretty(&schema);
-
-        assert!(serialized_json.is_err());
 
         Ok(())
     }
@@ -7313,5 +7411,63 @@ mod tests {
         assert_eq!(canonical_form1, canonical_form2);
 
         Ok(())
+    }
+
+    #[test]
+    fn avro_rs_339_schema_ref_uuid() {
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "foo",
+            "type": "record",
+            "fields": [
+                {
+                    "name": "a",
+                    "type": {
+                        "type": "fixed",
+                        "size": 16,
+                        "logicalType": "uuid",
+                        "name": "bar"
+                    }
+                },
+                {
+                    "name": "b",
+                    "type": "bar"
+                }
+            ]
+        }"#,
+        )
+        .unwrap();
+        let _resolved = ResolvedSchema::try_from(&schema).unwrap();
+        let _resolved_owned = ResolvedOwnedSchema::try_from(schema).unwrap();
+    }
+
+    #[test]
+    fn avro_rs_339_schema_ref_decimal() {
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "foo",
+            "type": "record",
+            "fields": [
+                {
+                    "name": "a",
+                    "type": {
+                        "type": "fixed",
+                        "size": 16,
+                        "logicalType": "decimal",
+                        "precision": 4,
+                        "scale": 2,
+                        "name": "bar"
+                    }
+                },
+                {
+                    "name": "b",
+                    "type": "bar"
+                }
+            ]
+        }"#,
+        )
+        .unwrap();
+        let _resolved = ResolvedSchema::try_from(&schema).unwrap();
+        let _resolved_owned = ResolvedOwnedSchema::try_from(schema).unwrap();
     }
 }
