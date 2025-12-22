@@ -403,9 +403,11 @@ impl SchemaCompatibility {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
     use crate::{
-        Codec, Reader, Writer,
+        Codec, Decimal, Reader, Writer,
         schema::{Name, UuidSchema},
         types::{Record, Value},
     };
@@ -1638,6 +1640,40 @@ mod tests {
         assert!(SchemaCompatibility::can_read(&schemas[1], &schemas[0]).is_err());
         SchemaCompatibility::can_read(&schemas[1], &schemas[1])?;
         SchemaCompatibility::can_read(&schemas[0], &schemas[0])?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_342_decimal_fixed_and_bytes() -> TestResult {
+        let bytes = Schema::Decimal(DecimalSchema {
+            precision: 20,
+            scale: 0,
+            inner: InnerDecimalSchema::Bytes,
+        });
+        let fixed = Schema::Decimal(DecimalSchema {
+            precision: 20,
+            scale: 0,
+            inner: InnerDecimalSchema::Fixed(FixedSchema {
+                name: Name::new("DecimalFixed")?,
+                aliases: None,
+                doc: None,
+                size: 20,
+                default: None,
+                attributes: BTreeMap::default(),
+            }),
+        });
+
+        assert_eq!(
+            Compatibility::Full,
+            SchemaCompatibility::mutual_read(&bytes, &fixed)?
+        );
+
+        let value = Value::Decimal(Decimal::from(vec![1; 10]));
+        let fixed_value = value.clone().resolve(&fixed)?;
+        let bytes_value = value.resolve(&bytes)?;
+
+        assert_eq!(fixed_value, bytes_value);
 
         Ok(())
     }
