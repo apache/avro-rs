@@ -274,6 +274,14 @@ pub enum Details {
     #[error("Could not find matching type in {schema:?} for {value:?}")]
     FindUnionVariant { schema: UnionSchema, value: Value },
 
+    #[error("Union index {index} out of bounds: {num_variants} in {schema:?} for {value:?}")]
+    UnionIndexOutOfBounds {
+        schema: UnionSchema,
+        value: Value,
+        index: usize,
+        num_variants: usize,
+    },
+
     #[error("Union type should not be empty")]
     EmptyUnion,
 
