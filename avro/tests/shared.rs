@@ -43,17 +43,16 @@ fn test_schema() -> TestResult {
             Err(e) => core::panic!("Can't get file {}", e),
         };
         log::debug!("{:?}", entry.file_name());
-        if let Ok(ft) = entry.file_type() {
-            if ft.is_dir() {
-                let sub_folder =
-                    ROOT_DIRECTORY.to_owned() + "/" + entry.file_name().to_str().unwrap();
+        if let Ok(ft) = entry.file_type()
+            && ft.is_dir()
+        {
+            let sub_folder = ROOT_DIRECTORY.to_owned() + "/" + entry.file_name().to_str().unwrap();
 
-                let dir_result = test_folder(sub_folder.as_str());
-                if let Err(ed) = dir_result {
-                    result = match result {
-                        Ok(()) => Err(ed),
-                        Err(e) => Err(e.merge(&ed)),
-                    }
+            let dir_result = test_folder(sub_folder.as_str());
+            if let Err(ed) = dir_result {
+                result = match result {
+                    Ok(()) => Err(ed),
+                    Err(e) => Err(e.merge(&ed)),
                 }
             }
         }

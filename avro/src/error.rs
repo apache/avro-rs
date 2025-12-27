@@ -611,14 +611,27 @@ pub enum CompatibilityError {
     #[error("Incompatible schemata! Field '{0}' in reader schema must have a default value")]
     MissingDefaultValue(String),
 
-    #[error("Incompatible schemata! Reader's symbols must contain all writer's symbols")]
+    #[error("Incompatible schemata! Reader's symbols contain none of the writer's symbols")]
     MissingSymbols,
 
     #[error("Incompatible schemata! All elements in union must match for both schemas")]
     MissingUnionElements,
 
-    #[error("Incompatible schemata! Name and size don't match for fixed")]
+    #[error("Incompatible schemata! At least one element in the union must match the schema")]
+    SchemaMismatchAllUnionElements,
+
+    #[error("Incompatible schemata! Size doesn't match for fixed")]
     FixedMismatch,
+
+    #[error(
+        "Incompatible schemata! Decimal precision and/or scale don't match, reader: ({r_precision},{r_scale}), writer: ({w_precision},{w_scale})"
+    )]
+    DecimalMismatch {
+        r_precision: usize,
+        r_scale: usize,
+        w_precision: usize,
+        w_scale: usize,
+    },
 
     #[error(
         "Incompatible schemata! The name must be the same for both schemas. Writer's name {writer_name} and reader's name {reader_name}"
