@@ -176,10 +176,15 @@ impl SchemaKind {
         )
     }
 
+    #[deprecated(since = "0.22.0", note = "Use Schema::is_named instead")]
     pub fn is_named(self) -> bool {
         matches!(
             self,
-            SchemaKind::Record | SchemaKind::Enum | SchemaKind::Fixed | SchemaKind::Ref
+            SchemaKind::Record
+                | SchemaKind::Enum
+                | SchemaKind::Fixed
+                | SchemaKind::Ref
+                | SchemaKind::Duration
         )
     }
 }
@@ -979,8 +984,7 @@ impl UnionSchema {
             if let Schema::Union(_) = schema {
                 return Err(Details::GetNestedUnion.into());
             }
-            let kind = SchemaKind::from(schema);
-            if !kind.is_named() && vindex.insert(kind, i).is_some() {
+            if !schema.is_named() && vindex.insert(SchemaKind::from(schema), i).is_some() {
                 return Err(Details::GetUnionDuplicate.into());
             }
         }
@@ -1271,6 +1275,23 @@ impl Schema {
         }
     }
 
+    /// Returns whether the schema represents a named type according to the avro specification
+    pub fn is_named(&self) -> bool {
+        match self {
+            Schema::Ref { .. }
+            | Schema::Record(_)
+            | Schema::Enum(_)
+            | Schema::Fixed(_)
+            | Schema::Decimal(DecimalSchema {
+                inner: InnerDecimalSchema::Fixed(_),
+                ..
+            })
+            | Schema::Uuid(UuidSchema::Fixed(_))
+            | Schema::Duration(_) => true,
+            _ => false,
+        }
+    }
+
     /// Returns the name of the schema if it has one.
     pub fn name(&self) -> Option<&Name> {
         match self {
@@ -1282,7 +1303,8 @@ impl Schema {
                 inner: InnerDecimalSchema::Fixed(FixedSchema { name, .. }),
                 ..
             })
-            | Schema::Uuid(UuidSchema::Fixed(FixedSchema { name, .. })) => Some(name),
+            | Schema::Uuid(UuidSchema::Fixed(FixedSchema { name, .. }))
+            | Schema::Duration(FixedSchema { name, .. }) => Some(name),
             _ => None,
         }
     }
@@ -1750,13 +1772,19 @@ impl Parser {
                         &[SchemaKind::Fixed],
                         |schema| -> AvroResult<Schema> {
                             match schema {
-                                Schema::Fixed(fixed @ FixedSchema { size: 12, .. }) => Ok(Schema::Duration(fixed)),
-                                Schema::Fixed(FixedSchema{ size, ..}) => {
-                                    warn!("Ignoring duration logical type on fixed type because size ({size}) is not 12! Schema: {schema:?}");
+                                Schema::Fixed(fixed @ FixedSchema { size: 12, .. }) => {
+                                    Ok(Schema::Duration(fixed))
+                                }
+                                Schema::Fixed(FixedSchema { size, .. }) => {
+                                    warn!(
+                                        "Ignoring duration logical type on fixed type because size ({size}) is not 12! Schema: {schema:?}"
+                                    );
                                     Ok(schema)
-                                },
+                                }
                                 _ => {
-                                    warn!("Ignoring invalid duration logical type for schema: {schema:?}");
+                                    warn!(
+                                        "Ignoring invalid duration logical type for schema: {schema:?}"
+                                    );
                                     Ok(schema)
                                 }
                             }
