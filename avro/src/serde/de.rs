@@ -359,7 +359,8 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
                     visitor.visit_bytes(&duration_bytes[..])
                 }
                 Value::Union(_, _) => Err(de::Error::custom(format!(
-                    "Directly nested union types are not supported"
+                    "Directly nested union types are not supported. Got {:?}",
+                    &**u
                 ))),
             },
             Value::Record(fields) => visitor.visit_map(RecordDeserializer::new(fields)),

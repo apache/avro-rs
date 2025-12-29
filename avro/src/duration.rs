@@ -198,7 +198,7 @@ impl<'de> Deserialize<'de> for Duration {
     where
         D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_any(DurationVisitor)
+        deserializer.deserialize_bytes(DurationVisitor)
     }
 }
 
@@ -224,7 +224,7 @@ mod tests {
         let duration = Duration::new(Months::new(7), Days::new(4), Millis::new(45));
         let ser_val = crate::to_value(&duration)?;
         match ser_val {
-            // Without a schema, Duration will serialize to bytes
+            // Without a schema, we expect Duration to serialize to bytes
             Value::Bytes(b) => {
                 assert_eq!(b, vec![7, 0, 0, 0, 4, 0, 0, 0, 45, 0, 0, 0]);
             }

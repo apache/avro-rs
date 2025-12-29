@@ -1277,19 +1277,19 @@ impl Schema {
 
     /// Returns whether the schema represents a named type according to the avro specification
     pub fn is_named(&self) -> bool {
-        match self {
+        matches!(
+            self,
             Schema::Ref { .. }
-            | Schema::Record(_)
-            | Schema::Enum(_)
-            | Schema::Fixed(_)
-            | Schema::Decimal(DecimalSchema {
-                inner: InnerDecimalSchema::Fixed(_),
-                ..
-            })
-            | Schema::Uuid(UuidSchema::Fixed(_))
-            | Schema::Duration(_) => true,
-            _ => false,
-        }
+                | Schema::Record(_)
+                | Schema::Enum(_)
+                | Schema::Fixed(_)
+                | Schema::Decimal(DecimalSchema {
+                    inner: InnerDecimalSchema::Fixed(_),
+                    ..
+                })
+                | Schema::Uuid(UuidSchema::Fixed(_))
+                | Schema::Duration(_)
+        )
     }
 
     /// Returns the name of the schema if it has one.
