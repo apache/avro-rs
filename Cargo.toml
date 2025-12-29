@@ -43,7 +43,7 @@ documentation = "https://docs.rs/apache-avro"
 log = { default-features = false, version = "0.4.29" }
 serde = { default-features = false, version = "1.0.228", features = ["std", "derive"] }
 serde_bytes = { default-features = false, version = "0.11.19", features = ["std"] }
-serde_json = { default-features = false, version = "1.0.147", features = ["std"] }
+serde_json = { default-features = false, version = "1.0.148", features = ["std"] }
 pretty_assertions = { default-features = false, version = "1.4.1", features = ["std"] }
 
 [profile.release.package.hello-wasm]
