@@ -159,8 +159,11 @@ impl From<[u8; 12]> for Duration {
 }
 
 impl Serialize for Duration {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
-        let value_bytes: [u8;12] = self.into();
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let value_bytes: [u8; 12] = self.into();
         serializer.serialize_bytes(&value_bytes)
     }
 }
@@ -202,9 +205,9 @@ impl<'de> Deserialize<'de> for Duration {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use apache_avro_test_helper::TestResult;
-    use anyhow::anyhow;
     use crate::types::Value;
+    use anyhow::anyhow;
+    use apache_avro_test_helper::TestResult;
 
     #[test]
     fn test_duration_from_value() -> TestResult {
@@ -225,7 +228,9 @@ mod tests {
             Value::Bytes(b) => {
                 assert_eq!(b, vec![7, 0, 0, 0, 4, 0, 0, 0, 45, 0, 0, 0]);
             }
-            _ => { Err(anyhow!("Expected a Bytes value but got {:?}", ser_val))?; }
+            _ => {
+                Err(anyhow!("Expected a Bytes value but got {:?}", ser_val))?;
+            }
         }
         Ok(())
     }
