@@ -772,7 +772,7 @@ fn generate_sync_marker() -> [u8; 16] {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::RefCell, rc::Rc};
+    use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
     use super::*;
     use crate::{
@@ -1047,7 +1047,14 @@ mod tests {
         ));
         logical_type_test(
             r#"{"type": {"type": "fixed", "name": "duration", "size": 12}, "logicalType": "duration"}"#,
-            &Schema::Duration,
+            &Schema::Duration(FixedSchema {
+                name: Name::from("duration"),
+                aliases: None,
+                doc: None,
+                size: 12,
+                default: None,
+                attributes: BTreeMap::new(),
+            }),
             value,
             &inner,
             Value::Fixed(12, vec![0, 1, 0, 0, 0, 2, 0, 0, 0, 4, 0, 0]),

@@ -354,9 +354,12 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
                 Value::BigDecimal(ref big_decimal) => {
                     visitor.visit_str(big_decimal.to_plain_string().as_str())
                 }
-                _ => Err(de::Error::custom(format!(
-                    "unsupported union: {:?}",
-                    self.input
+                Value::Duration(ref duration) => {
+                    let duration_bytes: [u8; 12] = duration.into();
+                    visitor.visit_bytes(&duration_bytes[..])
+                }
+                Value::Union(_, _) => Err(de::Error::custom(format!(
+                    "Directly nested union types are not supported"
                 ))),
             },
             Value::Record(fields) => visitor.visit_map(RecordDeserializer::new(fields)),
@@ -370,10 +373,10 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
             Value::BigDecimal(big_decimal) => {
                 visitor.visit_str(big_decimal.to_plain_string().as_str())
             }
-            value => Err(de::Error::custom(format!(
-                "incorrect value of type: {:?}",
-                crate::schema::SchemaKind::from(value)
-            ))),
+            Value::Duration(duration) => {
+                let duration_bytes: [u8; 12] = duration.into();
+                visitor.visit_bytes(&duration_bytes[..])
+            }
         }
     }
 

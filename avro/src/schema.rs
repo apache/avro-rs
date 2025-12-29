@@ -134,7 +134,7 @@ pub enum Schema {
     /// An instant in local time represented as the number of nanoseconds after the UNIX epoch.
     LocalTimestampNanos,
     /// An amount of time defined by a number of months, days and milliseconds.
-    Duration,
+    Duration(FixedSchema),
     /// A reference to another schema.
     Ref { name: Name },
 }
@@ -1748,7 +1748,19 @@ impl Parser {
                         "duration",
                         parse_as_native_complex(complex, self, enclosing_namespace)?,
                         &[SchemaKind::Fixed],
-                        |_| -> AvroResult<Schema> { Ok(Schema::Duration) },
+                        |schema| -> AvroResult<Schema> {
+                            match schema {
+                                Schema::Fixed(fixed @ FixedSchema { size: 12, .. }) => Ok(Schema::Duration(fixed)),
+                                Schema::Fixed(FixedSchema{ size, ..}) => {
+                                    warn!("Ignoring duration logical type on fixed type because size ({size}) is not 12! Schema: {schema:?}");
+                                    Ok(schema)
+                                },
+                                _ => {
+                                    warn!("Ignoring invalid duration logical type for schema: {schema:?}");
+                                    Ok(schema)
+                                }
+                            }
+                        },
                     );
                 }
                 // In this case, of an unknown logical type, we just pass through the underlying
@@ -2348,19 +2360,10 @@ impl Serialize for Schema {
                 map.serialize_entry("logicalType", "local-timestamp-nanos")?;
                 map.end()
             }
-            Schema::Duration => {
+            Schema::Duration(fixed) => {
                 let mut map = serializer.serialize_map(None)?;
 
-                // the Avro doesn't indicate what the name of the underlying fixed type of a
-                // duration should be or typically is.
-                let inner = Schema::Fixed(FixedSchema {
-                    name: Name::new("duration").unwrap(),
-                    aliases: None,
-                    doc: None,
-                    size: 12,
-                    default: None,
-                    attributes: Default::default(),
-                });
+                let inner = Schema::Fixed(fixed.clone());
                 map.serialize_entry("type", &inner)?;
                 map.serialize_entry("logicalType", "duration")?;
                 map.end()
@@ -2629,7 +2632,6 @@ pub mod derive {
     impl_schema!(f64, Schema::Double);
     impl_schema!(String, Schema::String);
     impl_schema!(uuid::Uuid, Schema::Uuid(UuidSchema::String));
-    impl_schema!(core::time::Duration, Schema::Duration);
 
     impl<T> AvroSchemaComponent for Vec<T>
     where

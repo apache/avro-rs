@@ -88,8 +88,8 @@ impl SchemataEq for StructFieldEq {
             (Schema::BigDecimal, _) => false,
             (Schema::Date, Schema::Date) => true,
             (Schema::Date, _) => false,
-            (Schema::Duration, Schema::Duration) => true,
-            (Schema::Duration, _) => false,
+            (Schema::Duration(_), Schema::Duration(_)) => true,
+            (Schema::Duration(_), _) => false,
             (Schema::TimeMicros, Schema::TimeMicros) => true,
             (Schema::TimeMicros, _) => false,
             (Schema::TimeMillis, Schema::TimeMillis) => true,
@@ -258,7 +258,6 @@ mod tests {
     test_primitives!(String);
     test_primitives!(BigDecimal);
     test_primitives!(Date);
-    test_primitives!(Duration);
     test_primitives!(TimeMicros);
     test_primitives!(TimeMillis);
     test_primitives!(TimestampMicros);
@@ -267,6 +266,29 @@ mod tests {
     test_primitives!(LocalTimestampMicros);
     test_primitives!(LocalTimestampMillis);
     test_primitives!(LocalTimestampNanos);
+
+    #[test]
+    fn test_avro_3939_compare_schemata_duration() {
+        let schema_one = Schema::Duration(FixedSchema {
+            name: Name::from("name1"),
+            size: 12,
+            aliases: None,
+            doc: None,
+            default: None,
+            attributes: BTreeMap::new(),
+        });
+        let schema_two = Schema::Duration(FixedSchema {
+            name: Name::from("name1"),
+            size: 12,
+            aliases: None,
+            doc: None,
+            default: None,
+            attributes: BTreeMap::new(),
+        });
+        let specification_eq_res = SPECIFICATION_EQ.compare(&schema_one, &schema_two);
+        let struct_field_eq_res = STRUCT_FIELD_EQ.compare(&schema_one, &schema_two);
+        assert_eq!(specification_eq_res, struct_field_eq_res)
+    }
 
     #[test]
     fn test_avro_3939_compare_named_schemata_with_different_names() {
