@@ -268,7 +268,7 @@ mod tests {
     test_primitives!(LocalTimestampNanos);
 
     #[test]
-    fn avro_rs_832_compare_schemata_duration() {
+    fn avro_rs_382_compare_schemata_duration() {
         let schema_one = Schema::Duration(FixedSchema {
             name: Name::from("name1"),
             size: 12,

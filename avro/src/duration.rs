@@ -210,7 +210,7 @@ mod tests {
     use apache_avro_test_helper::TestResult;
 
     #[test]
-    fn avro_rs_832_duration_from_value() -> TestResult {
+    fn avro_rs_382_duration_from_value() -> TestResult {
         let val = Value::Duration(Duration::new(Months::new(7), Days::new(4), Millis::new(45)));
         let de_val: Duration = crate::from_value(&val)?;
         assert_eq!(de_val.months(), Months::new(7));
@@ -220,7 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_832_duration_to_value() -> TestResult {
+    fn avro_rs_382_duration_to_value() -> TestResult {
         let duration = Duration::new(Months::new(7), Days::new(4), Millis::new(45));
         let ser_val = crate::to_value(&duration)?;
         match ser_val {

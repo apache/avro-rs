@@ -2389,10 +2389,9 @@ impl Serialize for Schema {
                 map.end()
             }
             Schema::Duration(fixed) => {
-                let mut map = serializer.serialize_map(None)?;
+                let map = serializer.serialize_map(None)?;
 
-                let inner = Schema::Fixed(fixed.clone());
-                map.serialize_entry("type", &inner)?;
+                let mut map = fixed.serialize_to_map::<S>(map)?;
                 map.serialize_entry("logicalType", "duration")?;
                 map.end()
             }
@@ -7499,5 +7498,30 @@ mod tests {
         .unwrap();
         let _resolved = ResolvedSchema::try_from(&schema).unwrap();
         let _resolved_owned = ResolvedOwnedSchema::try_from(schema).unwrap();
+    }
+
+    #[test]
+    fn avro_rs_382_serialize_duration_schema() -> TestResult {
+        let schema = Schema::Duration(FixedSchema {
+            name: Name::from("Duration"),
+            aliases: None,
+            doc: None,
+            size: 12,
+            default: None,
+            attributes: BTreeMap::new(),
+        });
+
+        let expected_schema_json = json!({
+            "type": "fixed",
+            "logicalType": "duration",
+            "name": "Duration",
+            "size": 12
+        });
+
+        let schema_json = serde_json::to_value(&schema)?;
+
+        assert_eq!(&schema_json, &expected_schema_json);
+
+        Ok(())
     }
 }
