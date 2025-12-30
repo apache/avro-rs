@@ -168,36 +168,36 @@ impl Serialize for Duration {
     }
 }
 
-struct DurationVisitor;
-
-impl<'de> de::Visitor<'de> for DurationVisitor {
-    type Value = Duration;
-
-    fn expecting(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        write!(f, "a byte array with size 12")
-    }
-
-    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        if v.len() != 12 {
-            Err(E::custom(format!(
-                "Expected byte array of length 12, but length is {}",
-                v.len()
-            )))
-        } else {
-            let v_slice: [u8; 12] = v[..12].try_into().unwrap();
-            Ok(Duration::from(v_slice))
-        }
-    }
-}
-
 impl<'de> Deserialize<'de> for Duration {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
+        struct DurationVisitor;
+
+        impl<'v> de::Visitor<'v> for DurationVisitor {
+            type Value = Duration;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+                write!(f, "a byte array with size 12")
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                if v.len() != 12 {
+                    Err(E::custom(format!(
+                        "Expected byte array of length 12, but length is {}",
+                        v.len()
+                    )))
+                } else {
+                    let v_slice: [u8; 12] = v[..12].try_into().unwrap();
+                    Ok(Duration::from(v_slice))
+                }
+            }
+        }
+
         deserializer.deserialize_bytes(DurationVisitor)
     }
 }
@@ -210,7 +210,7 @@ mod tests {
     use apache_avro_test_helper::TestResult;
 
     #[test]
-    fn test_duration_from_value() -> TestResult {
+    fn avro_rs_832_duration_from_value() -> TestResult {
         let val = Value::Duration(Duration::new(Months::new(7), Days::new(4), Millis::new(45)));
         let de_val: Duration = crate::from_value(&val)?;
         assert_eq!(de_val.months(), Months::new(7));
@@ -220,7 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn test_duration_to_value() -> TestResult {
+    fn avro_rs_832_duration_to_value() -> TestResult {
         let duration = Duration::new(Months::new(7), Days::new(4), Millis::new(45));
         let ser_val = crate::to_value(&duration)?;
         match ser_val {

@@ -455,8 +455,12 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
             }
             Value::Uuid(ref u) => visitor.visit_bytes(u.as_bytes()),
             Value::Decimal(ref d) => visitor.visit_bytes(&d.to_vec()?),
+            Value::Duration(ref d) => {
+                let d_bytes: [u8; 12] = d.into();
+                visitor.visit_bytes(&d_bytes[..])
+            }
             _ => Err(de::Error::custom(format!(
-                "Expected a String|Bytes|Fixed|Uuid|Decimal, but got {:?}",
+                "Expected a String|Bytes|Fixed|Uuid|Decimal|Duration, but got {:?}",
                 self.input
             ))),
         }
