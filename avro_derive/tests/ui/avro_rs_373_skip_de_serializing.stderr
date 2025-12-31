@@ -1,0 +1,6 @@
+error: Use `#[serde(skip)]` instead of `#[serde(skip_serializing, skip_deserializing)]`
+ --> tests/ui/avro_rs_373_skip_de_serializing.rs:7:5
+  |
+7 | /     #[serde(skip_serializing, skip_deserializing)]
+8 | |     z: Option<i8>,
+  | |_________________^

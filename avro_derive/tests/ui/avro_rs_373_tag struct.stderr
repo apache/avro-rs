@@ -1,0 +1,9 @@
+error: AvroSchema derive does not support changing the tagging Serde generates (`tag`, `content`, `untagged`, `variant_identifier`, `field_identifier`)
+ --> tests/ui/avro_rs_373_tag struct.rs:4:1
+  |
+4 | / #[serde(tag = "bar")]
+5 | | struct Foo {
+6 | |     a: String,
+7 | |     b: i32,
+8 | | }
+  | |_^
