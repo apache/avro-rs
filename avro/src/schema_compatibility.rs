@@ -493,7 +493,7 @@ impl SchemaCompatibility {
                     | Schema::LocalTimestampMillis
                     | Schema::LocalTimestampMicros
                     | Schema::LocalTimestampNanos
-                    | Schema::Duration
+                    | Schema::Duration(_)
                     | Schema::Ref { .. } => {
                         unreachable!("SchemaKind::Uuid can only be a Schema::Uuid")
                     }

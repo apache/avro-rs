@@ -179,7 +179,7 @@ pub enum Details {
     GetBigDecimal(Value),
 
     #[error("Fixed bytes of size 12 expected, got Fixed of size {0}")]
-    GetDecimalFixedBytes(usize),
+    GetDurationFixedBytes(usize),
 
     #[error("Expected Value::Duration or Value::Fixed(12), got: {0:?}")]
     ResolveDuration(Value),
