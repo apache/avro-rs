@@ -498,7 +498,8 @@ impl<'s> ResolvedSchema<'s> {
                 | Schema::Decimal(DecimalSchema {
                     inner: InnerDecimalSchema::Fixed(FixedSchema { name, .. }),
                     ..
-                }) => {
+                })
+                | Schema::Duration(FixedSchema { name, .. }) => {
                     let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
                     if self
                         .names_ref
@@ -1271,6 +1272,7 @@ impl Schema {
                 ..
             })
             | Schema::Uuid(UuidSchema::Fixed(FixedSchema { attributes, .. })) => Some(attributes),
+            Schema::Duration(FixedSchema { attributes, .. }) => Some(attributes),
             _ => None,
         }
     }
@@ -1325,6 +1327,7 @@ impl Schema {
                 ..
             })
             | Schema::Uuid(UuidSchema::Fixed(FixedSchema { aliases, .. })) => aliases.as_ref(),
+            Schema::Duration(FixedSchema { aliases, .. }) => aliases.as_ref(),
             _ => None,
         }
     }
@@ -1340,6 +1343,7 @@ impl Schema {
                 ..
             })
             | Schema::Uuid(UuidSchema::Fixed(FixedSchema { doc, .. })) => doc.as_ref(),
+            Schema::Duration(FixedSchema { doc, .. }) => doc.as_ref(),
             _ => None,
         }
     }

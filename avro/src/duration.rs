@@ -1,5 +1,3 @@
-use serde::{Deserialize, Serialize, de};
-
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -18,6 +16,8 @@ use serde::{Deserialize, Serialize, de};
 // under the License.
 /// A struct representing duration that hides the details of endianness and conversion between
 /// platform-native u32 and byte arrays.
+use serde::{Deserialize, Serialize, de};
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Duration {
     months: Months,
@@ -175,7 +175,7 @@ impl<'de> Deserialize<'de> for Duration {
     {
         struct DurationVisitor;
 
-        impl<'v> de::Visitor<'v> for DurationVisitor {
+        impl de::Visitor<'_> for DurationVisitor {
             type Value = Duration;
 
             fn expecting(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
@@ -222,7 +222,7 @@ mod tests {
     #[test]
     fn avro_rs_382_duration_to_value() -> TestResult {
         let duration = Duration::new(Months::new(7), Days::new(4), Millis::new(45));
-        let ser_val = crate::to_value(&duration)?;
+        let ser_val = crate::to_value(duration)?;
         match ser_val {
             // Without a schema, we expect Duration to serialize to bytes
             Value::Bytes(b) => {

@@ -754,7 +754,7 @@ impl Value {
             duration @ Value::Duration { .. } => duration,
             Value::Fixed(size, bytes) => {
                 if size != 12 {
-                    return Err(Details::GetDecimalFixedBytes(size).into());
+                    return Err(Details::GetDurationFixedBytes(size).into());
                 }
                 Value::Duration(Duration::from([
                     bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
