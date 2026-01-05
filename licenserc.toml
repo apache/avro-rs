@@ -15,18 +15,11 @@
 # specific language governing permissions and limitations
 # under the License.
 
-version: 2
-updates:
-  - package-ecosystem: "cargo"
-    directory: "/"
-    schedule:
-      interval: "daily"
-    open-pull-requests-limit: 20
-    commit-message:
-      prefix: "chore(deps): "
-
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "sunday"
+headerPath = "Apache-2.0-ASF.txt"
+excludes = [
+  "*.stderr",
+  "*.avro",
+  "NOTICE",
+  "README.tpl",
+  ".requirements-precommit.txt"
+]
