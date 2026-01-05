@@ -1,0 +1,21 @@
+warning: `#[avro(name = "...")]` is deprecated.
+  --> tests/ui/avro_rs_373_name.rs:21:1
+   |
+21 | / #[avro(name = "Something")]
+22 | | struct Foo {
+23 | |     a: String,
+24 | |     b: i32,
+25 | | }
+   | |_^
+   |
+   = help: Use `#[serde(rename = "...")]` instead.
+
+error: #[avro(name = "..")] must match #[serde(rename = "..")], it's also deprecated. Please use only `#[serde(rename = "..")]`
+  --> tests/ui/avro_rs_373_name.rs:21:1
+   |
+21 | / #[avro(name = "Something")]
+22 | | struct Foo {
+23 | |     a: String,
+24 | |     b: i32,
+25 | | }
+   | |_^

@@ -18,11 +18,10 @@
 use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
-struct T {
-    x: Option<i8>,
-    y: Option<String>,
-    #[serde(skip_serializing, skip_deserializing)]
-    z: Option<i8>,
+#[avro(name = "Something")]
+struct Foo {
+    a: String,
+    b: i32,
 }
 
-fn main() {}
+pub fn main() {}

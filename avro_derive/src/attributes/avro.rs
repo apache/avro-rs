@@ -51,6 +51,13 @@ pub struct ContainerAttributes {
 
 impl ContainerAttributes {
     pub fn deprecated(&self, span: Span) {
+        if self.name.is_some() {
+            super::warn(
+                span,
+                "`#[avro(name = \"...\")]` is deprecated.",
+                "Use `#[serde(rename = \"...\")]` instead.",
+            )
+        }
         if self.rename_all != RenameRule::None {
             super::warn(
                 span,

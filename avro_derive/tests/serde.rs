@@ -18,7 +18,8 @@
 use apache_avro::{AvroSchema, Error, Reader, Schema, Writer, from_value};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-/// Takes in a type that implements the right combination of traits and runs it through a Serde Cycle and asserts the result is the same
+/// Takes in a type that implements the right combination of traits and runs it through a Serde
+/// round-trip and asserts the result is the same.
 fn serde_assert<T>(obj: T)
 where
     T: std::fmt::Debug + Serialize + DeserializeOwned + AvroSchema + Clone + PartialEq,
@@ -26,7 +27,8 @@ where
     assert_eq!(obj, serde(obj.clone()).unwrap());
 }
 
-/// Takes in a type that implements the right combination of traits and runs it through a Serde Cycle and asserts that the error matches the expected string
+/// Takes in a type that implements the right combination of traits and runs it through a Serde
+/// round-trip and asserts that the error matches the expected string.
 fn serde_assert_err<T>(obj: T, expected: &str)
 where
     T: std::fmt::Debug + Serialize + DeserializeOwned + AvroSchema + Clone + PartialEq,
@@ -65,7 +67,7 @@ where
     if let Some(res) = reader.next() {
         return res.and_then(|v| from_value::<T>(&v));
     }
-    unreachable!("Nothing was encoded!")
+    panic!("Nothing was encoded!")
 }
 
 mod container_attributes {
@@ -83,7 +85,7 @@ mod container_attributes {
         let schema = r#"
         {
             "type":"record",
-            "name":"Foo",
+            "name":"Bar",
             "fields": [
                 {
                     "name":"a",
@@ -129,7 +131,7 @@ mod container_attributes {
                     "name":"bar",
                     "type": {
                         "type":"record",
-                        "name":"Foo",
+                        "name":"Bar",
                         "fields": [
                             {
                                 "name":"a",

@@ -68,21 +68,27 @@ impl NamedTypeOptions {
             errors.push(syn::Error::new(
                 span,
                 "AvroSchema derive does not support Serde `transparent` attribute",
-            ))
+            ));
         }
         if serde.rename_all.deserialize != serde.rename_all.serialize {
             errors.push(syn::Error::new(
                 span,
                 "AvroSchema derive does not support different rename rules for serializing and deserializing (`rename_all(serialize = \"..\", deserialize = \"..\")`)"
-            ))
+            ));
         }
 
         // Check for conflicts between Serde and Avro
+        if avro.name.is_some() && avro.name != serde.rename {
+            errors.push(syn::Error::new(
+                span,
+                "#[avro(name = \"..\")] must match #[serde(rename = \"..\")], it's also deprecated. Please use only `#[serde(rename = \"..\")]`",
+            ));
+        }
         if avro.rename_all != RenameRule::None && serde.rename_all.serialize != avro.rename_all {
             errors.push(syn::Error::new(
                 span,
                 "#[avro(rename_all = \"..\")] must match #[serde(rename_all = \"..\")], it's also deprecated. Please use only `#[serde(rename_all = \"..\")]`",
-            ))
+            ));
         }
 
         if !errors.is_empty() {
@@ -90,7 +96,7 @@ impl NamedTypeOptions {
         }
 
         Ok(Self {
-            name: avro.name,
+            name: serde.rename,
             namespace: avro.namespace,
             doc: avro.doc,
             alias: avro.alias,
@@ -126,7 +132,7 @@ impl VariantOptions {
         if avro.rename.is_some() && serde.rename != avro.rename {
             errors.push(syn::Error::new(
                 span,
-                "`#[avro(rename = \"..\")]` must match `#[serde(rename = \"..\")]`, it's also deprecated. Please use only `#[serde(rename  = \"..\")]`"
+                "`#[avro(rename = \"..\")]` must match `#[serde(rename = \"..\")]`, it's also deprecated. Please use only `#[serde(rename = \"..\")]`"
             ));
         }
 
@@ -174,7 +180,7 @@ impl FieldOptions {
         }
 
         // Check for conflicts between Serde and Avro
-        if avro.skip && !serde.skip {
+        if avro.skip && !(serde.skip || (serde.skip_serializing && serde.skip_deserializing)) {
             errors.push(syn::Error::new(
                 span,
                 "`#[avro(skip)]` requires `#[serde(skip)]`, it's also deprecated. Please use only `#[serde(skip)]`"
@@ -190,25 +196,18 @@ impl FieldOptions {
         if avro.rename.is_some() && serde.rename != avro.rename {
             errors.push(syn::Error::new(
                 span,
-                "`#[avro(rename = \"..\")]` must match `#[serde(rename = \"..\")]`, it's also deprecated. Please use only `#[serde(rename  = \"..\")]`"
+                "`#[avro(rename = \"..\")]` must match `#[serde(rename = \"..\")]`, it's also deprecated. Please use only `#[serde(rename = \"..\")]`"
             ));
         }
         if !avro.alias.is_empty() && serde.alias != avro.alias {
             errors.push(syn::Error::new(
                 span,
-                "`#[avro(alias = \"..\")]` must match `#[serde(alias = \"..\")]`, it's also deprecated. Please use only `#[serde(alias  = \"..\")]`"
+                "`#[avro(alias = \"..\")]` must match `#[serde(alias = \"..\")]`, it's also deprecated. Please use only `#[serde(alias = \"..\")]`"
             ));
         }
-        if serde.skip_serializing && serde.skip_deserializing {
-            errors.push(syn::Error::new(
-                span,
-                "Use `#[serde(skip)]` instead of `#[serde(skip_serializing, skip_deserializing)]`",
-            ));
-
-            // Don't want to suggest default for skip_serializing as it's not needed for skip
-            return Err(errors);
-        }
-        if (serde.skip_serializing || serde.skip_serializing_if.is_some()) && avro.default.is_none()
+        if ((serde.skip_serializing && !serde.skip_deserializing)
+            || serde.skip_serializing_if.is_some())
+            && avro.default.is_none()
         {
             errors.push(syn::Error::new(
                 span,
@@ -225,7 +224,7 @@ impl FieldOptions {
             default: avro.default,
             alias: serde.alias,
             rename: serde.rename,
-            skip: serde.skip,
+            skip: serde.skip || (serde.skip_serializing && serde.skip_deserializing),
             flatten: serde.flatten,
         })
     }

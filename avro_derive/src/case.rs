@@ -73,19 +73,13 @@ static RENAME_RULES: &[(&str, RenameRule)] = &[
 
 impl RenameRule {
     pub fn from_str(rename_all_str: &str) -> Result<Self, ParseError> {
-        match rename_all_str {
-            "lowercase" => Ok(Self::LowerCase),
-            "UPPERCASE" => Ok(Self::UpperCase),
-            "PascalCase" => Ok(Self::PascalCase),
-            "camelCase" => Ok(Self::CamelCase),
-            "snake_case" => Ok(Self::SnakeCase),
-            "SCREAMING_SNAKE_CASE" => Ok(Self::ScreamingSnakeCase),
-            "kebab-case" => Ok(Self::KebabCase),
-            "SCREAMING-KEBAB-CASE" => Ok(Self::ScreamingKebabCase),
-            _ => Err(ParseError {
+        RENAME_RULES
+            .iter()
+            .find(|(name, _)| *name == rename_all_str)
+            .map(|(_, rule)| *rule)
+            .ok_or_else(|| ParseError {
                 unknown: rename_all_str.to_string(),
-            }),
-        }
+            })
     }
 
     /// Apply a renaming rule to an enum variant, returning the version expected in the source.

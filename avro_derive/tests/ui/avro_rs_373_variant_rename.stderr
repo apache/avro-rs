@@ -7,7 +7,7 @@ warning: `#[avro(rename = "..")]` is deprecated
    |
    = help: Use `#[serde(rename = "..")]` instead
 
-error: `#[avro(rename = "..")]` must match `#[serde(rename = "..")]`, it's also deprecated. Please use only `#[serde(rename  = "..")]`
+error: `#[avro(rename = "..")]` must match `#[serde(rename = "..")]`, it's also deprecated. Please use only `#[serde(rename = "..")]`
   --> tests/ui/avro_rs_373_variant_rename.rs:23:5
    |
 23 | /     #[avro(rename = "Scam")]

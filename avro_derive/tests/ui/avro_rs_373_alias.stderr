@@ -7,7 +7,7 @@ warning: `#[avro(alias = "..")]` is deprecated
    |
    = help: Use `#[serde(alias = "..")]` instead
 
-error: `#[avro(alias = "..")]` must match `#[serde(alias = "..")]`, it's also deprecated. Please use only `#[serde(alias  = "..")]`
+error: `#[avro(alias = "..")]` must match `#[serde(alias = "..")]`, it's also deprecated. Please use only `#[serde(alias = "..")]`
   --> tests/ui/avro_rs_373_alias.rs:22:5
    |
 22 | /     #[avro(alias = "c")]

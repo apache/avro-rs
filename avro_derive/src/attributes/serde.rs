@@ -59,7 +59,7 @@ impl From<RenameRule> for RenameAll {
 impl RenameAll {
     fn from_expr(expr: &Expr) -> darling::Result<Self> {
         let Expr::Lit(lit) = expr else {
-            return Err(darling::Error::custom("Expected a string or a tuple!"));
+            return Err(darling::Error::custom("Expected a string literal!"));
         };
         let rule = RenameRule::from_value(&lit.lit)?;
         Ok(RenameAll::from(rule))
@@ -86,9 +86,8 @@ pub enum SerdeDefault {
 #[derive(Debug, FromAttributes)]
 #[darling(attributes(serde))]
 pub struct ContainerAttributes {
-    #[darling(rename = "rename")]
     /// Rename this container.
-    pub _rename: Option<String>,
+    pub rename: Option<String>,
     /// Rename all the fields (if this is a struct) or variants (if this is an enum) according to the given case convention.
     #[darling(default)]
     pub rename_all: RenameAll,

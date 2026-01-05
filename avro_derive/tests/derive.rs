@@ -208,7 +208,8 @@ fn test_complex_namespace() {
 #[test]
 fn avro_rs_239_test_named_record() {
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
-    #[avro(name = "Other", namespace = "com.testing.namespace")]
+    #[avro(namespace = "com.testing.namespace")]
+    #[serde(rename = "Other")]
     struct TestNamedRecord {
         a: i32,
         b: String,
@@ -655,8 +656,7 @@ fn test_enum() {
 #[test]
 fn avro_rs_239_test_enum_named() {
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
-    #[avro(name = "Other")]
-    #[serde(rename_all = "snake_case")]
+    #[serde(rename = "Other", rename_all = "snake_case")]
     enum TestNamedEnum {
         A,
         B,
