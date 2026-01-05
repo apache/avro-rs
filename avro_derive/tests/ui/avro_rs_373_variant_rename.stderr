@@ -1,15 +1,15 @@
 warning: `#[avro(rename = "..")]` is deprecated
- --> tests/ui/avro_rs_373_variant_rename.rs:6:5
-  |
-6 | /     #[avro(rename = "Scam")]
-7 | |     Spam,
-  | |________^
-  |
-  = help: Use `#[serde(rename = "..")]` instead
+  --> tests/ui/avro_rs_373_variant_rename.rs:23:5
+   |
+23 | /     #[avro(rename = "Scam")]
+24 | |     Spam,
+   | |________^
+   |
+   = help: Use `#[serde(rename = "..")]` instead
 
 error: `#[avro(rename = "..")]` must match `#[serde(rename = "..")]`, it's also deprecated. Please use only `#[serde(rename  = "..")]`
- --> tests/ui/avro_rs_373_variant_rename.rs:6:5
-  |
-6 | /     #[avro(rename = "Scam")]
-7 | |     Spam,
-  | |________^
+  --> tests/ui/avro_rs_373_variant_rename.rs:23:5
+   |
+23 | /     #[avro(rename = "Scam")]
+24 | |     Spam,
+   | |________^
