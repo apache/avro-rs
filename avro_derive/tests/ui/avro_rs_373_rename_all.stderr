@@ -1,0 +1,21 @@
+warning: `#[avro(rename_all = "..")]` is deprecated
+ --> tests/ui/avro_rs_373_rename_all.rs:4:1
+  |
+4 | / #[avro(rename_all = "snake_case")]
+5 | | struct Foo {
+6 | |     a: String,
+7 | |     b: i32,
+8 | | }
+  | |_^
+  |
+  = help: Use `#[serde(rename_all = "..")]` instead
+
+error: #[avro(rename_all = "..")] must match #[serde(rename_all = "..")], it's also deprecated. Please use only `#[serde(rename_all = "..")]`
+ --> tests/ui/avro_rs_373_rename_all.rs:4:1
+  |
+4 | / #[avro(rename_all = "snake_case")]
+5 | | struct Foo {
+6 | |     a: String,
+7 | |     b: i32,
+8 | | }
+  | |_^

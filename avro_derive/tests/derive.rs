@@ -655,13 +655,12 @@ fn test_enum() {
 #[test]
 fn avro_rs_239_test_enum_named() {
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
-    #[avro(name = "Other", rename_all = "snake_case")]
+    #[avro(name = "Other")]
     #[serde(rename_all = "snake_case")]
     enum TestNamedEnum {
         A,
         B,
         C,
-        #[avro(rename = "e")]
         #[serde(rename = "e")]
         D,
     }
@@ -1505,16 +1504,12 @@ fn avro_3633_test_basic_struct_with_skip_attribute() {
 
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
     struct TestBasicStructWithSkipAttribute {
-        #[avro(skip)]
         #[serde(skip)]
         condition: bool,
-        #[avro(skip = false)]
         a: f64,
-        #[avro(skip)]
         #[serde(skip)]
         map: HashMap<String, i32>,
         array: Vec<i32>,
-        #[avro(skip = true)]
         #[serde(skip)]
         mystruct: TestBasicStructNoSchema,
         b: i32,
@@ -1581,11 +1576,9 @@ fn avro_3633_test_basic_struct_with_skip_attribute() {
 fn avro_3633_test_basic_struct_with_rename_attribute() {
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
     struct TestBasicStructWithRenameAttribute {
-        #[avro(rename = "a1")]
         #[serde(rename = "a1")]
         a: bool,
         b: i32,
-        #[avro(rename = "c1")]
         #[serde(rename = "c1")]
         c: f32,
     }
@@ -1686,7 +1679,6 @@ fn avro_rs_247_serde_flatten_support() {
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
     struct Foo {
         #[serde(flatten)]
-        #[avro(flatten)]
         nested: Nested,
         b: i32,
     }
@@ -1730,7 +1722,6 @@ fn avro_rs_247_serde_nested_flatten_support() {
     #[derive(AvroSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Foo {
         #[serde(flatten)]
-        #[avro(flatten)]
         nested_foo: NestedFoo,
     }
 
@@ -1788,7 +1779,6 @@ fn avro_rs_247_serde_flatten_support_duplicate_field_name() {
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
     struct Foo {
         #[serde(flatten)]
-        #[avro(flatten)]
         nested: Nested,
         a: i32,
     }
@@ -1802,14 +1792,12 @@ fn avro_rs_247_serde_flatten_support_with_skip() {
     struct Nested {
         a: bool,
         #[serde(skip)]
-        #[avro(skip)]
         c: f64,
     }
 
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
     struct Foo {
         #[serde(flatten)]
-        #[avro(flatten)]
         nested: Nested,
         b: i32,
     }

@@ -5,6 +5,69 @@
 //! a user can use. These add extra metadata to the generated schema.
 
 use crate::case::RenameRule;
+use proc_macro2::Span;
+
+/// All the Avro attributes a container can have.
+#[derive(darling::FromAttributes)]
+#[darling(attributes(avro))]
+pub struct ContainerAttributes {
+    /// Change the name of this record/enum in the schema.
+    #[darling(default)]
+    pub name: Option<String>,
+    /// Adds a `namespace` field to the schema.
+    #[darling(default)]
+    pub namespace: Option<String>,
+    /// Adds a `doc` field to the schema.
+    #[darling(default)]
+    pub doc: Option<String>,
+    /// Adds the `aliases` field to the schema.
+    #[darling(multiple)]
+    pub alias: Vec<String>,
+    /// Deprecated. Use [`serde::ContainerAttributes::rename_all`] instead.
+    ///
+    /// Change the name of all fields in the schema according to the [`RenameRule`].
+    ///
+    /// [`serde::ContainerAttributes::rename_all`]: crate::attributes::serde::ContainerAttributes::rename_all
+    #[darling(default)]
+    pub rename_all: RenameRule,
+}
+
+impl ContainerAttributes {
+    pub fn deprecated(&self, span: Span) {
+        if self.rename_all != RenameRule::None {
+            super::warn(
+                span,
+                "`#[avro(rename_all = \"..\")]` is deprecated",
+                "Use `#[serde(rename_all = \"..\")]` instead",
+            )
+        }
+    }
+}
+
+/// All the Avro attributes a variant can have.
+#[derive(darling::FromAttributes)]
+#[darling(attributes(avro))]
+pub struct VariantAttributes {
+    /// Deprecated. Use [`serde::VariantAttributes::rename`] instead.
+    ///
+    /// Changes the name of the variant in the schema.
+    ///
+    /// [`serde::VariantAttributes::rename`]: crate::attributes::serde::VariantAttributes::rename
+    #[darling(default)]
+    pub rename: Option<String>,
+}
+
+impl VariantAttributes {
+    pub fn deprecated(&self, span: Span) {
+        if self.rename.is_some() {
+            super::warn(
+                span,
+                "`#[avro(rename = \"..\")]` is deprecated",
+                "Use `#[serde(rename = \"..\")]` instead",
+            )
+        }
+    }
+}
 
 /// All the Avro attributes a field can have.
 #[derive(darling::FromAttributes)]
@@ -48,40 +111,35 @@ pub struct FieldAttributes {
     pub flatten: bool,
 }
 
-/// All the Avro attributes a variant can have.
-#[derive(darling::FromAttributes)]
-#[darling(attributes(avro))]
-pub struct VariantAttributes {
-    /// Deprecated. Use [`serde::VariantAttributes::rename`] instead.
-    ///
-    /// Changes the name of the variant in the schema.
-    ///
-    /// [`serde::VariantAttributes::rename`]: crate::attributes::serde::VariantAttributes::rename
-    #[darling(default)]
-    pub rename: Option<String>,
-}
-
-/// All the Avro attributes a container can have.
-#[derive(darling::FromAttributes)]
-#[darling(attributes(avro))]
-pub struct ContainerAttributes {
-    /// Change the name of this record/enum in the schema.
-    #[darling(default)]
-    pub name: Option<String>,
-    /// Adds a `namespace` field to the schema.
-    #[darling(default)]
-    pub namespace: Option<String>,
-    /// Adds a `doc` field to the schema.
-    #[darling(default)]
-    pub doc: Option<String>,
-    /// Adds the `aliases` field to the schema.
-    #[darling(multiple)]
-    pub alias: Vec<String>,
-    /// Deprecated. Use [`serde::ContainerAttributes::rename_all`] instead.
-    ///
-    /// Change the name of all fields in the schema according to the [`RenameRule`].
-    ///
-    /// [`serde::ContainerAttributes::rename_all`]: crate::attributes::serde::ContainerAttributes::rename_all
-    #[darling(default)]
-    pub rename_all: RenameRule,
+impl FieldAttributes {
+    pub fn deprecated(&self, span: Span) {
+        if !self.alias.is_empty() {
+            super::warn(
+                span,
+                "`#[avro(alias = \"..\")]` is deprecated",
+                "Use `#[serde(alias = \"..\")]` instead",
+            )
+        }
+        if self.rename.is_some() {
+            super::warn(
+                span,
+                "`#[avro(rename = \"..\")]` is deprecated",
+                "Use `#[serde(rename = \"..\")]` instead",
+            )
+        }
+        if self.skip {
+            super::warn(
+                span,
+                "`#[avro(skip)]` is deprecated",
+                "Use `#[serde(skip)]` instead",
+            )
+        }
+        if self.flatten {
+            super::warn(
+                span,
+                "`#[avro(flatten)]` is deprecated",
+                "Use `#[serde(flatten)]` instead",
+            )
+        }
+    }
 }

@@ -116,7 +116,6 @@ fn avro_rs_226_index_out_of_bounds_with_serde_skip_multiple_fields() -> TestResu
         #[serde(skip_deserializing)]
         skip_deserializing: Option<String>,
         #[serde(skip)]
-        #[avro(skip)]
         skip: Option<String>,
         no_skip2: Option<i8>,
     }

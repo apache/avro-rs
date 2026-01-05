@@ -14,6 +14,7 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+#![cfg_attr(nightly, feature(proc_macro_diagnostic))]
 
 mod attributes;
 mod case;
@@ -652,7 +653,7 @@ mod tests {
         let test_struct = quote! {
             struct A {
                 #[serde(alias = "a1", alias = "a2", rename = "a3")]
-                #[avro(alias = "a1", alias = "a2", doc = "a doc", default = "123", rename = "a3")]
+                #[avro(doc = "a doc", default = "123")]
                 a: i32
             }
         };
@@ -672,7 +673,6 @@ mod tests {
         let test_enum = quote! {
             enum A {
                 #[serde(rename = "A3")]
-                #[avro(rename = "A3")]
                 Item1,
             }
         };
@@ -694,7 +694,6 @@ mod tests {
     fn test_avro_rs_207_rename_all_attribute() {
         let test_struct = quote! {
             #[serde(rename_all="SCREAMING_SNAKE_CASE")]
-            #[avro(rename_all="SCREAMING_SNAKE_CASE")]
             struct A {
                 item: i32,
                 double_item: i32
@@ -715,7 +714,6 @@ mod tests {
 
         let test_enum = quote! {
             #[serde(rename_all="SCREAMING_SNAKE_CASE")]
-            #[avro(rename_all="SCREAMING_SNAKE_CASE")]
             enum B {
                 Item,
                 DoubleItem,
@@ -739,11 +737,9 @@ mod tests {
     fn test_avro_rs_207_rename_attr_has_priority_over_rename_all_attribute() {
         let test_struct = quote! {
             #[serde(rename_all="SCREAMING_SNAKE_CASE")]
-            #[avro(rename_all="SCREAMING_SNAKE_CASE")]
             struct A {
                 item: i32,
                 #[serde(rename="DoubleItem")]
-                #[avro(rename="DoubleItem")]
                 double_item: i32
             }
         };

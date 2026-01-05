@@ -1,0 +1,15 @@
+warning: `#[avro(flatten)]` is deprecated
+ --> tests/ui/avro_rs_373_flatten.rs:5:5
+  |
+5 | /     #[avro(flatten)]
+6 | |     a: Bar,
+  | |__________^
+  |
+  = help: Use `#[serde(flatten)]` instead
+
+error: `#[avro(flatten)]` requires `#[serde(flatten)]`, it's also deprecated. Please use only `#[serde(flatten)]`
+ --> tests/ui/avro_rs_373_flatten.rs:5:5
+  |
+5 | /     #[avro(flatten)]
+6 | |     a: Bar,
+  | |__________^

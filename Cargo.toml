@@ -53,3 +53,4 @@ opt-level = "s"
 [workspace.lints]
 # By setting the priority to -1, this lint group can be overridden for specific lints
 clippy.all = { level = "warn", priority = -1 }
+rust.unexpected_cfgs = { level = "warn", check-cfg = ['cfg(nightly)'] }

@@ -1,0 +1,15 @@
+warning: `#[avro(skip)]` is deprecated
+ --> tests/ui/avro_rs_373_skip.rs:5:5
+  |
+5 | /     #[avro(skip)]
+6 | |     a: String,
+  | |_____________^
+  |
+  = help: Use `#[serde(skip)]` instead
+
+error: `#[avro(skip)]` requires `#[serde(skip)]`, it's also deprecated. Please use only `#[serde(skip)]`
+ --> tests/ui/avro_rs_373_skip.rs:5:5
+  |
+5 | /     #[avro(skip)]
+6 | |     a: String,
+  | |_____________^

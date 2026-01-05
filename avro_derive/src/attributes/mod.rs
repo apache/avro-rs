@@ -23,6 +23,9 @@ impl NamedTypeOptions {
         let serde =
             serde::ContainerAttributes::from_attributes(attributes).map_err(darling_to_syn)?;
 
+        // Check for deprecated attributes
+        avro.deprecated(span);
+
         // Collect errors so user gets all feedback at once
         let mut errors = Vec::new();
 
@@ -79,6 +82,47 @@ impl NamedTypeOptions {
     }
 }
 
+pub struct VariantOptions {
+    pub rename: Option<String>,
+}
+
+impl VariantOptions {
+    pub fn new(attributes: &[Attribute], span: Span) -> Result<Self, Vec<syn::Error>> {
+        let avro = avro::VariantAttributes::from_attributes(attributes).map_err(darling_to_syn)?;
+        let serde =
+            serde::VariantAttributes::from_attributes(attributes).map_err(darling_to_syn)?;
+
+        // Check for deprecated attributes
+        avro.deprecated(span);
+
+        // Collect errors so user gets all feedback at once
+        let mut errors = Vec::new();
+
+        // Check for any Serde attributes that are hard errors
+        if serde.other || serde.untagged {
+            errors.push(syn::Error::new(
+                span,
+                "AvroSchema derive does not support changing the tagging Serde generates (`other`, `untagged`)",
+            ));
+        }
+
+        if avro.rename.is_some() && serde.rename != avro.rename {
+            errors.push(syn::Error::new(
+                span,
+                "`#[avro(rename = \"..\")]` must match `#[serde(rename = \"..\")]`, it's also deprecated. Please use only `#[serde(rename  = \"..\")]`"
+            ));
+        }
+
+        if !errors.is_empty() {
+            return Err(errors);
+        }
+
+        Ok(Self {
+            rename: serde.rename,
+        })
+    }
+}
+
 pub struct FieldOptions {
     pub doc: Option<String>,
     pub default: Option<String>,
@@ -97,6 +141,9 @@ impl FieldOptions {
         // Sort the aliases, so our check for equality does not fail if they are provided in a different order
         avro.alias.sort();
         serde.alias.sort();
+
+        // Check for deprecated attributes
+        avro.deprecated(span);
 
         // Collect errors so user gets all feedback at once
         let mut errors = Vec::new();
@@ -167,40 +214,18 @@ impl FieldOptions {
     }
 }
 
-pub struct VariantOptions {
-    pub rename: Option<String>,
+#[cfg(nightly)]
+/// Emit a compiler warning.
+///
+/// This is a no-op when the `nightly` feature is not enabled.
+fn warn(span: Span, message: &str, help: &str) {
+    proc_macro::Diagnostic::spanned(span.unwrap(), proc_macro::Level::Warning, message)
+        .help(help)
+        .emit()
 }
 
-impl VariantOptions {
-    pub fn new(attributes: &[Attribute], span: Span) -> Result<Self, Vec<syn::Error>> {
-        let avro = avro::VariantAttributes::from_attributes(attributes).map_err(darling_to_syn)?;
-        let serde =
-            serde::VariantAttributes::from_attributes(attributes).map_err(darling_to_syn)?;
-
-        // Collect errors so user gets all feedback at once
-        let mut errors = Vec::new();
-
-        // Check for any Serde attributes that are hard errors
-        if serde.other || serde.untagged {
-            errors.push(syn::Error::new(
-                span,
-                "AvroSchema derive does not support changing the tagging Serde generates (`other`, `untagged`)",
-            ));
-        }
-
-        if avro.rename.is_some() && serde.rename != avro.rename {
-            errors.push(syn::Error::new(
-                span,
-                "`#[avro(rename = \"..\")]` must match `#[serde(rename = \"..\")]`, it's also deprecated. Please use only `#[serde(rename  = \"..\")]`"
-            ));
-        }
-
-        if !errors.is_empty() {
-            return Err(errors);
-        }
-
-        Ok(Self {
-            rename: serde.rename,
-        })
-    }
-}
+#[cfg(not(nightly))]
+/// Emit a compiler warning.
+///
+/// This is a no-op when the `nightly` feature is not enabled.
+fn warn(_span: Span, _message: &str, _help: &str) {}

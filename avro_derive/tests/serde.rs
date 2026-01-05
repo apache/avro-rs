@@ -144,42 +144,6 @@ mod container_attributes {
     fn avro_rs_373_rename_all() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
         #[serde(rename_all = "UPPERCASE")]
-        #[avro(rename_all = "UPPERCASE")]
-        struct Foo {
-            a: String,
-            b: i32,
-        }
-
-        let schema = r#"
-        {
-            "type":"record",
-            "name":"Foo",
-            "fields": [
-                {
-                    "name":"A",
-                    "type":"string"
-                },
-                {
-                    "name":"B",
-                    "type":"int"
-                }
-            ]
-        }
-        "#;
-
-        let schema = Schema::parse_str(schema).unwrap();
-        assert_eq!(schema, Foo::get_schema());
-
-        serde_assert(Foo {
-            a: "spam".to_string(),
-            b: 321,
-        });
-    }
-
-    #[test]
-    fn avro_rs_373_rename_all_no_avro() {
-        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
-        #[serde(rename_all = "UPPERCASE")]
         struct Foo {
             a: String,
             b: i32,
@@ -337,36 +301,10 @@ mod variant_attributes {
     use super::*;
 
     #[test]
-    fn avro_rs_373_rename_no_avro() {
-        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
-        enum Foo {
-            #[serde(rename = "Three")]
-            One,
-            Two,
-        }
-
-        let schema = r#"
-        {
-            "type":"enum",
-            "name":"Foo",
-            "symbols": [
-                "Three", "Two"
-            ]
-        }
-        "#;
-
-        let schema = Schema::parse_str(schema).unwrap();
-        assert_eq!(schema, Foo::get_schema());
-
-        serde_assert(Foo::One);
-    }
-
-    #[test]
     fn avro_rs_373_rename() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
         enum Foo {
             #[serde(rename = "Three")]
-            #[avro(rename = "Three")]
             One,
             Two,
         }
@@ -447,42 +385,6 @@ mod field_attributes {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
         struct Foo {
             #[serde(rename = "c")]
-            #[avro(rename = "c")]
-            a: String,
-            b: i32,
-        }
-
-        let schema = r#"
-        {
-            "type":"record",
-            "name":"Foo",
-            "fields": [
-                {
-                    "name":"c",
-                    "type":"string"
-                },
-                {
-                    "name":"b",
-                    "type":"int"
-                }
-            ]
-        }
-        "#;
-
-        let schema = Schema::parse_str(schema).unwrap();
-        assert_eq!(schema, Foo::get_schema());
-
-        serde_assert(Foo {
-            a: "spam".to_string(),
-            b: 321,
-        });
-    }
-
-    #[test]
-    fn avro_rs_373_rename_no_avro() {
-        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
-        struct Foo {
-            #[serde(rename = "c")]
             a: String,
             b: i32,
         }
@@ -523,47 +425,6 @@ mod field_attributes {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
         struct Foo {
             #[serde(flatten)]
-            #[avro(flatten)]
-            nested: Nested,
-            b: i32,
-        }
-
-        let schema = r#"
-        {
-            "type":"record",
-            "name":"Foo",
-            "fields": [
-                {
-                    "name":"a",
-                    "type":"boolean"
-                },
-                {
-                    "name":"b",
-                    "type":"int"
-                }
-            ]
-        }
-        "#;
-
-        let schema = Schema::parse_str(schema).unwrap();
-        assert_eq!(schema, Foo::get_schema());
-
-        serde_assert(Foo {
-            nested: Nested { a: true },
-            b: 321,
-        });
-    }
-
-    #[test]
-    fn avro_rs_373_flatten_no_avro() {
-        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
-        struct Nested {
-            a: bool,
-        }
-
-        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
-        struct Foo {
-            #[serde(flatten)]
             nested: Nested,
             b: i32,
         }
@@ -596,38 +457,6 @@ mod field_attributes {
 
     #[test]
     fn avro_rs_373_skip() {
-        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
-        struct Foo {
-            #[serde(skip)]
-            #[avro(skip)]
-            a: String,
-            b: i32,
-        }
-
-        let schema = r#"
-        {
-            "type":"record",
-            "name":"Foo",
-            "fields": [
-                {
-                    "name":"b",
-                    "type":"int"
-                }
-            ]
-        }
-        "#;
-
-        let schema = Schema::parse_str(schema).unwrap();
-        assert_eq!(schema, Foo::get_schema());
-
-        serde_assert(Foo {
-            a: "".to_string(),
-            b: 321,
-        });
-    }
-
-    #[test]
-    fn avro_rs_373_skip_no_avro() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
         struct Foo {
             #[serde(skip)]
