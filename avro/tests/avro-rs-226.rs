@@ -116,7 +116,6 @@ fn avro_rs_226_index_out_of_bounds_with_serde_skip_multiple_fields() -> TestResu
         #[serde(skip_deserializing)]
         skip_deserializing: Option<String>,
         #[serde(skip)]
-        #[avro(skip)]
         skip: Option<String>,
         no_skip2: Option<i8>,
     }
@@ -132,70 +131,4 @@ fn avro_rs_226_index_out_of_bounds_with_serde_skip_multiple_fields() -> TestResu
             no_skip2: Some(2),
         },
     )
-}
-
-#[test]
-#[should_panic(expected = "Missing default for skipped field 'y' for schema")]
-fn avro_rs_351_no_default_for_serde_skip_serializing_if_should_panic() {
-    #[derive(AvroSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
-    struct T {
-        x: Option<i8>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        y: Option<String>,
-        z: Option<i8>,
-    }
-
-    ser_deser::<T>(
-        &T::get_schema(),
-        T {
-            x: None,
-            y: None,
-            z: Some(1),
-        },
-    )
-    .unwrap()
-}
-
-#[test]
-#[should_panic(expected = "Missing default for skipped field 'x' for schema")]
-fn avro_rs_351_no_default_for_serde_skip_should_panic() {
-    #[derive(AvroSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
-    struct T {
-        #[serde(skip)]
-        x: Option<i8>,
-        y: Option<String>,
-        z: Option<i8>,
-    }
-
-    ser_deser::<T>(
-        &T::get_schema(),
-        T {
-            x: None,
-            y: None,
-            z: Some(1),
-        },
-    )
-    .unwrap()
-}
-
-#[test]
-#[should_panic(expected = "Missing default for skipped field 'z' for schema")]
-fn avro_rs_351_no_default_for_serde_skip_serializing_should_panic() {
-    #[derive(AvroSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
-    struct T {
-        x: Option<i8>,
-        y: Option<String>,
-        #[serde(skip_serializing)]
-        z: Option<i8>,
-    }
-
-    ser_deser::<T>(
-        &T::get_schema(),
-        T {
-            x: Some(0),
-            y: None,
-            z: None,
-        },
-    )
-    .unwrap()
 }

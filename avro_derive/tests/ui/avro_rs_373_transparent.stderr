@@ -1,0 +1,8 @@
+error: AvroSchema derive does not support Serde `transparent` attribute
+  --> tests/ui/avro_rs_373_transparent.rs:27:1
+   |
+27 | / #[serde(transparent)]
+28 | | struct Bar {
+29 | |     foo: Foo,
+30 | | }
+   | |_^
