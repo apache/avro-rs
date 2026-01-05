@@ -26,8 +26,10 @@ use syn::{
     spanned::Spanned,
 };
 
-use crate::attributes::{FieldOptions, NamedTypeOptions, VariantOptions};
-use crate::case::RenameRule;
+use crate::{
+    attributes::{FieldOptions, NamedTypeOptions, VariantOptions},
+    case::RenameRule,
+};
 
 #[proc_macro_derive(AvroSchema, attributes(avro, serde))]
 // Templated from Serde
@@ -383,12 +385,6 @@ fn preserve_vec(op: Vec<impl quote::ToTokens>) -> TokenStream {
     } else {
         quote! {Some(vec![#(#items),*])}
     }
-}
-
-fn darling_to_syn(e: darling::Error) -> Vec<syn::Error> {
-    let msg = format!("{e}");
-    let token_errors = e.write_errors();
-    vec![syn::Error::new(token_errors.span(), msg)]
 }
 
 #[cfg(test)]

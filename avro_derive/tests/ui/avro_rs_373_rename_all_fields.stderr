@@ -1,20 +1,5 @@
-error: cannot find derive macro `AvroSchema` in this scope
-  --> tests/ui/avro_rs_373_rename_all_fields.rs:18:10
+error: AvroSchema derive does not work for enums with non unit structs
+  --> tests/ui/avro_rs_373_rename_all_fields.rs:22:6
    |
-18 | #[derive(AvroSchema)]
-   |          ^^^^^^^^^^
-   |
-help: consider importing one of these derive macros
-   |
-18 + use apache_avro::AvroSchema;
-   |
-18 + use apache_avro_derive::AvroSchema;
-   |
-
-error: cannot find attribute `serde` in this scope
-  --> tests/ui/avro_rs_373_rename_all_fields.rs:19:3
-   |
-19 | #[serde(rename_all_fields = "UPPERCASE")]
-   |   ^^^^^
-   |
-   = note: `serde` is in scope, but it is a crate, not an attribute
+22 | enum Foo {
+   |      ^^^

@@ -15,6 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use apache_avro::AvroSchema;
+
 #[derive(AvroSchema)]
 #[serde(rename_all_fields = "UPPERCASE")]
 enum Foo {

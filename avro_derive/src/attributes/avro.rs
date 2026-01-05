@@ -28,7 +28,11 @@ use proc_macro2::Span;
 #[derive(darling::FromAttributes)]
 #[darling(attributes(avro))]
 pub struct ContainerAttributes {
+    /// Deprecated. Use [`serde::ContainerAttributes::rename`] instead.
+    ///
     /// Change the name of this record/enum in the schema.
+    ///
+    /// [`serde::ContainerAttributes::rename`]: crate::attributes::serde::ContainerAttributes::rename
     #[darling(default)]
     pub name: Option<String>,
     /// Adds a `namespace` field to the schema.

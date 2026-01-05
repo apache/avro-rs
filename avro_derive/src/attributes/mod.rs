@@ -15,11 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::case::RenameRule;
 use darling::FromAttributes;
 use proc_macro2::Span;
-use syn::Attribute;
-
-use crate::{case::RenameRule, darling_to_syn};
+use syn::{Attribute, spanned::Spanned};
 
 pub mod avro;
 pub mod serde;
@@ -228,6 +227,12 @@ impl FieldOptions {
             flatten: serde.flatten,
         })
     }
+}
+
+fn darling_to_syn(e: darling::Error) -> Vec<syn::Error> {
+    let msg = format!("{e}");
+    let token_errors = e.write_errors();
+    vec![syn::Error::new(token_errors.span(), msg)]
 }
 
 #[cfg(nightly)]
