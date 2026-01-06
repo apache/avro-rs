@@ -772,7 +772,7 @@ fn generate_sync_marker() -> [u8; 16] {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
+    use std::{cell::RefCell, rc::Rc};
 
     use super::*;
     use crate::{
@@ -1053,7 +1053,7 @@ mod tests {
                 doc: None,
                 size: 12,
                 default: None,
-                attributes: BTreeMap::new(),
+                attributes: Default::default(),
             }),
             value,
             &inner,

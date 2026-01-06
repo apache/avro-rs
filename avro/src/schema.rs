@@ -2755,6 +2755,29 @@ pub mod derive {
             T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
         }
     }
+
+    impl AvroSchemaComponent for core::time::Duration {
+        fn get_schema_in_ctxt(
+            named_schemas: &mut Names,
+            enclosing_namespace: &Namespace,
+        ) -> Schema {
+            let name = Name {
+                name: "duration".to_string(),
+                namespace: enclosing_namespace.clone(),
+            };
+            named_schemas
+                .entry(name.clone())
+                .or_insert(Schema::Duration(FixedSchema {
+                    name,
+                    aliases: None,
+                    doc: None,
+                    size: 12,
+                    default: None,
+                    attributes: Default::default(),
+                }))
+                .clone()
+        }
+    }
 }
 
 #[cfg(test)]
