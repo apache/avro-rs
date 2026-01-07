@@ -475,8 +475,14 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
             Value::Bytes(ref bytes) | Value::Fixed(_, ref bytes) => {
                 visitor.visit_byte_buf(bytes.to_owned())
             }
+            Value::Uuid(ref u) => visitor.visit_byte_buf(Vec::from(u.as_bytes())),
+            Value::Decimal(ref d) => visitor.visit_byte_buf(d.to_vec()?),
+            Value::Duration(ref d) => {
+                let d_bytes: [u8; 12] = d.into();
+                visitor.visit_byte_buf(Vec::from(d_bytes))
+            }
             _ => Err(de::Error::custom(format!(
-                "Expected a String|Bytes|Fixed, but got {:?}",
+                "Expected a String|Bytes|Fixed|Uuid|Decimal|Duration, but got {:?}",
                 self.input
             ))),
         }

@@ -163,9 +163,9 @@ impl SchemataEq for StructFieldEq {
             ) => {
                 self.compare(items_one, items_two)
             }
+            (Schema::Array(_), _) => false,
             (Schema::Duration(FixedSchema { size: size_one, ..}), Schema::Duration(FixedSchema { size: size_two, ..})) => size_one == size_two,
             (Schema::Duration(_), _) => false,
-            (Schema::Array(_), _) => false,
             (
                 Schema::Map(MapSchema { types: types_one, ..}),
                 Schema::Map(MapSchema { types: types_two, ..})
