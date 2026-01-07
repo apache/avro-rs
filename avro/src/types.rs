@@ -903,7 +903,10 @@ impl Value {
     fn resolve_int(self) -> Result<Self, Error> {
         match self {
             Value::Int(n) => Ok(Value::Int(n)),
-            Value::Long(n) => Ok(Value::Int(n as i32)),
+            Value::Long(n) => {
+                let n = i32::try_from(n).map_err(|e| Details::ZagI32(e, n))?;
+                Ok(Value::Int(n))
+            }
             other => Err(Details::GetInt(other).into()),
         }
     }
