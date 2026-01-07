@@ -3474,4 +3474,17 @@ Field with name '"b"' is not a member of the map items"#,
 
         Ok(())
     }
+
+    #[test]
+    fn avro_rs_392_resolve_long_to_int() {
+        // Values that are valid as in i32 should work
+        let value = Value::Long(0);
+        value.resolve(&Schema::Int).unwrap();
+        // Values that are outside the i32 range should not
+        let value = Value::Long(i64::MAX);
+        assert!(matches!(
+            value.resolve(&Schema::Int).unwrap_err().details(),
+            Details::ZagI32(_, _)
+        ));
+    }
 }
