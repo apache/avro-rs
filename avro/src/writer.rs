@@ -1047,7 +1047,14 @@ mod tests {
         ));
         logical_type_test(
             r#"{"type": {"type": "fixed", "name": "duration", "size": 12}, "logicalType": "duration"}"#,
-            &Schema::Duration,
+            &Schema::Duration(FixedSchema {
+                name: Name::from("duration"),
+                aliases: None,
+                doc: None,
+                size: 12,
+                default: None,
+                attributes: Default::default(),
+            }),
             value,
             &inner,
             Value::Fixed(12, vec![0, 1, 0, 0, 0, 2, 0, 0, 0, 4, 0, 0]),

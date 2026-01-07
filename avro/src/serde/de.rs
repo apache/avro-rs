@@ -354,9 +354,13 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
                 Value::BigDecimal(ref big_decimal) => {
                     visitor.visit_str(big_decimal.to_plain_string().as_str())
                 }
-                _ => Err(de::Error::custom(format!(
-                    "unsupported union: {:?}",
-                    self.input
+                Value::Duration(ref duration) => {
+                    let duration_bytes: [u8; 12] = duration.into();
+                    visitor.visit_bytes(&duration_bytes[..])
+                }
+                Value::Union(_, _) => Err(de::Error::custom(format!(
+                    "Directly nested union types are not supported. Got {:?}",
+                    &**u
                 ))),
             },
             Value::Record(fields) => visitor.visit_map(RecordDeserializer::new(fields)),
@@ -370,10 +374,10 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
             Value::BigDecimal(big_decimal) => {
                 visitor.visit_str(big_decimal.to_plain_string().as_str())
             }
-            value => Err(de::Error::custom(format!(
-                "incorrect value of type: {:?}",
-                crate::schema::SchemaKind::from(value)
-            ))),
+            Value::Duration(duration) => {
+                let duration_bytes: [u8; 12] = duration.into();
+                visitor.visit_bytes(&duration_bytes[..])
+            }
         }
     }
 
@@ -451,8 +455,12 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
             }
             Value::Uuid(ref u) => visitor.visit_bytes(u.as_bytes()),
             Value::Decimal(ref d) => visitor.visit_bytes(&d.to_vec()?),
+            Value::Duration(ref d) => {
+                let d_bytes: [u8; 12] = d.into();
+                visitor.visit_bytes(&d_bytes[..])
+            }
             _ => Err(de::Error::custom(format!(
-                "Expected a String|Bytes|Fixed|Uuid|Decimal, but got {:?}",
+                "Expected a String|Bytes|Fixed|Uuid|Decimal|Duration, but got {:?}",
                 self.input
             ))),
         }
@@ -467,8 +475,14 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
             Value::Bytes(ref bytes) | Value::Fixed(_, ref bytes) => {
                 visitor.visit_byte_buf(bytes.to_owned())
             }
+            Value::Uuid(ref u) => visitor.visit_byte_buf(Vec::from(u.as_bytes())),
+            Value::Decimal(ref d) => visitor.visit_byte_buf(d.to_vec()?),
+            Value::Duration(ref d) => {
+                let d_bytes: [u8; 12] = d.into();
+                visitor.visit_byte_buf(Vec::from(d_bytes))
+            }
             _ => Err(de::Error::custom(format!(
-                "Expected a String|Bytes|Fixed, but got {:?}",
+                "Expected a String|Bytes|Fixed|Uuid|Decimal|Duration, but got {:?}",
                 self.input
             ))),
         }

@@ -134,7 +134,7 @@ pub enum Schema {
     /// An instant in local time represented as the number of nanoseconds after the UNIX epoch.
     LocalTimestampNanos,
     /// An amount of time defined by a number of months, days and milliseconds.
-    Duration,
+    Duration(FixedSchema),
     /// A reference to another schema.
     Ref { name: Name },
 }
@@ -176,10 +176,15 @@ impl SchemaKind {
         )
     }
 
+    #[deprecated(since = "0.22.0", note = "Use Schema::is_named instead")]
     pub fn is_named(self) -> bool {
         matches!(
             self,
-            SchemaKind::Record | SchemaKind::Enum | SchemaKind::Fixed | SchemaKind::Ref
+            SchemaKind::Record
+                | SchemaKind::Enum
+                | SchemaKind::Fixed
+                | SchemaKind::Ref
+                | SchemaKind::Duration
         )
     }
 }
@@ -493,7 +498,8 @@ impl<'s> ResolvedSchema<'s> {
                 | Schema::Decimal(DecimalSchema {
                     inner: InnerDecimalSchema::Fixed(FixedSchema { name, .. }),
                     ..
-                }) => {
+                })
+                | Schema::Duration(FixedSchema { name, .. }) => {
                     let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
                     if self
                         .names_ref
@@ -979,8 +985,7 @@ impl UnionSchema {
             if let Schema::Union(_) = schema {
                 return Err(Details::GetNestedUnion.into());
             }
-            let kind = SchemaKind::from(schema);
-            if !kind.is_named() && vindex.insert(kind, i).is_some() {
+            if !schema.is_named() && vindex.insert(SchemaKind::from(schema), i).is_some() {
                 return Err(Details::GetUnionDuplicate.into());
             }
         }
@@ -1267,8 +1272,26 @@ impl Schema {
                 ..
             })
             | Schema::Uuid(UuidSchema::Fixed(FixedSchema { attributes, .. })) => Some(attributes),
+            Schema::Duration(FixedSchema { attributes, .. }) => Some(attributes),
             _ => None,
         }
+    }
+
+    /// Returns whether the schema represents a named type according to the avro specification
+    pub fn is_named(&self) -> bool {
+        matches!(
+            self,
+            Schema::Ref { .. }
+                | Schema::Record(_)
+                | Schema::Enum(_)
+                | Schema::Fixed(_)
+                | Schema::Decimal(DecimalSchema {
+                    inner: InnerDecimalSchema::Fixed(_),
+                    ..
+                })
+                | Schema::Uuid(UuidSchema::Fixed(_))
+                | Schema::Duration(_)
+        )
     }
 
     /// Returns the name of the schema if it has one.
@@ -1282,7 +1305,8 @@ impl Schema {
                 inner: InnerDecimalSchema::Fixed(FixedSchema { name, .. }),
                 ..
             })
-            | Schema::Uuid(UuidSchema::Fixed(FixedSchema { name, .. })) => Some(name),
+            | Schema::Uuid(UuidSchema::Fixed(FixedSchema { name, .. }))
+            | Schema::Duration(FixedSchema { name, .. }) => Some(name),
             _ => None,
         }
     }
@@ -1303,6 +1327,7 @@ impl Schema {
                 ..
             })
             | Schema::Uuid(UuidSchema::Fixed(FixedSchema { aliases, .. })) => aliases.as_ref(),
+            Schema::Duration(FixedSchema { aliases, .. }) => aliases.as_ref(),
             _ => None,
         }
     }
@@ -1318,6 +1343,7 @@ impl Schema {
                 ..
             })
             | Schema::Uuid(UuidSchema::Fixed(FixedSchema { doc, .. })) => doc.as_ref(),
+            Schema::Duration(FixedSchema { doc, .. }) => doc.as_ref(),
             _ => None,
         }
     }
@@ -1748,7 +1774,25 @@ impl Parser {
                         "duration",
                         parse_as_native_complex(complex, self, enclosing_namespace)?,
                         &[SchemaKind::Fixed],
-                        |_| -> AvroResult<Schema> { Ok(Schema::Duration) },
+                        |schema| -> AvroResult<Schema> {
+                            match schema {
+                                Schema::Fixed(fixed @ FixedSchema { size: 12, .. }) => {
+                                    Ok(Schema::Duration(fixed))
+                                }
+                                Schema::Fixed(FixedSchema { size, .. }) => {
+                                    warn!(
+                                        "Ignoring duration logical type on fixed type because size ({size}) is not 12! Schema: {schema:?}"
+                                    );
+                                    Ok(schema)
+                                }
+                                _ => {
+                                    warn!(
+                                        "Ignoring invalid duration logical type for schema: {schema:?}"
+                                    );
+                                    Ok(schema)
+                                }
+                            }
+                        },
                     );
                 }
                 // In this case, of an unknown logical type, we just pass through the underlying
@@ -2348,20 +2392,10 @@ impl Serialize for Schema {
                 map.serialize_entry("logicalType", "local-timestamp-nanos")?;
                 map.end()
             }
-            Schema::Duration => {
-                let mut map = serializer.serialize_map(None)?;
+            Schema::Duration(fixed) => {
+                let map = serializer.serialize_map(None)?;
 
-                // the Avro doesn't indicate what the name of the underlying fixed type of a
-                // duration should be or typically is.
-                let inner = Schema::Fixed(FixedSchema {
-                    name: Name::new("duration").unwrap(),
-                    aliases: None,
-                    doc: None,
-                    size: 12,
-                    default: None,
-                    attributes: Default::default(),
-                });
-                map.serialize_entry("type", &inner)?;
+                let mut map = fixed.serialize_to_map::<S>(map)?;
                 map.serialize_entry("logicalType", "duration")?;
                 map.end()
             }
@@ -2629,7 +2663,6 @@ pub mod derive {
     impl_schema!(f64, Schema::Double);
     impl_schema!(String, Schema::String);
     impl_schema!(uuid::Uuid, Schema::Uuid(UuidSchema::String));
-    impl_schema!(core::time::Duration, Schema::Duration);
 
     impl<T> AvroSchemaComponent for Vec<T>
     where
@@ -2720,6 +2753,29 @@ pub mod derive {
             enclosing_namespace: &Namespace,
         ) -> Schema {
             T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
+        }
+    }
+
+    impl AvroSchemaComponent for core::time::Duration {
+        fn get_schema_in_ctxt(
+            named_schemas: &mut Names,
+            enclosing_namespace: &Namespace,
+        ) -> Schema {
+            let name = Name {
+                name: "duration".to_string(),
+                namespace: enclosing_namespace.clone(),
+            };
+            named_schemas
+                .entry(name.clone())
+                .or_insert(Schema::Duration(FixedSchema {
+                    name,
+                    aliases: None,
+                    doc: None,
+                    size: 12,
+                    default: None,
+                    attributes: Default::default(),
+                }))
+                .clone()
         }
     }
 }
@@ -7469,5 +7525,30 @@ mod tests {
         .unwrap();
         let _resolved = ResolvedSchema::try_from(&schema).unwrap();
         let _resolved_owned = ResolvedOwnedSchema::try_from(schema).unwrap();
+    }
+
+    #[test]
+    fn avro_rs_382_serialize_duration_schema() -> TestResult {
+        let schema = Schema::Duration(FixedSchema {
+            name: Name::from("Duration"),
+            aliases: None,
+            doc: None,
+            size: 12,
+            default: None,
+            attributes: BTreeMap::new(),
+        });
+
+        let expected_schema_json = json!({
+            "type": "fixed",
+            "logicalType": "duration",
+            "name": "Duration",
+            "size": 12
+        });
+
+        let schema_json = serde_json::to_value(&schema)?;
+
+        assert_eq!(&schema_json, &expected_schema_json);
+
+        Ok(())
     }
 }

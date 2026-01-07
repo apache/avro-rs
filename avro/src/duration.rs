@@ -17,6 +17,8 @@
 
 /// A struct representing duration that hides the details of endianness and conversion between
 /// platform-native u32 and byte arrays.
+use serde::{Deserialize, Serialize, de};
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Duration {
     months: Months,
@@ -125,8 +127,8 @@ impl Duration {
     }
 }
 
-impl From<Duration> for [u8; 12] {
-    fn from(duration: Duration) -> Self {
+impl From<&Duration> for [u8; 12] {
+    fn from(duration: &Duration) -> Self {
         let mut bytes = [0u8; 12];
         bytes[0..4].copy_from_slice(&duration.months.as_bytes());
         bytes[4..8].copy_from_slice(&duration.days.as_bytes());
@@ -135,12 +137,102 @@ impl From<Duration> for [u8; 12] {
     }
 }
 
-impl From<[u8; 12]> for Duration {
-    fn from(bytes: [u8; 12]) -> Self {
+impl From<Duration> for [u8; 12] {
+    fn from(duration: Duration) -> Self {
+        (&duration).into()
+    }
+}
+
+impl From<&[u8; 12]> for Duration {
+    fn from(bytes: &[u8; 12]) -> Self {
         Self {
             months: Months::from([bytes[0], bytes[1], bytes[2], bytes[3]]),
             days: Days::from([bytes[4], bytes[5], bytes[6], bytes[7]]),
             millis: Millis::from([bytes[8], bytes[9], bytes[10], bytes[11]]),
         }
+    }
+}
+
+impl From<[u8; 12]> for Duration {
+    fn from(bytes: [u8; 12]) -> Duration {
+        (&bytes).into()
+    }
+}
+
+impl Serialize for Duration {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let value_bytes: [u8; 12] = self.into();
+        serializer.serialize_bytes(&value_bytes)
+    }
+}
+
+impl<'de> Deserialize<'de> for Duration {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct DurationVisitor;
+
+        impl de::Visitor<'_> for DurationVisitor {
+            type Value = Duration;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+                write!(f, "a byte array with size 12")
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                if v.len() != 12 {
+                    Err(E::custom(format!(
+                        "Expected byte array of length 12, but length is {}",
+                        v.len()
+                    )))
+                } else {
+                    let v_slice: [u8; 12] = v[..12].try_into().unwrap();
+                    Ok(Duration::from(v_slice))
+                }
+            }
+        }
+
+        deserializer.deserialize_bytes(DurationVisitor)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::Value;
+    use anyhow::anyhow;
+    use apache_avro_test_helper::TestResult;
+
+    #[test]
+    fn avro_rs_382_duration_from_value() -> TestResult {
+        let val = Value::Duration(Duration::new(Months::new(7), Days::new(4), Millis::new(45)));
+        let de_val: Duration = crate::from_value(&val)?;
+        assert_eq!(de_val.months(), Months::new(7));
+        assert_eq!(de_val.days(), Days::new(4));
+        assert_eq!(de_val.millis(), Millis::new(45));
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_382_duration_to_value() -> TestResult {
+        let duration = Duration::new(Months::new(7), Days::new(4), Millis::new(45));
+        let ser_val = crate::to_value(duration)?;
+        match ser_val {
+            // Without a schema, we expect Duration to serialize to bytes
+            Value::Bytes(b) => {
+                assert_eq!(b, vec![7, 0, 0, 0, 4, 0, 0, 0, 45, 0, 0, 0]);
+            }
+            _ => {
+                Err(anyhow!("Expected a Bytes value but got {:?}", ser_val))?;
+            }
+        }
+        Ok(())
     }
 }

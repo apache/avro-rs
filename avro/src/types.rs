@@ -441,7 +441,7 @@ impl Value {
             (&Value::Date(_), &Schema::Date) => None,
             (&Value::Decimal(_), &Schema::Decimal { .. }) => None,
             (&Value::BigDecimal(_), &Schema::BigDecimal) => None,
-            (&Value::Duration(_), &Schema::Duration) => None,
+            (&Value::Duration(_), &Schema::Duration(_)) => None,
             (&Value::Uuid(_), &Schema::Uuid(_)) => None,
             (&Value::Float(_), &Schema::Float) => None,
             (&Value::Float(_), &Schema::Double) => None,
@@ -471,7 +471,7 @@ impl Value {
                     None
                 }
             }
-            (&Value::Fixed(n, _), &Schema::Duration) => {
+            (&Value::Fixed(n, _), &Schema::Duration(_)) => {
                 if n != 12 {
                     Some(format!(
                         "The value's size ('{n}') must be exactly 12 to be a Duration"
@@ -716,7 +716,7 @@ impl Value {
             Schema::LocalTimestampMillis => self.resolve_local_timestamp_millis(),
             Schema::LocalTimestampMicros => self.resolve_local_timestamp_micros(),
             Schema::LocalTimestampNanos => self.resolve_local_timestamp_nanos(),
-            Schema::Duration => self.resolve_duration(),
+            Schema::Duration(_) => self.resolve_duration(),
             Schema::Uuid(inner) => self.resolve_uuid(inner),
         }
     }
@@ -754,7 +754,7 @@ impl Value {
             duration @ Value::Duration { .. } => duration,
             Value::Fixed(size, bytes) => {
                 if size != 12 {
-                    return Err(Details::GetDecimalFixedBytes(size).into());
+                    return Err(Details::GetDurationFixedBytes(size).into());
                 }
                 Value::Duration(Duration::from([
                     bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
@@ -1332,15 +1332,29 @@ mod tests {
             ),
             (
                 Value::Fixed(12, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
-                Schema::Duration,
+                Schema::Duration(FixedSchema {
+                    name: Name::from("TestName"),
+                    aliases: None,
+                    doc: None,
+                    size: 12,
+                    default: None,
+                    attributes: BTreeMap::new(),
+                }),
                 true,
                 "",
             ),
             (
                 Value::Fixed(11, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-                Schema::Duration,
+                Schema::Duration(FixedSchema {
+                    name: Name::from("TestName"),
+                    aliases: None,
+                    doc: None,
+                    size: 12,
+                    default: None,
+                    attributes: BTreeMap::new(),
+                }),
                 false,
-                "Invalid value: Fixed(11, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) for schema: Duration. Reason: The value's size ('11') must be exactly 12 to be a Duration",
+                "Invalid value: Fixed(11, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) for schema: Duration(FixedSchema { name: Name { name: \"TestName\", namespace: None }, aliases: None, doc: None, size: 12, default: None, attributes: {} }). Reason: The value's size ('11') must be exactly 12 to be a Duration",
             ),
             (
                 Value::Record(vec![("unknown_field_name".to_string(), Value::Null)]),
@@ -1883,9 +1897,32 @@ Field with name '"b"' is not a member of the map items"#,
             Days::new(5),
             Millis::new(3000),
         ));
-        assert!(value.clone().resolve(&Schema::Duration).is_ok());
+        assert!(
+            value
+                .clone()
+                .resolve(&Schema::Duration(FixedSchema {
+                    name: Name::from("TestName"),
+                    aliases: None,
+                    doc: None,
+                    size: 12,
+                    default: None,
+                    attributes: BTreeMap::new()
+                }))
+                .is_ok()
+        );
         assert!(value.resolve(&Schema::TimestampMicros).is_err());
-        assert!(Value::Long(1i64).resolve(&Schema::Duration).is_err());
+        assert!(
+            Value::Long(1i64)
+                .resolve(&Schema::Duration(FixedSchema {
+                    name: Name::from("TestName"),
+                    aliases: None,
+                    doc: None,
+                    size: 12,
+                    default: None,
+                    attributes: BTreeMap::new()
+                }))
+                .is_err()
+        );
     }
 
     #[test]
