@@ -903,7 +903,10 @@ impl Value {
     fn resolve_int(self) -> Result<Self, Error> {
         match self {
             Value::Int(n) => Ok(Value::Int(n)),
-            Value::Long(n) => Ok(Value::Int(n as i32)),
+            Value::Long(n) => {
+                let n = i32::try_from(n).map_err(|e| Details::ZagI32(e, n))?;
+                Ok(Value::Int(n))
+            }
             other => Err(Details::GetInt(other).into()),
         }
     }
@@ -3470,5 +3473,18 @@ Field with name '"b"' is not a member of the map items"#,
         assert_eq!(record.get("baz"), None);
 
         Ok(())
+    }
+
+    #[test]
+    fn avro_rs_392_resolve_long_to_int() {
+        // Values that are valid as in i32 should work
+        let value = Value::Long(0);
+        value.resolve(&Schema::Int).unwrap();
+        // Values that are outside the i32 range should not
+        let value = Value::Long(i64::MAX);
+        assert!(matches!(
+            value.resolve(&Schema::Int).unwrap_err().details(),
+            Details::ZagI32(_, _)
+        ));
     }
 }
