@@ -241,15 +241,9 @@ impl Checker {
             // float promotes to double
             (Schema::Float, Schema::Float | Schema::Double) => Ok(Compatibility::Full),
             (Schema::Double, Schema::Double) => Ok(Compatibility::Full),
-            // bytes and strings are interchangeable
-            (
-                Schema::Bytes | Schema::String | Schema::BigDecimal
-                | Schema::Uuid(UuidSchema::String | UuidSchema::Bytes)
-                | Schema::Decimal(DecimalSchema { inner: InnerDecimalSchema::Bytes, .. }),
-                Schema::Bytes | Schema::String | Schema::BigDecimal
-                | Schema::Uuid(UuidSchema::String | UuidSchema::Bytes)
-                | Schema::Decimal(DecimalSchema { inner: InnerDecimalSchema::Bytes, .. }),
-            ) => Ok(Compatibility::Full),
+            // This check needs to be above the other Decimal checks, so that if both schemas are
+            // Decimal then the precision and scale are checked. The other Decimal checks below will
+            // thus only hit if only one of the schemas is a Decimal
             (
                 Schema::Decimal(DecimalSchema { precision: w_precision, scale: w_scale, .. }),
                 Schema::Decimal(DecimalSchema { precision: r_precision, scale: r_scale, .. }),
@@ -266,6 +260,15 @@ impl Checker {
                     })
                 }
             }
+            // bytes and strings are interchangeable
+            (
+                Schema::Bytes | Schema::String | Schema::BigDecimal
+                | Schema::Uuid(UuidSchema::String | UuidSchema::Bytes)
+                | Schema::Decimal(DecimalSchema { inner: InnerDecimalSchema::Bytes, .. }),
+                Schema::Bytes | Schema::String | Schema::BigDecimal
+                | Schema::Uuid(UuidSchema::String | UuidSchema::Bytes)
+                | Schema::Decimal(DecimalSchema { inner: InnerDecimalSchema::Bytes, .. }),
+            ) => Ok(Compatibility::Full),
             (Schema::Uuid(_), Schema::Uuid(_)) => Ok(Compatibility::Full),
             (
                 Schema::Fixed(w_fixed) | Schema::Uuid(UuidSchema::Fixed(w_fixed))

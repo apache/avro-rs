@@ -451,7 +451,7 @@ impl Value {
             (Value::Bytes(bytes), &Schema::Uuid(UuidSchema::Bytes)) => {
                 if bytes.len() != 16 {
                     Some(format!(
-                        "The value's size ({}) is not the right length for a fixed UUID (16)",
+                        "The value's size ({}) is not the right length for a bytes UUID (16)",
                         bytes.len()
                     ))
                 } else {

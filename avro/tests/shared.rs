@@ -17,6 +17,7 @@
 
 use apache_avro::{Codec, Reader, Schema, Writer, types::Value};
 use apache_avro_test_helper::TestResult;
+use std::path::PathBuf;
 use std::{
     fmt,
     fs::{DirEntry, File, ReadDir},
@@ -46,9 +47,9 @@ fn test_schema() -> TestResult {
         if let Ok(ft) = entry.file_type()
             && ft.is_dir()
         {
-            let sub_folder = ROOT_DIRECTORY.to_owned() + "/" + entry.file_name().to_str().unwrap();
+            let sub_folder = PathBuf::from(ROOT_DIRECTORY).join(entry.file_name());
 
-            let dir_result = test_folder(sub_folder.as_str());
+            let dir_result = test_folder(&sub_folder);
             if let Err(ed) = dir_result {
                 result = match result {
                     Ok(()) => Err(ed),
@@ -95,19 +96,18 @@ impl fmt::Display for ErrorsDesc {
     }
 }
 
-fn test_folder(folder: &str) -> Result<(), ErrorsDesc> {
-    let file_name = folder.to_owned() + "/schema.json";
+fn test_folder(folder: &Path) -> Result<(), ErrorsDesc> {
+    let file_name = folder.join("schema.json");
     let content = std::fs::read_to_string(file_name).expect("Unable to find schema.json file");
 
     let schema: Schema = Schema::parse_str(content.as_str()).expect("Can't read schema");
 
-    let data_file_name = folder.to_owned() + "/data.avro";
-    let data_path: &Path = Path::new(data_file_name.as_str());
+    let data_path = folder.join("data.avro");
     let mut result = Ok(());
     if !data_path.exists() {
-        log::error!("folder {folder} does not exist");
+        log::error!("folder {folder:?} does not exist");
         return Err(ErrorsDesc::new(
-            format!("folder {folder} does not exist").as_str(),
+            format!("folder {folder:?} does not exist").as_str(),
         ));
     } else {
         let file: File = File::open(data_path).expect("Can't open data.avro");
@@ -136,11 +136,11 @@ fn test_folder(folder: &str) -> Result<(), ErrorsDesc> {
             if original != &record {
                 result = match result {
                     Ok(_) => Result::Err(ErrorsDesc::new(
-                        format!("Records are not equals for folder : {folder}").as_str(),
+                        format!("Records are not equals for folder : {folder:?}").as_str(),
                     )),
-                    Err(e) => {
-                        Err(e.add(format!("Records are not equals for folder : {folder}").as_str()))
-                    }
+                    Err(e) => Err(
+                        e.add(format!("Records are not equals for folder : {folder:?}").as_str())
+                    ),
                 }
             }
         }
