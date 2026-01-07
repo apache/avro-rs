@@ -179,10 +179,18 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
         Schema::LocalTimestampMillis => zag_i64(reader).map(Value::LocalTimestampMillis),
         Schema::LocalTimestampMicros => zag_i64(reader).map(Value::LocalTimestampMicros),
         Schema::LocalTimestampNanos => zag_i64(reader).map(Value::LocalTimestampNanos),
-        Schema::Duration => {
-            let mut buf = [0u8; 12];
-            reader.read_exact(&mut buf).map_err(Details::ReadDuration)?;
-            Ok(Value::Duration(Duration::from(buf)))
+        Schema::Duration(fixed_schema) => {
+            if fixed_schema.size == 12 {
+                let mut buf = [0u8; 12];
+                reader.read_exact(&mut buf).map_err(Details::ReadDuration)?;
+                Ok(Value::Duration(Duration::from(buf)))
+            } else {
+                Err(Details::CompareFixedSizes {
+                    size: 12,
+                    n: fixed_schema.size,
+                }
+                .into())
+            }
         }
         Schema::Float => {
             let mut buf = [0u8; std::mem::size_of::<f32>()];

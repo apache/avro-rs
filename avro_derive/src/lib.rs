@@ -15,57 +15,24 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#![cfg_attr(nightly, feature(proc_macro_diagnostic))]
+
+mod attributes;
 mod case;
-use case::RenameRule;
-use darling::FromAttributes;
+
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-
 use syn::{
     AttrStyle, Attribute, DeriveInput, Ident, Meta, Type, TypePath, parse_macro_input,
     spanned::Spanned,
 };
 
-#[derive(darling::FromAttributes)]
-#[darling(attributes(avro))]
-struct FieldOptions {
-    #[darling(default)]
-    doc: Option<String>,
-    #[darling(default)]
-    default: Option<String>,
-    #[darling(multiple)]
-    alias: Vec<String>,
-    #[darling(default)]
-    rename: Option<String>,
-    #[darling(default)]
-    skip: Option<bool>,
-    #[darling(default)]
-    flatten: Option<bool>,
-}
+use crate::{
+    attributes::{FieldOptions, NamedTypeOptions, VariantOptions},
+    case::RenameRule,
+};
 
-#[derive(darling::FromAttributes)]
-#[darling(attributes(avro))]
-struct VariantOptions {
-    #[darling(default)]
-    rename: Option<String>,
-}
-
-#[derive(darling::FromAttributes)]
-#[darling(attributes(avro))]
-struct NamedTypeOptions {
-    #[darling(default)]
-    name: Option<String>,
-    #[darling(default)]
-    namespace: Option<String>,
-    #[darling(default)]
-    doc: Option<String>,
-    #[darling(multiple)]
-    alias: Vec<String>,
-    #[darling(default)]
-    rename_all: Option<String>,
-}
-
-#[proc_macro_derive(AvroSchema, attributes(avro))]
+#[proc_macro_derive(AvroSchema, attributes(avro, serde))]
 // Templated from Serde
 pub fn proc_macro_derive_avro_schema(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mut input = parse_macro_input!(input as DeriveInput);
@@ -75,10 +42,9 @@ pub fn proc_macro_derive_avro_schema(input: proc_macro::TokenStream) -> proc_mac
 }
 
 fn derive_avro_schema(input: &mut DeriveInput) -> Result<TokenStream, Vec<syn::Error>> {
-    let named_type_options =
-        NamedTypeOptions::from_attributes(&input.attrs[..]).map_err(darling_to_syn)?;
+    let named_type_options = NamedTypeOptions::new(&input.attrs, input.span())?;
 
-    let rename_all = parse_case(named_type_options.rename_all.as_deref(), input.span())?;
+    let rename_all = named_type_options.rename_all;
     let name = named_type_options.name.unwrap_or(input.ident.to_string());
 
     let full_schema_name = vec![named_type_options.namespace, Some(name)]
@@ -153,8 +119,7 @@ fn get_data_struct_schema_def(
                 if let Some(raw_name) = name.strip_prefix("r#") {
                     name = raw_name.to_string();
                 }
-                let field_attrs =
-                    FieldOptions::from_attributes(&field.attrs).map_err(darling_to_syn)?;
+                let field_attrs = FieldOptions::new(&field.attrs, field.span())?;
                 let doc =
                     preserve_optional(field_attrs.doc.or_else(|| extract_outer_doc(&field.attrs)));
                 match (field_attrs.rename, rename_all) {
@@ -166,9 +131,9 @@ fn get_data_struct_schema_def(
                     }
                     _ => {}
                 }
-                if Some(true) == field_attrs.skip {
+                if field_attrs.skip {
                     continue;
-                } else if Some(true) == field_attrs.flatten {
+                } else if field_attrs.flatten {
                     // Inline the fields of the child record at runtime, as we don't have access to
                     // the schema here.
                     let flatten_ty = &field.ty;
@@ -271,8 +236,7 @@ fn get_data_enum_schema_def(
         let default = preserve_optional(default_value);
         let mut symbols = Vec::new();
         for variant in &e.variants {
-            let field_attrs =
-                VariantOptions::from_attributes(&variant.attrs[..]).map_err(darling_to_syn)?;
+            let field_attrs = VariantOptions::new(&variant.attrs, variant.span())?;
             let name = match (field_attrs.rename, rename_all) {
                 (Some(rename), _) => rename,
                 (None, rename_all) if !matches!(rename_all, RenameRule::None) => {
@@ -421,22 +385,6 @@ fn preserve_vec(op: Vec<impl quote::ToTokens>) -> TokenStream {
         quote! {None}
     } else {
         quote! {Some(vec![#(#items),*])}
-    }
-}
-
-fn darling_to_syn(e: darling::Error) -> Vec<syn::Error> {
-    let msg = format!("{e}");
-    let token_errors = e.write_errors();
-    vec![syn::Error::new(token_errors.span(), msg)]
-}
-
-fn parse_case(case: Option<&str>, span: Span) -> Result<RenameRule, Vec<syn::Error>> {
-    match case {
-        None => Ok(RenameRule::None),
-        Some(case) => {
-            Ok(RenameRule::from_str(case)
-                .map_err(|e| vec![syn::Error::new(span, e.to_string())])?)
-        }
     }
 }
 
@@ -701,7 +649,8 @@ mod tests {
     fn test_avro_3709_record_field_attributes() {
         let test_struct = quote! {
             struct A {
-                #[avro(alias = "a1", alias = "a2", doc = "a doc", default = "123", rename = "a3")]
+                #[serde(alias = "a1", alias = "a2", rename = "a3")]
+                #[avro(doc = "a doc", default = "123")]
                 a: i32
             }
         };
@@ -720,7 +669,7 @@ mod tests {
 
         let test_enum = quote! {
             enum A {
-                #[avro(rename = "A3")]
+                #[serde(rename = "A3")]
                 Item1,
             }
         };
@@ -741,7 +690,7 @@ mod tests {
     #[test]
     fn test_avro_rs_207_rename_all_attribute() {
         let test_struct = quote! {
-            #[avro(rename_all="SCREAMING_SNAKE_CASE")]
+            #[serde(rename_all="SCREAMING_SNAKE_CASE")]
             struct A {
                 item: i32,
                 double_item: i32
@@ -761,7 +710,7 @@ mod tests {
         };
 
         let test_enum = quote! {
-            #[avro(rename_all="SCREAMING_SNAKE_CASE")]
+            #[serde(rename_all="SCREAMING_SNAKE_CASE")]
             enum B {
                 Item,
                 DoubleItem,
@@ -784,10 +733,10 @@ mod tests {
     #[test]
     fn test_avro_rs_207_rename_attr_has_priority_over_rename_all_attribute() {
         let test_struct = quote! {
-            #[avro(rename_all="SCREAMING_SNAKE_CASE")]
+            #[serde(rename_all="SCREAMING_SNAKE_CASE")]
             struct A {
                 item: i32,
-                #[avro(rename="DoubleItem")]
+                #[serde(rename="DoubleItem")]
                 double_item: i32
             }
         };

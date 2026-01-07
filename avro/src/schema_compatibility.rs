@@ -19,8 +19,8 @@
 use crate::{
     error::CompatibilityError,
     schema::{
-        ArraySchema, DecimalSchema, EnumSchema, FixedSchema, InnerDecimalSchema, MapSchema,
-        RecordSchema, Schema, UuidSchema,
+        ArraySchema, DecimalSchema, EnumSchema, InnerDecimalSchema, MapSchema, RecordSchema,
+        Schema, UuidSchema,
     },
 };
 use std::{
@@ -250,14 +250,6 @@ impl Checker {
                 | Schema::Uuid(UuidSchema::String | UuidSchema::Bytes)
                 | Schema::Decimal(DecimalSchema { inner: InnerDecimalSchema::Bytes, .. }),
             ) => Ok(Compatibility::Full),
-            // This should also check the unqualified name but we don't store that for duration
-            (Schema::Duration, Schema::Duration) => Ok(Compatibility::Full),
-            (Schema::Fixed(FixedSchema { size: 12, .. }), Schema::Duration) => {
-                Ok(Compatibility::Full)
-            }
-            (Schema::Duration, Schema::Fixed(FixedSchema { size: 12, .. })) => {
-                Ok(Compatibility::Full)
-            }
             (
                 Schema::Decimal(DecimalSchema { precision: w_precision, scale: w_scale, .. }),
                 Schema::Decimal(DecimalSchema { precision: r_precision, scale: r_scale, .. }),
@@ -277,9 +269,11 @@ impl Checker {
             (Schema::Uuid(_), Schema::Uuid(_)) => Ok(Compatibility::Full),
             (
                 Schema::Fixed(w_fixed) | Schema::Uuid(UuidSchema::Fixed(w_fixed))
-                | Schema::Decimal(DecimalSchema { inner: InnerDecimalSchema::Fixed(w_fixed), .. }),
+                | Schema::Decimal(DecimalSchema { inner: InnerDecimalSchema::Fixed(w_fixed), .. })
+                | Schema::Duration(w_fixed),
                 Schema::Fixed(r_fixed) | Schema::Uuid(UuidSchema::Fixed(r_fixed))
-                | Schema::Decimal(DecimalSchema { inner: InnerDecimalSchema::Fixed(r_fixed), .. }),
+                | Schema::Decimal(DecimalSchema { inner: InnerDecimalSchema::Fixed(r_fixed), .. })
+                | Schema::Duration(r_fixed),
             ) => {
                 // Size must match
                 if r_fixed.size == w_fixed.size {
@@ -408,7 +402,7 @@ mod tests {
     use super::*;
     use crate::{
         Codec, Decimal, Reader, Writer,
-        schema::{Name, UuidSchema},
+        schema::{FixedSchema, Name, UuidSchema},
         types::{Record, Value},
     };
     use apache_avro_test_helper::TestResult;

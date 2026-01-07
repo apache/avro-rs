@@ -88,8 +88,6 @@ impl SchemataEq for StructFieldEq {
             (Schema::BigDecimal, _) => false,
             (Schema::Date, Schema::Date) => true,
             (Schema::Date, _) => false,
-            (Schema::Duration, Schema::Duration) => true,
-            (Schema::Duration, _) => false,
             (Schema::TimeMicros, Schema::TimeMicros) => true,
             (Schema::TimeMicros, _) => false,
             (Schema::TimeMillis, Schema::TimeMillis) => true,
@@ -166,6 +164,8 @@ impl SchemataEq for StructFieldEq {
                 self.compare(items_one, items_two)
             }
             (Schema::Array(_), _) => false,
+            (Schema::Duration(FixedSchema { size: size_one, ..}), Schema::Duration(FixedSchema { size: size_two, ..})) => size_one == size_two,
+            (Schema::Duration(_), _) => false,
             (
                 Schema::Map(MapSchema { types: types_one, ..}),
                 Schema::Map(MapSchema { types: types_two, ..})
@@ -234,6 +234,9 @@ mod tests {
     const STRUCT_FIELD_EQ: StructFieldEq = StructFieldEq {
         include_attributes: false,
     };
+    const STRUCT_FIELD_EQ_WITH_ATTRS: StructFieldEq = StructFieldEq {
+        include_attributes: true,
+    };
 
     macro_rules! test_primitives {
         ($primitive:ident) => {
@@ -258,7 +261,6 @@ mod tests {
     test_primitives!(String);
     test_primitives!(BigDecimal);
     test_primitives!(Date);
-    test_primitives!(Duration);
     test_primitives!(TimeMicros);
     test_primitives!(TimeMillis);
     test_primitives!(TimestampMicros);
@@ -267,6 +269,110 @@ mod tests {
     test_primitives!(LocalTimestampMicros);
     test_primitives!(LocalTimestampMillis);
     test_primitives!(LocalTimestampNanos);
+
+    #[test]
+    fn avro_rs_382_compare_schemata_duration_equal() {
+        let schema_one = Schema::Duration(FixedSchema {
+            name: Name::from("name1"),
+            size: 12,
+            aliases: None,
+            doc: None,
+            default: None,
+            attributes: BTreeMap::new(),
+        });
+        let schema_two = Schema::Duration(FixedSchema {
+            name: Name::from("name1"),
+            size: 12,
+            aliases: None,
+            doc: None,
+            default: None,
+            attributes: BTreeMap::new(),
+        });
+        let specification_eq_res = SPECIFICATION_EQ.compare(&schema_one, &schema_two);
+        let struct_field_eq_res = STRUCT_FIELD_EQ.compare(&schema_one, &schema_two);
+        assert_eq!(specification_eq_res, struct_field_eq_res)
+    }
+
+    #[test]
+    fn avro_rs_382_compare_schemata_duration_different_names() {
+        let schema_one = Schema::Duration(FixedSchema {
+            name: Name::from("name1"),
+            size: 12,
+            aliases: None,
+            doc: None,
+            default: None,
+            attributes: BTreeMap::new(),
+        });
+        let schema_two = Schema::Duration(FixedSchema {
+            name: Name::from("name2"),
+            size: 12,
+            aliases: None,
+            doc: None,
+            default: None,
+            attributes: BTreeMap::new(),
+        });
+        let specification_eq_res = SPECIFICATION_EQ.compare(&schema_one, &schema_two);
+        assert!(!specification_eq_res);
+
+        let struct_field_eq_res = STRUCT_FIELD_EQ.compare(&schema_one, &schema_two);
+        assert!(!struct_field_eq_res)
+    }
+
+    #[test]
+    fn avro_rs_382_compare_schemata_duration_different_attributes() {
+        let schema_one = Schema::Duration(FixedSchema {
+            name: Name::from("name1"),
+            size: 12,
+            aliases: None,
+            doc: None,
+            default: None,
+            attributes: vec![(String::from("attr1"), serde_json::Value::Bool(true))]
+                .into_iter()
+                .collect(),
+        });
+        let schema_two = Schema::Duration(FixedSchema {
+            name: Name::from("name1"),
+            size: 12,
+            aliases: None,
+            doc: None,
+            default: None,
+            attributes: BTreeMap::new(),
+        });
+        let specification_eq_res = SPECIFICATION_EQ.compare(&schema_one, &schema_two);
+        assert!(specification_eq_res);
+
+        let struct_field_eq_res = STRUCT_FIELD_EQ.compare(&schema_one, &schema_two);
+        assert!(struct_field_eq_res);
+
+        let struct_field_eq_with_attrs_res =
+            STRUCT_FIELD_EQ_WITH_ATTRS.compare(&schema_one, &schema_two);
+        assert!(!struct_field_eq_with_attrs_res);
+    }
+
+    #[test]
+    fn avro_rs_382_compare_schemata_duration_different_sizes() {
+        let schema_one = Schema::Duration(FixedSchema {
+            name: Name::from("name1"),
+            size: 8,
+            aliases: None,
+            doc: None,
+            default: None,
+            attributes: BTreeMap::new(),
+        });
+        let schema_two = Schema::Duration(FixedSchema {
+            name: Name::from("name1"),
+            size: 12,
+            aliases: None,
+            doc: None,
+            default: None,
+            attributes: BTreeMap::new(),
+        });
+        let specification_eq_res = SPECIFICATION_EQ.compare(&schema_one, &schema_two);
+        assert!(!specification_eq_res);
+
+        let struct_field_eq_res = STRUCT_FIELD_EQ.compare(&schema_one, &schema_two);
+        assert!(!struct_field_eq_res);
+    }
 
     #[test]
     fn test_avro_3939_compare_named_schemata_with_different_names() {

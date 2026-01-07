@@ -1143,7 +1143,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     )))
                 }
             }
-            Schema::Duration => {
+            Schema::Duration(_) => {
                 if value.len() == 12 {
                     self.writer
                         .write(value)
@@ -1193,7 +1193,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                         | Schema::Uuid(_)
                         | Schema::BigDecimal
                         | Schema::Fixed(_)
-                        | Schema::Duration
+                        | Schema::Duration(_)
                         | Schema::Decimal(_)
                         | Schema::Ref { name: _ } => {
                             encode_int(i as i32, &mut *self.writer)?;
