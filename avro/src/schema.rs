@@ -7470,7 +7470,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_339_schema_ref_uuid() {
+    fn avro_rs_339_schema_ref_uuid() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "name": "foo",
@@ -7491,14 +7491,15 @@ mod tests {
                 }
             ]
         }"#,
-        )
-        .unwrap();
-        let _resolved = ResolvedSchema::try_from(&schema).unwrap();
-        let _resolved_owned = ResolvedOwnedSchema::try_from(schema).unwrap();
+        )?;
+        let _resolved = ResolvedSchema::try_from(&schema)?;
+        let _resolved_owned = ResolvedOwnedSchema::try_from(schema)?;
+
+        Ok(())
     }
 
     #[test]
-    fn avro_rs_339_schema_ref_decimal() {
+    fn avro_rs_339_schema_ref_decimal() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "name": "foo",
@@ -7521,10 +7522,11 @@ mod tests {
                 }
             ]
         }"#,
-        )
-        .unwrap();
-        let _resolved = ResolvedSchema::try_from(&schema).unwrap();
-        let _resolved_owned = ResolvedOwnedSchema::try_from(schema).unwrap();
+        )?;
+        let _resolved = ResolvedSchema::try_from(&schema)?;
+        let _resolved_owned = ResolvedOwnedSchema::try_from(schema)?;
+
+        Ok(())
     }
 
     #[test]
