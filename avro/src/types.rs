@@ -448,9 +448,28 @@ impl Value {
             (&Value::Double(_), &Schema::Double) => None,
             (&Value::Bytes(_), &Schema::Bytes) => None,
             (&Value::Bytes(_), &Schema::Decimal { .. }) => None,
-            (&Value::Bytes(_), &Schema::Uuid(UuidSchema::Bytes)) => None,
+            (Value::Bytes(bytes), &Schema::Uuid(UuidSchema::Bytes)) => {
+                if bytes.len() != 16 {
+                    Some(format!(
+                        "The value's size ({}) is not the right length for a bytes UUID (16)",
+                        bytes.len()
+                    ))
+                } else {
+                    None
+                }
+            }
             (&Value::String(_), &Schema::String) => None,
-            (&Value::String(_), &Schema::Uuid(UuidSchema::String)) => None,
+            (Value::String(string), &Schema::Uuid(UuidSchema::String)) => {
+                // Non-hyphenated is 32 characters, hyphenated is longer
+                if string.len() < 32 {
+                    Some(format!(
+                        "The value's size ({}) is not the right length for a string UUID (>=32)",
+                        string.len()
+                    ))
+                } else {
+                    None
+                }
+            }
             (&Value::Fixed(n, _), &Schema::Fixed(FixedSchema { size, .. })) => {
                 if n != size {
                     Some(format!(
@@ -1182,10 +1201,11 @@ impl Value {
 
     fn try_u8(self) -> AvroResult<u8> {
         let int = self.resolve(&Schema::Int)?;
-        if let Value::Int(n) = int {
-            if n >= 0 && n <= i32::from(u8::MAX) {
-                return Ok(n as u8);
-            }
+        if let Value::Int(n) = int
+            && n >= 0
+            && n <= i32::from(u8::MAX)
+        {
+            return Ok(n as u8);
         }
 
         Err(Details::GetU8(int).into())

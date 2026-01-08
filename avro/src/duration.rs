@@ -230,7 +230,7 @@ mod tests {
                 assert_eq!(b, vec![7, 0, 0, 0, 4, 0, 0, 0, 45, 0, 0, 0]);
             }
             _ => {
-                Err(anyhow!("Expected a Bytes value but got {:?}", ser_val))?;
+                Err(anyhow!("Expected a Bytes value but got {ser_val:?}"))?;
             }
         }
         Ok(())

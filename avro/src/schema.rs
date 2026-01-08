@@ -1897,10 +1897,10 @@ impl Parser {
     ) -> AvroResult<Schema> {
         let fields_opt = complex.get("fields");
 
-        if fields_opt.is_none() {
-            if let Some(seen) = self.get_already_seen_schema(complex, enclosing_namespace) {
-                return Ok(seen.clone());
-            }
+        if fields_opt.is_none()
+            && let Some(seen) = self.get_already_seen_schema(complex, enclosing_namespace)
+        {
+            return Ok(seen.clone());
         }
 
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
@@ -1976,10 +1976,10 @@ impl Parser {
     ) -> AvroResult<Schema> {
         let symbols_opt = complex.get("symbols");
 
-        if symbols_opt.is_none() {
-            if let Some(seen) = self.get_already_seen_schema(complex, enclosing_namespace) {
-                return Ok(seen.clone());
-            }
+        if symbols_opt.is_none()
+            && let Some(seen) = self.get_already_seen_schema(complex, enclosing_namespace)
+        {
+            return Ok(seen.clone());
         }
 
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
@@ -2119,10 +2119,10 @@ impl Parser {
         enclosing_namespace: &Namespace,
     ) -> AvroResult<Schema> {
         let size_opt = complex.get("size");
-        if size_opt.is_none() {
-            if let Some(seen) = self.get_already_seen_schema(complex, enclosing_namespace) {
-                return Ok(seen.clone());
-            }
+        if size_opt.is_none()
+            && let Some(seen) = self.get_already_seen_schema(complex, enclosing_namespace)
+        {
+            return Ok(seen.clone());
         }
 
         let doc = complex.get("doc").and_then(|v| match &v {
@@ -2483,11 +2483,11 @@ fn pcf_map(schema: &Map<String, Value>, defined_names: &mut HashSet<String>) -> 
         }
 
         // Fully qualify the name, if it isn't already ([FULLNAMES] rule).
-        if k == "name" {
-            if let Some(ref n) = name {
-                fields.push(("name", format!("{}:{}", pcf_string(k), pcf_string(n))));
-                continue;
-            }
+        if k == "name"
+            && let Some(ref n) = name
+        {
+            fields.push(("name", format!("{}:{}", pcf_string(k), pcf_string(n))));
+            continue;
         }
 
         // Strip off quotes surrounding "size" type, if they exist ([INTEGERS] rule).
