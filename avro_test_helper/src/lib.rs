@@ -51,7 +51,7 @@ fn after_all() {
 
 /// A custom error type for tests.
 #[derive(Debug)]
-pub struct TestError {}
+pub struct TestError;
 
 /// A converter of any error into [TestError].
 /// It is used to print better error messages in the tests.
@@ -63,7 +63,7 @@ impl<Err: std::fmt::Display + std::fmt::Debug> From<Err> for TestError {
     }
 }
 
-pub type TestResult = anyhow::Result<(), TestError>;
+pub type TestResult = Result<(), TestError>;
 
 /// Does nothing. Just loads the crate.
 /// Should be used in the integration tests, because they do not use [dev-dependencies]
