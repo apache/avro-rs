@@ -2305,12 +2305,16 @@ impl Serialize for Schema {
                 match inner {
                     InnerDecimalSchema::Fixed(fixed_schema) => {
                         map = fixed_schema.serialize_to_map::<S>(map)?;
+                        // If logicalType is in the fixed schema's attributes, then we already wrote it to the map
+                        if !fixed_schema.attributes.contains_key("logicalType") {
+                            map.serialize_entry("logicalType", "decimal")?;
+                        }
                     }
                     InnerDecimalSchema::Bytes => {
                         map.serialize_entry("type", "bytes")?;
+                        map.serialize_entry("logicalType", "decimal")?;
                     }
                 }
-                map.serialize_entry("logicalType", "decimal")?;
                 map.serialize_entry("scale", scale)?;
                 map.serialize_entry("precision", precision)?;
                 map.end()
@@ -2327,15 +2331,20 @@ impl Serialize for Schema {
                 match inner {
                     UuidSchema::Bytes => {
                         map.serialize_entry("type", "bytes")?;
+                        map.serialize_entry("logicalType", "uuid")?;
                     }
                     UuidSchema::String => {
                         map.serialize_entry("type", "string")?;
+                        map.serialize_entry("logicalType", "uuid")?;
                     }
                     UuidSchema::Fixed(fixed_schema) => {
                         map = fixed_schema.serialize_to_map::<S>(map)?;
+                        // If logicalType is in the fixed schema's attributes, then we already wrote it to the map
+                        if !fixed_schema.attributes.contains_key("logicalType") {
+                            map.serialize_entry("logicalType", "uuid")?;
+                        }
                     }
                 }
-                map.serialize_entry("logicalType", "uuid")?;
                 map.end()
             }
             Schema::Date => {
@@ -2396,7 +2405,10 @@ impl Serialize for Schema {
                 let map = serializer.serialize_map(None)?;
 
                 let mut map = fixed.serialize_to_map::<S>(map)?;
-                map.serialize_entry("logicalType", "duration")?;
+                // If logicalType is in the fixed schema's attributes, then we already wrote it to the map
+                if !fixed.attributes.contains_key("logicalType") {
+                    map.serialize_entry("logicalType", "duration")?;
+                }
                 map.end()
             }
         }
@@ -7548,6 +7560,77 @@ mod tests {
         let schema_json = serde_json::to_value(&schema)?;
 
         assert_eq!(&schema_json, &expected_schema_json);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_logical_type_written_once_for_duration() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "fixed",
+            "logicalType": "duration",
+            "name": "Duration",
+            "size": 12
+        }"#,
+        )?;
+
+        let schema_json_str = serde_json::to_string(&schema)?;
+        let logical_type_keys: Vec<&str> = schema_json_str.matches("logicalType").collect();
+
+        assert_eq!(
+            logical_type_keys.len(),
+            1,
+            "Expected serialized schema to contain only one logicalType key: {schema_json_str}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_logical_type_written_once_for_uuid_fixed() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "fixed",
+            "logicalType": "uuid",
+            "name": "UUID",
+            "size": 16
+        }"#,
+        )?;
+
+        let schema_json_str = serde_json::to_string(&schema)?;
+        let logical_type_keys: Vec<&str> = schema_json_str.matches("logicalType").collect();
+
+        assert_eq!(
+            logical_type_keys.len(),
+            1,
+            "Expected serialized schema to contain only one logicalType key: {schema_json_str}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_logical_type_written_once_for_decimal_fixed() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "fixed",
+            "logicalType": "decimal",
+            "scale": 4,
+            "precision": 8,
+            "name": "FixedDecimal16",
+            "size": 16
+        }"#,
+        )?;
+
+        let schema_json_str = serde_json::to_string(&schema)?;
+        let logical_type_keys: Vec<&str> = schema_json_str.matches("logicalType").collect();
+
+        assert_eq!(
+            logical_type_keys.len(),
+            1,
+            "Expected serialized schema to contain only one logicalType key: {schema_json_str}"
+        );
 
         Ok(())
     }
