@@ -17,7 +17,7 @@
 
 use apache_avro::{
     Reader, Schema, Writer, from_value,
-    schema::{AvroSchema, derive::AvroSchemaComponent},
+    schema::{AvroSchema, AvroSchemaComponent},
 };
 use apache_avro_derive::*;
 use proptest::prelude::*;
