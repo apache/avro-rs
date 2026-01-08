@@ -111,7 +111,6 @@ dependencies = [
 name = "apache-avro-test-helper"
 version = "0.22.0"
 dependencies = [
- "anyhow",
  "better-panic",
  "ctor",
  "env_logger",
