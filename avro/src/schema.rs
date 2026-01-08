@@ -7565,7 +7565,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_logical_type_written_once_for_duration() -> TestResult {
+    fn avro_rs_395_logical_type_written_once_for_duration() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "type": "fixed",
@@ -7588,7 +7588,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_logical_type_written_once_for_uuid_fixed() -> TestResult {
+    fn avro_rs_395_logical_type_written_once_for_uuid_fixed() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "type": "fixed",
@@ -7611,7 +7611,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_logical_type_written_once_for_decimal_fixed() -> TestResult {
+    fn avro_rs_395_logical_type_written_once_for_decimal_fixed() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "type": "fixed",
