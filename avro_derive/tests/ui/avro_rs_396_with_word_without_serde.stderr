@@ -1,0 +1,6 @@
+error: `#[avro(with)]` requires `#[serde(with = "..")]` or provide a function to call `#[avro(width = ..)]`
+  --> tests/ui/avro_rs_396_with_word_without_serde.rs:22:5
+   |
+22 | /     #[avro(with)]
+23 | |     a: String,
+   | |_____________^

@@ -22,7 +22,9 @@
 //! a user can use. These add extra metadata to the generated schema.
 
 use crate::case::RenameRule;
+use darling::FromMeta;
 use proc_macro2::Span;
+use syn::Expr;
 
 /// All the Avro attributes a container can have.
 #[derive(darling::FromAttributes)]
@@ -97,6 +99,21 @@ impl VariantAttributes {
     }
 }
 
+/// How to get the schema for this field.
+#[derive(Debug, FromMeta, PartialEq, Default)]
+#[darling(from_expr = |expr| Ok(With::Expr(expr.clone())))]
+pub enum With {
+    /// Use `<T as AvroSchemaComponent>::get_schema_with_ctxt`.
+    #[default]
+    #[darling(skip)]
+    Trait,
+    /// Use `module::get_schema_with_ctxt` where the module is defined by Serde's `with` attribute.
+    #[darling(word, skip)]
+    Serde,
+    /// Call the function in this expression.
+    Expr(Expr),
+}
+
 /// All the Avro attributes a field can have.
 #[derive(darling::FromAttributes)]
 #[darling(attributes(avro))]
@@ -137,6 +154,16 @@ pub struct FieldAttributes {
     /// [`serde::FieldAttributes::flatten`]: crate::attributes::serde::FieldAttributes::flatten
     #[darling(default)]
     pub flatten: bool,
+    /// How to get the schema for this field.
+    ///
+    /// By default uses `<T as AvroSchemaComponent>::get_schema_in_ctxt`.
+    ///
+    /// When it's provided without an argument (`#[avro(with)]`), it will use the function `get_schema_in_ctxt` defined
+    /// in the same module as the `#[serde(with = "..")]` attribute.
+    ///
+    /// When it's provided with an argument (`#[avro(with = ..)]`), it will use that function.
+    #[darling(default)]
+    pub with: With,
 }
 
 impl FieldAttributes {
