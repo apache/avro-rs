@@ -2679,7 +2679,6 @@ impl_schema!(f32, Schema::Float);
 impl_schema!(f64, Schema::Double);
 impl_schema!(String, Schema::String);
 impl_schema!(str, Schema::String);
-impl_schema!(uuid::Uuid, Schema::Uuid(UuidSchema::String));
 
 impl<T> AvroSchemaComponent for &T
 where
@@ -2788,22 +2787,54 @@ where
 }
 
 impl AvroSchemaComponent for core::time::Duration {
+    /// The schema is [`Schema::Duration`] with the name `duration`.
+    ///
+    /// This is a lossy conversion as this Avro type does not store the amount of nanoseconds.
     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
         let name = Name {
             name: "duration".to_string(),
             namespace: enclosing_namespace.clone(),
         };
-        named_schemas
-            .entry(name.clone())
-            .or_insert(Schema::Duration(FixedSchema {
-                name,
+        if named_schemas.contains_key(&name) {
+            Schema::Ref { name }
+        } else {
+            let schema = Schema::Duration(FixedSchema {
+                name: name.clone(),
                 aliases: None,
                 doc: None,
                 size: 12,
                 default: None,
                 attributes: Default::default(),
-            }))
-            .clone()
+            });
+            named_schemas.insert(name.clone(), schema.clone());
+            schema
+        }
+    }
+}
+
+impl AvroSchemaComponent for uuid::Uuid {
+    /// The schema is [`Schema::Uuid`] with the name `uuid`.
+    ///
+    /// The underlying schema is [`Schema::Fixed`] with a size of 16.
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        let name = Name {
+            name: "uuid".to_string(),
+            namespace: enclosing_namespace.clone(),
+        };
+        if named_schemas.contains_key(&name) {
+            Schema::Ref { name }
+        } else {
+            let schema = Schema::Uuid(UuidSchema::Fixed(FixedSchema {
+                name: name.clone(),
+                aliases: None,
+                doc: None,
+                size: 16,
+                default: None,
+                attributes: Default::default(),
+            }));
+            named_schemas.insert(name.clone(), schema.clone());
+            schema
+        }
     }
 }
 
