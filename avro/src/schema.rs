@@ -2574,63 +2574,62 @@ pub trait AvroSchema {
     fn get_schema() -> Schema;
 }
 
+/// Trait for types that serve as fully defined components inside an Avro data model. Derive
+/// implementation available through `derive` feature. This is what is implemented by
+/// the `derive(AvroSchema)` macro.
+///
+/// # Implementation guide
+///
+///### Simple implementation
+/// To construct a non named simple schema, it is possible to ignore the input argument making the
+/// general form implementation look like
+/// ```ignore
+/// impl AvroSchemaComponent for AType {
+///     fn get_schema_in_ctxt(_: &mut Names, _: &Namespace) -> Schema {
+///        Schema::?
+///    }
+///}
+/// ```
+/// ### Passthrough implementation
+/// To construct a schema for a Type that acts as in "inner" type, such as for smart pointers, simply
+/// pass through the arguments to the inner type
+/// ```ignore
+/// impl AvroSchemaComponent for PassthroughType {
+///     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+///        InnerType::get_schema_in_ctxt(names, enclosing_namespace)
+///    }
+///}
+/// ```
+///### Complex implementation
+/// To implement this for Named schema there is a general form needed to avoid creating invalid
+/// schemas or infinite loops.
+/// ```ignore
+/// impl AvroSchemaComponent for ComplexType {
+///     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+///         // Create the fully qualified name for your type given the enclosing namespace
+///         let name =  apache_avro::schema::Name::new("MyName")
+///             .expect("Unable to parse schema name")
+///             .fully_qualified_name(enclosing_namespace);
+///         let enclosing_namespace = &name.namespace;
+///         // Check, if your name is already defined, and if so, return a ref to that name
+///         if named_schemas.contains_key(&name) {
+///             apache_avro::schema::Schema::Ref{name: name.clone()}
+///         } else {
+///             named_schemas.insert(name.clone(), apache_avro::schema::Schema::Ref{name: name.clone()});
+///             // YOUR SCHEMA DEFINITION HERE with the name equivalent to "MyName".
+///             // For non-simple sub types delegate to their implementation of AvroSchemaComponent
+///         }
+///    }
+///}
+/// ```
+pub trait AvroSchemaComponent {
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema;
+}
+
 #[cfg(feature = "derive")]
 pub mod derive {
     use super::*;
     use std::borrow::Cow;
-
-    /// Trait for types that serve as fully defined components inside an Avro data model. Derive
-    /// implementation available through `derive` feature. This is what is implemented by
-    /// the `derive(AvroSchema)` macro.
-    ///
-    /// # Implementation guide
-    ///
-    ///### Simple implementation
-    /// To construct a non named simple schema, it is possible to ignore the input argument making the
-    /// general form implementation look like
-    /// ```ignore
-    /// impl AvroSchemaComponent for AType {
-    ///     fn get_schema_in_ctxt(_: &mut Names, _: &Namespace) -> Schema {
-    ///        Schema::?
-    ///    }
-    ///}
-    /// ```
-    /// ### Passthrough implementation
-    /// To construct a schema for a Type that acts as in "inner" type, such as for smart pointers, simply
-    /// pass through the arguments to the inner type
-    /// ```ignore
-    /// impl AvroSchemaComponent for PassthroughType {
-    ///     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
-    ///        InnerType::get_schema_in_ctxt(names, enclosing_namespace)
-    ///    }
-    ///}
-    /// ```
-    ///### Complex implementation
-    /// To implement this for Named schema there is a general form needed to avoid creating invalid
-    /// schemas or infinite loops.
-    /// ```ignore
-    /// impl AvroSchemaComponent for ComplexType {
-    ///     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
-    ///         // Create the fully qualified name for your type given the enclosing namespace
-    ///         let name =  apache_avro::schema::Name::new("MyName")
-    ///             .expect("Unable to parse schema name")
-    ///             .fully_qualified_name(enclosing_namespace);
-    ///         let enclosing_namespace = &name.namespace;
-    ///         // Check, if your name is already defined, and if so, return a ref to that name
-    ///         if named_schemas.contains_key(&name) {
-    ///             apache_avro::schema::Schema::Ref{name: name.clone()}
-    ///         } else {
-    ///             named_schemas.insert(name.clone(), apache_avro::schema::Schema::Ref{name: name.clone()});
-    ///             // YOUR SCHEMA DEFINITION HERE with the name equivalent to "MyName".
-    ///             // For non-simple sub types delegate to their implementation of AvroSchemaComponent
-    ///         }
-    ///    }
-    ///}
-    /// ```
-    pub trait AvroSchemaComponent {
-        fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace)
-        -> Schema;
-    }
 
     impl<T> AvroSchema for T
     where
