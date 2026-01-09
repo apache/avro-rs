@@ -16,12 +16,12 @@
 // under the License.
 
 use crate::case::RenameRule;
-use darling::FromAttributes;
+use darling::{FromAttributes, FromMeta};
 use proc_macro2::Span;
-use syn::{Attribute, spanned::Spanned};
+use syn::{Attribute, Expr, Path, spanned::Spanned};
 
-pub mod avro;
-pub mod serde;
+mod avro;
+mod serde;
 
 #[derive(Default)]
 pub struct NamedTypeOptions {
@@ -128,6 +128,7 @@ impl VariantOptions {
             ));
         }
 
+        // Check for conflicts between Serde and Avro
         if avro.rename.is_some() && serde.rename != avro.rename {
             errors.push(syn::Error::new(
                 span,
@@ -145,6 +146,42 @@ impl VariantOptions {
     }
 }
 
+/// How to get the schema for this field or variant.
+#[derive(Debug, PartialEq, Default)]
+pub enum With {
+    /// Use `<T as AvroSchemaComponent>::get_schema_with_ctxt`.
+    #[default]
+    Trait,
+    /// Use `module::get_schema_with_ctxt` where the module is defined by Serde's `with` attribute.
+    Serde(Path),
+    /// Call the function in this expression.
+    Expr(Expr),
+}
+
+impl With {
+    fn from_avro_and_serde(
+        avro: &avro::With,
+        serde: &Option<String>,
+        span: Span,
+    ) -> Result<Self, syn::Error> {
+        match &avro {
+            avro::With::Trait => Ok(Self::Trait),
+            avro::With::Serde => {
+                if let Some(serde) = serde {
+                    let path = Path::from_string(serde).unwrap();
+                    Ok(Self::Serde(path))
+                } else {
+                    Err(syn::Error::new(
+                        span,
+                        "`#[avro(with)]` requires `#[serde(with = \"..\")]` or provide a function to call `#[avro(width = ..)]`",
+                    ))
+                }
+            }
+            avro::With::Expr(expr) => Ok(Self::Expr(expr.clone())),
+        }
+    }
+}
+
 pub struct FieldOptions {
     pub doc: Option<String>,
     pub default: Option<String>,
@@ -152,6 +189,7 @@ pub struct FieldOptions {
     pub rename: Option<String>,
     pub skip: bool,
     pub flatten: bool,
+    pub with: With,
 }
 
 impl FieldOptions {
@@ -213,6 +251,14 @@ impl FieldOptions {
                 "`#[serde(skip_serializing)]` and `#[serde(skip_serializing_if)]` require `#[avro(default = \"..\")]`"
             ));
         }
+        let with = match With::from_avro_and_serde(&avro.with, &serde.with, span) {
+            Ok(with) => with,
+            Err(error) => {
+                errors.push(error);
+                // This won't actually be used, but it does simplify the code
+                With::Trait
+            }
+        };
 
         if !errors.is_empty() {
             return Err(errors);
@@ -225,6 +271,7 @@ impl FieldOptions {
             rename: serde.rename,
             skip: serde.skip || (serde.skip_serializing && serde.skip_deserializing),
             flatten: serde.flatten,
+            with,
         })
     }
 }

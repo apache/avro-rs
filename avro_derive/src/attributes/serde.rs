@@ -238,8 +238,7 @@ pub struct FieldAttributes {
     #[darling(rename = "deserialize_with")]
     pub _deserialize_with: Option<String>,
     /// Use this module for (de)serializing.
-    #[darling(rename = "with")]
-    pub _with: Option<String>,
+    pub with: Option<String>,
     /// Put bounds on the lifetimes.
     #[darling(rename = "borrow")]
     pub _borrow: Option<SerdeBorrow>,

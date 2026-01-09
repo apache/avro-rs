@@ -17,15 +17,14 @@
 
 use apache_avro::{
     Reader, Schema, Writer, from_value,
-    schema::{AvroSchema, AvroSchemaComponent},
+    schema::{
+        Alias, AvroSchema, AvroSchemaComponent, EnumSchema, Names, Namespace, RecordSchema,
+    },
 };
 use apache_avro_derive::*;
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use std::collections::HashMap;
-
-use apache_avro::schema::{Alias, EnumSchema, RecordSchema};
-use std::{borrow::Cow, sync::Mutex};
+use std::{borrow::Cow, collections::HashMap, sync::Mutex};
 
 use pretty_assertions::assert_eq;
 
@@ -1826,6 +1825,55 @@ fn avro_rs_247_serde_flatten_support_with_skip() {
         nested: Nested { a: true, c: 0.0 },
         b: 321,
     });
+}
+
+#[test]
+fn avro_rs_396_with() {
+    let schema = Schema::parse_str(
+        r#"
+    {
+        "type":"record",
+        "name":"Foo",
+        "fields": [
+            {
+                "name":"a",
+                "type":"bytes"
+            },
+            {
+                "name":"b",
+                "type":"long"
+            }
+        ]
+    }
+    "#,
+    )
+    .unwrap();
+
+    fn long_schema(_named_schemas: &mut Names, _enclosing_namespace: &Namespace) -> Schema {
+        Schema::Long
+    }
+
+    mod module {
+        use super::*;
+        pub fn get_schema_in_ctxt(
+            _named_schemas: &mut Names,
+            _enclosing_namespace: &Namespace,
+        ) -> Schema {
+            Schema::Bytes
+        }
+    }
+
+    #[allow(dead_code)]
+    #[derive(AvroSchema)]
+    struct Foo {
+        #[avro(with)]
+        #[serde(with = "module")]
+        a: String,
+        #[avro(with = long_schema)]
+        b: i32,
+    }
+
+    assert_eq!(schema, Foo::get_schema());
 }
 
 #[test]

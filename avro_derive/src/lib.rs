@@ -27,7 +27,7 @@ use syn::{
 };
 
 use crate::{
-    attributes::{FieldOptions, NamedTypeOptions, VariantOptions},
+    attributes::{FieldOptions, NamedTypeOptions, VariantOptions, With},
     case::RenameRule,
 };
 
@@ -166,7 +166,13 @@ fn get_data_struct_schema_def(
                     None => quote! { None },
                 };
                 let aliases = preserve_vec(field_attrs.alias);
-                let schema_expr = type_to_schema_expr(&field.ty)?;
+                let schema_expr = match field_attrs.with {
+                    With::Trait => type_to_schema_expr(&field.ty)?,
+                    With::Serde(path) => {
+                        quote! {#path::get_schema_in_ctxt(named_schemas, enclosing_namespace)}
+                    }
+                    With::Expr(expr) => quote! {#expr(named_schemas, enclosing_namespace)},
+                };
                 record_field_exprs.push(quote! {
                     schema_fields.push(::apache_avro::schema::RecordField {
                         name: #name.to_string(),

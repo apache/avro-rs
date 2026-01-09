@@ -1,0 +1,8 @@
+error[E0618]: expected function, found `&'static str`
+  --> tests/ui/avro_rs_396_with_expr_string.rs:22:19
+   |
+20 | #[derive(AvroSchema)]
+   |          ---------- call expression requires function
+21 | struct Foo {
+22 |     #[avro(with = "Schema::Bytes")]
+   |                   ^^^^^^^^^^^^^^^
