@@ -314,6 +314,28 @@ mod container_attributes {
             "Invalid field name c",
         );
     }
+
+    #[test]
+    fn avro_rs_398_transparent() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[serde(transparent)]
+        struct Foo {
+            a: String,
+        }
+
+        let schema = r#"
+        {
+            "type":"string"
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo {
+            a: "spam".to_string(),
+        });
+    }
 }
 
 mod variant_attributes {

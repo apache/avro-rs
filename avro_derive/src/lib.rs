@@ -44,71 +44,85 @@ pub fn proc_macro_derive_avro_schema(input: proc_macro::TokenStream) -> proc_mac
 fn derive_avro_schema(input: &mut DeriveInput) -> Result<TokenStream, Vec<syn::Error>> {
     let named_type_options = NamedTypeOptions::new(&input.attrs, input.span())?;
 
-    let rename_all = named_type_options.rename_all;
-    let name = named_type_options.name.unwrap_or(input.ident.to_string());
-
-    let full_schema_name = vec![named_type_options.namespace, Some(name)]
-        .into_iter()
-        .flatten()
-        .collect::<Vec<String>>()
-        .join(".");
-    let schema_def = match &input.data {
-        syn::Data::Struct(s) => get_data_struct_schema_def(
-            &full_schema_name,
-            named_type_options
-                .doc
-                .or_else(|| extract_outer_doc(&input.attrs)),
-            named_type_options.alias,
-            rename_all,
-            s,
-            input.ident.span(),
-        )?,
-        syn::Data::Enum(e) => get_data_enum_schema_def(
-            &full_schema_name,
-            named_type_options
-                .doc
-                .or_else(|| extract_outer_doc(&input.attrs)),
-            named_type_options.alias,
-            rename_all,
-            e,
-            input.ident.span(),
-        )?,
-        _ => {
-            return Err(vec![syn::Error::new(
-                input.ident.span(),
-                "AvroSchema derive only works for structs and simple enums ",
-            )]);
-        }
-    };
-    let ident = &input.ident;
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    Ok(quote! {
-        #[automatically_derived]
-        impl #impl_generics apache_avro::schema::derive::AvroSchemaComponent for #ident #ty_generics #where_clause {
-            fn get_schema_in_ctxt(named_schemas: &mut std::collections::HashMap<apache_avro::schema::Name, apache_avro::schema::Schema>, enclosing_namespace: &Option<String>) -> apache_avro::schema::Schema {
-                let name =  apache_avro::schema::Name::new(#full_schema_name).expect(&format!("Unable to parse schema name {}", #full_schema_name)[..]).fully_qualified_name(enclosing_namespace);
-                let enclosing_namespace = &name.namespace;
-                if named_schemas.contains_key(&name) {
-                    apache_avro::schema::Schema::Ref{name: name.clone()}
-                } else {
-                    named_schemas.insert(name.clone(), apache_avro::schema::Schema::Ref{name: name.clone()});
+    if named_type_options.transparent {
+        let schema_def = get_transparent_data_schema_def(&input.data, input.span())?;
+        let ident = &input.ident;
+        let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+        Ok(quote! {
+            #[automatically_derived]
+            impl #impl_generics apache_avro::schema::derive::AvroSchemaComponent for #ident #ty_generics #where_clause {
+                fn get_schema_in_ctxt(named_schemas: &mut std::collections::HashMap<apache_avro::schema::Name, apache_avro::schema::Schema>, enclosing_namespace: &Option<String>) -> apache_avro::schema::Schema {
                     #schema_def
                 }
             }
-        }
-    })
+        })
+    } else {
+        let name = named_type_options.name.unwrap_or(input.ident.to_string());
+        let full_schema_name = vec![named_type_options.namespace, Some(name)]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<String>>()
+            .join(".");
+
+        let schema_def = match &input.data {
+            syn::Data::Struct(data_struct) => get_data_struct_schema_def(
+                &full_schema_name,
+                named_type_options
+                    .doc
+                    .or_else(|| extract_outer_doc(&input.attrs)),
+                named_type_options.alias,
+                named_type_options.rename_all,
+                data_struct,
+                input.ident.span(),
+            )?,
+            syn::Data::Enum(data_enum) => get_data_enum_schema_def(
+                &full_schema_name,
+                named_type_options
+                    .doc
+                    .or_else(|| extract_outer_doc(&input.attrs)),
+                named_type_options.alias,
+                named_type_options.rename_all,
+                data_enum,
+                input.ident.span(),
+            )?,
+            syn::Data::Union(_) => {
+                return Err(vec![syn::Error::new(
+                    input.ident.span(),
+                    "AvroSchema derive only works for structs and simple enums",
+                )]);
+            }
+        };
+        let ident = &input.ident;
+        let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+        Ok(quote! {
+            #[automatically_derived]
+            impl #impl_generics apache_avro::schema::derive::AvroSchemaComponent for #ident #ty_generics #where_clause {
+                fn get_schema_in_ctxt(named_schemas: &mut std::collections::HashMap<apache_avro::schema::Name, apache_avro::schema::Schema>, enclosing_namespace: &Option<String>) -> apache_avro::schema::Schema {
+                    let name =  apache_avro::schema::Name::new(#full_schema_name).expect(&format!("Unable to parse schema name {}", #full_schema_name)[..]).fully_qualified_name(enclosing_namespace);
+                    let enclosing_namespace = &name.namespace;
+                    if named_schemas.contains_key(&name) {
+                        apache_avro::schema::Schema::Ref{name: name.clone()}
+                    } else {
+                        named_schemas.insert(name.clone(), apache_avro::schema::Schema::Ref{name: name.clone()});
+                        #schema_def
+                    }
+                }
+            }
+        })
+    }
 }
 
+/// Generate a schema definition for a struct.
 fn get_data_struct_schema_def(
     full_schema_name: &str,
     record_doc: Option<String>,
     aliases: Vec<String>,
     rename_all: RenameRule,
-    s: &syn::DataStruct,
-    error_span: Span,
+    data_struct: &syn::DataStruct,
+    ident_span: Span,
 ) -> Result<TokenStream, Vec<syn::Error>> {
     let mut record_field_exprs = vec![];
-    match s.fields {
+    match data_struct.fields {
         syn::Fields::Named(ref a) => {
             for field in a.named.iter() {
                 let mut name = field
@@ -184,13 +198,13 @@ fn get_data_struct_schema_def(
         }
         syn::Fields::Unnamed(_) => {
             return Err(vec![syn::Error::new(
-                error_span,
+                ident_span,
                 "AvroSchema derive does not work for tuple structs",
             )]);
         }
         syn::Fields::Unit => {
             return Err(vec![syn::Error::new(
-                error_span,
+                ident_span,
                 "AvroSchema derive does not work for unit structs",
             )]);
         }
@@ -221,21 +235,26 @@ fn get_data_struct_schema_def(
     })
 }
 
+/// Generate a schema definition for a enum.
 fn get_data_enum_schema_def(
     full_schema_name: &str,
     doc: Option<String>,
     aliases: Vec<String>,
     rename_all: RenameRule,
-    e: &syn::DataEnum,
+    data_enum: &syn::DataEnum,
     error_span: Span,
 ) -> Result<TokenStream, Vec<syn::Error>> {
     let doc = preserve_optional(doc);
     let enum_aliases = preserve_vec(aliases);
-    if e.variants.iter().all(|v| syn::Fields::Unit == v.fields) {
-        let default_value = default_enum_variant(e, error_span)?;
+    if data_enum
+        .variants
+        .iter()
+        .all(|v| syn::Fields::Unit == v.fields)
+    {
+        let default_value = default_enum_variant(data_enum, error_span)?;
         let default = preserve_optional(default_value);
         let mut symbols = Vec::new();
-        for variant in &e.variants {
+        for variant in &data_enum.variants {
             let field_attrs = VariantOptions::new(&variant.attrs, variant.span())?;
             let name = match (field_attrs.rename, rename_all) {
                 (Some(rename), _) => rename,
@@ -261,6 +280,69 @@ fn get_data_enum_schema_def(
             error_span,
             "AvroSchema derive does not work for enums with non unit structs",
         )])
+    }
+}
+
+/// Generate a schema definition for a type marked transparent.
+fn get_transparent_data_schema_def(
+    data: &syn::Data,
+    input_span: Span,
+) -> Result<TokenStream, Vec<syn::Error>> {
+    match data {
+        syn::Data::Struct(data_struct) => match &data_struct.fields {
+            syn::Fields::Named(fields_named) => {
+                if fields_named.named.len() != 1 {
+                    return Err(vec![syn::Error::new(
+                        input_span,
+                        "#[serde(transparent)] is only allowed on structs with one field",
+                    )]);
+                }
+                let field = fields_named
+                    .named
+                    .first()
+                    .expect("There is exactly one field");
+                let field_attrs = FieldOptions::new(&field.attrs, field.span())?;
+                if field_attrs != FieldOptions::default() {
+                    return Err(vec![syn::Error::new(
+                        input_span,
+                        "#[serde(transparent)] is incompatible with all other attributes",
+                    )]);
+                }
+                let ty = &field.ty;
+                Ok(quote! {
+                    #ty::get_schema_in_ctxt(named_schemas, enclosing_namespace)
+                })
+            }
+            syn::Fields::Unnamed(_) => Err(vec![syn::Error::new(
+                input_span,
+                "AvroSchema derive does not work for tuple structs",
+            )]),
+            syn::Fields::Unit => Err(vec![syn::Error::new(
+                input_span,
+                "AvroSchema derive does not work for unit structs",
+            )]),
+        },
+        syn::Data::Enum(data_enum) => {
+            if data_enum
+                .variants
+                .iter()
+                .all(|v| syn::Fields::Unit == v.fields)
+            {
+                Err(vec![syn::Error::new(
+                    input_span,
+                    "AvroSchema derive does not support #[serde(transparent)] on simple enums",
+                )])
+            } else {
+                Err(vec![syn::Error::new(
+                    input_span,
+                    "AvroSchema derive does not work for enums with non unit structs",
+                )])
+            }
+        }
+        syn::Data::Union(_) => Err(vec![syn::Error::new(
+            input_span,
+            "AvroSchema derive only works for structs and simple enums",
+        )]),
     }
 }
 

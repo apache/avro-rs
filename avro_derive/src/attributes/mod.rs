@@ -30,6 +30,7 @@ pub struct NamedTypeOptions {
     pub doc: Option<String>,
     pub alias: Vec<String>,
     pub rename_all: RenameRule,
+    pub transparent: bool,
 }
 
 impl NamedTypeOptions {
@@ -63,12 +64,6 @@ impl NamedTypeOptions {
                 "AvroSchema derive does not support the Serde `remote` attribute",
             ));
         }
-        if serde.transparent {
-            errors.push(syn::Error::new(
-                span,
-                "AvroSchema derive does not support Serde `transparent` attribute",
-            ));
-        }
         if serde.rename_all.deserialize != serde.rename_all.serialize {
             errors.push(syn::Error::new(
                 span,
@@ -89,6 +84,19 @@ impl NamedTypeOptions {
                 "#[avro(rename_all = \"..\")] must match #[serde(rename_all = \"..\")], it's also deprecated. Please use only `#[serde(rename_all = \"..\")]`",
             ));
         }
+        if serde.transparent
+            && (serde.rename.is_some()
+                || avro.namespace.is_some()
+                || avro.doc.is_some()
+                || !avro.alias.is_empty()
+                || serde.rename_all.serialize != RenameRule::None
+                || serde.rename_all.deserialize != RenameRule::None)
+        {
+            errors.push(syn::Error::new(
+                span,
+                "#[serde(transparent)] is incompatible with all other attributes",
+            ));
+        }
 
         if !errors.is_empty() {
             return Err(errors);
@@ -100,6 +108,7 @@ impl NamedTypeOptions {
             doc: avro.doc,
             alias: avro.alias,
             rename_all: serde.rename_all.serialize,
+            transparent: serde.transparent,
         })
     }
 }
@@ -145,6 +154,7 @@ impl VariantOptions {
     }
 }
 
+#[derive(Default, PartialEq, Eq)]
 pub struct FieldOptions {
     pub doc: Option<String>,
     pub default: Option<String>,
