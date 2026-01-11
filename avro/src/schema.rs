@@ -7564,10 +7564,9 @@ mod tests {
         )?;
 
         let schema_json_str = serde_json::to_string(&schema)?;
-        let logical_type_keys: Vec<&str> = schema_json_str.matches("logicalType").collect();
 
         assert_eq!(
-            logical_type_keys.len(),
+            schema_json_str.matches("logicalType").count(),
             1,
             "Expected serialized schema to contain only one logicalType key: {schema_json_str}"
         );
@@ -7587,10 +7586,9 @@ mod tests {
         )?;
 
         let schema_json_str = serde_json::to_string(&schema)?;
-        let logical_type_keys: Vec<&str> = schema_json_str.matches("logicalType").collect();
 
         assert_eq!(
-            logical_type_keys.len(),
+            schema_json_str.matches("logicalType").count(),
             1,
             "Expected serialized schema to contain only one logicalType key: {schema_json_str}"
         );
@@ -7612,10 +7610,9 @@ mod tests {
         )?;
 
         let schema_json_str = serde_json::to_string(&schema)?;
-        let logical_type_keys: Vec<&str> = schema_json_str.matches("logicalType").collect();
 
         assert_eq!(
-            logical_type_keys.len(),
+            schema_json_str.matches("logicalType").count(),
             1,
             "Expected serialized schema to contain only one logicalType key: {schema_json_str}"
         );
