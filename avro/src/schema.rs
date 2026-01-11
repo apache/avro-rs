@@ -1959,7 +1959,7 @@ impl Parser {
         let mut custom_attributes: BTreeMap<String, Value> = BTreeMap::new();
         for (key, value) in complex {
             match key.as_str() {
-                "type" | "name" | "namespace" | "doc" | "aliases" => continue,
+                "type" | "name" | "namespace" | "doc" | "aliases" | "logicalType" => continue,
                 candidate if excluded.contains(&candidate) => continue,
                 _ => custom_attributes.insert(key.clone(), value.clone()),
             };
@@ -2305,16 +2305,12 @@ impl Serialize for Schema {
                 match inner {
                     InnerDecimalSchema::Fixed(fixed_schema) => {
                         map = fixed_schema.serialize_to_map::<S>(map)?;
-                        // If logicalType is in the fixed schema's attributes, then we already wrote it to the map
-                        if !fixed_schema.attributes.contains_key("logicalType") {
-                            map.serialize_entry("logicalType", "decimal")?;
-                        }
                     }
                     InnerDecimalSchema::Bytes => {
                         map.serialize_entry("type", "bytes")?;
-                        map.serialize_entry("logicalType", "decimal")?;
                     }
                 }
+                map.serialize_entry("logicalType", "decimal")?;
                 map.serialize_entry("scale", scale)?;
                 map.serialize_entry("precision", precision)?;
                 map.end()
@@ -2331,20 +2327,15 @@ impl Serialize for Schema {
                 match inner {
                     UuidSchema::Bytes => {
                         map.serialize_entry("type", "bytes")?;
-                        map.serialize_entry("logicalType", "uuid")?;
                     }
                     UuidSchema::String => {
                         map.serialize_entry("type", "string")?;
-                        map.serialize_entry("logicalType", "uuid")?;
                     }
                     UuidSchema::Fixed(fixed_schema) => {
                         map = fixed_schema.serialize_to_map::<S>(map)?;
-                        // If logicalType is in the fixed schema's attributes, then we already wrote it to the map
-                        if !fixed_schema.attributes.contains_key("logicalType") {
-                            map.serialize_entry("logicalType", "uuid")?;
-                        }
                     }
                 }
+                map.serialize_entry("logicalType", "uuid")?;
                 map.end()
             }
             Schema::Date => {
@@ -2405,10 +2396,7 @@ impl Serialize for Schema {
                 let map = serializer.serialize_map(None)?;
 
                 let mut map = fixed.serialize_to_map::<S>(map)?;
-                // If logicalType is in the fixed schema's attributes, then we already wrote it to the map
-                if !fixed.attributes.contains_key("logicalType") {
-                    map.serialize_entry("logicalType", "duration")?;
-                }
+                map.serialize_entry("logicalType", "duration")?;
                 map.end()
             }
         }
@@ -6921,11 +6909,11 @@ mod tests {
                 doc: None,
                 size: 6,
                 default: None,
-                attributes: BTreeMap::from([("logicalType".to_string(), "uuid".into())]),
+                attributes: BTreeMap::new(),
             })
         );
         assert_logged(
-            r#"Ignoring uuid logical type for a Fixed schema because its size (6) is not 16! Schema: Fixed(FixedSchema { name: Name { name: "FixedUUID", namespace: None }, aliases: None, doc: None, size: 6, default: None, attributes: {"logicalType": String("uuid")} })"#,
+            r#"Ignoring uuid logical type for a Fixed schema because its size (6) is not 16! Schema: Fixed(FixedSchema { name: Name { name: "FixedUUID", namespace: None }, aliases: None, doc: None, size: 6, default: None, attributes: {} })"#,
         );
 
         Ok(())
