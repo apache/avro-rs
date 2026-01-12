@@ -2568,7 +2568,7 @@ fn field_ordering_position(field: &str) -> Option<usize> {
 
 /// Trait for types that serve as an Avro data model. Derive implementation available
 /// through `derive` feature. Do not implement directly!
-/// Implement `apache_avro::schema::derive::AvroSchemaComponent` to get this trait
+/// Implement [AvroSchemaComponent] to get this trait
 /// through a blanket implementation.
 pub trait AvroSchema {
     fn get_schema() -> Schema;

@@ -993,7 +993,7 @@ pub use writer::{
 };
 
 #[cfg(feature = "derive")]
-pub use apache_avro_derive::*;
+pub use apache_avro_derive::AvroSchema;
 
 /// A convenience type alias for `Result`s with `Error`s.
 pub type AvroResult<T> = Result<T, Error>;
