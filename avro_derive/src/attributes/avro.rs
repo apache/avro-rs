@@ -99,15 +99,15 @@ impl VariantAttributes {
     }
 }
 
-/// How to get the schema for this field.
+/// How to get the schema for a field.
 #[derive(Debug, FromMeta, PartialEq, Default)]
 #[darling(from_expr = |expr| Ok(With::Expr(expr.clone())))]
 pub enum With {
-    /// Use `<T as AvroSchemaComponent>::get_schema_with_ctxt`.
+    /// Use `<T as AvroSchemaComponent>::get_schema_in_ctxt`.
     #[default]
     #[darling(skip)]
     Trait,
-    /// Use `module::get_schema_with_ctxt` where the module is defined by Serde's `with` attribute.
+    /// Use `module::get_schema_in_ctxt` where the module is defined by Serde's `with` attribute.
     #[darling(word, skip)]
     Serde,
     /// Call the function in this expression.
@@ -154,14 +154,14 @@ pub struct FieldAttributes {
     /// [`serde::FieldAttributes::flatten`]: crate::attributes::serde::FieldAttributes::flatten
     #[darling(default)]
     pub flatten: bool,
-    /// How to get the schema for this field.
+    /// How to get the schema for a field.
     ///
     /// By default uses `<T as AvroSchemaComponent>::get_schema_in_ctxt`.
     ///
     /// When it's provided without an argument (`#[avro(with)]`), it will use the function `get_schema_in_ctxt` defined
-    /// in the same module as the `#[serde(with = "..")]` attribute.
+    /// in the same module as the `#[serde(with = "some_module")]` attribute.
     ///
-    /// When it's provided with an argument (`#[avro(with = ..)]`), it will use that function.
+    /// When it's provided with an argument (`#[avro(with = some_fn)]`), it will use that function.
     #[darling(default)]
     pub with: With,
 }

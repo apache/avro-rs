@@ -149,10 +149,10 @@ impl VariantOptions {
 /// How to get the schema for this field or variant.
 #[derive(Debug, PartialEq, Default)]
 pub enum With {
-    /// Use `<T as AvroSchemaComponent>::get_schema_with_ctxt`.
+    /// Use `<T as AvroSchemaComponent>::get_schema_in_ctxt`.
     #[default]
     Trait,
-    /// Use `module::get_schema_with_ctxt` where the module is defined by Serde's `with` attribute.
+    /// Use `module::get_schema_in_ctxt` where the module is defined by Serde's `with` attribute.
     Serde(Path),
     /// Call the function in this expression.
     Expr(Expr),
@@ -168,12 +168,17 @@ impl With {
             avro::With::Trait => Ok(Self::Trait),
             avro::With::Serde => {
                 if let Some(serde) = serde {
-                    let path = Path::from_string(serde).unwrap();
+                    let path = Path::from_string(serde).map_err(|err| {
+                        syn::Error::new(
+                            span,
+                            format!("Expected a path for `#[serde(with = \"..\")]: {err:?}"),
+                        )
+                    })?;
                     Ok(Self::Serde(path))
                 } else {
                     Err(syn::Error::new(
                         span,
-                        "`#[avro(with)]` requires `#[serde(with = \"..\")]` or provide a function to call `#[avro(width = ..)]`",
+                        "`#[avro(with)]` requires `#[serde(with = \"some_module\")]` or provide a function to call `#[avro(with = some_fn)]`",
                     ))
                 }
             }

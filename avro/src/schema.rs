@@ -592,7 +592,8 @@ pub(crate) fn resolve_names(
         | Schema::Decimal(DecimalSchema {
             inner: InnerDecimalSchema::Fixed(FixedSchema { name, .. }),
             ..
-        }) => {
+        })
+        | Schema::Duration(FixedSchema { name, .. }) => {
             let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
             if names
                 .insert(fully_qualified_name.clone(), schema.clone())

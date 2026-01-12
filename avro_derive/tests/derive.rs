@@ -17,9 +17,7 @@
 
 use apache_avro::{
     Reader, Schema, Writer, from_value,
-    schema::{
-        Alias, AvroSchema, AvroSchemaComponent, EnumSchema, Names, Namespace, RecordSchema,
-    },
+    schema::{Alias, AvroSchema, AvroSchemaComponent, EnumSchema, Names, Namespace, RecordSchema},
 };
 use apache_avro_derive::*;
 use proptest::prelude::*;
