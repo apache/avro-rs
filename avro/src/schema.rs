@@ -1959,7 +1959,7 @@ impl Parser {
         let mut custom_attributes: BTreeMap<String, Value> = BTreeMap::new();
         for (key, value) in complex {
             match key.as_str() {
-                "type" | "name" | "namespace" | "doc" | "aliases" => continue,
+                "type" | "name" | "namespace" | "doc" | "aliases" | "logicalType" => continue,
                 candidate if excluded.contains(&candidate) => continue,
                 _ => custom_attributes.insert(key.clone(), value.clone()),
             };
@@ -6909,11 +6909,11 @@ mod tests {
                 doc: None,
                 size: 6,
                 default: None,
-                attributes: BTreeMap::from([("logicalType".to_string(), "uuid".into())]),
+                attributes: BTreeMap::new(),
             })
         );
         assert_logged(
-            r#"Ignoring uuid logical type for a Fixed schema because its size (6) is not 16! Schema: Fixed(FixedSchema { name: Name { name: "FixedUUID", namespace: None }, aliases: None, doc: None, size: 6, default: None, attributes: {"logicalType": String("uuid")} })"#,
+            r#"Ignoring uuid logical type for a Fixed schema because its size (6) is not 16! Schema: Fixed(FixedSchema { name: Name { name: "FixedUUID", namespace: None }, aliases: None, doc: None, size: 6, default: None, attributes: {} })"#,
         );
 
         Ok(())
@@ -7550,6 +7550,74 @@ mod tests {
         let schema_json = serde_json::to_value(&schema)?;
 
         assert_eq!(&schema_json, &expected_schema_json);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_395_logical_type_written_once_for_duration() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "fixed",
+            "logicalType": "duration",
+            "name": "Duration",
+            "size": 12
+        }"#,
+        )?;
+
+        let schema_json_str = serde_json::to_string(&schema)?;
+
+        assert_eq!(
+            schema_json_str.matches("logicalType").count(),
+            1,
+            "Expected serialized schema to contain only one logicalType key: {schema_json_str}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_395_logical_type_written_once_for_uuid_fixed() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "fixed",
+            "logicalType": "uuid",
+            "name": "UUID",
+            "size": 16
+        }"#,
+        )?;
+
+        let schema_json_str = serde_json::to_string(&schema)?;
+
+        assert_eq!(
+            schema_json_str.matches("logicalType").count(),
+            1,
+            "Expected serialized schema to contain only one logicalType key: {schema_json_str}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_395_logical_type_written_once_for_decimal_fixed() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "fixed",
+            "logicalType": "decimal",
+            "scale": 4,
+            "precision": 8,
+            "name": "FixedDecimal16",
+            "size": 16
+        }"#,
+        )?;
+
+        let schema_json_str = serde_json::to_string(&schema)?;
+
+        assert_eq!(
+            schema_json_str.matches("logicalType").count(),
+            1,
+            "Expected serialized schema to contain only one logicalType key: {schema_json_str}"
+        );
 
         Ok(())
     }
