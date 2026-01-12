@@ -34,7 +34,7 @@ use serde::{
 };
 use serde_json::{Map, Value};
 use std::{
-    borrow::Borrow,
+    borrow::{Borrow, Cow},
     collections::{BTreeMap, HashMap, HashSet},
     fmt,
     fmt::Debug,
@@ -2626,156 +2626,126 @@ pub trait AvroSchemaComponent {
     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema;
 }
 
-#[cfg(feature = "derive")]
-pub mod derive {
-    use super::*;
-    use std::borrow::Cow;
-
-    impl<T> AvroSchema for T
-    where
-        T: AvroSchemaComponent,
-    {
-        fn get_schema() -> Schema {
-            T::get_schema_in_ctxt(&mut HashMap::default(), &None)
-        }
+impl<T> AvroSchema for T
+where
+    T: AvroSchemaComponent,
+{
+    fn get_schema() -> Schema {
+        T::get_schema_in_ctxt(&mut HashMap::default(), &None)
     }
+}
 
-    macro_rules! impl_schema (
-        ($type:ty, $variant_constructor:expr) => (
-            impl AvroSchemaComponent for $type {
-                fn get_schema_in_ctxt(_: &mut Names, _: &Namespace) -> Schema {
-                    $variant_constructor
-                }
+macro_rules! impl_schema (
+    ($type:ty, $variant_constructor:expr) => (
+        impl AvroSchemaComponent for $type {
+            fn get_schema_in_ctxt(_: &mut Names, _: &Namespace) -> Schema {
+                $variant_constructor
             }
-        );
+        }
     );
+);
 
-    impl_schema!(bool, Schema::Boolean);
-    impl_schema!(i8, Schema::Int);
-    impl_schema!(i16, Schema::Int);
-    impl_schema!(i32, Schema::Int);
-    impl_schema!(i64, Schema::Long);
-    impl_schema!(u8, Schema::Int);
-    impl_schema!(u16, Schema::Int);
-    impl_schema!(u32, Schema::Long);
-    impl_schema!(f32, Schema::Float);
-    impl_schema!(f64, Schema::Double);
-    impl_schema!(String, Schema::String);
-    impl_schema!(uuid::Uuid, Schema::Uuid(UuidSchema::String));
+impl_schema!(bool, Schema::Boolean);
+impl_schema!(i8, Schema::Int);
+impl_schema!(i16, Schema::Int);
+impl_schema!(i32, Schema::Int);
+impl_schema!(i64, Schema::Long);
+impl_schema!(u8, Schema::Int);
+impl_schema!(u16, Schema::Int);
+impl_schema!(u32, Schema::Long);
+impl_schema!(f32, Schema::Float);
+impl_schema!(f64, Schema::Double);
+impl_schema!(String, Schema::String);
+impl_schema!(uuid::Uuid, Schema::Uuid(UuidSchema::String));
 
-    impl<T> AvroSchemaComponent for Vec<T>
-    where
-        T: AvroSchemaComponent,
-    {
-        fn get_schema_in_ctxt(
-            named_schemas: &mut Names,
-            enclosing_namespace: &Namespace,
-        ) -> Schema {
-            Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
-        }
+impl<T> AvroSchemaComponent for Vec<T>
+where
+    T: AvroSchemaComponent,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
     }
+}
 
-    impl<T> AvroSchemaComponent for Option<T>
-    where
-        T: AvroSchemaComponent,
-    {
-        fn get_schema_in_ctxt(
-            named_schemas: &mut Names,
-            enclosing_namespace: &Namespace,
-        ) -> Schema {
-            let inner_schema = T::get_schema_in_ctxt(named_schemas, enclosing_namespace);
-            Schema::Union(UnionSchema {
-                schemas: vec![Schema::Null, inner_schema.clone()],
-                variant_index: [Schema::Null, inner_schema]
-                    .iter()
-                    .enumerate()
-                    .map(|(idx, s)| (SchemaKind::from(s), idx))
-                    .collect(),
-            })
-        }
+impl<T> AvroSchemaComponent for Option<T>
+where
+    T: AvroSchemaComponent,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        let inner_schema = T::get_schema_in_ctxt(named_schemas, enclosing_namespace);
+        Schema::Union(UnionSchema {
+            schemas: vec![Schema::Null, inner_schema.clone()],
+            variant_index: [Schema::Null, inner_schema]
+                .iter()
+                .enumerate()
+                .map(|(idx, s)| (SchemaKind::from(s), idx))
+                .collect(),
+        })
     }
+}
 
-    impl<T> AvroSchemaComponent for Map<String, T>
-    where
-        T: AvroSchemaComponent,
-    {
-        fn get_schema_in_ctxt(
-            named_schemas: &mut Names,
-            enclosing_namespace: &Namespace,
-        ) -> Schema {
-            Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
-        }
+impl<T> AvroSchemaComponent for Map<String, T>
+where
+    T: AvroSchemaComponent,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
     }
+}
 
-    impl<T> AvroSchemaComponent for HashMap<String, T>
-    where
-        T: AvroSchemaComponent,
-    {
-        fn get_schema_in_ctxt(
-            named_schemas: &mut Names,
-            enclosing_namespace: &Namespace,
-        ) -> Schema {
-            Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
-        }
+impl<T> AvroSchemaComponent for HashMap<String, T>
+where
+    T: AvroSchemaComponent,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
     }
+}
 
-    impl<T> AvroSchemaComponent for Box<T>
-    where
-        T: AvroSchemaComponent,
-    {
-        fn get_schema_in_ctxt(
-            named_schemas: &mut Names,
-            enclosing_namespace: &Namespace,
-        ) -> Schema {
-            T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
-        }
+impl<T> AvroSchemaComponent for Box<T>
+where
+    T: AvroSchemaComponent,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
     }
+}
 
-    impl<T> AvroSchemaComponent for std::sync::Mutex<T>
-    where
-        T: AvroSchemaComponent,
-    {
-        fn get_schema_in_ctxt(
-            named_schemas: &mut Names,
-            enclosing_namespace: &Namespace,
-        ) -> Schema {
-            T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
-        }
+impl<T> AvroSchemaComponent for std::sync::Mutex<T>
+where
+    T: AvroSchemaComponent,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
     }
+}
 
-    impl<T> AvroSchemaComponent for Cow<'_, T>
-    where
-        T: AvroSchemaComponent + Clone,
-    {
-        fn get_schema_in_ctxt(
-            named_schemas: &mut Names,
-            enclosing_namespace: &Namespace,
-        ) -> Schema {
-            T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
-        }
+impl<T> AvroSchemaComponent for Cow<'_, T>
+where
+    T: AvroSchemaComponent + Clone,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
     }
+}
 
-    impl AvroSchemaComponent for core::time::Duration {
-        fn get_schema_in_ctxt(
-            named_schemas: &mut Names,
-            enclosing_namespace: &Namespace,
-        ) -> Schema {
-            let name = Name {
-                name: "duration".to_string(),
-                namespace: enclosing_namespace.clone(),
-            };
-            named_schemas
-                .entry(name.clone())
-                .or_insert(Schema::Duration(FixedSchema {
-                    name,
-                    aliases: None,
-                    doc: None,
-                    size: 12,
-                    default: None,
-                    attributes: Default::default(),
-                }))
-                .clone()
-        }
+impl AvroSchemaComponent for core::time::Duration {
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        let name = Name {
+            name: "duration".to_string(),
+            namespace: enclosing_namespace.clone(),
+        };
+        named_schemas
+            .entry(name.clone())
+            .or_insert(Schema::Duration(FixedSchema {
+                name,
+                aliases: None,
+                doc: None,
+                size: 12,
+                default: None,
+                attributes: Default::default(),
+            }))
+            .clone()
     }
 }
 
