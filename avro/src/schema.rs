@@ -2674,14 +2674,24 @@ where
 {
     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
         let inner_schema = T::get_schema_in_ctxt(named_schemas, enclosing_namespace);
-        Schema::Union(UnionSchema {
-            schemas: vec![Schema::Null, inner_schema.clone()],
-            variant_index: [Schema::Null, inner_schema]
-                .iter()
-                .enumerate()
-                .map(|(idx, s)| (SchemaKind::from(s), idx))
-                .collect(),
-        })
+
+        let mut variants = vec![Schema::Null];
+        match inner_schema {
+            Schema::Union(union_schema) => {
+                // Flatten and avoid repeating `null`.
+                for schema in union_schema.schemas {
+                    if !matches!(schema, Schema::Null) {
+                        variants.push(schema);
+                    }
+                }
+            }
+            Schema::Null => { /* keep just null */ }
+            other => variants.push(other),
+        }
+
+        Schema::Union(
+            UnionSchema::new(variants).expect("Option<T> must produce a valid (non-nested) union"),
+        )
     }
 }
 
