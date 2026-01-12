@@ -245,7 +245,7 @@ pub type Documentation = Option<String>;
 /// Represents the aliases for Named Schema
 pub type Aliases = Option<Vec<Alias>>;
 /// Represents Schema lookup within a schema env
-pub(crate) type Names = HashMap<Name, Schema>;
+pub type Names = HashMap<Name, Schema>;
 /// Represents Schema lookup within a schema
 pub type NamesRef<'a> = HashMap<Name, &'a Schema>;
 /// Represents the namespace for Named Schema
@@ -2580,7 +2580,7 @@ pub trait AvroSchema {
 ///
 /// # Implementation guide
 ///
-///### Simple implementation
+/// ### Simple implementation
 /// To construct a non named simple schema, it is possible to ignore the input argument making the
 /// general form implementation look like
 /// ```ignore
@@ -2591,12 +2591,13 @@ pub trait AvroSchema {
 ///}
 /// ```
 /// ### Passthrough implementation
+///
 /// To construct a schema for a Type that acts as in "inner" type, such as for smart pointers, simply
 /// pass through the arguments to the inner type
 /// ```ignore
 /// impl AvroSchemaComponent for PassthroughType {
 ///     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
-///        InnerType::get_schema_in_ctxt(names, enclosing_namespace)
+///        InnerType::get_schema_in_ctxt(named_schemas, enclosing_namespace)
 ///    }
 ///}
 /// ```
