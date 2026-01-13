@@ -154,6 +154,7 @@ impl Codec {
                         Done => Error::other("Unexpected error: miniz_oxide reported an error with a success status. Please report this to avro-rs developers."),
                         NeedsMoreInput => Error::from(ErrorKind::UnexpectedEof),
                         HasMoreOutput => Error::other("Unexpected error: miniz_oxide has more data than the output buffer can hold. Please report this to avro-rs developers."), // not possible for _to_vec()
+                        other => Error::other(format!("Unexpected error: {other:?}"))
                     }
                 };
                 Error::new(Details::DeflateDecompress(err))
