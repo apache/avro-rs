@@ -15,28 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use apache_avro::{AvroSchemaComponent, Schema};
+use std::collections::HashMap;
+
 #[test]
 fn avro_rs_394_avro_schema_component_without_derive_feature() {
-    use apache_avro::{AvroSchemaComponent, Schema};
-    use std::collections::HashMap;
-
-    // Verify basic types work without derive feature
     let schema = i32::get_schema_in_ctxt(&mut HashMap::default(), &None);
     assert!(matches!(schema, Schema::Int));
 }
 
 #[test]
+#[should_panic(expected = "Option<T> must produce a valid (non-nested) union")]
 fn avro_rs_394_avro_schema_component_nested_options() {
-    use apache_avro::{AvroSchemaComponent, Schema};
-    use std::collections::HashMap;
+    type VeryOptional = Option<Option<i32>>;
 
-    type VeryOptional = Option<Option<Option<Option<Option<i32>>>>>;
-
-    let schema = VeryOptional::get_schema_in_ctxt(&mut HashMap::default(), &None);
-    match schema {
-        Schema::Union(union_schema) => {
-            assert_eq!(union_schema.variants(), &[Schema::Null, Schema::Int]);
-        }
-        _ => panic!("Unexpected schema type: {schema}"),
-    };
+    let _schema = VeryOptional::get_schema_in_ctxt(&mut HashMap::default(), &None);
 }
