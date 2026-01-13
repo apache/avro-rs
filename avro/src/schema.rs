@@ -2657,6 +2657,7 @@ impl_schema!(u32, Schema::Long);
 impl_schema!(f32, Schema::Float);
 impl_schema!(f64, Schema::Double);
 impl_schema!(String, Schema::String);
+impl_schema!(str, Schema::String);
 impl_schema!(uuid::Uuid, Schema::Uuid(UuidSchema::String));
 
 impl<T> AvroSchemaComponent for Vec<T>

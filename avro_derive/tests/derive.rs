@@ -1827,3 +1827,31 @@ fn avro_rs_247_serde_flatten_support_with_skip() {
         b: 321,
     });
 }
+
+#[test]
+fn avro_rs_401_do_not_match_typename() {
+    #[expect(nonstandard_style, reason = "It needs to be exactly this")]
+    type f32 = f64;
+
+    #[expect(dead_code, reason = "We only check the schema")]
+    #[derive(AvroSchema)]
+    struct Foo {
+        field: f32,
+    }
+
+    let schema = r#"
+    {
+        "type":"record",
+        "name":"Foo",
+        "fields": [
+            {
+                "name":"field",
+                "type":"double"
+            }
+        ]
+    }
+    "#;
+
+    let schema = Schema::parse_str(schema).unwrap();
+    assert_eq!(schema, Foo::get_schema());
+}
