@@ -34,7 +34,7 @@ use serde::{
 };
 use serde_json::{Map, Value};
 use std::{
-    borrow::Borrow,
+    borrow::{Borrow, Cow},
     collections::{BTreeMap, HashMap, HashSet},
     fmt,
     fmt::Debug,
@@ -245,7 +245,7 @@ pub type Documentation = Option<String>;
 /// Represents the aliases for Named Schema
 pub type Aliases = Option<Vec<Alias>>;
 /// Represents Schema lookup within a schema env
-pub(crate) type Names = HashMap<Name, Schema>;
+pub type Names = HashMap<Name, Schema>;
 /// Represents Schema lookup within a schema
 pub type NamesRef<'a> = HashMap<Name, &'a Schema>;
 /// Represents the namespace for Named Schema
@@ -2568,215 +2568,184 @@ fn field_ordering_position(field: &str) -> Option<usize> {
 
 /// Trait for types that serve as an Avro data model. Derive implementation available
 /// through `derive` feature. Do not implement directly!
-/// Implement `apache_avro::schema::derive::AvroSchemaComponent` to get this trait
+/// Implement [`AvroSchemaComponent`] to get this trait
 /// through a blanket implementation.
 pub trait AvroSchema {
     fn get_schema() -> Schema;
 }
 
-#[cfg(feature = "derive")]
-pub mod derive {
-    use super::*;
-    use std::borrow::Cow;
+/// Trait for types that serve as fully defined components inside an Avro data model. Derive
+/// implementation available through `derive` feature. This is what is implemented by
+/// the `derive(AvroSchema)` macro.
+///
+/// # Implementation guide
+///
+/// ### Simple implementation
+/// To construct a non named simple schema, it is possible to ignore the input argument making the
+/// general form implementation look like
+/// ```ignore
+/// impl AvroSchemaComponent for AType {
+///     fn get_schema_in_ctxt(_: &mut Names, _: &Namespace) -> Schema {
+///        Schema::?
+///    }
+///}
+/// ```
+/// ### Passthrough implementation
+///
+/// To construct a schema for a Type that acts as in "inner" type, such as for smart pointers, simply
+/// pass through the arguments to the inner type
+/// ```ignore
+/// impl AvroSchemaComponent for PassthroughType {
+///     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+///        InnerType::get_schema_in_ctxt(named_schemas, enclosing_namespace)
+///    }
+///}
+/// ```
+///### Complex implementation
+/// To implement this for Named schema there is a general form needed to avoid creating invalid
+/// schemas or infinite loops.
+/// ```ignore
+/// impl AvroSchemaComponent for ComplexType {
+///     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+///         // Create the fully qualified name for your type given the enclosing namespace
+///         let name =  apache_avro::schema::Name::new("MyName")
+///             .expect("Unable to parse schema name")
+///             .fully_qualified_name(enclosing_namespace);
+///         let enclosing_namespace = &name.namespace;
+///         // Check, if your name is already defined, and if so, return a ref to that name
+///         if named_schemas.contains_key(&name) {
+///             apache_avro::schema::Schema::Ref{name: name.clone()}
+///         } else {
+///             named_schemas.insert(name.clone(), apache_avro::schema::Schema::Ref{name: name.clone()});
+///             // YOUR SCHEMA DEFINITION HERE with the name equivalent to "MyName".
+///             // For non-simple sub types delegate to their implementation of AvroSchemaComponent
+///         }
+///    }
+///}
+/// ```
+pub trait AvroSchemaComponent {
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema;
+}
 
-    /// Trait for types that serve as fully defined components inside an Avro data model. Derive
-    /// implementation available through `derive` feature. This is what is implemented by
-    /// the `derive(AvroSchema)` macro.
-    ///
-    /// # Implementation guide
-    ///
-    ///### Simple implementation
-    /// To construct a non named simple schema, it is possible to ignore the input argument making the
-    /// general form implementation look like
-    /// ```ignore
-    /// impl AvroSchemaComponent for AType {
-    ///     fn get_schema_in_ctxt(_: &mut Names, _: &Namespace) -> Schema {
-    ///        Schema::?
-    ///    }
-    ///}
-    /// ```
-    /// ### Passthrough implementation
-    /// To construct a schema for a Type that acts as in "inner" type, such as for smart pointers, simply
-    /// pass through the arguments to the inner type
-    /// ```ignore
-    /// impl AvroSchemaComponent for PassthroughType {
-    ///     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
-    ///        InnerType::get_schema_in_ctxt(names, enclosing_namespace)
-    ///    }
-    ///}
-    /// ```
-    ///### Complex implementation
-    /// To implement this for Named schema there is a general form needed to avoid creating invalid
-    /// schemas or infinite loops.
-    /// ```ignore
-    /// impl AvroSchemaComponent for ComplexType {
-    ///     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
-    ///         // Create the fully qualified name for your type given the enclosing namespace
-    ///         let name =  apache_avro::schema::Name::new("MyName")
-    ///             .expect("Unable to parse schema name")
-    ///             .fully_qualified_name(enclosing_namespace);
-    ///         let enclosing_namespace = &name.namespace;
-    ///         // Check, if your name is already defined, and if so, return a ref to that name
-    ///         if named_schemas.contains_key(&name) {
-    ///             apache_avro::schema::Schema::Ref{name: name.clone()}
-    ///         } else {
-    ///             named_schemas.insert(name.clone(), apache_avro::schema::Schema::Ref{name: name.clone()});
-    ///             // YOUR SCHEMA DEFINITION HERE with the name equivalent to "MyName".
-    ///             // For non-simple sub types delegate to their implementation of AvroSchemaComponent
-    ///         }
-    ///    }
-    ///}
-    /// ```
-    pub trait AvroSchemaComponent {
-        fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace)
-        -> Schema;
+impl<T> AvroSchema for T
+where
+    T: AvroSchemaComponent,
+{
+    fn get_schema() -> Schema {
+        T::get_schema_in_ctxt(&mut HashMap::default(), &None)
     }
+}
 
-    impl<T> AvroSchema for T
-    where
-        T: AvroSchemaComponent,
-    {
-        fn get_schema() -> Schema {
-            T::get_schema_in_ctxt(&mut HashMap::default(), &None)
-        }
-    }
-
-    macro_rules! impl_schema (
-        ($type:ty, $variant_constructor:expr) => (
-            impl AvroSchemaComponent for $type {
-                fn get_schema_in_ctxt(_: &mut Names, _: &Namespace) -> Schema {
-                    $variant_constructor
-                }
+macro_rules! impl_schema (
+    ($type:ty, $variant_constructor:expr) => (
+        impl AvroSchemaComponent for $type {
+            fn get_schema_in_ctxt(_: &mut Names, _: &Namespace) -> Schema {
+                $variant_constructor
             }
-        );
+        }
     );
+);
 
-    impl_schema!(bool, Schema::Boolean);
-    impl_schema!(i8, Schema::Int);
-    impl_schema!(i16, Schema::Int);
-    impl_schema!(i32, Schema::Int);
-    impl_schema!(i64, Schema::Long);
-    impl_schema!(u8, Schema::Int);
-    impl_schema!(u16, Schema::Int);
-    impl_schema!(u32, Schema::Long);
-    impl_schema!(f32, Schema::Float);
-    impl_schema!(f64, Schema::Double);
-    impl_schema!(String, Schema::String);
-    impl_schema!(uuid::Uuid, Schema::Uuid(UuidSchema::String));
+impl_schema!(bool, Schema::Boolean);
+impl_schema!(i8, Schema::Int);
+impl_schema!(i16, Schema::Int);
+impl_schema!(i32, Schema::Int);
+impl_schema!(i64, Schema::Long);
+impl_schema!(u8, Schema::Int);
+impl_schema!(u16, Schema::Int);
+impl_schema!(u32, Schema::Long);
+impl_schema!(f32, Schema::Float);
+impl_schema!(f64, Schema::Double);
+impl_schema!(String, Schema::String);
+impl_schema!(uuid::Uuid, Schema::Uuid(UuidSchema::String));
 
-    impl<T> AvroSchemaComponent for Vec<T>
-    where
-        T: AvroSchemaComponent,
-    {
-        fn get_schema_in_ctxt(
-            named_schemas: &mut Names,
-            enclosing_namespace: &Namespace,
-        ) -> Schema {
-            Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
-        }
+impl<T> AvroSchemaComponent for Vec<T>
+where
+    T: AvroSchemaComponent,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
     }
+}
 
-    impl<T> AvroSchemaComponent for Option<T>
-    where
-        T: AvroSchemaComponent,
-    {
-        fn get_schema_in_ctxt(
-            named_schemas: &mut Names,
-            enclosing_namespace: &Namespace,
-        ) -> Schema {
-            let inner_schema = T::get_schema_in_ctxt(named_schemas, enclosing_namespace);
-            Schema::Union(UnionSchema {
-                schemas: vec![Schema::Null, inner_schema.clone()],
-                variant_index: [Schema::Null, inner_schema]
-                    .iter()
-                    .enumerate()
-                    .map(|(idx, s)| (SchemaKind::from(s), idx))
-                    .collect(),
-            })
-        }
+impl<T> AvroSchemaComponent for Option<T>
+where
+    T: AvroSchemaComponent,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        let variants = vec![
+            Schema::Null,
+            T::get_schema_in_ctxt(named_schemas, enclosing_namespace),
+        ];
+
+        Schema::Union(
+            UnionSchema::new(variants).expect("Option<T> must produce a valid (non-nested) union"),
+        )
     }
+}
 
-    impl<T> AvroSchemaComponent for Map<String, T>
-    where
-        T: AvroSchemaComponent,
-    {
-        fn get_schema_in_ctxt(
-            named_schemas: &mut Names,
-            enclosing_namespace: &Namespace,
-        ) -> Schema {
-            Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
-        }
+impl<T> AvroSchemaComponent for Map<String, T>
+where
+    T: AvroSchemaComponent,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
     }
+}
 
-    impl<T> AvroSchemaComponent for HashMap<String, T>
-    where
-        T: AvroSchemaComponent,
-    {
-        fn get_schema_in_ctxt(
-            named_schemas: &mut Names,
-            enclosing_namespace: &Namespace,
-        ) -> Schema {
-            Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
-        }
+impl<T> AvroSchemaComponent for HashMap<String, T>
+where
+    T: AvroSchemaComponent,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
     }
+}
 
-    impl<T> AvroSchemaComponent for Box<T>
-    where
-        T: AvroSchemaComponent,
-    {
-        fn get_schema_in_ctxt(
-            named_schemas: &mut Names,
-            enclosing_namespace: &Namespace,
-        ) -> Schema {
-            T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
-        }
+impl<T> AvroSchemaComponent for Box<T>
+where
+    T: AvroSchemaComponent,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
     }
+}
 
-    impl<T> AvroSchemaComponent for std::sync::Mutex<T>
-    where
-        T: AvroSchemaComponent,
-    {
-        fn get_schema_in_ctxt(
-            named_schemas: &mut Names,
-            enclosing_namespace: &Namespace,
-        ) -> Schema {
-            T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
-        }
+impl<T> AvroSchemaComponent for std::sync::Mutex<T>
+where
+    T: AvroSchemaComponent,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
     }
+}
 
-    impl<T> AvroSchemaComponent for Cow<'_, T>
-    where
-        T: AvroSchemaComponent + Clone,
-    {
-        fn get_schema_in_ctxt(
-            named_schemas: &mut Names,
-            enclosing_namespace: &Namespace,
-        ) -> Schema {
-            T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
-        }
+impl<T> AvroSchemaComponent for Cow<'_, T>
+where
+    T: AvroSchemaComponent + Clone,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
     }
+}
 
-    impl AvroSchemaComponent for core::time::Duration {
-        fn get_schema_in_ctxt(
-            named_schemas: &mut Names,
-            enclosing_namespace: &Namespace,
-        ) -> Schema {
-            let name = Name {
-                name: "duration".to_string(),
-                namespace: enclosing_namespace.clone(),
-            };
-            named_schemas
-                .entry(name.clone())
-                .or_insert(Schema::Duration(FixedSchema {
-                    name,
-                    aliases: None,
-                    doc: None,
-                    size: 12,
-                    default: None,
-                    attributes: Default::default(),
-                }))
-                .clone()
-        }
+impl AvroSchemaComponent for core::time::Duration {
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        let name = Name {
+            name: "duration".to_string(),
+            namespace: enclosing_namespace.clone(),
+        };
+        named_schemas
+            .entry(name.clone())
+            .or_insert(Schema::Duration(FixedSchema {
+                name,
+                aliases: None,
+                doc: None,
+                size: 12,
+                default: None,
+                attributes: Default::default(),
+            }))
+            .clone()
     }
 }
 
