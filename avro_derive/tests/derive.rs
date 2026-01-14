@@ -1855,3 +1855,60 @@ fn avro_rs_401_do_not_match_typename() {
     let schema = Schema::parse_str(schema).unwrap();
     assert_eq!(schema, Foo::get_schema());
 }
+
+#[test]
+fn avro_rs_401_supported_type_variants() {
+    #[expect(dead_code, reason = "We only check the schema")]
+    #[derive(AvroSchema)]
+    struct Foo<'a> {
+        one: f32,
+        two: std::string::String,
+        three: &'static i32,
+        four: &'a str,
+        five: &'a mut f64,
+        six: [u8; 5],
+        seven: [u8],
+    }
+
+    let schema = r#"
+    {
+        "type":"record",
+        "name":"Foo",
+        "fields": [
+            {
+                "name":"one",
+                "type":"float"
+            },
+            {
+                "name":"two",
+                "type":"string"
+            },
+            {
+                "name":"three",
+                "type":"int"
+            },
+            {
+                "name":"four",
+                "type":"string"
+            },
+            {
+                "name":"five",
+                "type":"double"
+            },
+            {
+                "name":"six",
+                "type":"array",
+                "items":"int"
+            },
+            {
+                "name":"seven",
+                "type":"array",
+                "items":"int"
+            }
+        ]
+    }
+    "#;
+
+    let schema = Schema::parse_str(schema).unwrap();
+    assert_eq!(schema, Foo::get_schema());
+}

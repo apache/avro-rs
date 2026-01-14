@@ -979,6 +979,10 @@ pub struct UnionSchema {
 
 impl UnionSchema {
     /// Creates a new UnionSchema from a vector of schemas.
+    ///
+    /// # Errors
+    /// Will return an error if `variants` has duplicate unnamed schemas or if `variants`
+    /// contains a union.
     pub fn new(schemas: Vec<Schema>) -> AvroResult<Self> {
         let mut vindex = BTreeMap::new();
         for (i, schema) in schemas.iter().enumerate() {
@@ -1378,6 +1382,15 @@ impl Schema {
             items: Box::new(items),
             attributes,
         })
+    }
+
+    /// Returns a `Schema::Union` with the given variants.
+    ///
+    /// # Errors
+    /// Will return an error if `variants` has duplicate unnamed schemas or if `variants`
+    /// contains a union.
+    pub fn union(variants: Vec<Schema>) -> AvroResult<Schema> {
+        UnionSchema::new(variants).map(Schema::Union)
     }
 
     fn denormalize(&mut self, schemata: &[Schema]) -> AvroResult<()> {
@@ -2570,6 +2583,10 @@ fn field_ordering_position(field: &str) -> Option<usize> {
 /// through `derive` feature. Do not implement directly!
 /// Implement [`AvroSchemaComponent`] to get this trait
 /// through a blanket implementation.
+///
+/// Note: This trait is **not** implemented for `char` and `u64`. `char` is a 32-bit value
+/// that does not have a logical mapping to an Avro schema. `u64` is too large to fit in a
+/// Avro `long`.
 pub trait AvroSchema {
     fn get_schema() -> Schema;
 }
@@ -2577,6 +2594,10 @@ pub trait AvroSchema {
 /// Trait for types that serve as fully defined components inside an Avro data model. Derive
 /// implementation available through `derive` feature. This is what is implemented by
 /// the `derive(AvroSchema)` macro.
+///
+/// Note: This trait is **not** implemented for `char` and `u64`. `char` is a 32-bit value
+/// that does not have a logical mapping to an Avro schema. `u64` is too large to fit in a
+/// Avro `long`.
 ///
 /// # Implementation guide
 ///
@@ -2629,7 +2650,7 @@ pub trait AvroSchemaComponent {
 
 impl<T> AvroSchema for T
 where
-    T: AvroSchemaComponent,
+    T: AvroSchemaComponent + ?Sized,
 {
     fn get_schema() -> Schema {
         T::get_schema_in_ctxt(&mut HashMap::default(), &None)
@@ -2659,6 +2680,42 @@ impl_schema!(f64, Schema::Double);
 impl_schema!(String, Schema::String);
 impl_schema!(str, Schema::String);
 impl_schema!(uuid::Uuid, Schema::Uuid(UuidSchema::String));
+
+impl<T> AvroSchemaComponent for &T
+where
+    T: AvroSchemaComponent + ?Sized,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
+    }
+}
+
+impl<T> AvroSchemaComponent for &mut T
+where
+    T: AvroSchemaComponent + ?Sized,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
+    }
+}
+
+impl<T> AvroSchemaComponent for [T]
+where
+    T: AvroSchemaComponent,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
+    }
+}
+
+impl<const N: usize, T> AvroSchemaComponent for [T; N]
+where
+    T: AvroSchemaComponent,
+{
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
+    }
+}
 
 impl<T> AvroSchemaComponent for Vec<T>
 where
@@ -7587,6 +7644,56 @@ mod tests {
             schema_json_str.matches("logicalType").count(),
             1,
             "Expected serialized schema to contain only one logicalType key: {schema_json_str}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_401_str() -> TestResult {
+        let schema = str::get_schema();
+        assert_eq!(schema, Schema::String);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_401_references() -> TestResult {
+        let schema_ref = <&str>::get_schema();
+        let schema_ref_mut = <&mut str>::get_schema();
+
+        assert_eq!(schema_ref, Schema::String);
+        assert_eq!(schema_ref_mut, Schema::String);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_401_slice() -> TestResult {
+        let schema = <[u8]>::get_schema();
+        assert_eq!(schema, Schema::array(Schema::Int));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_401_array() -> TestResult {
+        let schema = <[u8; 55]>::get_schema();
+        assert_eq!(schema, Schema::array(Schema::Int));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_401_option_ref_slice_array() -> TestResult {
+        let schema = <Option<&[[u8; 55]]>>::get_schema();
+        assert_eq!(
+            schema,
+            Schema::union(vec![
+                Schema::Null,
+                Schema::array(Schema::array(Schema::Int))
+            ])
+            .unwrap()
         );
 
         Ok(())

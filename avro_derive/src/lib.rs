@@ -23,8 +23,7 @@ mod case;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{
-    AttrStyle, Attribute, DeriveInput, Ident, Meta, Type, TypePath, parse_macro_input,
-    spanned::Spanned,
+    AttrStyle, Attribute, DeriveInput, Ident, Meta, Type, parse_macro_input, spanned::Spanned,
 };
 
 use crate::{
@@ -266,20 +265,24 @@ fn get_data_enum_schema_def(
 
 /// Takes in the Tokens of a type and returns the tokens of an expression with return type `Schema`
 fn type_to_schema_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>> {
-    if let Type::Path(p) = ty {
-        // If the type does not implement AvroSchemaComponent this will cause a compile error
-        // indicating that
-        Ok(type_path_schema_expr(p))
-    } else if let Type::Array(ta) = ty {
-        let inner_schema_expr = type_to_schema_expr(&ta.elem)?;
-        Ok(quote! {apache_avro::schema::Schema::array(#inner_schema_expr)})
-    } else if let Type::Reference(tr) = ty {
-        type_to_schema_expr(&tr.elem)
-    } else {
-        Err(vec![syn::Error::new_spanned(
+    match ty {
+        Type::Array(_) | Type::Slice(_) | Type::Path(_) | Type::Reference(_) => Ok(
+            quote! {<#ty as apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(named_schemas, enclosing_namespace)},
+        ),
+        Type::Ptr(_) => Err(vec![syn::Error::new_spanned(
             ty,
-            format!("Unable to generate schema for type: {ty:?}"),
-        )])
+            "AvroSchema: derive does not support raw pointers",
+        )]),
+        Type::Tuple(_) => Err(vec![syn::Error::new_spanned(
+            ty,
+            "AvroSchema: derive does not support tuples",
+        )]),
+        _ => Err(vec![syn::Error::new_spanned(
+            ty,
+            format!(
+                "AvroSchema: Unexpected type encountered, please open an issue if this kind of type should be supported: {ty:?}"
+            ),
+        )]),
     }
 }
 
@@ -310,13 +313,6 @@ fn default_enum_variant(
 
 fn is_default_attr(attr: &Attribute) -> bool {
     matches!(attr, Attribute { meta: Meta::Path(path), .. } if path.get_ident().map(Ident::to_string).as_deref() == Some("default"))
-}
-
-/// Generates the schema def expression for fully qualified type paths using the associated function
-/// - `A -> <A as apache_avro::AvroSchemaComponent>::get_schema_in_ctxt()`
-/// - `A<T> -> <A<T> as apache_avro::AvroSchemaComponent>::get_schema_in_ctxt()`
-fn type_path_schema_expr(p: &TypePath) -> TokenStream {
-    quote! {<#p as apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(named_schemas, enclosing_namespace)}
 }
 
 /// Stolen from serde
@@ -615,9 +611,9 @@ mod tests {
 
     #[test]
     fn test_trait_cast() {
-        assert_eq!(type_path_schema_expr(&syn::parse2::<TypePath>(quote!{i32}).unwrap()).to_string(), quote!{<i32 as apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(named_schemas, enclosing_namespace)}.to_string());
-        assert_eq!(type_path_schema_expr(&syn::parse2::<TypePath>(quote!{Vec<T>}).unwrap()).to_string(), quote!{<Vec<T> as apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(named_schemas, enclosing_namespace)}.to_string());
-        assert_eq!(type_path_schema_expr(&syn::parse2::<TypePath>(quote!{AnyType}).unwrap()).to_string(), quote!{<AnyType as apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(named_schemas, enclosing_namespace)}.to_string());
+        assert_eq!(type_to_schema_expr(&syn::parse2::<Type>(quote!{i32}).unwrap()).unwrap().to_string(), quote!{<i32 as apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(named_schemas, enclosing_namespace)}.to_string());
+        assert_eq!(type_to_schema_expr(&syn::parse2::<Type>(quote!{Vec<T>}).unwrap()).unwrap().to_string(), quote!{<Vec<T> as apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(named_schemas, enclosing_namespace)}.to_string());
+        assert_eq!(type_to_schema_expr(&syn::parse2::<Type>(quote!{AnyType}).unwrap()).unwrap().to_string(), quote!{<AnyType as apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(named_schemas, enclosing_namespace)}.to_string());
     }
 
     #[test]
