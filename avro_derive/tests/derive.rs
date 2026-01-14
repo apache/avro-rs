@@ -17,7 +17,10 @@
 
 use apache_avro::{
     Reader, Schema, Writer, from_value,
-    schema::{Alias, AvroSchema, AvroSchemaComponent, EnumSchema, Names, Namespace, RecordSchema},
+    schema::{
+        Alias, AvroSchema, AvroSchemaComponent, EnumSchema, FixedSchema, Name, Names, Namespace,
+        RecordSchema,
+    },
 };
 use apache_avro_derive::*;
 use proptest::prelude::*;
@@ -1869,6 +1872,52 @@ fn avro_rs_396_with() {
         a: String,
         #[avro(with = long_schema)]
         b: i32,
+    }
+
+    assert_eq!(schema, Foo::get_schema());
+}
+
+#[test]
+fn avro_rs_396_with_generic() {
+    let schema = Schema::parse_str(
+        r#"
+    {
+        "type":"record",
+        "name":"Foo",
+        "fields": [
+            {
+                "name":"a",
+                "type": {
+                    "type": "fixed",
+                    "size": 15,
+                    "name": "fixed_15"
+                }
+            }
+        ]
+    }
+    "#,
+    )
+    .unwrap();
+
+    fn generic<const N: usize>(
+        _named_schemas: &mut Names,
+        _enclosing_namespace: &Namespace,
+    ) -> Schema {
+        Schema::Fixed(FixedSchema {
+            name: Name::new(&format!("fixed_{N}")).unwrap(),
+            aliases: None,
+            doc: None,
+            size: N,
+            default: None,
+            attributes: Default::default(),
+        })
+    }
+
+    #[allow(dead_code)]
+    #[derive(AvroSchema)]
+    struct Foo {
+        #[avro(with = generic::<15>)]
+        a: [u8; 15],
     }
 
     assert_eq!(schema, Foo::get_schema());

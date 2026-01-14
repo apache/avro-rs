@@ -44,20 +44,32 @@ pub(crate) enum BytesType {
 ///
 /// See usage with below example:
 /// ```rust
-/// use apache_avro::{serde_avro_bytes, serde_avro_fixed};
+/// use apache_avro::{AvroSchema, serde_avro_bytes, serde_avro_fixed};
 /// use serde::{Deserialize, Serialize};
 ///
-/// #[derive(Serialize, Deserialize)]
+/// #[derive(AvroSchema, Serialize, Deserialize)]
 /// struct StructWithBytes {
+///     #[avro(with)]
 ///     #[serde(with = "serde_avro_bytes")]
 ///     vec_field: Vec<u8>,
 ///
+///     #[avro(with = serde_avro_fixed::get_schema_in_ctxt::<6>)]
 ///     #[serde(with = "serde_avro_fixed")]
 ///     fixed_field: [u8; 6],
 /// }
 /// ```
 pub mod serde_avro_bytes {
     use serde::{Deserializer, Serializer};
+
+    use crate::{
+        Schema,
+        schema::{Names, Namespace},
+    };
+
+    /// Returns [`Schema::Bytes`]
+    pub fn get_schema_in_ctxt(_names: &mut Names, _enclosing_namespace: &Namespace) -> Schema {
+        Schema::Bytes
+    }
 
     pub fn serialize<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -81,14 +93,16 @@ pub mod serde_avro_bytes {
 ///
 /// See usage with below example:
 /// ```rust
-/// use apache_avro::{serde_avro_bytes_opt, serde_avro_fixed_opt};
+/// use apache_avro::{AvroSchema, serde_avro_bytes_opt, serde_avro_fixed_opt};
 /// use serde::{Deserialize, Serialize};
 ///
-/// #[derive(Serialize, Deserialize)]
+/// #[derive(AvroSchema, Serialize, Deserialize)]
 /// struct StructWithBytes {
+///     #[avro(with)]
 ///     #[serde(with = "serde_avro_bytes_opt")]
 ///     vec_field: Option<Vec<u8>>,
 ///
+///     #[avro(with = serde_avro_fixed_opt::get_schema_in_ctxt::<6>)]
 ///     #[serde(with = "serde_avro_fixed_opt")]
 ///     fixed_field: Option<[u8; 6]>,
 /// }
@@ -96,6 +110,18 @@ pub mod serde_avro_bytes {
 pub mod serde_avro_bytes_opt {
     use serde::{Deserializer, Serializer};
     use std::borrow::Borrow;
+
+    use crate::{
+        Schema,
+        schema::{Names, Namespace, UnionSchema},
+    };
+
+    /// Returns `Schema::Union(Schema::Null, Schema::Bytes)`
+    pub fn get_schema_in_ctxt(_names: &mut Names, _enclosing_namespace: &Namespace) -> Schema {
+        Schema::Union(
+            UnionSchema::new(vec![Schema::Null, Schema::Bytes]).expect("This is a valid union"),
+        )
+    }
 
     pub fn serialize<S, B>(bytes: &Option<B>, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -120,14 +146,16 @@ pub mod serde_avro_bytes_opt {
 ///
 /// See usage with below example:
 /// ```rust
-/// use apache_avro::{serde_avro_bytes, serde_avro_fixed};
+/// use apache_avro::{AvroSchema, serde_avro_bytes, serde_avro_fixed};
 /// use serde::{Deserialize, Serialize};
 ///
-/// #[derive(Serialize, Deserialize)]
+/// #[derive(AvroSchema, Serialize, Deserialize)]
 /// struct StructWithBytes {
+///     #[avro(with)]
 ///     #[serde(with = "serde_avro_bytes")]
 ///     vec_field: Vec<u8>,
 ///
+///     #[avro(with = serde_avro_fixed::get_schema_in_ctxt::<6>)]
 ///     #[serde(with = "serde_avro_fixed")]
 ///     fixed_field: [u8; 6],
 /// }
@@ -135,6 +163,29 @@ pub mod serde_avro_bytes_opt {
 pub mod serde_avro_fixed {
     use super::{BytesType, SER_BYTES_TYPE};
     use serde::{Deserializer, Serializer};
+
+    use crate::{
+        Schema,
+        schema::{FixedSchema, Name, Names, Namespace},
+    };
+
+    /// Returns `Schema::Fixed(N)` named `serde_avro_fixed_{N}`
+    pub fn get_schema_in_ctxt<const N: usize>(
+        named_schemas: &mut Names,
+        enclosing_namespace: &Namespace,
+    ) -> Schema {
+        let name = Name::new(&format!("serde_avro_fixed_{N}"))
+            .expect("Name is valid")
+            .fully_qualified_name(enclosing_namespace);
+        if named_schemas.contains_key(&name) {
+            Schema::Ref { name }
+        } else {
+            let name_for_names = name.clone();
+            let schema = Schema::Fixed(FixedSchema::builder().name(name).size(N).build());
+            named_schemas.insert(name_for_names, schema.clone());
+            schema
+        }
+    }
 
     pub fn serialize<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -161,14 +212,16 @@ pub mod serde_avro_fixed {
 ///
 /// See usage with below example:
 /// ```rust
-/// use apache_avro::{serde_avro_bytes_opt, serde_avro_fixed_opt};
+/// use apache_avro::{AvroSchema, serde_avro_bytes_opt, serde_avro_fixed_opt};
 /// use serde::{Deserialize, Serialize};
 ///
-/// #[derive(Serialize, Deserialize)]
+/// #[derive(AvroSchema, Serialize, Deserialize)]
 /// struct StructWithBytes {
+///     #[avro(with)]
 ///     #[serde(with = "serde_avro_bytes_opt")]
 ///     vec_field: Option<Vec<u8>>,
 ///
+///     #[avro(with = serde_avro_fixed_opt::get_schema_in_ctxt::<6>)]
 ///     #[serde(with = "serde_avro_fixed_opt")]
 ///     fixed_field: Option<[u8; 6]>,
 /// }
@@ -177,6 +230,28 @@ pub mod serde_avro_fixed_opt {
     use super::{BytesType, SER_BYTES_TYPE};
     use serde::{Deserializer, Serializer};
     use std::borrow::Borrow;
+
+    use crate::{
+        Schema,
+        schema::{Names, Namespace, UnionSchema},
+    };
+
+    /// Returns `Schema::Union(Schema::Null, Schema::Fixed(N))` where the fixed schema is named `serde_avro_fixed_{N}`
+    pub fn get_schema_in_ctxt<const N: usize>(
+        named_schemas: &mut Names,
+        enclosing_namespace: &Namespace,
+    ) -> Schema {
+        Schema::Union(
+            UnionSchema::new(vec![
+                Schema::Null,
+                super::serde_avro_fixed::get_schema_in_ctxt::<N>(
+                    named_schemas,
+                    enclosing_namespace,
+                ),
+            ])
+            .expect("This is a valid union"),
+        )
+    }
 
     pub fn serialize<S, B>(bytes: &Option<B>, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -209,11 +284,12 @@ pub mod serde_avro_fixed_opt {
 ///
 /// See usage with below example:
 /// ```rust
-/// use apache_avro::serde_avro_slice;
+/// use apache_avro::{AvroSchema, serde_avro_slice};
 /// use serde::{Deserialize, Serialize};
 ///
-/// #[derive(Serialize, Deserialize)]
+/// #[derive(AvroSchema, Serialize, Deserialize)]
 /// struct StructWithBytes<'a> {
+///     #[avro(with)]
 ///     #[serde(with = "serde_avro_slice")]
 ///     slice_field: &'a [u8],
 /// }
@@ -221,6 +297,16 @@ pub mod serde_avro_fixed_opt {
 pub mod serde_avro_slice {
     use super::DE_BYTES_BORROWED;
     use serde::{Deserializer, Serializer};
+
+    use crate::{
+        Schema,
+        schema::{Names, Namespace},
+    };
+
+    /// Returns [`Schema::Bytes`]
+    pub fn get_schema_in_ctxt(_names: &mut Names, _enclosing_namespace: &Namespace) -> Schema {
+        Schema::Bytes
+    }
 
     pub fn serialize<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -252,11 +338,12 @@ pub mod serde_avro_slice {
 ///
 /// See usage with below example:
 /// ```rust
-/// use apache_avro::serde_avro_slice_opt;
+/// use apache_avro::{AvroSchema, serde_avro_slice_opt};
 /// use serde::{Deserialize, Serialize};
 ///
-/// #[derive(Serialize, Deserialize)]
+/// #[derive(AvroSchema, Serialize, Deserialize)]
 /// struct StructWithBytes<'a> {
+///     #[avro(with)]
 ///     #[serde(with = "serde_avro_slice_opt")]
 ///     slice_field: Option<&'a [u8]>,
 /// }
@@ -265,6 +352,18 @@ pub mod serde_avro_slice_opt {
     use super::DE_BYTES_BORROWED;
     use serde::{Deserializer, Serializer};
     use std::borrow::Borrow;
+
+    use crate::{
+        Schema,
+        schema::{Names, Namespace, UnionSchema},
+    };
+
+    /// Returns `Schema::Union(Schema::Null, Schema::Bytes)`
+    pub fn get_schema_in_ctxt(_names: &mut Names, _enclosing_namespace: &Namespace) -> Schema {
+        Schema::Union(
+            UnionSchema::new(vec![Schema::Null, Schema::Bytes]).expect("This is a valid union"),
+        )
+    }
 
     pub fn serialize<S, B>(bytes: &Option<B>, serializer: S) -> Result<S::Ok, S::Error>
     where
