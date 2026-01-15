@@ -171,7 +171,7 @@ impl With {
                     let path = Path::from_string(serde).map_err(|err| {
                         syn::Error::new(
                             span,
-                            format!("Expected a path for `#[serde(with = \"..\")]: {err:?}"),
+                            format!("Expected a path for `#[serde(with = \"..\")]`: {err:?}"),
                         )
                     })?;
                     Ok(Self::Serde(path))

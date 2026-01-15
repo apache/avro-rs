@@ -41,10 +41,11 @@ documentation = "https://docs.rs/apache-avro"
 # dependencies used by more than one members
 [workspace.dependencies]
 log = { default-features = false, version = "0.4.29" }
+pretty_assertions = { default-features = false, version = "1.4.1", features = ["std"] }
 serde = { default-features = false, version = "1.0.228", features = ["std", "derive"] }
 serde_bytes = { default-features = false, version = "0.11.19", features = ["std"] }
 serde_json = { default-features = false, version = "1.0.149", features = ["std"] }
-pretty_assertions = { default-features = false, version = "1.4.1", features = ["std"] }
+uuid = { default-features = false, version = "1.19.0", features = ["serde", "std"] }
 
 [profile.release.package.hello-wasm]
 # Tell `rustc` to optimize for small code size.

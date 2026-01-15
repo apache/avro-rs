@@ -1829,7 +1829,7 @@ fn avro_rs_247_serde_flatten_support_with_skip() {
 }
 
 #[test]
-fn avro_rs_396_with() {
+fn avro_rs_397_with() {
     let schema = Schema::parse_str(
         r#"
     {
@@ -1878,7 +1878,7 @@ fn avro_rs_396_with() {
 }
 
 #[test]
-fn avro_rs_396_with_generic() {
+fn avro_rs_397_with_generic() {
     let schema = Schema::parse_str(
         r#"
     {
@@ -1921,6 +1921,41 @@ fn avro_rs_396_with_generic() {
     }
 
     assert_eq!(schema, Foo::get_schema());
+}
+
+#[test]
+fn avro_rs_397_uuid() {
+    let schema = Schema::parse_str(
+        r#"
+    {
+        "type":"record",
+        "name":"Foo",
+        "fields": [
+            {
+                "name":"baz",
+                "type":{
+                    "type":"fixed",
+                    "logicalType":"uuid",
+                    "name":"uuid",
+                    "size":16
+                }
+            }
+        ]
+    }
+    "#,
+    )
+    .unwrap();
+
+    #[derive(AvroSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
+    struct Foo {
+        #[serde(rename = "baz")]
+        bar: uuid::Uuid,
+    }
+
+    assert_eq!(schema, Foo::get_schema());
+    serde_assert(Foo {
+        bar: uuid::Uuid::nil(),
+    });
 }
 
 #[test]

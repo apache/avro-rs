@@ -1,5 +1,5 @@
 error: `#[avro(with)]` requires `#[serde(with = "some_module")]` or provide a function to call `#[avro(with = some_fn)]`
-  --> tests/ui/avro_rs_396_with_word_without_serde.rs:22:5
+  --> tests/ui/avro_rs_397_with_word_without_serde.rs:22:5
    |
 22 | /     #[avro(with)]
 23 | |     a: String,

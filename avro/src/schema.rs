@@ -2001,13 +2001,13 @@ impl Parser {
 
         let symbols: Vec<String> = symbols_opt
             .and_then(|v| v.as_array())
-            .ok_or(Details::GetEnumSymbolsField)
+            .ok_or_else(|| Error::from(Details::GetEnumSymbolsField))
             .and_then(|symbols| {
                 symbols
                     .iter()
                     .map(|symbol| symbol.as_str().map(|s| s.to_string()))
                     .collect::<Option<_>>()
-                    .ok_or(Details::GetEnumSymbols)
+                    .ok_or_else(|| Error::from(Details::GetEnumSymbols))
             })?;
 
         let mut existing_symbols: HashSet<&String> = HashSet::with_capacity(symbols.len());
@@ -2612,6 +2612,7 @@ pub trait AvroSchema {
 ///    }
 ///}
 /// ```
+///
 /// ### Passthrough implementation
 ///
 /// To construct a schema for a Type that acts as in "inner" type, such as for smart pointers, simply
@@ -2623,7 +2624,9 @@ pub trait AvroSchema {
 ///    }
 ///}
 /// ```
-///### Complex implementation
+///
+/// ### Complex implementation
+///
 /// To implement this for Named schema there is a general form needed to avoid creating invalid
 /// schemas or infinite loops.
 /// ```ignore
@@ -2791,11 +2794,11 @@ impl AvroSchemaComponent for core::time::Duration {
     /// The schema is [`Schema::Duration`] with the name `duration`.
     ///
     /// This is a lossy conversion as this Avro type does not store the amount of nanoseconds.
+    #[expect(clippy::map_entry, reason = "We don't use the value from the map")]
     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
-        let name = Name {
-            name: "duration".to_string(),
-            namespace: enclosing_namespace.clone(),
-        };
+        let name = Name::new("duration")
+            .expect("Name is valid")
+            .fully_qualified_name(enclosing_namespace);
         if named_schemas.contains_key(&name) {
             Schema::Ref { name }
         } else {
@@ -2807,7 +2810,7 @@ impl AvroSchemaComponent for core::time::Duration {
                 default: None,
                 attributes: Default::default(),
             });
-            named_schemas.insert(name.clone(), schema.clone());
+            named_schemas.insert(name, schema.clone());
             schema
         }
     }
@@ -2817,11 +2820,11 @@ impl AvroSchemaComponent for uuid::Uuid {
     /// The schema is [`Schema::Uuid`] with the name `uuid`.
     ///
     /// The underlying schema is [`Schema::Fixed`] with a size of 16.
+    #[expect(clippy::map_entry, reason = "We don't use the value from the map")]
     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
-        let name = Name {
-            name: "uuid".to_string(),
-            namespace: enclosing_namespace.clone(),
-        };
+        let name = Name::new("uuid")
+            .expect("Name is valid")
+            .fully_qualified_name(enclosing_namespace);
         if named_schemas.contains_key(&name) {
             Schema::Ref { name }
         } else {
@@ -2833,7 +2836,7 @@ impl AvroSchemaComponent for uuid::Uuid {
                 default: None,
                 attributes: Default::default(),
             }));
-            named_schemas.insert(name.clone(), schema.clone());
+            named_schemas.insert(name, schema.clone());
             schema
         }
     }

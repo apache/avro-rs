@@ -170,6 +170,7 @@ pub mod serde_avro_fixed {
     };
 
     /// Returns `Schema::Fixed(N)` named `serde_avro_fixed_{N}`
+    #[expect(clippy::map_entry, reason = "We don't use the value from the map")]
     pub fn get_schema_in_ctxt<const N: usize>(
         named_schemas: &mut Names,
         enclosing_namespace: &Namespace,
@@ -180,9 +181,8 @@ pub mod serde_avro_fixed {
         if named_schemas.contains_key(&name) {
             Schema::Ref { name }
         } else {
-            let name_for_names = name.clone();
-            let schema = Schema::Fixed(FixedSchema::builder().name(name).size(N).build());
-            named_schemas.insert(name_for_names, schema.clone());
+            let schema = Schema::Fixed(FixedSchema::builder().name(name.clone()).size(N).build());
+            named_schemas.insert(name, schema.clone());
             schema
         }
     }

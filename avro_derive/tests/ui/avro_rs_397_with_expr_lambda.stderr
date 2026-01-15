@@ -1,5 +1,5 @@
 error[E0618]: expected function, found `Schema`
-  --> tests/ui/avro_rs_396_with_expr_lambda.rs:22:22
+  --> tests/ui/avro_rs_397_with_expr_lambda.rs:22:22
    |
 20 | #[derive(AvroSchema)]
    |          ---------- call expression requires function

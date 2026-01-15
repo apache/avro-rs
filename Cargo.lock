@@ -105,6 +105,7 @@ dependencies = [
  "serde_json",
  "syn",
  "trybuild",
+ "uuid",
 ]
 
 [[package]]
