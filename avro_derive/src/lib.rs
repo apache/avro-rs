@@ -280,7 +280,7 @@ fn type_to_schema_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>> {
         _ => Err(vec![syn::Error::new_spanned(
             ty,
             format!(
-                "AvroSchema: Unexpected type encountered, please open an issue if this kind of type should be supported: {ty:?}"
+                "AvroSchema: Unexpected type encountered! Please open an issue if this kind of type should be supported: {ty:?}"
             ),
         )]),
     }
