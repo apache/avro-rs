@@ -981,7 +981,7 @@ impl UnionSchema {
     /// Creates a new UnionSchema from a vector of schemas.
     ///
     /// # Errors
-    /// Will return an error if `variants` has duplicate unnamed schemas or if `variants`
+    /// Will return an error if `schemas` has duplicate unnamed schemas or if `schemas`
     /// contains a union.
     pub fn new(schemas: Vec<Schema>) -> AvroResult<Self> {
         let mut vindex = BTreeMap::new();
@@ -1384,13 +1384,13 @@ impl Schema {
         })
     }
 
-    /// Returns a `Schema::Union` with the given variants.
+    /// Returns a [`Schema::Union`] with the given variants.
     ///
     /// # Errors
-    /// Will return an error if `variants` has duplicate unnamed schemas or if `variants`
+    /// Will return an error if `schemas` has duplicate unnamed schemas or if `schemas`
     /// contains a union.
-    pub fn union(variants: Vec<Schema>) -> AvroResult<Schema> {
-        UnionSchema::new(variants).map(Schema::Union)
+    pub fn union(schemas: Vec<Schema>) -> AvroResult<Schema> {
+        UnionSchema::new(schemas).map(Schema::Union)
     }
 
     fn denormalize(&mut self, schemata: &[Schema]) -> AvroResult<()> {
