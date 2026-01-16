@@ -173,16 +173,27 @@ fn get_data_struct_schema_def(
                 let schema_expr = match field_attrs.with {
                     With::Trait => type_to_schema_expr(&field.ty)?,
                     With::Serde(path) => {
-                        quote! {#path::get_schema_in_ctxt(named_schemas, enclosing_namespace)}
+                        quote! { #path::get_schema_in_ctxt(named_schemas, enclosing_namespace) }
                     }
-                    With::Expr(expr) => match expr {
-                        Expr::Closure(closure) => {
-                            let _inputs = &closure.inputs;
-                            let body = &closure.body;
-                            quote! {#body}
+                    With::Expr(Expr::Closure(closure)) => {
+                        if closure.inputs.is_empty() {
+                            quote! { (#closure)() }
+                        } else {
+                            return Err(vec![syn::Error::new(
+                                field.span(),
+                                "Expected closure with 0 parameters",
+                            )]);
                         }
-                        _ => quote! {#expr(named_schemas, enclosing_namespace)},
-                    },
+                    }
+                    With::Expr(Expr::Path(path)) => {
+                        quote! { #path(named_schemas, enclosing_namespace) }
+                    }
+                    With::Expr(_expr) => {
+                        return Err(vec![syn::Error::new(
+                            field.span(),
+                            "Invalid expression, expected function or closure",
+                        )]);
+                    }
                 };
                 record_field_exprs.push(quote! {
                     schema_fields.push(::apache_avro::schema::RecordField {
