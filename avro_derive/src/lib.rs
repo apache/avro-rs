@@ -23,7 +23,7 @@ mod case;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{
-    AttrStyle, Attribute, DeriveInput, Ident, Meta, Type, parse_macro_input, spanned::Spanned,
+    AttrStyle, Attribute, DeriveInput, Expr, Ident, Meta, Type, parse_macro_input, spanned::Spanned,
 };
 
 use crate::{
@@ -175,7 +175,14 @@ fn get_data_struct_schema_def(
                     With::Serde(path) => {
                         quote! {#path::get_schema_in_ctxt(named_schemas, enclosing_namespace)}
                     }
-                    With::Expr(expr) => quote! {#expr(named_schemas, enclosing_namespace)},
+                    With::Expr(expr) => match expr {
+                        Expr::Closure(closure) => {
+                            let _inputs = &closure.inputs;
+                            let body = &closure.body;
+                            quote! {#body}
+                        }
+                        _ => quote! {#expr(named_schemas, enclosing_namespace)},
+                    },
                 };
                 record_field_exprs.push(quote! {
                     schema_fields.push(::apache_avro::schema::RecordField {

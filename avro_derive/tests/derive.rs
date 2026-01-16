@@ -2042,3 +2042,35 @@ fn avro_rs_401_supported_type_variants() {
     let schema = Schema::parse_str(schema).unwrap();
     assert_eq!(schema, Foo::get_schema());
 }
+
+#[test]
+fn avro_rs_397_derive_with_expr_lambda() {
+    let schema = r#"
+  {
+    "type":"record",
+    "name":"Foo",
+    "fields": [
+      {
+        "name": "_a",
+        "type": "bytes"
+      },
+      {
+        "name": "_b",
+        "type": "int"
+      }
+    ]
+  }"#;
+
+    let expected_schema = Schema::parse_str(schema).unwrap();
+
+    #[derive(AvroSchema)]
+    struct Foo {
+        #[avro(with = || Schema::Bytes)]
+        _a: String,
+        _b: i32,
+    }
+
+    let derived_schema = Foo::get_schema();
+
+    assert_eq!(expected_schema, derived_schema);
+}

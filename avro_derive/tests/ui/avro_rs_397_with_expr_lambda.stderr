@@ -1,8 +1,0 @@
-error[E0618]: expected function, found `Schema`
-  --> tests/ui/avro_rs_397_with_expr_lambda.rs:22:22
-   |
-20 | #[derive(AvroSchema)]
-   |          ---------- call expression requires function
-21 | struct Foo {
-22 |     #[avro(with = || Schema::Bytes)]
-   |                      ^^^^^^^^^^^^^
