@@ -17,15 +17,15 @@
 
 use apache_avro::{
     Reader, Schema, Writer, from_value,
-    schema::{AvroSchema, AvroSchemaComponent},
+    schema::{
+        Alias, AvroSchema, AvroSchemaComponent, EnumSchema, FixedSchema, Name, Names, Namespace,
+        RecordSchema,
+    },
 };
 use apache_avro_derive::*;
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use std::collections::HashMap;
-
-use apache_avro::schema::{Alias, EnumSchema, RecordSchema};
-use std::{borrow::Cow, sync::Mutex};
+use std::{borrow::Cow, collections::HashMap, sync::Mutex};
 
 use pretty_assertions::assert_eq;
 
@@ -1826,6 +1826,174 @@ fn avro_rs_247_serde_flatten_support_with_skip() {
         nested: Nested { a: true, c: 0.0 },
         b: 321,
     });
+}
+
+#[test]
+fn avro_rs_397_with() {
+    let schema = Schema::parse_str(
+        r#"
+    {
+        "type":"record",
+        "name":"Foo",
+        "fields": [
+            {
+                "name":"a",
+                "type":"bytes"
+            },
+            {
+                "name":"b",
+                "type":"long"
+            },
+            {
+                "name":"c",
+                "type":"bytes"
+            }
+        ]
+    }
+    "#,
+    )
+    .unwrap();
+
+    fn long_schema(_named_schemas: &mut Names, _enclosing_namespace: &Namespace) -> Schema {
+        Schema::Long
+    }
+
+    mod module {
+        use super::*;
+        pub fn get_schema_in_ctxt(
+            _named_schemas: &mut Names,
+            _enclosing_namespace: &Namespace,
+        ) -> Schema {
+            Schema::Bytes
+        }
+    }
+
+    #[allow(dead_code)]
+    #[derive(AvroSchema)]
+    struct Foo {
+        #[avro(with)]
+        #[serde(with = "module")]
+        a: String,
+        #[avro(with = long_schema)]
+        b: i32,
+        #[avro(with = module::get_schema_in_ctxt)]
+        c: String,
+    }
+
+    assert_eq!(schema, Foo::get_schema());
+}
+
+#[test]
+fn avro_rs_397_with_generic() {
+    let schema = Schema::parse_str(
+        r#"
+    {
+        "type":"record",
+        "name":"Foo",
+        "fields": [
+            {
+                "name":"a",
+                "type": {
+                    "type": "fixed",
+                    "size": 15,
+                    "name": "fixed_15"
+                }
+            }
+        ]
+    }
+    "#,
+    )
+    .unwrap();
+
+    fn generic<const N: usize>(
+        _named_schemas: &mut Names,
+        _enclosing_namespace: &Namespace,
+    ) -> Schema {
+        Schema::Fixed(FixedSchema {
+            name: Name::new(&format!("fixed_{N}")).unwrap(),
+            aliases: None,
+            doc: None,
+            size: N,
+            default: None,
+            attributes: Default::default(),
+        })
+    }
+
+    #[allow(dead_code)]
+    #[derive(AvroSchema)]
+    struct Foo {
+        #[avro(with = generic::<15>)]
+        a: [u8; 15],
+    }
+
+    assert_eq!(schema, Foo::get_schema());
+}
+
+#[test]
+fn avro_rs_397_uuid() {
+    let schema = Schema::parse_str(
+        r#"
+    {
+        "type":"record",
+        "name":"Foo",
+        "fields": [
+            {
+                "name":"baz",
+                "type":{
+                    "type":"fixed",
+                    "logicalType":"uuid",
+                    "name":"uuid",
+                    "size":16
+                }
+            }
+        ]
+    }
+    "#,
+    )
+    .unwrap();
+
+    #[derive(AvroSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
+    struct Foo {
+        #[serde(rename = "baz")]
+        bar: uuid::Uuid,
+    }
+
+    assert_eq!(schema, Foo::get_schema());
+    serde_assert(Foo {
+        bar: uuid::Uuid::nil(),
+    });
+}
+
+#[test]
+fn avro_rs_397_derive_with_expr_lambda() {
+    let schema = r#"
+  {
+    "type":"record",
+    "name":"Foo",
+    "fields": [
+      {
+        "name": "_a",
+        "type": "bytes"
+      },
+      {
+        "name": "_b",
+        "type": "int"
+      }
+    ]
+  }"#;
+
+    let expected_schema = Schema::parse_str(schema).unwrap();
+
+    #[derive(AvroSchema)]
+    struct Foo {
+        #[avro(with = || Schema::Bytes)]
+        _a: String,
+        _b: i32,
+    }
+
+    let derived_schema = Foo::get_schema();
+
+    assert_eq!(expected_schema, derived_schema);
 }
 
 #[test]

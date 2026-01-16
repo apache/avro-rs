@@ -70,7 +70,7 @@ snap = { default-features = false, version = "1.1.0", optional = true }
 strum = { default-features = false, version = "0.27.2" }
 strum_macros = { default-features = false, version = "0.27.2" }
 thiserror = { default-features = false, version = "2.0.17" }
-uuid = { default-features = false, version = "1.19.0", features = ["serde", "std"] }
+uuid = { workspace = true }
 liblzma = { default-features = false, version = "0.4.5", optional = true }
 zstd = { default-features = false, version = "0.13.3", optional = true }
 

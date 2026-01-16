@@ -1,0 +1,6 @@
+error: Invalid expression, expected function or closure
+  --> tests/ui/avro_rs_397_with_expr_string.rs:22:5
+   |
+22 | /     #[avro(with = "Schema::Bytes")]
+23 | |     a: String,
+   | |_____________^

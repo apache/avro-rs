@@ -1,0 +1,14 @@
+error: Expected closure with 0 parameters
+  --> tests/ui/avro_rs_397_with_closure_parameters.rs:22:5
+   |
+22 | /     #[avro(with = |_named_schemas, _enclosing_namespace| Schema::Bytes)]
+23 | |     a: String,
+   | |_____________^
+
+warning: unused import: `Schema`
+  --> tests/ui/avro_rs_397_with_closure_parameters.rs:18:31
+   |
+18 | use apache_avro::{AvroSchema, Schema};
+   |                               ^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
