@@ -314,6 +314,69 @@ mod container_attributes {
             "Invalid field name c",
         );
     }
+
+    #[test]
+    fn avro_rs_398_transparent() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[serde(transparent)]
+        struct Foo {
+            a: String,
+        }
+
+        let schema = r#"
+        {
+            "type":"string"
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo {
+            a: "spam".to_string(),
+        });
+    }
+
+    #[test]
+    fn avro_rs_398_transparent_ref() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[serde(transparent)]
+        struct Foo<'a> {
+            a: &'a str,
+        }
+
+        let schema = r#"
+        {
+            "type":"string"
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+    }
+
+    #[test]
+    fn avro_rs_398_transparent_array() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[serde(transparent)]
+        struct Foo {
+            a: Vec<String>,
+        }
+
+        let schema = r#"
+        {
+            "type":"array",
+            "items":"string"
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo {
+            a: vec!["spam".to_string()],
+        });
+    }
 }
 
 mod variant_attributes {

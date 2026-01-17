@@ -18,22 +18,26 @@
 use crate::case::RenameRule;
 use darling::{FromAttributes, FromMeta};
 use proc_macro2::Span;
-use syn::{Attribute, Expr, Path, spanned::Spanned};
+use syn::{AttrStyle, Attribute, Expr, Ident, Path, spanned::Spanned};
 
 mod avro;
 mod serde;
 
 #[derive(Default)]
 pub struct NamedTypeOptions {
-    pub name: Option<String>,
-    pub namespace: Option<String>,
+    pub name: String,
     pub doc: Option<String>,
-    pub alias: Vec<String>,
+    pub aliases: Vec<String>,
     pub rename_all: RenameRule,
+    pub transparent: bool,
 }
 
 impl NamedTypeOptions {
-    pub fn new(attributes: &[Attribute], span: Span) -> Result<Self, Vec<syn::Error>> {
+    pub fn new(
+        ident: &Ident,
+        attributes: &[Attribute],
+        span: Span,
+    ) -> Result<Self, Vec<syn::Error>> {
         let avro =
             avro::ContainerAttributes::from_attributes(attributes).map_err(darling_to_syn)?;
         let serde =
@@ -63,12 +67,6 @@ impl NamedTypeOptions {
                 "AvroSchema derive does not support the Serde `remote` attribute",
             ));
         }
-        if serde.transparent {
-            errors.push(syn::Error::new(
-                span,
-                "AvroSchema derive does not support Serde `transparent` attribute",
-            ));
-        }
         if serde.rename_all.deserialize != serde.rename_all.serialize {
             errors.push(syn::Error::new(
                 span,
@@ -89,17 +87,41 @@ impl NamedTypeOptions {
                 "#[avro(rename_all = \"..\")] must match #[serde(rename_all = \"..\")], it's also deprecated. Please use only `#[serde(rename_all = \"..\")]`",
             ));
         }
+        if serde.transparent
+            && (serde.rename.is_some()
+                || avro.name.is_some()
+                || avro.namespace.is_some()
+                || avro.doc.is_some()
+                || !avro.alias.is_empty()
+                || avro.rename_all != RenameRule::None
+                || serde.rename_all.serialize != RenameRule::None
+                || serde.rename_all.deserialize != RenameRule::None)
+        {
+            errors.push(syn::Error::new(
+                span,
+                "#[serde(transparent)] is incompatible with all other attributes",
+            ));
+        }
 
         if !errors.is_empty() {
             return Err(errors);
         }
 
+        let name = serde.rename.unwrap_or(ident.to_string());
+        let full_schema_name = vec![avro.namespace, Some(name)]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<String>>()
+            .join(".");
+
+        let doc = avro.doc.or_else(|| extract_rustdoc(attributes));
+
         Ok(Self {
-            name: serde.rename,
-            namespace: avro.namespace,
-            doc: avro.doc,
-            alias: avro.alias,
+            name: full_schema_name,
+            doc,
+            aliases: avro.alias,
             rename_all: serde.rename_all.serialize,
+            transparent: serde.transparent,
         })
     }
 }
@@ -269,8 +291,10 @@ impl FieldOptions {
             return Err(errors);
         }
 
+        let doc = avro.doc.or_else(|| extract_rustdoc(attributes));
+
         Ok(Self {
-            doc: avro.doc,
+            doc,
             default: avro.default,
             alias: serde.alias,
             rename: serde.rename,
@@ -279,6 +303,28 @@ impl FieldOptions {
             with,
         })
     }
+}
+
+fn extract_rustdoc(attributes: &[Attribute]) -> Option<String> {
+    let doc = attributes
+        .iter()
+        .filter(|attr| attr.style == AttrStyle::Outer && attr.path().is_ident("doc"))
+        .filter_map(|attr| {
+            let name_value = attr.meta.require_name_value();
+            match name_value {
+                Ok(name_value) => match &name_value.value {
+                    syn::Expr::Lit(expr_lit) => match expr_lit.lit {
+                        syn::Lit::Str(ref lit_str) => Some(lit_str.value().trim().to_string()),
+                        _ => None,
+                    },
+                    _ => None,
+                },
+                Err(_) => None,
+            }
+        })
+        .collect::<Vec<String>>()
+        .join("\n");
+    if doc.is_empty() { None } else { Some(doc) }
 }
 
 fn darling_to_syn(e: darling::Error) -> Vec<syn::Error> {
