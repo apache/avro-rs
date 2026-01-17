@@ -1997,6 +1997,42 @@ fn avro_rs_397_derive_with_expr_lambda() {
 }
 
 #[test]
+fn avro_rs_398_transparent_with_skip() {
+    let schema = Schema::parse_str(
+        r#"
+    {
+        "type":"record",
+        "name":"Foo",
+        "fields": [
+            {
+                "name":"b",
+                "type":"long"
+            }
+        ]
+    }
+    "#,
+    )
+    .unwrap();
+
+    fn long_schema(_named_schemas: &mut Names, _enclosing_namespace: &Namespace) -> Schema {
+        Schema::Long
+    }
+
+    #[allow(dead_code)]
+    #[derive(AvroSchema)]
+    struct Foo {
+        #[serde(skip)]
+        a: String,
+        #[avro(with = long_schema)]
+        b: i32,
+        #[serde(skip)]
+        c: String,
+    }
+
+    assert_eq!(schema, Foo::get_schema());
+}
+
+#[test]
 fn avro_rs_401_do_not_match_typename() {
     #[expect(nonstandard_style, reason = "It needs to be exactly this")]
     type f32 = f64;

@@ -1,0 +1,11 @@
+error: AvroSchema: #[serde(transparent)] is only allowed on structs with one unskipped field
+  --> tests/ui/avro_rs_398_transparent_skips.rs:21:1
+   |
+21 | / #[serde(transparent)]
+22 | | struct Foo {
+23 | |     #[serde(skip)]
+24 | |     a: String,
+...  |
+28 | |     c: Vec<u8>
+29 | | }
+   | |_^

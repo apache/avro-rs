@@ -99,7 +99,7 @@ impl NamedTypeOptions {
         {
             errors.push(syn::Error::new(
                 span,
-                "#[serde(transparent)] is incompatible with all other attributes",
+                "AvroSchema: #[serde(transparent)] is incompatible with all other attributes",
             ));
         }
 
@@ -193,7 +193,9 @@ impl With {
                     let path = Path::from_string(serde).map_err(|err| {
                         syn::Error::new(
                             span,
-                            format!("Expected a path for `#[serde(with = \"..\")]`: {err:?}"),
+                            format!(
+                                "AvroSchema: Expected a path for `#[serde(with = \"..\")]`: {err:?}"
+                            ),
                         )
                     })?;
                     Ok(Self::Serde(path))
@@ -209,6 +211,7 @@ impl With {
     }
 }
 
+#[derive(Default)]
 pub struct FieldOptions {
     pub doc: Option<String>,
     pub default: Option<String>,

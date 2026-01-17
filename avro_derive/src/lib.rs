@@ -23,7 +23,7 @@ mod case;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{
-    Attribute, DataEnum, DataStruct, DeriveInput, Expr, Fields, Generics, Ident, Meta, Type,
+    Attribute, DataEnum, DataStruct, DeriveInput, Expr, Field, Fields, Generics, Ident, Meta, Type,
     parse_macro_input, spanned::Spanned,
 };
 
@@ -120,8 +120,8 @@ fn get_struct_schema_def(
 ) -> Result<TokenStream, Vec<syn::Error>> {
     let mut record_field_exprs = vec![];
     match data_struct.fields {
-        Fields::Named(ref a) => {
-            for field in a.named.iter() {
+        Fields::Named(a) => {
+            for field in a.named {
                 let mut name = field
                     .ident
                     .as_ref()
@@ -177,31 +177,7 @@ fn get_struct_schema_def(
                     None => quote! { None },
                 };
                 let aliases = preserve_vec(&field_attrs.alias);
-                let schema_expr = match field_attrs.with {
-                    With::Trait => type_to_schema_expr(&field.ty)?,
-                    With::Serde(path) => {
-                        quote! { #path::get_schema_in_ctxt(named_schemas, enclosing_namespace) }
-                    }
-                    With::Expr(Expr::Closure(closure)) => {
-                        if closure.inputs.is_empty() {
-                            quote! { (#closure)() }
-                        } else {
-                            return Err(vec![syn::Error::new(
-                                field.span(),
-                                "Expected closure with 0 parameters",
-                            )]);
-                        }
-                    }
-                    With::Expr(Expr::Path(path)) => {
-                        quote! { #path(named_schemas, enclosing_namespace) }
-                    }
-                    With::Expr(_expr) => {
-                        return Err(vec![syn::Error::new(
-                            field.span(),
-                            "Invalid expression, expected function or closure",
-                        )]);
-                    }
-                };
+                let schema_expr = get_field_schema_expr(&field, field_attrs.with)?;
                 record_field_exprs.push(quote! {
                     schema_fields.push(::apache_avro::schema::RecordField {
                         name: #name.to_string(),
@@ -268,19 +244,27 @@ fn get_transparent_struct_schema_def(
 ) -> Result<TokenStream, Vec<syn::Error>> {
     match fields {
         Fields::Named(fields_named) => {
-            // TODO: Allow more than one field if all but one are skipped
-            if fields_named.named.len() != 1 {
-                return Err(vec![syn::Error::new(
-                    input_span,
-                    "#[serde(transparent)] is only allowed on structs with one field",
-                )]);
+            let mut found = None;
+            for field in fields_named.named {
+                let attrs = FieldOptions::new(&field.attrs, field.span())?;
+                if attrs.skip {
+                    continue;
+                }
+                if found.replace((field, attrs)).is_some() {
+                    return Err(vec![syn::Error::new(
+                        input_span,
+                        "AvroSchema: #[serde(transparent)] is only allowed on structs with one unskipped field",
+                    )]);
+                }
             }
-            let field = fields_named
-                .named
-                .first()
-                .expect("There is exactly one field");
-            // let field_attrs = FieldOptions::new(&field.attrs, field.span())?;
-            type_to_schema_expr(&field.ty)
+            if let Some((field, attrs)) = found {
+                get_field_schema_expr(&field, attrs.with)
+            } else {
+                Err(vec![syn::Error::new(
+                    input_span,
+                    "AvroSchema: #[serde(transparent)] is only allowed on structs with one unskipped field",
+                )])
+            }
         }
         Fields::Unnamed(_) => Err(vec![syn::Error::new(
             input_span,
@@ -289,6 +273,30 @@ fn get_transparent_struct_schema_def(
         Fields::Unit => Err(vec![syn::Error::new(
             input_span,
             "AvroSchema: derive does not work for unit structs",
+        )]),
+    }
+}
+
+fn get_field_schema_expr(field: &Field, with: With) -> Result<TokenStream, Vec<syn::Error>> {
+    match with {
+        With::Trait => Ok(type_to_schema_expr(&field.ty)?),
+        With::Serde(path) => {
+            Ok(quote! { #path::get_schema_in_ctxt(named_schemas, enclosing_namespace) })
+        }
+        With::Expr(Expr::Closure(closure)) => {
+            if closure.inputs.is_empty() {
+                Ok(quote! { (#closure)() })
+            } else {
+                Err(vec![syn::Error::new(
+                    field.span(),
+                    "Expected closure with 0 parameters",
+                )])
+            }
+        }
+        With::Expr(Expr::Path(path)) => Ok(quote! { #path(named_schemas, enclosing_namespace) }),
+        With::Expr(_expr) => Err(vec![syn::Error::new(
+            field.span(),
+            "Invalid expression, expected function or closure",
         )]),
     }
 }
