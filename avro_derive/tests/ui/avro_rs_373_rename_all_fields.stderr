@@ -1,4 +1,4 @@
-error: AvroSchema derive does not work for enums with non unit structs
+error: AvroSchema: derive does not work for enums with non unit structs
   --> tests/ui/avro_rs_373_rename_all_fields.rs:22:6
    |
 22 | enum Foo {
