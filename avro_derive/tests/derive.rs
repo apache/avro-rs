@@ -17,10 +17,7 @@
 
 use apache_avro::{
     AvroSchema, AvroSchemaComponent, Reader, Schema, Writer, from_value,
-    schema::{
-        Alias, EnumSchema, FixedSchema, Name, Names, Namespace,
-        RecordSchema,
-    },
+    schema::{Alias, EnumSchema, FixedSchema, Name, Names, Namespace, RecordSchema},
 };
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};

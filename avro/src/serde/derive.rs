@@ -1,17 +1,171 @@
-use std::borrow::Cow;
-use std::collections::HashMap;
-use serde_json::Map;
 use crate::Schema;
 use crate::schema::{FixedSchema, Name, Names, Namespace, UnionSchema, UuidSchema};
+use serde_json::Map;
+use std::borrow::Cow;
+use std::collections::HashMap;
 
-/// Trait for types that serve as an Avro data model. Derive implementation available
-/// through `derive` feature. Do not implement directly!
-/// Implement [`AvroSchemaComponent`] to get this trait
+/// Trait for types that serve as an Avro data model.
+///
+/// Do not implement directly! Either derive it or implement [`AvroSchemaComponent`] to get this trait
 /// through a blanket implementation.
 ///
-/// Note: This trait is **not** implemented for `char` and `u64`. `char` is a 32-bit value
-/// that does not have a logical mapping to an Avro schema. `u64` is too large to fit in a
-/// Avro `long`.
+/// ## Deriving `AvroSchema`
+///
+/// Using the custom derive requires that you enable the `"derive"` cargo
+/// feature in your `Cargo.toml`:
+///
+/// ```toml
+/// [dependencies]
+/// apache-avro = { version = "..", features = ["derive"] }
+/// ```
+///
+/// Then, you add the `#[derive(AvroSchema)]` annotation to your `struct` and
+/// `enum` type definition:
+///
+/// ```
+/// # use serde::{Serialize, Deserialize};
+/// # use apache_avro::AvroSchema;
+/// #[derive(AvroSchema, Serialize, Deserialize)]
+/// pub struct Foo {
+///     bar: Vec<Bar>,
+/// }
+///
+/// #[derive(AvroSchema, Serialize, Deserialize)]
+/// pub enum Bar {
+///     Spam,
+///     Maps
+/// }
+/// ```
+///
+/// This will implement [`AvroSchemaComponent`] for the type, and `AvroSchema`
+/// through the blanket implementation for `T: AvroSchemaComponent`.
+///
+/// Every member of the `struct` and `enum` must also implement `AvroSchemaComponent`.
+///
+/// ## Changing the generated schema
+///
+/// The derive macro will read both the `avro` and `serde` attributes to modify the generated schema.
+/// It will also check for compatibility between the various attributes.
+///
+/// ### Container attributes
+///
+///  - `#[serde(rename = "name")]`
+///
+// TODO: Should we check if `name` contains any dots? As that would imply a namespace
+///    Set the `name` of the schema to the given string. Defaults to the name of the type.
+///
+///  - `#[avro(namespace = "some.name.space")]`
+///
+///    Set the `namespace` of the schema. This will be the relative namespace if the schema is included
+///    in another schema.
+///
+///  - `#[avro(doc = "Some documentation")]`
+///
+///    Set the `doc` attribute of the schema. Defaults to the documentation of the type.
+///
+///  - `#[avro(alias = "name")]`
+///
+///    Set the `alias` attribute of the schema. Can be specified multiple times.
+///
+///  - `#[serde(rename_all = "camelCase")]`
+///
+///    Rename all the fields or variants in the schema to follow the given case convention. The possible values
+///    are `"lowercase"`, `"UPPERCASE"`, `"PascalCase"`, `"camelCase"`, `"snake_case"`, `"kebab-case"`,
+///    `"SCREAMING_SNAKE_CASE"`, `"SCREAMING-KEBAB-CASE"`.
+///
+///  - `#[serde(transparent)]`
+///
+///    Use the schema of the inner field directly. Is only allowed on structs with only unskipped field.
+///
+///
+/// ### Variant attributes
+///
+///  - `#[serde(rename = "name")]`
+///
+///    Rename the variant to the given name.
+///
+///
+/// ### Field attributes
+///
+///  - `#[serde(rename = "name")]`
+///
+///    Rename the field name to the given name.
+///
+///  - `#[avro(doc = "Some documentation")]`
+///
+///    Set the `doc` attribute of the field. Defaults to the documentation of the field.
+///
+///  - `#[avro(default = "null")]`
+///
+///    Set the `default` attribute of the field.
+///
+///    _Note:_ This is a JSON value not a Rust value, as this is put in the schema itself.
+///
+///  - `#[serde(alias = "name")]`
+///
+///    Set the `alias` attribute of the field. Can be specified multiple times.
+///
+///  - `#[serde(flatten)]`
+///
+///    Flatten the content of this field into the container it is defined in.
+///
+///  - `#[serde(skip)]`
+///
+///    Do not include this field in the schema.
+///
+///  - `#[serde(skip_serializing)]`
+///
+///    When combined with `#[serde(skip_deserializing)]`, don't include this field in the schema.
+///    Otherwise, it will be included in the schema and the `#[avro(default)]` attribute **must** be
+///    set. That value will be used for serializing.
+///
+///  - `#[serde(skip_serializing_if)]`
+///
+///    Conditionally use the value of the field or the value provided by `#[avro(default)]`. The
+///    `#[avro(default)]` attribute **must** be set.
+///
+///  - `#[avro(with)]` and `#[serde(with = "module")]`
+///
+///    Override the schema used for this field. See [Working with foreign types](#working-with-foreign-types).
+///
+/// ### Incompatible Serde attributes
+///
+/// The derive macro is compatible with most Serde attributes, but it is incompatible with
+/// the following attributes:
+///
+/// - Container attributes
+///     - `tag`
+///     - `content`
+///     - `untagged`
+///     - `variant_identifier`
+///     - `field_identifier`
+///     - `remote`
+///     - `rename_all(serialize = "..", deserialize = "..")` where `serialize` != `deserialize`
+/// - Variant attributes
+///     - `other`
+///     - `untagged`
+/// - Field attributes
+///     - `getter`
+///
+/// ## Working with foreign types
+///
+/// Most foreign types won't have a [`AvroSchema`] implementation. This crate implements it only
+/// for built-in types, [`serde_json::Map`] and [`uuid::Uuid`]. Notable exceptions are [`char`] and
+/// [`u64`] types, as there is no equivalent for char in Avro and the largest integer type in Avro
+/// is `long` (equal to an [`i64`]).
+///
+/// To still be able to derive schemas for fields of foreign types, the `#[avro(with)`]
+/// attribute can be used to get the schema for those fields. It can be used in two ways:
+///
+/// 1. In combination with `#[serde(with = "path::to::module)]`
+///
+///    To get the schema, it will call the function `fn get_schema_in_ctxt(&mut Names, &Namespace) -> Schema`
+///    in the module provided to the Serde attribute.
+///
+/// 2. By providing a function directly, `#[avro(with = some_fn)]`.
+///
+///    To get the schema, it will call the function provided. It must have the signature
+///    `fn(&mut Names, &Namespace) -> Schema`
 pub trait AvroSchema {
     fn get_schema() -> Schema;
 }
