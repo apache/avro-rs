@@ -21,16 +21,15 @@ use crate::{Error, types::Value};
 use serde::{Serialize, ser};
 use std::{collections::HashMap, iter::once};
 
-#[derive(Clone, Default)]
-pub struct Serializer {}
+pub struct Serializer;
 
 pub struct SeqSerializer {
     items: Vec<Value>,
 }
 
-pub struct SeqVariantSerializer<'a> {
+pub struct SeqVariantSerializer {
     index: u32,
-    variant: &'a str,
+    variant: &'static str,
     items: Vec<Value>,
 }
 
@@ -43,9 +42,9 @@ pub struct StructSerializer {
     fields: Vec<(String, Value)>,
 }
 
-pub struct StructVariantSerializer<'a> {
+pub struct StructVariantSerializer {
     index: u32,
-    variant: &'a str,
+    variant: &'static str,
     fields: Vec<(String, Value)>,
 }
 
@@ -60,8 +59,8 @@ impl SeqSerializer {
     }
 }
 
-impl<'a> SeqVariantSerializer<'a> {
-    pub fn new(index: u32, variant: &'a str, len: Option<usize>) -> SeqVariantSerializer<'a> {
+impl SeqVariantSerializer {
+    pub fn new(index: u32, variant: &'static str, len: Option<usize>) -> SeqVariantSerializer {
         let items = match len {
             Some(len) => Vec::with_capacity(len),
             None => Vec::new(),
@@ -93,8 +92,8 @@ impl StructSerializer {
     }
 }
 
-impl<'a> StructVariantSerializer<'a> {
-    pub fn new(index: u32, variant: &'a str, len: usize) -> StructVariantSerializer<'a> {
+impl StructVariantSerializer {
+    pub fn new(index: u32, variant: &'static str, len: usize) -> StructVariantSerializer {
         StructVariantSerializer {
             index,
             variant,
@@ -103,16 +102,16 @@ impl<'a> StructVariantSerializer<'a> {
     }
 }
 
-impl<'b> ser::Serializer for &'b mut Serializer {
+impl ser::Serializer for Serializer {
     type Ok = Value;
     type Error = Error;
     type SerializeSeq = SeqSerializer;
     type SerializeTuple = SeqSerializer;
     type SerializeTupleStruct = SeqSerializer;
-    type SerializeTupleVariant = SeqVariantSerializer<'b>;
+    type SerializeTupleVariant = SeqVariantSerializer;
     type SerializeMap = MapSerializer;
     type SerializeStruct = StructSerializer;
-    type SerializeStructVariant = StructVariantSerializer<'b>;
+    type SerializeStructVariant = StructVariantSerializer;
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
         Ok(Value::Boolean(v))
@@ -189,7 +188,7 @@ impl<'b> ser::Serializer for &'b mut Serializer {
     where
         T: Serialize + ?Sized,
     {
-        let v = value.serialize(&mut Serializer::default())?;
+        let v = value.serialize(Serializer)?;
         Ok(Value::from(Some(v)))
     }
 
@@ -301,8 +300,7 @@ impl ser::SerializeSeq for SeqSerializer {
     where
         T: Serialize + ?Sized,
     {
-        self.items
-            .push(value.serialize(&mut Serializer::default())?);
+        self.items.push(value.serialize(Serializer)?);
         Ok(())
     }
 
@@ -343,7 +341,7 @@ impl ser::SerializeTupleStruct for SeqSerializer {
     }
 }
 
-impl ser::SerializeSeq for SeqVariantSerializer<'_> {
+impl ser::SerializeSeq for SeqVariantSerializer {
     type Ok = Value;
     type Error = Error;
 
@@ -353,7 +351,7 @@ impl ser::SerializeSeq for SeqVariantSerializer<'_> {
     {
         self.items.push(Value::Union(
             self.index,
-            Box::new(value.serialize(&mut Serializer::default())?),
+            Box::new(value.serialize(Serializer)?),
         ));
         Ok(())
     }
@@ -369,7 +367,7 @@ impl ser::SerializeSeq for SeqVariantSerializer<'_> {
     }
 }
 
-impl ser::SerializeTupleVariant for SeqVariantSerializer<'_> {
+impl ser::SerializeTupleVariant for SeqVariantSerializer {
     type Ok = Value;
     type Error = Error;
 
@@ -393,7 +391,7 @@ impl ser::SerializeMap for MapSerializer {
     where
         T: Serialize + ?Sized,
     {
-        let key = key.serialize(&mut Serializer::default())?;
+        let key = key.serialize(Serializer)?;
 
         if let Value::String(key) = key {
             self.indices.insert(key, self.values.len());
@@ -407,8 +405,7 @@ impl ser::SerializeMap for MapSerializer {
     where
         T: Serialize + ?Sized,
     {
-        self.values
-            .push(value.serialize(&mut Serializer::default())?);
+        self.values.push(value.serialize(Serializer)?);
         Ok(())
     }
 
@@ -432,10 +429,8 @@ impl ser::SerializeStruct for StructSerializer {
     where
         T: Serialize + ?Sized,
     {
-        self.fields.push((
-            name.to_owned(),
-            value.serialize(&mut Serializer::default())?,
-        ));
+        self.fields
+            .push((name.to_owned(), value.serialize(Serializer)?));
         Ok(())
     }
 
@@ -444,7 +439,7 @@ impl ser::SerializeStruct for StructSerializer {
     }
 }
 
-impl ser::SerializeStructVariant for StructVariantSerializer<'_> {
+impl ser::SerializeStructVariant for StructVariantSerializer {
     type Ok = Value;
     type Error = Error;
 
@@ -452,10 +447,8 @@ impl ser::SerializeStructVariant for StructVariantSerializer<'_> {
     where
         T: Serialize + ?Sized,
     {
-        self.fields.push((
-            name.to_owned(),
-            value.serialize(&mut Serializer::default())?,
-        ));
+        self.fields
+            .push((name.to_owned(), value.serialize(Serializer)?));
         Ok(())
     }
 
@@ -483,8 +476,7 @@ impl ser::SerializeStructVariant for StructVariantSerializer<'_> {
 ///
 /// [`Writer::append_ser`]: crate::Writer::append_ser
 pub fn to_value<S: Serialize>(value: S) -> Result<Value, Error> {
-    let mut serializer = Serializer::default();
-    value.serialize(&mut serializer)
+    value.serialize(Serializer)
 }
 
 #[cfg(test)]
