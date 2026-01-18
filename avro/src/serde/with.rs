@@ -18,14 +18,14 @@
 use std::cell::Cell;
 
 thread_local! {
-    /// A thread local that is used to decide how to serialize Rust bytes into an Avro
-    /// `types::Value` of type bytes.
+    /// A thread local that is used to decide if Rust bytes need to be serialized to
+    /// [`Value::Bytes`] or [`Value::Fixed`].
     ///
     /// Relies on the fact that serde's serialization process is single-threaded.
     pub(crate) static SER_BYTES_TYPE: Cell<BytesType> = const { Cell::new(BytesType::Bytes) };
 
-    /// A thread local that is used to decide how to deserialize an Avro `types::Value`
-    /// of type bytes into Rust bytes.
+    /// A thread local that is used to decide if a [`Value::Bytes`] needs to be deserialized to
+    /// a [`Vec`] or slice.
     ///
     /// Relies on the fact that serde's deserialization process is single-threaded.
     pub(crate) static DE_BYTES_BORROWED: Cell<bool> = const { Cell::new(false) };
