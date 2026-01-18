@@ -18,14 +18,14 @@
 use std::cell::Cell;
 
 thread_local! {
-    /// A thread local that is used to decide how to serialize Rust bytes into an Avro
-    /// `types::Value` of type bytes.
+    /// A thread local that is used to decide if Rust bytes need to be serialized to
+    /// [`Value::Bytes`] or [`Value::Fixed`].
     ///
     /// Relies on the fact that serde's serialization process is single-threaded.
     pub(crate) static SER_BYTES_TYPE: Cell<BytesType> = const { Cell::new(BytesType::Bytes) };
 
-    /// A thread local that is used to decide how to deserialize an Avro `types::Value`
-    /// of type bytes into Rust bytes.
+    /// A thread local that is used to decide if a [`Value::Bytes`] needs to be deserialized to
+    /// a [`Vec`] or slice.
     ///
     /// Relies on the fact that serde's deserialization process is single-threaded.
     pub(crate) static DE_BYTES_BORROWED: Cell<bool> = const { Cell::new(false) };
@@ -40,7 +40,7 @@ pub(crate) enum BytesType {
 /// Efficient (de)serialization of Avro bytes values.
 ///
 /// This module is intended to be used through the Serde `with` attribute. Use
-/// [`serde_avro_bytes_opt`](crate::serde_avro_bytes_opt) for optional bytes.
+/// [`serde_avro_bytes_opt`] for optional bytes.
 ///
 /// See usage with below example:
 /// ```rust
@@ -89,7 +89,7 @@ pub mod serde_avro_bytes {
 /// Efficient (de)serialization of optional Avro bytes values.
 ///
 /// This module is intended to be used through the Serde `with` attribute. Use
-/// [`serde_avro_bytes`](crate::serde_avro_bytes) for non optional bytes.
+/// [`serde_avro_bytes`] for non optional bytes.
 ///
 /// See usage with below example:
 /// ```rust
@@ -142,7 +142,7 @@ pub mod serde_avro_bytes_opt {
 /// Efficient (de)serialization of Avro fixed values.
 ///
 /// This module is intended to be used through the Serde `with` attribute. Use
-/// [`serde_avro_fixed_opt`](crate::serde_avro_fixed_opt) for optional fixed values.
+/// [`serde_avro_fixed_opt`] for optional fixed values.
 ///
 /// See usage with below example:
 /// ```rust
@@ -208,7 +208,7 @@ pub mod serde_avro_fixed {
 /// Efficient (de)serialization of optional Avro fixed values.
 ///
 /// This module is intended to be used through the Serde `with` attribute. Use
-/// [`serde_avro_fixed`](crate::serde_avro_fixed) for non optional fixed values.
+/// [`serde_avro_fixed`] for non optional fixed values.
 ///
 /// See usage with below example:
 /// ```rust
@@ -274,13 +274,12 @@ pub mod serde_avro_fixed_opt {
 
 /// Efficient (de)serialization of Avro bytes/fixed borrowed values.
 ///
-/// This module is intended to be used through the Serde `with` attribute. Note that
-/// `bytes: &[u8]` are always serialized as
-/// [`Value::Bytes`](crate::types::Value::Bytes). However, both
-/// [`Value::Bytes`](crate::types::Value::Bytes) and
-/// [`Value::Fixed`](crate::types::Value::Fixed) can be deserialized as `bytes:
-/// &[u8]`. Use [`serde_avro_slice_opt`](crate::serde_avro_slice_opt) for optional
-/// bytes/fixed borrowed values.
+/// This module is intended to be used through the Serde `with` attribute.
+///
+/// Note that `&[u8]` are always serialized as [`Value::Bytes`]. However,
+/// both [`Value::Bytes`] and [`Value::Fixed`] can be deserialized as `&[u8]`.
+///
+/// Use [`serde_avro_slice_opt`] for optional bytes/fixed borrowed values.
 ///
 /// See usage with below example:
 /// ```rust
@@ -294,6 +293,9 @@ pub mod serde_avro_fixed_opt {
 ///     slice_field: &'a [u8],
 /// }
 /// ```
+///
+/// [`Value::Bytes`]: crate::types::Value::Bytes
+/// [`Value::Fixed`]: crate::types::Value::Fixed
 pub mod serde_avro_slice {
     use super::DE_BYTES_BORROWED;
     use serde::{Deserializer, Serializer};
@@ -328,13 +330,12 @@ pub mod serde_avro_slice {
 
 /// Efficient (de)serialization of optional Avro bytes/fixed borrowed values.
 ///
-/// This module is intended to be used through the Serde `with` attribute. Note that
-/// `bytes: &[u8]` are always serialized as
-/// [`Value::Bytes`](crate::types::Value::Bytes). However, both
-/// [`Value::Bytes`](crate::types::Value::Bytes) and
-/// [`Value::Fixed`](crate::types::Value::Fixed) can be deserialized as `bytes:
-/// &[u8]`. Use [`serde_avro_slice`](crate::serde_avro_slice) for non optional
-/// bytes/fixed borrowed values.
+/// This module is intended to be used through the Serde `with` attribute.
+///
+/// Note that `&[u8]` are always serialized as [`Value::Bytes`]. However,
+/// both [`Value::Bytes`] and [`Value::Fixed`] can be deserialized as `&[u8]`.
+///
+/// Use [`serde_avro_slice`] for non-optional bytes/fixed borrowed values.
 ///
 /// See usage with below example:
 /// ```rust
@@ -348,6 +349,9 @@ pub mod serde_avro_slice {
 ///     slice_field: Option<&'a [u8]>,
 /// }
 /// ```
+///
+/// [`Value::Bytes`]: crate::types::Value::Bytes
+/// [`Value::Fixed`]: crate::types::Value::Fixed
 pub mod serde_avro_slice_opt {
     use super::DE_BYTES_BORROWED;
     use serde::{Deserializer, Serializer};
