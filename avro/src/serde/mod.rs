@@ -15,7 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
+mod util;
+mod with;
+
 pub mod de;
 pub mod ser;
 pub mod ser_schema;
-mod util;
+
+#[doc(inline)]
+pub use with::{bytes, bytes_opt, fixed, fixed_opt, slice, slice_opt};

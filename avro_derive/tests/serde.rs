@@ -570,33 +570,28 @@ mod field_attributes {
 
     #[test]
     fn avro_rs_397_avroschema_with_bytes() {
-        use apache_avro::{
-            serde_avro_bytes, serde_avro_bytes_opt, serde_avro_fixed, serde_avro_fixed_opt,
-            serde_avro_slice, serde_avro_slice_opt,
-        };
-
         #[expect(dead_code, reason = "We only care about the schema")]
         #[derive(AvroSchema)]
         struct TestStructWithBytes<'a> {
             #[avro(with)]
-            #[serde(with = "serde_avro_bytes")]
+            #[serde(with = "apache_avro::serde::bytes")]
             vec_field: Vec<u8>,
             #[avro(with)]
-            #[serde(with = "serde_avro_bytes_opt")]
+            #[serde(with = "apache_avro::serde::bytes_opt")]
             vec_field_opt: Option<Vec<u8>>,
 
-            #[avro(with = serde_avro_fixed::get_schema_in_ctxt::<6>)]
-            #[serde(with = "serde_avro_fixed")]
+            #[avro(with = apache_avro::serde::fixed::get_schema_in_ctxt::<6>)]
+            #[serde(with = "apache_avro::serde::fixed")]
             fixed_field: [u8; 6],
-            #[avro(with = serde_avro_fixed_opt::get_schema_in_ctxt::<7>)]
-            #[serde(with = "serde_avro_fixed_opt")]
+            #[avro(with = apache_avro::serde::fixed_opt::get_schema_in_ctxt::<7>)]
+            #[serde(with = "apache_avro::serde::fixed_opt")]
             fixed_field_opt: Option<[u8; 7]>,
 
             #[avro(with)]
-            #[serde(with = "serde_avro_slice")]
+            #[serde(with = "apache_avro::serde::slice")]
             slice_field: &'a [u8],
             #[avro(with)]
-            #[serde(with = "serde_avro_slice_opt")]
+            #[serde(with = "apache_avro::serde::slice_opt")]
             slice_field_opt: Option<&'a [u8]>,
         }
 

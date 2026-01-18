@@ -16,11 +16,8 @@
 // under the License.
 
 //! Logic for serde-compatible serialization.
-use crate::{
-    Error,
-    bytes::{BytesType, SER_BYTES_TYPE},
-    types::Value,
-};
+use crate::serde::with::{BytesType, SER_BYTES_TYPE};
+use crate::{Error, types::Value};
 use serde::{Serialize, ser};
 use std::{collections::HashMap, iter::once};
 
