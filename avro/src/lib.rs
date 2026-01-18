@@ -974,8 +974,8 @@ pub use reader::{
     GenericSingleObjectReader, Reader, SpecificSingleObjectReader, from_avro_datum,
     from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
 };
-pub use schema::{AvroSchema, AvroSchemaComponent, Schema};
-pub use serde::{de::from_value, ser::to_value};
+pub use schema::Schema;
+pub use serde::{AvroSchema, AvroSchemaComponent, de::from_value, ser::to_value};
 pub use uuid::Uuid;
 pub use writer::{
     GenericSingleObjectWriter, SpecificSingleObjectWriter, Writer, WriterBuilder, to_avro_datum,

@@ -17,11 +17,11 @@
 
 //! Logic handling writing in Avro format at user level.
 use crate::{
-    AvroResult, Codec, Error,
+    AvroResult, AvroSchema, Codec, Error,
     encode::{encode, encode_internal, encode_to_vec},
     error::Details,
     headers::{HeaderBuilder, RabinFingerprintHeader},
-    schema::{AvroSchema, Name, ResolvedOwnedSchema, ResolvedSchema, Schema},
+    schema::{Name, ResolvedOwnedSchema, ResolvedSchema, Schema},
     serde::ser_schema::SchemaAwareWriteSerializer,
     types::Value,
 };

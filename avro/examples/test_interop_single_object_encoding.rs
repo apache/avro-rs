@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{schema::AvroSchema, types::Value};
+use apache_avro::{AvroSchema, types::Value};
 use std::error::Error;
 
 struct InteropMessage;

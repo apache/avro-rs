@@ -16,13 +16,12 @@
 // under the License.
 
 use apache_avro::{
-    Reader, Schema, Writer, from_value,
+    AvroSchema, AvroSchemaComponent, Reader, Schema, Writer, from_value,
     schema::{
-        Alias, AvroSchema, AvroSchemaComponent, EnumSchema, FixedSchema, Name, Names, Namespace,
+        Alias, EnumSchema, FixedSchema, Name, Names, Namespace,
         RecordSchema,
     },
 };
-use apache_avro_derive::*;
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{borrow::Cow, collections::HashMap, sync::Mutex};

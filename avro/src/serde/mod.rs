@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+mod derive;
 mod util;
 mod with;
 
@@ -22,5 +23,7 @@ pub mod de;
 pub mod ser;
 pub mod ser_schema;
 
+#[doc(inline)]
+pub use derive::{AvroSchema, AvroSchemaComponent};
 #[doc(inline)]
 pub use with::{bytes, bytes_opt, fixed, fixed_opt, slice, slice_opt};

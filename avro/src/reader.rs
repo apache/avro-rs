@@ -17,13 +17,13 @@
 
 //! Logic handling reading from Avro format at user level.
 use crate::{
-    AvroResult, Codec, Error,
+    AvroResult, AvroSchema, Codec, Error,
     decode::{decode, decode_internal},
     error::Details,
     from_value,
     headers::{HeaderBuilder, RabinFingerprintHeader},
     schema::{
-        AvroSchema, Names, ResolvedOwnedSchema, ResolvedSchema, Schema, resolve_names,
+        Names, ResolvedOwnedSchema, ResolvedSchema, Schema, resolve_names,
         resolve_names_with_schemata,
     },
     types::Value,
