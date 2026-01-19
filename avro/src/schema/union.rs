@@ -20,7 +20,7 @@ use crate::error::Details;
 use crate::schema::{Name, Namespace, ResolvedSchema, Schema, SchemaKind};
 use crate::types;
 use std::borrow::Borrow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Debug;
 
 /// A description of a Union schema
@@ -42,13 +42,19 @@ impl UnionSchema {
     /// Will return an error if `schemas` has duplicate unnamed schemas or if `schemas`
     /// contains a union.
     pub fn new(schemas: Vec<Schema>) -> AvroResult<Self> {
+        let mut named_schemas: HashSet<&Name> = HashSet::default();
         let mut vindex = BTreeMap::new();
         for (i, schema) in schemas.iter().enumerate() {
             if let Schema::Union(_) = schema {
                 return Err(Details::GetNestedUnion.into());
-            }
-            if !schema.is_named() && vindex.insert(SchemaKind::from(schema), i).is_some() {
+            } else if !schema.is_named() && vindex.insert(SchemaKind::from(schema), i).is_some() {
                 return Err(Details::GetUnionDuplicate.into());
+            } else if schema.is_named() {
+                let name = schema.name().unwrap();
+                if !named_schemas.insert(name) {
+                    return Err(Details::GetUnionDuplicateNamedSchemas(name.to_string()).into());
+                }
+                vindex.insert(SchemaKind::from(schema), i);
             }
         }
         Ok(UnionSchema {
@@ -121,5 +127,42 @@ impl UnionSchema {
 impl PartialEq for UnionSchema {
     fn eq(&self, other: &UnionSchema) -> bool {
         self.schemas.eq(&other.schemas)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::{Details, Error};
+    use crate::schema::RecordSchema;
+    use apache_avro_test_helper::TestResult;
+
+    #[test]
+    fn avro_rs_402_new_union_schema() -> TestResult {
+        let schema1 = Schema::Int;
+        let schema2 = Schema::String;
+        let union_schema = UnionSchema::new(vec![schema1.clone(), schema2.clone()])?;
+
+        assert_eq!(union_schema.variants(), &[schema1, schema2]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_402_new_union_schema_duplicate_names() -> TestResult {
+        let res = UnionSchema::new(vec![
+            Schema::Record(RecordSchema::builder().name("Same_name".into()).build()),
+            Schema::Record(RecordSchema::builder().name("Same_name".into()).build()),
+        ])
+        .map_err(Error::into_details);
+
+        match res {
+            Err(Details::GetUnionDuplicateNamedSchemas(name)) => {
+                assert_eq!(name, Name::new("Same_name")?.to_string());
+            }
+            err => panic!("Expected GetUnionDuplicateNamedSchemas error, got: {err:?}"),
+        }
+
+        Ok(())
     }
 }
