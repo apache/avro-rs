@@ -301,6 +301,9 @@ pub enum Details {
     #[error("Unions cannot contain duplicate types")]
     GetUnionDuplicate,
 
+    #[error("Unions cannot contain more than one named schema with the same name: {0}")]
+    GetUnionDuplicateNamedSchemas(String),
+
     #[error("One union type {0:?} must match the `default`'s value type {1:?}")]
     GetDefaultUnion(SchemaKind, ValueKind),
 
