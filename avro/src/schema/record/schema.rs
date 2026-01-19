@@ -127,6 +127,32 @@ mod tests {
     }
 
     #[test]
+    fn avro_rs_403_record_schema_builder_no_fields_with_attributes() -> TestResult {
+        let name = Name::new("TestRecord")?;
+        let attrs: BTreeMap<String, Value> = [
+            ("bool_key".into(), Value::Bool(true)),
+            ("key_2".into(), Value::String("value_2".into())),
+        ]
+        .into_iter()
+        .collect();
+
+        let record_schema = RecordSchema::builder()
+            .name(name.clone())
+            .fields(vec![])
+            .attributes(attrs.clone())
+            .build();
+
+        assert_eq!(record_schema.name, name);
+        assert_eq!(record_schema.aliases, None);
+        assert_eq!(record_schema.doc, None);
+        assert_eq!(record_schema.fields.len(), 0);
+        assert_eq!(record_schema.lookup.len(), 0);
+        assert_eq!(record_schema.attributes, attrs);
+
+        Ok(())
+    }
+
+    #[test]
     fn avro_rs_403_record_schema_builder_with_fields() -> TestResult {
         let name = Name::new("TestRecord")?;
         let fields = vec![
