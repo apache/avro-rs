@@ -72,10 +72,7 @@ mod tests {
     fn avro_rs_403_record_schema_builder_no_fields() -> TestResult {
         let name = Name::new("TestRecord")?;
 
-        let record_schema = RecordSchema::builder()
-            .name(name.clone())
-            .fields(vec![])
-            .build();
+        let record_schema = RecordSchema::builder().name(name.clone()).build();
 
         assert_eq!(record_schema.name, name);
         assert_eq!(record_schema.aliases, None);
@@ -93,7 +90,6 @@ mod tests {
 
         let record_schema = RecordSchema::builder()
             .name(name.clone())
-            .fields(vec![])
             .aliases(Some(vec!["alias_1".into()]))
             .build();
 
@@ -113,7 +109,6 @@ mod tests {
 
         let record_schema = RecordSchema::builder()
             .name(name.clone())
-            .fields(vec![])
             .doc(Some("some_doc".into()))
             .build();
 
@@ -139,7 +134,6 @@ mod tests {
 
         let record_schema = RecordSchema::builder()
             .name(name.clone())
-            .fields(vec![])
             .attributes(attrs.clone())
             .build();
 
