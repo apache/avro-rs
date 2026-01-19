@@ -40,8 +40,8 @@ use std::{
 };
 use strum_macros::{Display, EnumDiscriminants};
 
-pub mod record_field;
-pub use crate::schema::record_field::{RecordField, RecordFieldBuilder, RecordFieldOrder};
+mod record;
+pub use crate::schema::record::{RecordField, RecordFieldBuilder, RecordFieldOrder};
 
 /// Represents an Avro schema fingerprint
 /// More information about Avro schema fingerprints can be found in the

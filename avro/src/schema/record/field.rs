@@ -15,9 +15,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use super::{Documentation, Name, Names, Parser, RecordSchemaParseLocation, Schema, SchemaKind};
 use crate::AvroResult;
 use crate::error::Details;
+use crate::schema::{
+    Documentation, Name, Names, Parser, RecordSchemaParseLocation, Schema, SchemaKind,
+};
 use crate::types;
 use crate::util::MapHelper;
 use crate::validator::validate_record_field_name;
@@ -68,7 +70,7 @@ pub enum RecordFieldOrder {
 
 impl RecordField {
     /// Parse a `serde_json::Value` into a `RecordField`.
-    pub(super) fn parse(
+    pub(crate) fn parse(
         field: &Map<String, Value>,
         position: usize,
         parser: &mut Parser,
