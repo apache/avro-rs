@@ -31,13 +31,14 @@ pub struct RecordSchema {
     #[builder(default)]
     pub doc: Documentation,
     /// The set of fields of the schema
+    #[builder(default)]
     pub fields: Vec<RecordField>,
     /// The `lookup` table maps field names to their position in the `Vec`
     /// of `fields`.
     #[builder(skip = calculate_lookup_table(&fields))]
     pub lookup: BTreeMap<String, usize>,
     /// The custom attributes of the schema
-    #[builder(default = Default::default())]
+    #[builder(default)]
     pub attributes: BTreeMap<String, Value>,
 }
 
