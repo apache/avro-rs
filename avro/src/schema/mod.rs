@@ -41,7 +41,10 @@ use std::{
 use strum_macros::{Display, EnumDiscriminants};
 
 mod record;
-pub use crate::schema::record::{RecordField, RecordFieldBuilder, RecordFieldOrder};
+use crate::schema::record::RecordSchemaParseLocation;
+pub use crate::schema::record::{
+    RecordField, RecordFieldBuilder, RecordFieldOrder, RecordSchema, RecordSchemaBuilder,
+};
 
 /// Represents an Avro schema fingerprint
 /// More information about Avro schema fingerprints can be found in the
@@ -640,27 +643,6 @@ pub(crate) fn resolve_names_with_schemata(
     Ok(())
 }
 
-/// A description of a Record schema.
-#[derive(bon::Builder, Debug, Clone)]
-pub struct RecordSchema {
-    /// The name of the schema
-    pub name: Name,
-    /// The aliases of the schema
-    #[builder(default)]
-    pub aliases: Aliases,
-    /// The documentation of the schema
-    #[builder(default)]
-    pub doc: Documentation,
-    /// The set of fields of the schema
-    pub fields: Vec<RecordField>,
-    /// The `lookup` table maps field names to their position in the `Vec`
-    /// of `fields`.
-    pub lookup: BTreeMap<String, usize>,
-    /// The custom attributes of the schema
-    #[builder(default = BTreeMap::new())]
-    pub attributes: BTreeMap<String, Value>,
-}
-
 /// A description of an Enum schema.
 #[derive(bon::Builder, Debug, Clone)]
 pub struct EnumSchema {
@@ -913,16 +895,6 @@ fn parse_json_integer_for_decimal(value: &serde_json::Number) -> Result<DecimalM
     } else {
         return Err(Details::GetPrecisionOrScaleFromJson(value.clone()).into());
     })
-}
-
-#[derive(Debug, Default)]
-enum RecordSchemaParseLocation {
-    /// When the parse is happening at root level
-    #[default]
-    Root,
-
-    /// When the parse is happening inside a record field
-    FromField,
 }
 
 #[derive(Default)]

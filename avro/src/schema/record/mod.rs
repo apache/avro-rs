@@ -17,3 +17,7 @@
 
 mod field;
 pub use field::{RecordField, RecordFieldBuilder, RecordFieldOrder};
+
+mod schema;
+pub(crate) use schema::RecordSchemaParseLocation;
+pub use schema::{RecordSchema, RecordSchemaBuilder};
