@@ -2702,8 +2702,6 @@ mod tests {
     // AVRO-3248
     #[test]
     fn test_union_of_records() -> TestResult {
-        use std::iter::FromIterator;
-
         // A and B are the same except the name.
         let schema_str_a = r#"{
             "name": "A",
@@ -2751,7 +2749,6 @@ mod tests {
                         ])?))
                         .build(),
                 ])
-                .lookup(BTreeMap::from_iter(vec![("field_one".to_string(), 0)]))
                 .build(),
         );
 
