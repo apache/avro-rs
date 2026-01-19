@@ -383,7 +383,167 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
     }
 
     forward_to_deserialize_any! {
-        bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64
+        bool i8 i16 i32 i64 u8 u16 u32 f32 f64
+    }
+
+    fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        match self.input {
+            Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => {
+                let n = u64::try_from(*i).map_err(|e| Details::ConvertI32ToU64(e, *i))?;
+                visitor.visit_u64(n)
+            }
+            Value::Long(i)
+            | Value::TimeMicros(i)
+            | Value::TimestampMillis(i)
+            | Value::TimestampMicros(i)
+            | Value::TimestampNanos(i)
+            | Value::LocalTimestampMillis(i)
+            | Value::LocalTimestampMicros(i)
+            | Value::LocalTimestampNanos(i) => {
+                let n = u64::try_from(*i).map_err(|e| Details::ConvertI64ToU64(e, *i))?;
+                visitor.visit_u64(n)
+            }
+            Value::Fixed(8, bytes) => {
+                let n = u64::from_le_bytes(bytes.as_slice().try_into().expect("Size is 8"));
+                visitor.visit_u64(n)
+            }
+            Value::Union(_i, x) => match x.deref() {
+                Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => {
+                    let n = u64::try_from(*i).map_err(|e| Details::ConvertI32ToU64(e, *i))?;
+                    visitor.visit_u64(n)
+                }
+                Value::Long(i)
+                | Value::TimeMicros(i)
+                | Value::TimestampMillis(i)
+                | Value::TimestampMicros(i)
+                | Value::TimestampNanos(i)
+                | Value::LocalTimestampMillis(i)
+                | Value::LocalTimestampMicros(i)
+                | Value::LocalTimestampNanos(i) => {
+                    let n = u64::try_from(*i).map_err(|e| Details::ConvertI64ToU64(e, *i))?;
+                    visitor.visit_u64(n)
+                }
+                Value::Fixed(8, bytes) => {
+                    let n = u64::from_le_bytes(bytes.as_slice().try_into().expect("Size is 8"));
+                    visitor.visit_u64(n)
+                }
+                _ => Err(de::Error::custom(format!(
+                    "Expected a Int|Long|Fixed(8), but got {:?}",
+                    self.input
+                ))),
+            },
+            _ => Err(de::Error::custom(format!(
+                "Expected a Int|Long|Fixed(8), but got {:?}",
+                self.input
+            ))),
+        }
+    }
+
+    fn deserialize_u128<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        match self.input {
+            Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => {
+                let n = u128::try_from(*i).map_err(|e| Details::ConvertI32ToU64(e, *i))?;
+                visitor.visit_u128(n)
+            }
+            Value::Long(i)
+            | Value::TimeMicros(i)
+            | Value::TimestampMillis(i)
+            | Value::TimestampMicros(i)
+            | Value::TimestampNanos(i)
+            | Value::LocalTimestampMillis(i)
+            | Value::LocalTimestampMicros(i)
+            | Value::LocalTimestampNanos(i) => {
+                let n = u128::try_from(*i).map_err(|e| Details::ConvertI64ToU64(e, *i))?;
+                visitor.visit_u128(n)
+            }
+            Value::Fixed(16, bytes) => {
+                let n = u128::from_le_bytes(bytes.as_slice().try_into().expect("Size is 16"));
+                visitor.visit_u128(n)
+            }
+            Value::Union(_i, x) => match x.deref() {
+                Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => {
+                    let n = u128::try_from(*i).map_err(|e| Details::ConvertI32ToU64(e, *i))?;
+                    visitor.visit_u128(n)
+                }
+                Value::Long(i)
+                | Value::TimeMicros(i)
+                | Value::TimestampMillis(i)
+                | Value::TimestampMicros(i)
+                | Value::TimestampNanos(i)
+                | Value::LocalTimestampMillis(i)
+                | Value::LocalTimestampMicros(i)
+                | Value::LocalTimestampNanos(i) => {
+                    let n = u128::try_from(*i).map_err(|e| Details::ConvertI64ToU64(e, *i))?;
+                    visitor.visit_u128(n)
+                }
+                Value::Fixed(16, bytes) => {
+                    let n = u128::from_le_bytes(bytes.as_slice().try_into().expect("Size is 16"));
+                    visitor.visit_u128(n)
+                }
+                _ => Err(de::Error::custom(format!(
+                    "Expected a Int|Long|Fixed(16), but got {:?}",
+                    self.input
+                ))),
+            },
+            _ => Err(de::Error::custom(format!(
+                "Expected a Int|Long|Fixed(16), but got {:?}",
+                self.input
+            ))),
+        }
+    }
+
+    fn deserialize_i128<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        match self.input {
+            Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => {
+                visitor.visit_i128(i128::from(*i))
+            }
+            Value::Long(i)
+            | Value::TimeMicros(i)
+            | Value::TimestampMillis(i)
+            | Value::TimestampMicros(i)
+            | Value::TimestampNanos(i)
+            | Value::LocalTimestampMillis(i)
+            | Value::LocalTimestampMicros(i)
+            | Value::LocalTimestampNanos(i) => visitor.visit_i128(i128::from(*i)),
+            Value::Fixed(16, bytes) => {
+                let n = i128::from_le_bytes(bytes.as_slice().try_into().expect("Size is 16"));
+                visitor.visit_i128(n)
+            }
+            Value::Union(_i, x) => match x.deref() {
+                Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => {
+                    visitor.visit_i128(i128::from(*i))
+                }
+                Value::Long(i)
+                | Value::TimeMicros(i)
+                | Value::TimestampMillis(i)
+                | Value::TimestampMicros(i)
+                | Value::TimestampNanos(i)
+                | Value::LocalTimestampMillis(i)
+                | Value::LocalTimestampMicros(i)
+                | Value::LocalTimestampNanos(i) => visitor.visit_i128(i128::from(*i)),
+                Value::Fixed(16, bytes) => {
+                    let n = i128::from_le_bytes(bytes.as_slice().try_into().expect("Size is 16"));
+                    visitor.visit_i128(n)
+                }
+                _ => Err(de::Error::custom(format!(
+                    "Expected a Int|Long|Fixed(16), but got {:?}",
+                    self.input
+                ))),
+            },
+            _ => Err(de::Error::custom(format!(
+                "Expected a Int|Long|Fixed(16), but got {:?}",
+                self.input
+            ))),
+        }
     }
 
     fn deserialize_char<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -411,6 +571,29 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
             Value::Fixed(4, bytes) => {
                 visitor.visit_char(char::from_u32(u32::from_le_bytes(bytes.as_slice().try_into().expect("Size is 4"))).ok_or_else(|| <Self::Error as de::Error>::custom("Tried to deserialize char from fixed, but was invalid value"))?)
             }
+            Value::Union(_i, x) => match x.deref() {
+                Value::String(s) => {
+                    if s.chars().count() == 1 {
+                        visitor.visit_char(s.chars().next().expect("There is exactly one char"))
+                    } else {
+                        Err(de::Error::custom(format!("Tried to deserialize char from string, but the string was longer than one char: {s}")))
+                    }
+                }
+                Value::Bytes(bytes) => std::str::from_utf8(bytes)
+                    .map_err(|e| de::Error::custom(e.to_string()))
+                    .and_then(|s| {
+                        if s.chars().count() == 1 {
+                            visitor.visit_char(s.chars().next().expect("There is exactly one char"))
+                        } else {
+                            Err(de::Error::custom(format!("Tried to deserialize char from a byte array, but the byte array was longer than one char: {}", s.len())))
+                        }
+                    }
+                    ),
+                Value::Fixed(4, bytes) => {
+                    visitor.visit_char(char::from_u32(u32::from_le_bytes(bytes.as_slice().try_into().expect("Size is 4"))).ok_or_else(|| <Self::Error as de::Error>::custom("Tried to deserialize char from fixed, but was invalid value"))?)
+                }
+                _ => Err(de::Error::custom(format!("Expected a String|Bytes|Fixed(4) for char, but got {:?}", self.input)))
+            },
             _ => Err(de::Error::custom(format!("Expected a String|Bytes|Fixed(4) for char, but got {:?}", self.input)))
         }
     }
@@ -425,6 +608,16 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
                 .map_err(|e| de::Error::custom(e.to_string()))
                 .and_then(|s| visitor.visit_borrowed_str(s)),
             Value::Uuid(u) => visitor.visit_str(&u.to_string()),
+            Value::Union(_i, x) => match x.deref() {
+                Value::String(s) => visitor.visit_borrowed_str(s),
+                Value::Bytes(bytes) | Value::Fixed(_, bytes) => std::str::from_utf8(bytes)
+                    .map_err(|e| de::Error::custom(e.to_string()))
+                    .and_then(|s| visitor.visit_borrowed_str(s)),
+                Value::Uuid(u) => visitor.visit_str(&u.to_string()),
+                _ => Err(de::Error::custom(format!(
+                    "Expected a String|Bytes|Fixed|Uuid, but got {x:?}"
+                ))),
+            },
             _ => Err(de::Error::custom(format!(
                 "Expected a String|Bytes|Fixed|Uuid, but got {:?}",
                 self.input

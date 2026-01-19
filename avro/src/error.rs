@@ -326,6 +326,18 @@ pub enum Details {
     #[error("Cannot convert i32 to usize: {1}")]
     ConvertI32ToUsize(#[source] std::num::TryFromIntError, i32),
 
+    #[error("Cannot convert i64 to u64: {1}")]
+    ConvertI64ToU64(#[source] std::num::TryFromIntError, i64),
+
+    #[error("Cannot convert i32 to u64: {1}")]
+    ConvertI32ToU64(#[source] std::num::TryFromIntError, i32),
+
+    #[error("Cannot convert i64 to u128: {1}")]
+    ConvertI64ToU128(#[source] std::num::TryFromIntError, i64),
+
+    #[error("Cannot convert i32 to u128: {1}")]
+    ConvertI32ToU128(#[source] std::num::TryFromIntError, i32),
+
     #[error("Invalid JSON value for decimal precision/scale integer: {0}")]
     GetPrecisionOrScaleFromJson(serde_json::Number),
 
