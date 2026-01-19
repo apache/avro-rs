@@ -785,6 +785,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
             expected => Err(create_error(format!("Expected: {expected}. Got: Int/Long"))),
         }
     }
+
     fn serialize_i128_with_schema(&mut self, value: i128, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| {
             Error::new(Details::SerializeValueWithSchema {
@@ -812,7 +813,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     }
                 }
                 Err(create_error(format!(
-                    "Cannot find a matching Int-like or Long-like schema in {:?}",
+                    "Cannot find a Fixed(size = 16, name = \"i128\") schema in {:?}",
                     union_schema.schemas
                 )))
             }
@@ -980,13 +981,14 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     }
                 }
                 Err(create_error(format!(
-                    "Cannot find a matching Int-like or Long-like schema in {:?}",
+                    "Cannot find a matching Int-like, Long-like or Fixed(size = 8, name \"u64\") schema in {:?}",
                     union_schema.schemas
                 )))
             }
-            expected => Err(create_error(format!("Expected {expected}. Got: Int/Long"))),
+            expected => Err(create_error(format!("Expected {expected}. Got: u64"))),
         }
     }
+
     fn serialize_u128_with_schema(&mut self, value: u128, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| {
             Error::new(Details::SerializeValueWithSchema {
@@ -1014,7 +1016,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     }
                 }
                 Err(create_error(format!(
-                    "Cannot find a matching Int-like or Long-like schema in {:?}",
+                    "Cannot find a Fixed(size = 16, name = \"u128\") schema in {:?}",
                     union_schema.schemas
                 )))
             }
@@ -1128,7 +1130,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     }
                 }
                 Err(create_error(format!(
-                    "Cannot find a matching String or Bytes schema in {union_schema:?}"
+                    "Cannot find a matching String, Bytes or Fixed(size = 4, name = \"char\") schema in {union_schema:?}"
                 )))
             }
             expected => Err(create_error(format!("Expected {expected}. Got: char"))),

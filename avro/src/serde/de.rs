@@ -448,7 +448,7 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
     {
         match self.input {
             Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => {
-                let n = u128::try_from(*i).map_err(|e| Details::ConvertI32ToU64(e, *i))?;
+                let n = u128::try_from(*i).map_err(|e| Details::ConvertI32ToU128(e, *i))?;
                 visitor.visit_u128(n)
             }
             Value::Long(i)
@@ -459,7 +459,7 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
             | Value::LocalTimestampMillis(i)
             | Value::LocalTimestampMicros(i)
             | Value::LocalTimestampNanos(i) => {
-                let n = u128::try_from(*i).map_err(|e| Details::ConvertI64ToU64(e, *i))?;
+                let n = u128::try_from(*i).map_err(|e| Details::ConvertI64ToU128(e, *i))?;
                 visitor.visit_u128(n)
             }
             Value::Fixed(16, bytes) => {
@@ -468,7 +468,7 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
             }
             Value::Union(_i, x) => match x.deref() {
                 Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => {
-                    let n = u128::try_from(*i).map_err(|e| Details::ConvertI32ToU64(e, *i))?;
+                    let n = u128::try_from(*i).map_err(|e| Details::ConvertI32ToU128(e, *i))?;
                     visitor.visit_u128(n)
                 }
                 Value::Long(i)
@@ -479,7 +479,7 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
                 | Value::LocalTimestampMillis(i)
                 | Value::LocalTimestampMicros(i)
                 | Value::LocalTimestampNanos(i) => {
-                    let n = u128::try_from(*i).map_err(|e| Details::ConvertI64ToU64(e, *i))?;
+                    let n = u128::try_from(*i).map_err(|e| Details::ConvertI64ToU128(e, *i))?;
                     visitor.visit_u128(n)
                 }
                 Value::Fixed(16, bytes) => {
@@ -1890,7 +1890,7 @@ mod tests {
 
     #[test]
     fn avro_rs_414_deserialize_char_from_bytes() -> TestResult {
-        let value = Value::Bytes('a'.to_string().into_bytes());
+        let value = Value::Bytes([b'a'].to_vec());
         let result = from_value::<char>(&value)?;
         assert_eq!(result, 'a');
 
@@ -1920,7 +1920,7 @@ mod tests {
 
     #[test]
     fn avro_rs_414_deserialize_char_from_long_bytes() -> TestResult {
-        let value = Value::Bytes("avro".to_string().into_bytes());
+        let value = Value::Bytes(b"avro".to_vec());
         let result = from_value::<char>(&value).unwrap_err().to_string();
         assert_eq!(
             result,
