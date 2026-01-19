@@ -1,0 +1,18 @@
+error: AvroSchema: #[serde(transparent)] is only allowed on structs with one unskipped field
+  --> tests/ui/avro_rs_398_transparent.rs:21:1
+   |
+21 | / #[serde(transparent)]
+22 | | struct Foo {
+23 | |     a: String,
+24 | |     b: i32,
+25 | | }
+   | |_^
+
+error: AvroSchema: `#[serde(transparent)]` is only supported on structs
+  --> tests/ui/avro_rs_398_transparent.rs:28:1
+   |
+28 | / #[serde(transparent)]
+29 | | enum Bar {
+30 | |     A
+31 | | }
+   | |_^

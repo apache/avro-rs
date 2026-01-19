@@ -18,6 +18,7 @@
 use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
+#[serde(transparent)]
 struct Foo {
     a: String,
     b: i32,
@@ -25,8 +26,8 @@ struct Foo {
 
 #[derive(AvroSchema)]
 #[serde(transparent)]
-struct Bar {
-    foo: Foo,
+enum Bar {
+    A
 }
 
 pub fn main() {}
