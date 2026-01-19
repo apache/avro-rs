@@ -395,7 +395,7 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
                 if s.chars().count() == 1 {
                     visitor.visit_char(s.chars().next().expect("There is exactly one char"))
                 } else {
-                    Err(de::Error::custom("Tried to deserialize char from string, but string was longer than one char"))
+                    Err(de::Error::custom(format!("Tried to deserialize char from string, but the string was longer than one char: {s}")))
                 }
             }
             Value::Bytes(bytes) => std::str::from_utf8(bytes)
@@ -404,7 +404,7 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
                     if s.chars().count() == 1 {
                         visitor.visit_char(s.chars().next().expect("There is exactly one char"))
                     } else {
-                        Err(de::Error::custom("Tried to deserialize char from bytes, but bytes was longer than one char"))
+                        Err(de::Error::custom(format!("Tried to deserialize char from a byte array, but the byte array was longer than one char: {}", s.len())))
                     }
                 }
             ),
@@ -1719,7 +1719,7 @@ mod tests {
         let result = from_value::<char>(&value).unwrap_err().to_string();
         assert_eq!(
             result,
-            "Failed to deserialize Avro value into value: Tried to deserialize char from string, but string was longer than one char"
+            "Failed to deserialize Avro value into value: Tried to deserialize char from string, but the string was longer than one char: avro"
         );
 
         Ok(())
@@ -1731,7 +1731,7 @@ mod tests {
         let result = from_value::<char>(&value).unwrap_err().to_string();
         assert_eq!(
             result,
-            "Failed to deserialize Avro value into value: Tried to deserialize char from bytes, but bytes was longer than one char"
+            "Failed to deserialize Avro value into value: Tried to deserialize char from a byte array, but the byte array was longer than one char: 4"
         );
 
         Ok(())

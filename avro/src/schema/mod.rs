@@ -2258,10 +2258,6 @@ fn field_ordering_position(field: &str) -> Option<usize> {
 /// through `derive` feature. Do not implement directly!
 /// Implement [`AvroSchemaComponent`] to get this trait
 /// through a blanket implementation.
-///
-/// Note: This trait is **not** implemented for `char` and `u64`. `char` is a 32-bit value
-/// that does not have a logical mapping to an Avro schema. `u64` is too large to fit in a
-/// Avro `long`.
 pub trait AvroSchema {
     fn get_schema() -> Schema;
 }
@@ -2269,10 +2265,6 @@ pub trait AvroSchema {
 /// Trait for types that serve as fully defined components inside an Avro data model. Derive
 /// implementation available through `derive` feature. This is what is implemented by
 /// the `derive(AvroSchema)` macro.
-///
-/// Note: This trait is **not** implemented for `char` and `u64`. `char` is a 32-bit value
-/// that does not have a logical mapping to an Avro schema. `u64` is too large to fit in a
-/// Avro `long`.
 ///
 /// # Implementation guide
 ///

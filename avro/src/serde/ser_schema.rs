@@ -799,7 +799,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 self.writer
                     .write_all(&value.to_le_bytes())
                     .map_err(Details::WriteBytes)?;
-                Ok(8)
+                Ok(16)
             }
             Schema::Union(union_schema) => {
                 for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
@@ -1001,7 +1001,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 self.writer
                     .write_all(&value.to_le_bytes())
                     .map_err(Details::WriteBytes)?;
-                Ok(8)
+                Ok(16)
             }
             Schema::Union(union_schema) => {
                 for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
@@ -3299,6 +3299,60 @@ mod tests {
     }
 
     #[test]
+    fn avro_rs_414_serialize_emoji_char_as_string() -> TestResult {
+        let schema = Schema::String;
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+
+        '👹'.serialize(&mut serializer)?;
+
+        assert_eq!(buffer.as_slice(), &[8, 240, 159, 145, 185]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_serialize_emoji_char_as_bytes() -> TestResult {
+        let schema = Schema::Bytes;
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+
+        '👹'.serialize(&mut serializer)?;
+
+        assert_eq!(buffer.as_slice(), &[8, 240, 159, 145, 185]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_serialize_emoji_char_as_fixed() -> TestResult {
+        let schema = Schema::Fixed(FixedSchema {
+            name: Name::new("char")?,
+            aliases: None,
+            doc: None,
+            size: 4,
+            default: None,
+            attributes: Default::default(),
+        });
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+
+        '👹'.serialize(&mut serializer)?;
+
+        // This is a different byte value than the tests above. This is because by creating a String
+        // the unicode value is normalized by Rust
+        assert_eq!(buffer.as_slice(), &[121, 244, 1, 0]);
+
+        Ok(())
+    }
+
+    #[test]
     fn avro_rs_414_serialize_char_as_fixed_wrong_name() -> TestResult {
         let schema = Schema::Fixed(FixedSchema {
             name: Name::new("characters")?,
@@ -3359,7 +3413,8 @@ mod tests {
         let names = HashMap::new();
         let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
-        i128::MAX.serialize(&mut serializer)?;
+        let bytes_written = i128::MAX.serialize(&mut serializer)?;
+        assert_eq!(bytes_written, 16);
 
         assert_eq!(
             buffer.as_slice(),
@@ -3433,7 +3488,8 @@ mod tests {
         let names = HashMap::new();
         let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
-        u128::MAX.serialize(&mut serializer)?;
+        let bytes_written = u128::MAX.serialize(&mut serializer)?;
+        assert_eq!(bytes_written, 16);
 
         assert_eq!(
             buffer.as_slice(),
