@@ -22,7 +22,7 @@ use crate::{
     types::Value,
 };
 use serde::{Serialize, ser};
-use std::{collections::HashMap, iter::once};
+use std::collections::HashMap;
 
 #[derive(Clone, Default)]
 pub struct Serializer {}
@@ -154,11 +154,15 @@ impl<'b> ser::Serializer for &'b mut Serializer {
     }
 
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
-        if v <= i64::MAX as u64 {
-            self.serialize_i64(v as i64)
-        } else {
-            Err(ser::Error::custom("u64 is too large"))
-        }
+        Ok(Value::Fixed(8, v.to_le_bytes().to_vec()))
+    }
+
+    fn serialize_i128(self, v: i128) -> Result<Self::Ok, Self::Error> {
+        Ok(Value::Fixed(16, v.to_le_bytes().to_vec()))
+    }
+
+    fn serialize_u128(self, v: u128) -> Result<Self::Ok, Self::Error> {
+        Ok(Value::Fixed(16, v.to_le_bytes().to_vec()))
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
@@ -170,7 +174,7 @@ impl<'b> ser::Serializer for &'b mut Serializer {
     }
 
     fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {
-        self.serialize_str(&once(v).collect::<String>())
+        self.serialize_str(&v.to_string())
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
@@ -1032,5 +1036,41 @@ mod tests {
         let ser = &mut Serializer {};
 
         assert!(!ser.is_human_readable());
+    }
+
+    #[test]
+    fn avro_rs_414_char_to_value() -> TestResult {
+        let value = to_value('s')?;
+
+        assert_eq!(value, Value::String("s".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_u64_to_value() -> TestResult {
+        let value = to_value(u64::MAX)?;
+
+        assert_eq!(value, Value::Fixed(8, u64::MAX.to_le_bytes().to_vec()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_u128_to_value() -> TestResult {
+        let value = to_value(u128::MAX)?;
+
+        assert_eq!(value, Value::Fixed(16, u128::MAX.to_le_bytes().to_vec()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_i128_to_value() -> TestResult {
+        let value = to_value(i128::MAX)?;
+
+        assert_eq!(value, Value::Fixed(16, i128::MAX.to_le_bytes().to_vec()));
+
+        Ok(())
     }
 }

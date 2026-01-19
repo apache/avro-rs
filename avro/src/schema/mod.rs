@@ -2357,6 +2357,7 @@ impl_schema!(f32, Schema::Float);
 impl_schema!(f64, Schema::Double);
 impl_schema!(String, Schema::String);
 impl_schema!(str, Schema::String);
+impl_schema!(char, Schema::String);
 
 impl<T> AvroSchemaComponent for &T
 where
@@ -2510,6 +2511,78 @@ impl AvroSchemaComponent for uuid::Uuid {
                 default: None,
                 attributes: Default::default(),
             }));
+            named_schemas.insert(name, schema.clone());
+            schema
+        }
+    }
+}
+
+impl AvroSchemaComponent for u64 {
+    /// The schema is [`Schema::Fixed`] of size 8 with the name `u64`.
+    #[expect(clippy::map_entry, reason = "We don't use the value from the map")]
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        let name = Name::new("u64")
+            .expect("Name is valid")
+            .fully_qualified_name(enclosing_namespace);
+        if named_schemas.contains_key(&name) {
+            Schema::Ref { name }
+        } else {
+            let schema = Schema::Fixed(FixedSchema {
+                name: name.clone(),
+                aliases: None,
+                doc: None,
+                size: 8,
+                default: None,
+                attributes: Default::default(),
+            });
+            named_schemas.insert(name, schema.clone());
+            schema
+        }
+    }
+}
+
+impl AvroSchemaComponent for u128 {
+    /// The schema is [`Schema::Fixed`] of size 16 with the name `u128`.
+    #[expect(clippy::map_entry, reason = "We don't use the value from the map")]
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        let name = Name::new("u128")
+            .expect("Name is valid")
+            .fully_qualified_name(enclosing_namespace);
+        if named_schemas.contains_key(&name) {
+            Schema::Ref { name }
+        } else {
+            let schema = Schema::Fixed(FixedSchema {
+                name: name.clone(),
+                aliases: None,
+                doc: None,
+                size: 16,
+                default: None,
+                attributes: Default::default(),
+            });
+            named_schemas.insert(name, schema.clone());
+            schema
+        }
+    }
+}
+
+impl AvroSchemaComponent for i128 {
+    /// The schema is [`Schema::Fixed`] of size 16 with the name `i128`.
+    #[expect(clippy::map_entry, reason = "We don't use the value from the map")]
+    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+        let name = Name::new("i128")
+            .expect("Name is valid")
+            .fully_qualified_name(enclosing_namespace);
+        if named_schemas.contains_key(&name) {
+            Schema::Ref { name }
+        } else {
+            let schema = Schema::Fixed(FixedSchema {
+                name: name.clone(),
+                aliases: None,
+                doc: None,
+                size: 16,
+                default: None,
+                attributes: Default::default(),
+            });
             named_schemas.insert(name, schema.clone());
             schema
         }
@@ -7367,8 +7440,69 @@ mod tests {
             Schema::union(vec![
                 Schema::Null,
                 Schema::array(Schema::array(Schema::Int))
-            ])
-            .unwrap()
+            ])?
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_char() -> TestResult {
+        let schema = char::get_schema();
+        assert_eq!(schema, Schema::String);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_u64() -> TestResult {
+        let schema = u64::get_schema();
+        assert_eq!(
+            schema,
+            Schema::Fixed(FixedSchema {
+                name: Name::new("u64")?,
+                aliases: None,
+                doc: None,
+                size: 8,
+                default: None,
+                attributes: Default::default(),
+            })
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_i128() -> TestResult {
+        let schema = i128::get_schema();
+        assert_eq!(
+            schema,
+            Schema::Fixed(FixedSchema {
+                name: Name::new("i128")?,
+                aliases: None,
+                doc: None,
+                size: 16,
+                default: None,
+                attributes: Default::default(),
+            })
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_u128() -> TestResult {
+        let schema = u128::get_schema();
+        assert_eq!(
+            schema,
+            Schema::Fixed(FixedSchema {
+                name: Name::new("u128")?,
+                aliases: None,
+                doc: None,
+                size: 16,
+                default: None,
+                attributes: Default::default(),
+            })
         );
 
         Ok(())

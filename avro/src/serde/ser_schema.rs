@@ -647,7 +647,9 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         let mut bytes_written: usize = 0;
 
         bytes_written += encode_long(bytes.len() as i64, &mut self.writer)?;
-        bytes_written += self.writer.write(bytes).map_err(Details::WriteBytes)?;
+        // write_all() will retry when the error is ErrorKind::Interrupted (happens mostly on network storage)
+        self.writer.write_all(bytes).map_err(Details::WriteBytes)?;
+        bytes_written += bytes.len();
 
         Ok(bytes_written)
     }
@@ -783,6 +785,40 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
             expected => Err(create_error(format!("Expected: {expected}. Got: Int/Long"))),
         }
     }
+    fn serialize_i128_with_schema(&mut self, value: i128, schema: &Schema) -> Result<usize, Error> {
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "i128",
+                value: format!("{value}. Cause: {cause}"),
+                schema: schema.clone(),
+            })
+        };
+
+        match schema {
+            Schema::Fixed(fixed) if fixed.size == 16 && fixed.name.name == "i128" => {
+                self.writer
+                    .write_all(&value.to_le_bytes())
+                    .map_err(Details::WriteBytes)?;
+                Ok(8)
+            }
+            Schema::Union(union_schema) => {
+                for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
+                    match variant_schema {
+                        Schema::Fixed(fixed) if fixed.size == 16 && fixed.name.name == "i128" => {
+                            encode_int(i as i32, &mut *self.writer)?;
+                            return self.serialize_i128_with_schema(value, variant_schema);
+                        }
+                        _ => { /* skip */ }
+                    }
+                }
+                Err(create_error(format!(
+                    "Cannot find a matching Int-like or Long-like schema in {:?}",
+                    union_schema.schemas
+                )))
+            }
+            expected => Err(create_error(format!("Expected {expected}. Got: i128"))),
+        }
+    }
 
     fn serialize_u8_with_schema(&mut self, value: u8, schema: &Schema) -> Result<usize, Error> {
         let create_error = |cause: String| {
@@ -913,6 +949,12 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     i64::try_from(value).map_err(|cause| create_error(cause.to_string()))?;
                 encode_long(long_value, &mut self.writer)
             }
+            Schema::Fixed(fixed) if fixed.size == 8 && fixed.name.name == "u64" => {
+                self.writer
+                    .write_all(&value.to_le_bytes())
+                    .map_err(Details::WriteBytes)?;
+                Ok(8)
+            }
             Schema::Union(union_schema) => {
                 for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
                     match variant_schema {
@@ -930,6 +972,10 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                             encode_int(i as i32, &mut *self.writer)?;
                             return self.serialize_u64_with_schema(value, variant_schema);
                         }
+                        Schema::Fixed(fixed) if fixed.size == 8 && fixed.name.name == "u64" => {
+                            encode_int(i as i32, &mut *self.writer)?;
+                            return self.serialize_u64_with_schema(value, variant_schema);
+                        }
                         _ => { /* skip */ }
                     }
                 }
@@ -939,6 +985,40 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 )))
             }
             expected => Err(create_error(format!("Expected {expected}. Got: Int/Long"))),
+        }
+    }
+    fn serialize_u128_with_schema(&mut self, value: u128, schema: &Schema) -> Result<usize, Error> {
+        let create_error = |cause: String| {
+            Error::new(Details::SerializeValueWithSchema {
+                value_type: "u128",
+                value: format!("{value}. Cause: {cause}"),
+                schema: schema.clone(),
+            })
+        };
+
+        match schema {
+            Schema::Fixed(fixed) if fixed.size == 16 && fixed.name.name == "u128" => {
+                self.writer
+                    .write_all(&value.to_le_bytes())
+                    .map_err(Details::WriteBytes)?;
+                Ok(8)
+            }
+            Schema::Union(union_schema) => {
+                for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
+                    match variant_schema {
+                        Schema::Fixed(fixed) if fixed.size == 16 && fixed.name.name == "u128" => {
+                            encode_int(i as i32, &mut *self.writer)?;
+                            return self.serialize_u128_with_schema(value, variant_schema);
+                        }
+                        _ => { /* skip */ }
+                    }
+                }
+                Err(create_error(format!(
+                    "Cannot find a matching Int-like or Long-like schema in {:?}",
+                    union_schema.schemas
+                )))
+            }
+            expected => Err(create_error(format!("Expected {expected}. Got: u128"))),
         }
     }
 
@@ -1027,10 +1107,20 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
         match schema {
             Schema::String | Schema::Bytes => self.write_bytes(String::from(value).as_bytes()),
+            Schema::Fixed(fixed) if fixed.size == 4 && fixed.name.name == "char" => {
+                self.writer
+                    .write_all(&u32::from(value).to_le_bytes())
+                    .map_err(Details::WriteBytes)?;
+                Ok(4)
+            }
             Schema::Union(union_schema) => {
                 for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
                     match variant_schema {
                         Schema::String | Schema::Bytes => {
+                            encode_int(i as i32, &mut *self.writer)?;
+                            return self.serialize_char_with_schema(value, variant_schema);
+                        }
+                        Schema::Fixed(fixed) if fixed.size == 4 && fixed.name.name == "char" => {
                             encode_int(i as i32, &mut *self.writer)?;
                             return self.serialize_char_with_schema(value, variant_schema);
                         }
@@ -1756,6 +1846,10 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut SchemaAwareWriteSerializer<'s
         self.serialize_i64_with_schema(v, self.root_schema)
     }
 
+    fn serialize_i128(self, v: i128) -> Result<Self::Ok, Self::Error> {
+        self.serialize_i128_with_schema(v, self.root_schema)
+    }
+
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
         self.serialize_u8_with_schema(v, self.root_schema)
     }
@@ -1770,6 +1864,10 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut SchemaAwareWriteSerializer<'s
 
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
         self.serialize_u64_with_schema(v, self.root_schema)
+    }
+
+    fn serialize_u128(self, v: u128) -> Result<Self::Ok, Self::Error> {
+        self.serialize_u128_with_schema(v, self.root_schema)
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
@@ -1918,6 +2016,7 @@ impl<'a, 's, W: Write> ser::Serializer for &'a mut SchemaAwareWriteSerializer<'s
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::schema::FixedSchema;
     use crate::{
         Days, Duration, Millis, Months, Reader, Writer, decimal::Decimal, error::Details,
         from_value, schema::ResolvedSchema,
@@ -3144,6 +3243,252 @@ mod tests {
                 e: 5
             }
         );
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_serialize_char_as_string() -> TestResult {
+        let schema = Schema::String;
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+
+        'a'.serialize(&mut serializer)?;
+
+        assert_eq!(buffer.as_slice(), &[2, b'a']);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_serialize_char_as_bytes() -> TestResult {
+        let schema = Schema::Bytes;
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+
+        'a'.serialize(&mut serializer)?;
+
+        assert_eq!(buffer.as_slice(), &[2, b'a']);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_serialize_char_as_fixed() -> TestResult {
+        let schema = Schema::Fixed(FixedSchema {
+            name: Name::new("char")?,
+            aliases: None,
+            doc: None,
+            size: 4,
+            default: None,
+            attributes: Default::default(),
+        });
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+
+        'a'.serialize(&mut serializer)?;
+
+        assert_eq!(buffer.as_slice(), &[b'a', 0, 0, 0]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_serialize_char_as_fixed_wrong_name() -> TestResult {
+        let schema = Schema::Fixed(FixedSchema {
+            name: Name::new("characters")?,
+            aliases: None,
+            doc: None,
+            size: 4,
+            default: None,
+            attributes: Default::default(),
+        });
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+
+        assert!(matches!(
+            'a'.serialize(&mut serializer).unwrap_err().details(),
+            Details::SerializeValueWithSchema { .. }
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_serialize_char_as_fixed_wrong_size() -> TestResult {
+        let schema = Schema::Fixed(FixedSchema {
+            name: Name::new("char")?,
+            aliases: None,
+            doc: None,
+            size: 1,
+            default: None,
+            attributes: Default::default(),
+        });
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+
+        assert!(matches!(
+            'a'.serialize(&mut serializer).unwrap_err().details(),
+            Details::SerializeValueWithSchema { .. }
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_serialize_i128_as_fixed() -> TestResult {
+        let schema = Schema::Fixed(FixedSchema {
+            name: Name::new("i128")?,
+            aliases: None,
+            doc: None,
+            size: 16,
+            default: None,
+            attributes: Default::default(),
+        });
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+
+        i128::MAX.serialize(&mut serializer)?;
+
+        assert_eq!(
+            buffer.as_slice(),
+            &[
+                0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                0xFF, 0x7F
+            ]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_serialize_i128_as_fixed_wrong_name() -> TestResult {
+        let schema = Schema::Fixed(FixedSchema {
+            name: Name::new("onehundredtwentyeight")?,
+            aliases: None,
+            doc: None,
+            size: 16,
+            default: None,
+            attributes: Default::default(),
+        });
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+
+        assert!(matches!(
+            i128::MAX.serialize(&mut serializer).unwrap_err().details(),
+            Details::SerializeValueWithSchema { .. }
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_serialize_i128_as_fixed_wrong_size() -> TestResult {
+        let schema = Schema::Fixed(FixedSchema {
+            name: Name::new("i128")?,
+            aliases: None,
+            doc: None,
+            size: 8,
+            default: None,
+            attributes: Default::default(),
+        });
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+
+        assert!(matches!(
+            i128::MAX.serialize(&mut serializer).unwrap_err().details(),
+            Details::SerializeValueWithSchema { .. }
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_serialize_u128_as_fixed() -> TestResult {
+        let schema = Schema::Fixed(FixedSchema {
+            name: Name::new("u128")?,
+            aliases: None,
+            doc: None,
+            size: 16,
+            default: None,
+            attributes: Default::default(),
+        });
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+
+        u128::MAX.serialize(&mut serializer)?;
+
+        assert_eq!(
+            buffer.as_slice(),
+            &[
+                0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                0xFF, 0xFF
+            ]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_serialize_u128_as_fixed_wrong_name() -> TestResult {
+        let schema = Schema::Fixed(FixedSchema {
+            name: Name::new("onehundredtwentyeight")?,
+            aliases: None,
+            doc: None,
+            size: 16,
+            default: None,
+            attributes: Default::default(),
+        });
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+
+        assert!(matches!(
+            u128::MAX.serialize(&mut serializer).unwrap_err().details(),
+            Details::SerializeValueWithSchema { .. }
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_serialize_u128_as_fixed_wrong_size() -> TestResult {
+        let schema = Schema::Fixed(FixedSchema {
+            name: Name::new("u128")?,
+            aliases: None,
+            doc: None,
+            size: 8,
+            default: None,
+            attributes: Default::default(),
+        });
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+
+        assert!(matches!(
+            u128::MAX.serialize(&mut serializer).unwrap_err().details(),
+            Details::SerializeValueWithSchema { .. }
+        ));
+
         Ok(())
     }
 }
