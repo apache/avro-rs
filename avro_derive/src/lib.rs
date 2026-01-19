@@ -71,7 +71,7 @@ fn derive_avro_schema(input: DeriveInput) -> Result<TokenStream, Vec<syn::Error>
             Ok(create_trait_definition(input.ident, &input.generics, inner))
         }
         syn::Data::Union(_) => Err(vec![syn::Error::new(
-            input.span(),
+            input_span,
             "AvroSchema: derive only works for structs and simple enums",
         )]),
     }
@@ -257,6 +257,7 @@ fn get_transparent_struct_schema_def(
                     )]);
                 }
             }
+
             if let Some((field, attrs)) = found {
                 get_field_schema_expr(&field, attrs.with)
             } else {
