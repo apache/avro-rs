@@ -926,7 +926,7 @@ enum RecordSchemaParseLocation {
 }
 
 #[derive(Default)]
-struct Parser {
+pub(crate) struct Parser {
     input_schemas: HashMap<Name, Value>,
     /// A map of name -> Schema::Ref
     /// Used to resolve cyclic references, i.e. when a
