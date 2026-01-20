@@ -44,8 +44,6 @@ pub struct Name {
     pub namespace: Namespace,
 }
 
-/// Represents documentation for complex Avro schemas.
-pub type Documentation = Option<String>;
 /// Represents the aliases for Named Schema
 pub type Aliases = Option<Vec<Alias>>;
 /// Represents Schema lookup within a schema env

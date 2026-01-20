@@ -38,7 +38,7 @@ use std::{
 use strum_macros::{Display, EnumDiscriminants};
 
 mod name;
-pub use name::{Alias, Aliases, Documentation, Name, Names, NamesRef, Namespace};
+pub use name::{Alias, Aliases, Name, Names, NamesRef, Namespace};
 mod record;
 use record::RecordSchemaParseLocation;
 pub use record::{
@@ -48,6 +48,9 @@ mod union;
 pub use union::UnionSchema;
 mod parser;
 use parser::Parser;
+
+/// Represents documentation for complex Avro schemas.
+pub type Documentation = Option<String>;
 
 /// Represents an Avro schema fingerprint
 /// More information about Avro schema fingerprints can be found in the
