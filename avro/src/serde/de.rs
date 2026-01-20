@@ -22,6 +22,7 @@ use serde::{
     de::{self, DeserializeSeed, Deserializer as _, Visitor},
     forward_to_deserialize_any,
 };
+use std::ops::Deref;
 use std::{
     collections::{
         HashMap,
@@ -382,26 +383,241 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
     }
 
     forward_to_deserialize_any! {
-        bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64
+        bool i8 i16 i32 i64 u8 u16 u32 f32 f64
     }
 
-    fn deserialize_char<V>(self, _: V) -> Result<V::Value, Self::Error>
+    fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        Err(de::Error::custom("avro does not support char"))
+        match self.input {
+            Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => {
+                let n = u64::try_from(*i).map_err(|e| Details::ConvertI32ToU64(e, *i))?;
+                visitor.visit_u64(n)
+            }
+            Value::Long(i)
+            | Value::TimeMicros(i)
+            | Value::TimestampMillis(i)
+            | Value::TimestampMicros(i)
+            | Value::TimestampNanos(i)
+            | Value::LocalTimestampMillis(i)
+            | Value::LocalTimestampMicros(i)
+            | Value::LocalTimestampNanos(i) => {
+                let n = u64::try_from(*i).map_err(|e| Details::ConvertI64ToU64(e, *i))?;
+                visitor.visit_u64(n)
+            }
+            Value::Fixed(8, bytes) => {
+                let n = u64::from_le_bytes(bytes.as_slice().try_into().expect("Size is 8"));
+                visitor.visit_u64(n)
+            }
+            Value::Union(_i, x) => match x.deref() {
+                Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => {
+                    let n = u64::try_from(*i).map_err(|e| Details::ConvertI32ToU64(e, *i))?;
+                    visitor.visit_u64(n)
+                }
+                Value::Long(i)
+                | Value::TimeMicros(i)
+                | Value::TimestampMillis(i)
+                | Value::TimestampMicros(i)
+                | Value::TimestampNanos(i)
+                | Value::LocalTimestampMillis(i)
+                | Value::LocalTimestampMicros(i)
+                | Value::LocalTimestampNanos(i) => {
+                    let n = u64::try_from(*i).map_err(|e| Details::ConvertI64ToU64(e, *i))?;
+                    visitor.visit_u64(n)
+                }
+                Value::Fixed(8, bytes) => {
+                    let n = u64::from_le_bytes(bytes.as_slice().try_into().expect("Size is 8"));
+                    visitor.visit_u64(n)
+                }
+                _ => Err(de::Error::custom(format!(
+                    "Expected a Int|Long|Fixed(8), but got {:?}",
+                    self.input
+                ))),
+            },
+            _ => Err(de::Error::custom(format!(
+                "Expected a Int|Long|Fixed(8), but got {:?}",
+                self.input
+            ))),
+        }
+    }
+
+    fn deserialize_u128<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        match self.input {
+            Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => {
+                let n = u128::try_from(*i).map_err(|e| Details::ConvertI32ToU128(e, *i))?;
+                visitor.visit_u128(n)
+            }
+            Value::Long(i)
+            | Value::TimeMicros(i)
+            | Value::TimestampMillis(i)
+            | Value::TimestampMicros(i)
+            | Value::TimestampNanos(i)
+            | Value::LocalTimestampMillis(i)
+            | Value::LocalTimestampMicros(i)
+            | Value::LocalTimestampNanos(i) => {
+                let n = u128::try_from(*i).map_err(|e| Details::ConvertI64ToU128(e, *i))?;
+                visitor.visit_u128(n)
+            }
+            Value::Fixed(16, bytes) => {
+                let n = u128::from_le_bytes(bytes.as_slice().try_into().expect("Size is 16"));
+                visitor.visit_u128(n)
+            }
+            Value::Union(_i, x) => match x.deref() {
+                Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => {
+                    let n = u128::try_from(*i).map_err(|e| Details::ConvertI32ToU128(e, *i))?;
+                    visitor.visit_u128(n)
+                }
+                Value::Long(i)
+                | Value::TimeMicros(i)
+                | Value::TimestampMillis(i)
+                | Value::TimestampMicros(i)
+                | Value::TimestampNanos(i)
+                | Value::LocalTimestampMillis(i)
+                | Value::LocalTimestampMicros(i)
+                | Value::LocalTimestampNanos(i) => {
+                    let n = u128::try_from(*i).map_err(|e| Details::ConvertI64ToU128(e, *i))?;
+                    visitor.visit_u128(n)
+                }
+                Value::Fixed(16, bytes) => {
+                    let n = u128::from_le_bytes(bytes.as_slice().try_into().expect("Size is 16"));
+                    visitor.visit_u128(n)
+                }
+                _ => Err(de::Error::custom(format!(
+                    "Expected a Int|Long|Fixed(16), but got {:?}",
+                    self.input
+                ))),
+            },
+            _ => Err(de::Error::custom(format!(
+                "Expected a Int|Long|Fixed(16), but got {:?}",
+                self.input
+            ))),
+        }
+    }
+
+    fn deserialize_i128<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        match self.input {
+            Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => {
+                visitor.visit_i128(i128::from(*i))
+            }
+            Value::Long(i)
+            | Value::TimeMicros(i)
+            | Value::TimestampMillis(i)
+            | Value::TimestampMicros(i)
+            | Value::TimestampNanos(i)
+            | Value::LocalTimestampMillis(i)
+            | Value::LocalTimestampMicros(i)
+            | Value::LocalTimestampNanos(i) => visitor.visit_i128(i128::from(*i)),
+            Value::Fixed(16, bytes) => {
+                let n = i128::from_le_bytes(bytes.as_slice().try_into().expect("Size is 16"));
+                visitor.visit_i128(n)
+            }
+            Value::Union(_i, x) => match x.deref() {
+                Value::Int(i) | Value::Date(i) | Value::TimeMillis(i) => {
+                    visitor.visit_i128(i128::from(*i))
+                }
+                Value::Long(i)
+                | Value::TimeMicros(i)
+                | Value::TimestampMillis(i)
+                | Value::TimestampMicros(i)
+                | Value::TimestampNanos(i)
+                | Value::LocalTimestampMillis(i)
+                | Value::LocalTimestampMicros(i)
+                | Value::LocalTimestampNanos(i) => visitor.visit_i128(i128::from(*i)),
+                Value::Fixed(16, bytes) => {
+                    let n = i128::from_le_bytes(bytes.as_slice().try_into().expect("Size is 16"));
+                    visitor.visit_i128(n)
+                }
+                _ => Err(de::Error::custom(format!(
+                    "Expected a Int|Long|Fixed(16), but got {:?}",
+                    self.input
+                ))),
+            },
+            _ => Err(de::Error::custom(format!(
+                "Expected a Int|Long|Fixed(16), but got {:?}",
+                self.input
+            ))),
+        }
+    }
+
+    fn deserialize_char<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        match self.input {
+            Value::String(s) => {
+                if s.chars().count() == 1 {
+                    visitor.visit_char(s.chars().next().expect("There is exactly one char"))
+                } else {
+                    Err(de::Error::custom(format!("Tried to deserialize char from string, but the string was longer than one char: {s}")))
+                }
+            }
+            Value::Bytes(bytes) => std::str::from_utf8(bytes)
+                .map_err(|e| de::Error::custom(e.to_string()))
+                .and_then(|s| {
+                    if s.chars().count() == 1 {
+                        visitor.visit_char(s.chars().next().expect("There is exactly one char"))
+                    } else {
+                        Err(de::Error::custom(format!("Tried to deserialize char from a byte array, but the byte array was longer than one char: {}", s.len())))
+                    }
+                }
+            ),
+            Value::Fixed(4, bytes) => {
+                visitor.visit_char(char::from_u32(u32::from_le_bytes(bytes.as_slice().try_into().expect("Size is 4"))).ok_or_else(|| <Self::Error as de::Error>::custom("Tried to deserialize char from fixed, but was invalid value"))?)
+            }
+            Value::Union(_i, x) => match x.deref() {
+                Value::String(s) => {
+                    if s.chars().count() == 1 {
+                        visitor.visit_char(s.chars().next().expect("There is exactly one char"))
+                    } else {
+                        Err(de::Error::custom(format!("Tried to deserialize char from string, but the string was longer than one char: {s}")))
+                    }
+                }
+                Value::Bytes(bytes) => std::str::from_utf8(bytes)
+                    .map_err(|e| de::Error::custom(e.to_string()))
+                    .and_then(|s| {
+                        if s.chars().count() == 1 {
+                            visitor.visit_char(s.chars().next().expect("There is exactly one char"))
+                        } else {
+                            Err(de::Error::custom(format!("Tried to deserialize char from a byte array, but the byte array was longer than one char: {}", s.len())))
+                        }
+                    }
+                    ),
+                Value::Fixed(4, bytes) => {
+                    visitor.visit_char(char::from_u32(u32::from_le_bytes(bytes.as_slice().try_into().expect("Size is 4"))).ok_or_else(|| <Self::Error as de::Error>::custom("Tried to deserialize char from fixed, but was invalid value"))?)
+                }
+                _ => Err(de::Error::custom(format!("Expected a String|Bytes|Fixed(4) for char, but got {:?}", self.input)))
+            },
+            _ => Err(de::Error::custom(format!("Expected a String|Bytes|Fixed(4) for char, but got {:?}", self.input)))
+        }
     }
 
     fn deserialize_str<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        match *self.input {
-            Value::String(ref s) => visitor.visit_borrowed_str(s),
-            Value::Bytes(ref bytes) | Value::Fixed(_, ref bytes) => ::std::str::from_utf8(bytes)
+        match self.input {
+            Value::String(s) => visitor.visit_borrowed_str(s),
+            Value::Bytes(bytes) | Value::Fixed(_, bytes) => std::str::from_utf8(bytes)
                 .map_err(|e| de::Error::custom(e.to_string()))
                 .and_then(|s| visitor.visit_borrowed_str(s)),
-            Value::Uuid(ref u) => visitor.visit_str(&u.to_string()),
+            Value::Uuid(u) => visitor.visit_str(&u.to_string()),
+            Value::Union(_i, x) => match x.deref() {
+                Value::String(s) => visitor.visit_borrowed_str(s),
+                Value::Bytes(bytes) | Value::Fixed(_, bytes) => std::str::from_utf8(bytes)
+                    .map_err(|e| de::Error::custom(e.to_string()))
+                    .and_then(|s| visitor.visit_borrowed_str(s)),
+                Value::Uuid(u) => visitor.visit_str(&u.to_string()),
+                _ => Err(de::Error::custom(format!(
+                    "Expected a String|Bytes|Fixed|Uuid, but got {x:?}"
+                ))),
+            },
             _ => Err(de::Error::custom(format!(
                 "Expected a String|Bytes|Fixed|Uuid, but got {:?}",
                 self.input
@@ -413,22 +629,18 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        match *self.input {
-            Value::Enum(_, ref s) | Value::String(ref s) => visitor.visit_borrowed_str(s),
-            Value::Bytes(ref bytes) | Value::Fixed(_, ref bytes) => {
-                String::from_utf8(bytes.to_owned())
+        match self.input {
+            Value::Enum(_, s) | Value::String(s) => visitor.visit_borrowed_str(s),
+            Value::Bytes(bytes) | Value::Fixed(_, bytes) => String::from_utf8(bytes.to_owned())
+                .map_err(|e| de::Error::custom(e.to_string()))
+                .and_then(|s| visitor.visit_string(s)),
+            Value::Uuid(u) => visitor.visit_str(&u.to_string()),
+            Value::Union(_i, x) => match x.deref() {
+                Value::String(s) => visitor.visit_borrowed_str(s),
+                Value::Bytes(bytes) | Value::Fixed(_, bytes) => String::from_utf8(bytes.to_owned())
                     .map_err(|e| de::Error::custom(e.to_string()))
-                    .and_then(|s| visitor.visit_string(s))
-            }
-            Value::Uuid(ref u) => visitor.visit_str(&u.to_string()),
-            Value::Union(_i, ref x) => match **x {
-                Value::String(ref s) => visitor.visit_borrowed_str(s),
-                Value::Bytes(ref bytes) | Value::Fixed(_, ref bytes) => {
-                    String::from_utf8(bytes.to_owned())
-                        .map_err(|e| de::Error::custom(e.to_string()))
-                        .and_then(|s| visitor.visit_string(s))
-                }
-                Value::Uuid(ref u) => visitor.visit_str(&u.to_string()),
+                    .and_then(|s| visitor.visit_string(s)),
+                Value::Uuid(u) => visitor.visit_str(&u.to_string()),
                 _ => Err(de::Error::custom(format!(
                     "Expected a String|Bytes|Fixed|Uuid, but got {x:?}"
                 ))),
@@ -444,18 +656,18 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        match *self.input {
-            Value::String(ref s) => visitor.visit_bytes(s.as_bytes()),
-            Value::Bytes(ref bytes) | Value::Fixed(_, ref bytes) => {
+        match self.input {
+            Value::String(s) => visitor.visit_bytes(s.as_bytes()),
+            Value::Bytes(bytes) | Value::Fixed(_, bytes) => {
                 if DE_BYTES_BORROWED.get() {
                     visitor.visit_borrowed_bytes(bytes)
                 } else {
                     visitor.visit_bytes(bytes)
                 }
             }
-            Value::Uuid(ref u) => visitor.visit_bytes(u.as_bytes()),
-            Value::Decimal(ref d) => visitor.visit_bytes(&d.to_vec()?),
-            Value::Duration(ref d) => {
+            Value::Uuid(u) => visitor.visit_bytes(u.as_bytes()),
+            Value::Decimal(d) => visitor.visit_bytes(&d.to_vec()?),
+            Value::Duration(d) => {
                 let d_bytes: [u8; 12] = d.into();
                 visitor.visit_bytes(&d_bytes[..])
             }
@@ -470,14 +682,14 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        match *self.input {
-            Value::String(ref s) => visitor.visit_byte_buf(s.clone().into_bytes()),
-            Value::Bytes(ref bytes) | Value::Fixed(_, ref bytes) => {
+        match self.input {
+            Value::String(s) => visitor.visit_byte_buf(s.clone().into_bytes()),
+            Value::Bytes(bytes) | Value::Fixed(_, bytes) => {
                 visitor.visit_byte_buf(bytes.to_owned())
             }
-            Value::Uuid(ref u) => visitor.visit_byte_buf(Vec::from(u.as_bytes())),
-            Value::Decimal(ref d) => visitor.visit_byte_buf(d.to_vec()?),
-            Value::Duration(ref d) => {
+            Value::Uuid(u) => visitor.visit_byte_buf(Vec::from(u.as_bytes())),
+            Value::Decimal(d) => visitor.visit_byte_buf(d.to_vec()?),
+            Value::Duration(d) => {
                 let d_bytes: [u8; 12] = d.into();
                 visitor.visit_byte_buf(Vec::from(d_bytes))
             }
@@ -492,9 +704,9 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        match *self.input {
-            Value::Union(_i, ref inner) if inner.as_ref() == &Value::Null => visitor.visit_none(),
-            Value::Union(_i, ref inner) => visitor.visit_some(&Deserializer::new(inner)),
+        match self.input {
+            Value::Union(_i, inner) if inner.as_ref() == &Value::Null => visitor.visit_none(),
+            Value::Union(_i, inner) => visitor.visit_some(&Deserializer::new(inner)),
             _ => Err(de::Error::custom(format!(
                 "Expected a Union, but got {:?}",
                 self.input
@@ -506,9 +718,9 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        match *self.input {
+        match self.input {
             Value::Null => visitor.visit_unit(),
-            Value::Union(_i, ref x) => match **x {
+            Value::Union(_i, x) => match **x {
                 Value::Null => visitor.visit_unit(),
                 _ => Err(de::Error::custom(format!(
                     "Expected a Null, but got {:?}",
@@ -548,10 +760,10 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        match *self.input {
-            Value::Array(ref items) => visitor.visit_seq(SeqDeserializer::new(items)),
-            Value::Union(_i, ref inner) => match **inner {
-                Value::Array(ref items) => visitor.visit_seq(SeqDeserializer::new(items)),
+        match self.input {
+            Value::Array(items) => visitor.visit_seq(SeqDeserializer::new(items)),
+            Value::Union(_i, inner) => match inner.deref() {
+                Value::Array(items) => visitor.visit_seq(SeqDeserializer::new(items)),
                 Value::Null => visitor.visit_seq(SeqDeserializer::new(&[])),
                 _ => Err(de::Error::custom(format!(
                     "Expected an Array or Null, but got: {inner:?}"
@@ -587,9 +799,9 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        match *self.input {
-            Value::Map(ref items) => visitor.visit_map(MapDeserializer::new(items)),
-            Value::Record(ref fields) => visitor.visit_map(RecordDeserializer::new(fields)),
+        match self.input {
+            Value::Map(items) => visitor.visit_map(MapDeserializer::new(items)),
+            Value::Record(fields) => visitor.visit_map(RecordDeserializer::new(fields)),
             _ => Err(de::Error::custom(format_args!(
                 "Expected a record or a map. Got: {:?}",
                 &self.input
@@ -606,10 +818,10 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        match *self.input {
-            Value::Record(ref fields) => visitor.visit_map(RecordDeserializer::new(fields)),
-            Value::Union(_i, ref inner) => match **inner {
-                Value::Record(ref fields) => visitor.visit_map(RecordDeserializer::new(fields)),
+        match self.input {
+            Value::Record(fields) => visitor.visit_map(RecordDeserializer::new(fields)),
+            Value::Union(_i, inner) => match inner.deref() {
+                Value::Record(fields) => visitor.visit_map(RecordDeserializer::new(fields)),
                 Value::Null => visitor.visit_map(RecordDeserializer::new(&[])),
                 _ => Err(de::Error::custom(format!(
                     "Expected a Record or Null, got: {inner:?}"
@@ -631,26 +843,26 @@ impl<'de> de::Deserializer<'de> for &Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        match *self.input {
+        match self.input {
             // This branch can be anything...
-            Value::Record(ref fields) => visitor.visit_enum(EnumDeserializer::new(fields)),
-            Value::String(ref field) => visitor.visit_enum(EnumUnitDeserializer::new(field)),
-            Value::Union(idx, ref inner) => {
-                if (idx as usize) < variants.len() {
+            Value::Record(fields) => visitor.visit_enum(EnumDeserializer::new(fields)),
+            Value::String(field) => visitor.visit_enum(EnumUnitDeserializer::new(field)),
+            Value::Union(idx, inner) => {
+                if (*idx as usize) < variants.len() {
                     visitor.visit_enum(UnionDeserializer::new(
-                        variants[idx as usize],
+                        variants[*idx as usize],
                         inner.as_ref(),
                     ))
                 } else {
                     Err(Details::GetUnionVariant {
-                        index: idx as i64,
+                        index: *idx as i64,
                         num_variants: variants.len(),
                     }
                     .into())
                 }
             }
             // This has to be a unit Enum
-            Value::Enum(_index, ref field) => visitor.visit_enum(EnumUnitDeserializer::new(field)),
+            Value::Enum(_index, field) => visitor.visit_enum(EnumUnitDeserializer::new(field)),
             _ => Err(de::Error::custom(format!(
                 "Expected a Record|Enum, but got {:?}",
                 self.input
@@ -727,8 +939,7 @@ impl<'de> de::MapAccess<'de> for RecordDeserializer<'de> {
         K: DeserializeSeed<'de>,
     {
         match self.input.next() {
-            Some(item) => {
-                let (ref field, ref value) = *item;
+            Some((field, value)) => {
                 self.value = Some(value);
                 seed.deserialize(StringDeserializer {
                     input: field.clone(),
@@ -1665,6 +1876,81 @@ mod tests {
         let value = Value::Union(0, Box::new(Value::Bytes(expected_bytes.clone())));
         let raw_bytes = from_value::<Option<Bytes>>(&value)?;
         assert_eq!(raw_bytes.unwrap().0, expected_bytes);
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_deserialize_char_from_string() -> TestResult {
+        let value = Value::String('a'.to_string());
+        let result = from_value::<char>(&value)?;
+        assert_eq!(result, 'a');
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_deserialize_char_from_bytes() -> TestResult {
+        let value = Value::Bytes([b'a'].to_vec());
+        let result = from_value::<char>(&value)?;
+        assert_eq!(result, 'a');
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_deserialize_char_from_fixed() -> TestResult {
+        let value = Value::Fixed(4, [b'a', 0, 0, 0].to_vec());
+        let result = from_value::<char>(&value)?;
+        assert_eq!(result, 'a');
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_deserialize_char_from_long_string() -> TestResult {
+        let value = Value::String("avro".to_string());
+        let result = from_value::<char>(&value).unwrap_err().to_string();
+        assert_eq!(
+            result,
+            "Failed to deserialize Avro value into value: Tried to deserialize char from string, but the string was longer than one char: avro"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_deserialize_char_from_long_bytes() -> TestResult {
+        let value = Value::Bytes(b"avro".to_vec());
+        let result = from_value::<char>(&value).unwrap_err().to_string();
+        assert_eq!(
+            result,
+            "Failed to deserialize Avro value into value: Tried to deserialize char from a byte array, but the byte array was longer than one char: 4"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_deserialize_char_from_long_fixed() -> TestResult {
+        let value = Value::Fixed(5, [b'a', 0, 0, 0, 0].to_vec());
+        let result = from_value::<char>(&value).unwrap_err().to_string();
+        assert_eq!(
+            result,
+            "Failed to deserialize Avro value into value: Expected a String|Bytes|Fixed(4) for char, but got Fixed(5, [97, 0, 0, 0, 0])"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_deserialize_char_from_short_fixed() -> TestResult {
+        let value = Value::Fixed(3, [b'a', 0, 0].to_vec());
+        let result = from_value::<char>(&value).unwrap_err().to_string();
+        assert_eq!(
+            result,
+            "Failed to deserialize Avro value into value: Expected a String|Bytes|Fixed(4) for char, but got Fixed(3, [97, 0, 0])"
+        );
+
         Ok(())
     }
 }

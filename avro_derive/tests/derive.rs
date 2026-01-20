@@ -2101,3 +2101,61 @@ fn avro_rs_401_supported_type_variants() {
     let schema = Schema::parse_str(schema).unwrap();
     assert_eq!(schema, Foo::get_schema());
 }
+
+#[test]
+fn avro_rs_414_round_trip_char_u64_u128_i128() {
+    let schema = Schema::parse_str(
+        r#"
+      {
+        "type":"record",
+        "name":"Foo",
+        "fields": [
+          {
+            "name": "a",
+            "type": "string"
+          },
+          {
+            "name": "b",
+            "type": {
+                "name": "u64",
+                "type": "fixed",
+                "size": 8
+            }
+          },
+          {
+            "name": "c",
+            "type": {
+                "name": "u128",
+                "type": "fixed",
+                "size": 16
+            }
+          },
+          {
+            "name": "d",
+            "type": {
+                "name": "i128",
+                "type": "fixed",
+                "size": 16
+            }
+          }
+        ]
+      }"#,
+    )
+    .unwrap();
+
+    #[derive(AvroSchema, Serialize, Deserialize, PartialEq, Debug, Clone)]
+    struct Foo {
+        a: char,
+        b: u64,
+        c: u128,
+        d: i128,
+    }
+
+    assert_eq!(schema, Foo::get_schema());
+    serde_assert(Foo {
+        a: '👺',
+        b: u64::MAX,
+        c: u128::MAX,
+        d: i128::MAX,
+    });
+}
