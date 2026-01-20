@@ -92,7 +92,7 @@ impl RecordField {
             &schema,
             &name,
             &enclosing_record.fullname(None),
-            &parser.parsed_schemas,
+            parser.get_parsed_schemas(),
             &default,
         )?;
 
