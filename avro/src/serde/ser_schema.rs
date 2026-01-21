@@ -3570,19 +3570,6 @@ mod tests {
 
     #[test]
     fn avro_rs_421_serialize_bytes_union_of_fixed() -> TestResult {
-        #[derive(Serialize, Deserialize)]
-        #[serde(transparent)]
-        struct Fixed4 {
-            #[serde(with = "crate::serde_avro_fixed")]
-            field: [u8; 4],
-        }
-        #[derive(Serialize, Deserialize)]
-        #[serde(transparent)]
-        struct Fixed8 {
-            #[serde(with = "crate::serde_avro_fixed")]
-            field: [u8; 8],
-        }
-
         let schema = Schema::parse_str(
             r#"[
             { "name": "fixed4", "type": "fixed", "size": 4 },
@@ -3594,15 +3581,10 @@ mod tests {
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
         let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
-        let bytes_written = Fixed4 {
-            field: [0, 1, 2, 3],
-        }
-        .serialize(&mut serializer)?;
+        let bytes_written = crate::serde_avro_fixed::serialize(&[0, 1, 2, 3], &mut serializer)?;
         assert_eq!(bytes_written, 4);
-        let bytes_written = Fixed8 {
-            field: [4, 5, 6, 7, 8, 9, 10, 11],
-        }
-        .serialize(&mut serializer)?;
+        let bytes_written =
+            crate::serde_avro_fixed::serialize(&[4, 5, 6, 7, 8, 9, 10, 11], &mut serializer)?;
         assert_eq!(bytes_written, 8);
 
         assert_eq!(buffer, &[0, 0, 1, 2, 3, 2, 4, 5, 6, 7, 8, 9, 10, 11][..]);
