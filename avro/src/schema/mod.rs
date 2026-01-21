@@ -913,15 +913,8 @@ impl Schema {
                     schema.denormalize(schemata, defined_names)?;
                 }
             }
-            Schema::Enum(EnumSchema { name, .. })
-            | Schema::Fixed(FixedSchema { name, .. })
-            | Schema::Decimal(DecimalSchema {
-                inner: InnerDecimalSchema::Fixed(FixedSchema { name, .. }),
-                ..
-            })
-            | Schema::Uuid(UuidSchema::Fixed(FixedSchema { name, .. }))
-            | Schema::Duration(FixedSchema { name, .. }) => {
-                defined_names.insert(name.clone());
+            schema if schema.is_named() => {
+                defined_names.insert(schema.name().expect("Schema is named").clone());
             }
             _ => (),
         }
@@ -6479,36 +6472,25 @@ mod tests {
 
     #[test]
     fn avro_rs_420_independent_canonical_form() -> TestResult {
-        let record = Schema::Record(
-            RecordSchema::builder()
-                .name(Name::new("root")?)
-                .fields(vec![
-                    RecordField::builder()
-                        .name("node".into())
-                        .schema(Schema::Ref {
-                            name: Name::new("node")?,
-                        })
-                        .build(),
-                ])
-                .build(),
-        );
-        let node = Schema::Record(
-            RecordSchema::builder()
-                .name(Name::new("node")?)
-                .fields(vec![
-                    RecordField::builder()
-                        .name("children".into())
-                        .schema(Schema::union(vec![
-                            Schema::Null,
-                            Schema::Ref {
-                                name: Name::new("node")?,
-                            },
-                        ])?)
-                        .build(),
-                ])
-                .build(),
-        );
-        let icf = record.independent_canonical_form(&[node])?;
+        let (record, schemata) = Schema::parse_str_with_list(
+            r#"{
+            "name": "root",
+            "type": "record",
+            "fields": [{
+                "name": "node",
+                "type": "node"
+            }]
+        }"#,
+            [r#"{
+            "name": "node",
+            "type": "record",
+            "fields": [{
+                "name": "children",
+                "type": ["null", "node"]
+            }]
+        }"#],
+        )?;
+        let icf = record.independent_canonical_form(&schemata)?;
         assert_eq!(
             icf,
             r#"{"name":"root","type":"record","fields":[{"name":"node","type":{"name":"node","type":"record","fields":[{"name":"children","type":["null","node"]}]}}]}"#
