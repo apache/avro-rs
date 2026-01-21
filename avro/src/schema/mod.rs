@@ -614,7 +614,7 @@ impl Schema {
     /// https://avro.apache.org/docs/current/specification/#parsing-canonical-form-for-schemas
     pub fn independent_canonical_form(&self, schemata: &[Schema]) -> Result<String, Error> {
         let mut this = self.clone();
-        this.denormalize(schemata)?;
+        this.denormalize(schemata, &mut HashSet::with_capacity(schemata.len()))?;
         Ok(this.canonical_form())
     }
 
@@ -870,7 +870,19 @@ impl Schema {
         UnionSchema::new(schemas).map(Schema::Union)
     }
 
-    fn denormalize(&mut self, schemata: &[Schema]) -> AvroResult<()> {
+    fn denormalize(
+        &mut self,
+        schemata: &[Schema],
+        defined_names: &mut HashSet<Name>,
+    ) -> AvroResult<()> {
+        // If this name already exists in this schema we can reference it.
+        // This makes the denormalized form as small as possible and prevent infinite loops for recursive types.
+        if let Some(name) = self.name()
+            && defined_names.contains(name)
+        {
+            *self = Schema::Ref { name: name.clone() };
+            return Ok(());
+        }
         match self {
             Schema::Ref { name } => {
                 let replacement_schema = schemata
@@ -878,27 +890,31 @@ impl Schema {
                     .find(|s| s.name().map(|n| *n == *name).unwrap_or(false));
                 if let Some(schema) = replacement_schema {
                     let mut denorm = schema.clone();
-                    denorm.denormalize(schemata)?;
+                    denorm.denormalize(schemata, defined_names)?;
                     *self = denorm;
                 } else {
                     return Err(Details::SchemaResolutionError(name.clone()).into());
                 }
             }
             Schema::Record(record_schema) => {
+                defined_names.insert(record_schema.name.clone());
                 for field in &mut record_schema.fields {
-                    field.schema.denormalize(schemata)?;
+                    field.schema.denormalize(schemata, defined_names)?;
                 }
             }
             Schema::Array(array_schema) => {
-                array_schema.items.denormalize(schemata)?;
+                array_schema.items.denormalize(schemata, defined_names)?;
             }
             Schema::Map(map_schema) => {
-                map_schema.types.denormalize(schemata)?;
+                map_schema.types.denormalize(schemata, defined_names)?;
             }
             Schema::Union(union_schema) => {
                 for schema in &mut union_schema.schemas {
-                    schema.denormalize(schemata)?;
+                    schema.denormalize(schemata, defined_names)?;
                 }
+            }
+            schema if schema.is_named() => {
+                defined_names.insert(schema.name().expect("Schema is named").clone());
             }
             _ => (),
         }
@@ -6451,6 +6467,34 @@ mod tests {
             })
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_420_independent_canonical_form() -> TestResult {
+        let (record, schemata) = Schema::parse_str_with_list(
+            r#"{
+            "name": "root",
+            "type": "record",
+            "fields": [{
+                "name": "node",
+                "type": "node"
+            }]
+        }"#,
+            [r#"{
+            "name": "node",
+            "type": "record",
+            "fields": [{
+                "name": "children",
+                "type": ["null", "node"]
+            }]
+        }"#],
+        )?;
+        let icf = record.independent_canonical_form(&schemata)?;
+        assert_eq!(
+            icf,
+            r#"{"name":"root","type":"record","fields":[{"name":"node","type":{"name":"node","type":"record","fields":[{"name":"children","type":["null","node"]}]}}]}"#
+        );
         Ok(())
     }
 }
