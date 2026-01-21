@@ -18,7 +18,7 @@
 //! Logic for serde-compatible schema-aware serialization
 //! which writes directly to a `Write` stream
 
-use crate::schema::{InnerDecimalSchema, UuidSchema};
+use crate::schema::{DecimalSchema, InnerDecimalSchema, UuidSchema};
 use crate::{
     bigdecimal::big_decimal_as_bytes,
     encode::{encode_int, encode_long},
@@ -1282,12 +1282,30 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     match variant_schema {
                         Schema::String
                         | Schema::Bytes
-                        | Schema::Uuid(_)
+                        | Schema::Uuid(UuidSchema::Bytes | UuidSchema::String)
                         | Schema::BigDecimal
-                        | Schema::Fixed(_)
-                        | Schema::Duration(_)
-                        | Schema::Decimal(_)
+                        | Schema::Decimal(DecimalSchema {
+                            inner: InnerDecimalSchema::Bytes,
+                            ..
+                        })
                         | Schema::Ref { name: _ } => {
+                            encode_int(i as i32, &mut *self.writer)?;
+                            return self.serialize_bytes_with_schema(value, variant_schema);
+                        }
+                        Schema::Fixed(fixed) | Schema::Uuid(UuidSchema::Fixed(fixed))
+                            if fixed.size == value.len() =>
+                        {
+                            encode_int(i as i32, &mut *self.writer)?;
+                            return self.serialize_bytes_with_schema(value, variant_schema);
+                        }
+                        Schema::Decimal(DecimalSchema {
+                            inner: InnerDecimalSchema::Fixed(fixed),
+                            ..
+                        }) if fixed.size >= value.len() => {
+                            encode_int(i as i32, &mut *self.writer)?;
+                            return self.serialize_bytes_with_schema(value, variant_schema);
+                        }
+                        Schema::Duration(_) if value.len() == 12 => {
                             encode_int(i as i32, &mut *self.writer)?;
                             return self.serialize_bytes_with_schema(value, variant_schema);
                         }
@@ -3546,6 +3564,30 @@ mod tests {
             u128::MAX.serialize(&mut serializer).unwrap_err().details(),
             Details::SerializeValueWithSchema { .. }
         ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_421_serialize_bytes_union_of_fixed() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"[
+            { "name": "fixed4", "type": "fixed", "size": 4 },
+            { "name": "fixed8", "type": "fixed", "size": 8 }
+        ]"#,
+        )
+        .unwrap();
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let bytes_written = crate::serde_avro_fixed::serialize(&[0, 1, 2, 3], &mut serializer)?;
+        assert_eq!(bytes_written, 4);
+        let bytes_written =
+            crate::serde_avro_fixed::serialize(&[4, 5, 6, 7, 8, 9, 10, 11], &mut serializer)?;
+        assert_eq!(bytes_written, 8);
+
+        assert_eq!(buffer, &[0, 0, 1, 2, 3, 2, 4, 5, 6, 7, 8, 9, 10, 11][..]);
 
         Ok(())
     }
