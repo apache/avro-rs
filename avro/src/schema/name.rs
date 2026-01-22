@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{Map, Value};
 
 use crate::{
-    AvroResult, Schema,
+    AvroResult, Error, Schema,
     error::Details,
     util::MapHelper,
     validator::{validate_namespace, validate_schema_name},
@@ -145,9 +145,19 @@ impl Name {
     }
 }
 
-impl From<&str> for Name {
-    fn from(name: &str) -> Self {
-        Name::new(name).unwrap()
+impl TryFrom<&str> for Name {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl TryFrom<String> for Name {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(&value)
     }
 }
 
@@ -200,9 +210,19 @@ impl Alias {
     }
 }
 
-impl From<&str> for Alias {
-    fn from(name: &str) -> Self {
-        Alias::new(name).unwrap()
+impl TryFrom<&str> for Alias {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl TryFrom<String> for Alias {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(&value)
     }
 }
 

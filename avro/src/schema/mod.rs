@@ -6269,7 +6269,7 @@ mod tests {
     #[test]
     fn avro_rs_382_serialize_duration_schema() -> TestResult {
         let schema = Schema::Duration(FixedSchema {
-            name: Name::from("Duration"),
+            name: Name::try_from("Duration")?,
             aliases: None,
             doc: None,
             size: 12,

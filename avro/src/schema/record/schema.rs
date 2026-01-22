@@ -90,11 +90,11 @@ mod tests {
 
         let record_schema = RecordSchema::builder()
             .name(name.clone())
-            .aliases(Some(vec!["alias_1".into()]))
+            .aliases(Some(vec!["alias_1".try_into()?]))
             .build();
 
         assert_eq!(record_schema.name, name);
-        assert_eq!(record_schema.aliases, Some(vec!["alias_1".into()]));
+        assert_eq!(record_schema.aliases, Some(vec!["alias_1".try_into()?]));
         assert_eq!(record_schema.doc, None);
         assert_eq!(record_schema.fields.len(), 0);
         assert_eq!(record_schema.lookup.len(), 0);
