@@ -42,6 +42,21 @@ pub struct RecordSchema {
     pub attributes: BTreeMap<String, Value>,
 }
 
+impl<S: record_schema_builder::State> RecordSchemaBuilder<S> {
+    /// Try to set a Name from the given string.
+    pub fn try_name<T>(
+        self,
+        name: T,
+    ) -> Result<RecordSchemaBuilder<record_schema_builder::SetName<S>>, <T as TryInto<Name>>::Error>
+    where
+        <S as record_schema_builder::State>::Name: record_schema_builder::IsUnset,
+        T: TryInto<Name>,
+    {
+        let name = name.try_into()?;
+        Ok(self.name(name))
+    }
+}
+
 /// Calculate the lookup table for the given fields.
 fn calculate_lookup_table(fields: &[RecordField]) -> BTreeMap<String, usize> {
     fields
@@ -152,11 +167,11 @@ mod tests {
         let name = Name::new("TestRecord")?;
         let fields = vec![
             RecordField::builder()
-                .name("field1_null".into())
+                .name("field1_null")
                 .schema(Schema::Null)
                 .build(),
             RecordField::builder()
-                .name("field2_bool".into())
+                .name("field2_bool")
                 .schema(Schema::Boolean)
                 .build(),
         ];
@@ -178,6 +193,19 @@ mod tests {
         assert_eq!(record_schema.fields, fields);
         assert_eq!(record_schema.lookup, expected_lookup);
         assert_eq!(record_schema.attributes.len(), 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_419_name_into() -> TestResult {
+        let schema = RecordSchema::builder().try_name("str_slice")?.build();
+        assert_eq!(schema.name, "str_slice".try_into()?);
+
+        let schema = RecordSchema::builder()
+            .try_name("String".to_string())?
+            .build();
+        assert_eq!(schema.name, "String".try_into()?);
 
         Ok(())
     }

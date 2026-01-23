@@ -151,16 +151,8 @@ mod tests {
     #[test]
     fn avro_rs_402_new_union_schema_duplicate_names() -> TestResult {
         let res = UnionSchema::new(vec![
-            Schema::Record(
-                RecordSchema::builder()
-                    .name("Same_name".try_into()?)
-                    .build(),
-            ),
-            Schema::Record(
-                RecordSchema::builder()
-                    .name("Same_name".try_into()?)
-                    .build(),
-            ),
+            Schema::Record(RecordSchema::builder().try_name("Same_name")?.build()),
+            Schema::Record(RecordSchema::builder().try_name("Same_name")?.build()),
         ])
         .map_err(Error::into_details);
 
