@@ -162,7 +162,7 @@ const RAW_ADDRESS_SCHEMA: &str = r#"
 }
 "#;
 
-fn make_small_record() -> anyhow::Result<(Schema, Value)> {
+fn make_small_record() -> Result<(Schema, Value), Box<dyn std::error::Error>> {
     let small_schema = Schema::parse_str(RAW_SMALL_SCHEMA)?;
     let small_record = {
         let mut small_record = Record::new(&small_schema).unwrap();
@@ -172,7 +172,7 @@ fn make_small_record() -> anyhow::Result<(Schema, Value)> {
     Ok((small_schema, small_record))
 }
 
-fn make_small_record_ser() -> anyhow::Result<(Schema, SmallRecord)> {
+fn make_small_record_ser() -> Result<(Schema, SmallRecord), Box<dyn std::error::Error>> {
     let small_schema = Schema::parse_str(RAW_SMALL_SCHEMA)?;
     let small_record = SmallRecord {
         field: String::from("foo"),
@@ -180,7 +180,7 @@ fn make_small_record_ser() -> anyhow::Result<(Schema, SmallRecord)> {
     Ok((small_schema, small_record))
 }
 
-fn make_big_record() -> anyhow::Result<(Schema, Value)> {
+fn make_big_record() -> Result<(Schema, Value), Box<dyn std::error::Error>> {
     let big_schema = Schema::parse_str(RAW_BIG_SCHEMA)?;
     let address_schema = Schema::parse_str(RAW_ADDRESS_SCHEMA)?;
     let mut address = Record::new(&address_schema).unwrap();
@@ -212,7 +212,7 @@ fn make_big_record() -> anyhow::Result<(Schema, Value)> {
     Ok((big_schema, big_record))
 }
 
-fn make_big_record_ser() -> anyhow::Result<(Schema, BigRecord)> {
+fn make_big_record_ser() -> Result<(Schema, BigRecord), Box<dyn std::error::Error>> {
     let big_schema = Schema::parse_str(RAW_BIG_SCHEMA)?;
     let big_record = BigRecord {
         username: Some(String::from("username")),
@@ -250,7 +250,7 @@ fn write_ser<T: Serialize>(schema: &Schema, records: &[T]) -> AvroResult<Vec<u8>
     writer.into_inner()
 }
 
-fn read(schema: &Schema, bytes: &[u8]) -> anyhow::Result<()> {
+fn read(schema: &Schema, bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
     let reader = Reader::with_schema(schema, bytes)?;
 
     for record in reader {
@@ -259,7 +259,7 @@ fn read(schema: &Schema, bytes: &[u8]) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn read_schemaless(bytes: &[u8]) -> anyhow::Result<()> {
+fn read_schemaless(bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
     let reader = Reader::new(bytes)?;
 
     for record in reader {
@@ -270,10 +270,10 @@ fn read_schemaless(bytes: &[u8]) -> anyhow::Result<()> {
 
 fn bench_write(
     c: &mut Criterion,
-    make_record: impl Fn() -> anyhow::Result<(Schema, Value)>,
+    make_record: impl Fn() -> Result<(Schema, Value), Box<dyn std::error::Error>>,
     n_records: usize,
     name: &str,
-) -> anyhow::Result<()> {
+) -> Result<(), Box<dyn std::error::Error>> {
     let (schema, record) = make_record()?;
     let records = make_records(record, n_records);
     c.bench_function(name, |b| b.iter(|| write(&schema, &records)));
@@ -282,10 +282,10 @@ fn bench_write(
 
 fn bench_write_ser<T: Serialize + Clone>(
     c: &mut Criterion,
-    make_record: impl Fn() -> anyhow::Result<(Schema, T)>,
+    make_record: impl Fn() -> Result<(Schema, T), Box<dyn std::error::Error>>,
     n_records: usize,
     name: &str,
-) -> anyhow::Result<()> {
+) -> Result<(), Box<dyn std::error::Error>> {
     let (schema, record) = make_record()?;
     let records = make_records_ser(record, n_records);
     c.bench_function(name, |b| b.iter(|| write_ser(&schema, &records)));
@@ -294,10 +294,10 @@ fn bench_write_ser<T: Serialize + Clone>(
 
 fn bench_read(
     c: &mut Criterion,
-    make_record: impl Fn() -> anyhow::Result<(Schema, Value)>,
+    make_record: impl Fn() -> Result<(Schema, Value), Box<dyn std::error::Error>>,
     n_records: usize,
     name: &str,
-) -> anyhow::Result<()> {
+) -> Result<(), Box<dyn std::error::Error>> {
     let (schema, record) = make_record()?;
     let records = make_records(record, n_records);
     let bytes = write(&schema, &records).unwrap();
@@ -305,7 +305,11 @@ fn bench_read(
     Ok(())
 }
 
-fn bench_from_file(c: &mut Criterion, file_path: &str, name: &str) -> anyhow::Result<()> {
+fn bench_from_file(
+    c: &mut Criterion,
+    file_path: &str,
+    name: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let bytes = std::fs::read(file_path)?;
     c.bench_function(name, |b| b.iter(|| read_schemaless(&bytes)));
     Ok(())
