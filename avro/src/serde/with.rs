@@ -284,7 +284,7 @@ pub mod fixed_opt {
 /// Note that `&[u8]` are always serialized as [`Value::Bytes`]. However,
 /// both [`Value::Bytes`] and [`Value::Fixed`] can be deserialized as `&[u8]`.
 ///
-/// Use [`apache_avro::serde::slice`] for optional bytes/fixed borrowed values.
+/// Use [`apache_avro::serde::slice_opt`] for optional bytes/fixed borrowed values.
 ///
 /// See usage with below example:
 /// ```rust
