@@ -1710,7 +1710,7 @@ mod tests {
 
         let schema_c_expected = Schema::Record(
             RecordSchema::builder()
-                .name(Name::new("C")?)
+                .try_name("C")?
                 .fields(vec![
                     RecordField::builder()
                         .name("field_one".to_string())
