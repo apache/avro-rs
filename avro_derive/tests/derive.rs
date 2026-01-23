@@ -16,9 +16,8 @@
 // under the License.
 
 use apache_avro::{
-    Reader, Schema, Writer, from_value,
+    AvroSchema, AvroSchemaComponent, Reader, Schema, Writer, from_value,
     schema::{Alias, EnumSchema, FixedSchema, Name, Names, Namespace, RecordSchema},
-    serde::{AvroSchema, AvroSchemaComponent},
 };
 use apache_avro_derive::*;
 use proptest::prelude::*;
