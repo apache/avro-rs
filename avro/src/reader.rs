@@ -23,9 +23,10 @@ use crate::{
     from_value,
     headers::{HeaderBuilder, RabinFingerprintHeader},
     schema::{
-        AvroSchema, Names, ResolvedOwnedSchema, ResolvedSchema, Schema, resolve_names,
+        Names, ResolvedOwnedSchema, ResolvedSchema, Schema, resolve_names,
         resolve_names_with_schemata,
     },
+    serde::AvroSchema,
     types::Value,
     util,
 };
