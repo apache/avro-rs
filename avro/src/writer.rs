@@ -21,7 +21,7 @@ use crate::{
     encode::{encode, encode_internal, encode_to_vec},
     error::Details,
     headers::{HeaderBuilder, RabinFingerprintHeader},
-    schema::{Name, ResolvedOwnedSchema, ResolvedSchema, Schema},
+    schema::{ResolvedOwnedSchema, ResolvedSchema, Schema},
     serde::{AvroSchema, ser_schema::SchemaAwareWriteSerializer},
     types::Value,
 };
@@ -642,8 +642,18 @@ where
             .write_all(self.inner.buffer.as_slice())
             .map_err(Details::WriteBytes)?;
 
-        let bytes_written =
-            self.inner.buffer.len() + write_avro_datum_ref(&self.schema, data, writer)?;
+        // Use the resolved schema names from the inner GenericSingleObjectWriter
+        // to properly resolve Schema::Ref during serialization
+        let names_ref = self
+            .inner
+            .resolved
+            .get_names()
+            .iter()
+            .map(|(name, schema)| (name.clone(), schema))
+            .collect();
+        let mut serializer =
+            SchemaAwareWriteSerializer::new(writer, &self.schema, &names_ref, None);
+        let bytes_written = self.inner.buffer.len() + data.serialize(&mut serializer)?;
 
         Ok(bytes_written)
     }
@@ -733,8 +743,9 @@ pub fn write_avro_datum_ref<T: Serialize, W: Write>(
     data: &T,
     writer: &mut W,
 ) -> AvroResult<usize> {
-    let names: HashMap<Name, &Schema> = HashMap::new();
-    let mut serializer = SchemaAwareWriteSerializer::new(writer, schema, &names, None);
+    let resolved = ResolvedSchema::try_from(schema)?;
+    let mut serializer =
+        SchemaAwareWriteSerializer::new(writer, schema, resolved.get_names(), None);
     let bytes_written = data.serialize(&mut serializer)?;
     Ok(bytes_written)
 }
@@ -1457,6 +1468,7 @@ mod tests {
         a: i64,
         b: f64,
         c: Vec<String>,
+        child: Option<Box<TestSingleObjectWriter>>,
     }
 
     impl AvroSchema for TestSingleObjectWriter {
@@ -1480,6 +1492,10 @@ mod tests {
                             "type":"array",
                             "items":"string"
                         }
+                    },
+                    {
+                        "name":"child",
+                        "type":["null", "TestSingleObjectWrtierSerialize"]
                     }
                 ]
             }
@@ -1497,6 +1513,13 @@ mod tests {
                     "c".into(),
                     Value::Array(obj.c.into_iter().map(|s| s.into()).collect()),
                 ),
+                (
+                    "child".into(),
+                    match obj.child {
+                        Some(child) => Value::Union(1, Box::new((*child).into())),
+                        None => Value::Union(0, Box::new(Value::Null)),
+                    },
+                ),
             ])
         }
     }
@@ -1508,6 +1531,7 @@ mod tests {
             a: 300,
             b: 34.555,
             c: vec!["cat".into(), "dog".into()],
+            child: None,
         };
         let mut writer = GenericSingleObjectWriter::new_with_capacity(
             &TestSingleObjectWriter::get_schema(),
@@ -1548,6 +1572,7 @@ mod tests {
             a: 300,
             b: 34.555,
             c: vec!["cat".into(), "dog".into()],
+            child: None,
         };
         let schema_uuid = Uuid::parse_str("b2f1cf00-0434-013e-439a-125eb8485a5f")?;
         let header_builder = GlueSchemaUuidHeader::from_uuid(schema_uuid);
@@ -1568,12 +1593,46 @@ mod tests {
         Ok(())
     }
 
+    /// Tests that `SpecificSingleObjectWriter` correctly handles recursive schemas
+    /// containing `Schema::Ref` references. This verifies that the writer properly
+    /// resolves schema references during serialization of nested structures.
+    #[test]
+    fn test_specific_single_object_writer_with_schema_ref() -> TestResult {
+        let obj = TestSingleObjectWriter {
+            a: 300,
+            b: 34.555,
+            c: vec!["parent".into()],
+            child: Some(Box::new(TestSingleObjectWriter {
+                a: 100,
+                b: 12.345,
+                c: vec!["child".into()],
+                child: None,
+            })),
+        };
+
+        let mut writer = SpecificSingleObjectWriter::<TestSingleObjectWriter>::with_capacity(1024)?;
+        let mut buf: Vec<u8> = Vec::new();
+        let bytes_written = writer.write_ref(&obj, &mut buf)?;
+
+        assert!(bytes_written > 0);
+        assert!(!buf.is_empty());
+        assert_eq!(buf[0], 0xC3);
+        assert_eq!(buf[1], 0x01);
+
+        let data = &buf[10..];
+        assert!(data.windows(6).any(|w| w == b"parent"));
+        assert!(data.windows(5).any(|w| w == b"child"));
+
+        Ok(())
+    }
+
     #[test]
     fn test_writer_parity() -> TestResult {
         let obj1 = TestSingleObjectWriter {
             a: 300,
             b: 34.555,
             c: vec!["cat".into(), "dog".into()],
+            child: None,
         };
 
         let mut buf1: Vec<u8> = Vec::new();
