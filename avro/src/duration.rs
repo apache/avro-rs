@@ -207,7 +207,6 @@ impl<'de> Deserialize<'de> for Duration {
 mod tests {
     use super::*;
     use crate::types::Value;
-    use anyhow::anyhow;
     use apache_avro_test_helper::TestResult;
 
     #[test]
@@ -230,7 +229,7 @@ mod tests {
                 assert_eq!(b, vec![7, 0, 0, 0, 4, 0, 0, 0, 45, 0, 0, 0]);
             }
             _ => {
-                Err(anyhow!("Expected a Bytes value but got {ser_val:?}"))?;
+                Err(format!("Expected a Bytes value but got {ser_val:?}"))?;
             }
         }
         Ok(())

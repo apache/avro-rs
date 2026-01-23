@@ -21,7 +21,7 @@ struct Test {
     b: &'static str,
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let test = Test { a: 27, b: "foo" };
     let value = apache_avro::to_value(test)?;
     println!("{value:?}");

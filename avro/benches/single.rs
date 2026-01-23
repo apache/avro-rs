@@ -137,7 +137,7 @@ const RAW_ADDRESS_SCHEMA: &str = r#"
 }
 "#;
 
-fn make_small_record() -> anyhow::Result<(Schema, Value)> {
+fn make_small_record() -> Result<(Schema, Value), Box<dyn std::error::Error>> {
     let small_schema = Schema::parse_str(RAW_SMALL_SCHEMA)?;
     let small_record = {
         let mut small_record = Record::new(&small_schema).unwrap();
@@ -148,7 +148,7 @@ fn make_small_record() -> anyhow::Result<(Schema, Value)> {
     Ok((small_schema, small_record))
 }
 
-fn make_big_record() -> anyhow::Result<(Schema, Value)> {
+fn make_big_record() -> Result<(Schema, Value), Box<dyn std::error::Error>> {
     let big_schema = Schema::parse_str(RAW_BIG_SCHEMA)?;
     let address_schema = Schema::parse_str(RAW_ADDRESS_SCHEMA)?;
     let mut address = Record::new(&address_schema).unwrap();

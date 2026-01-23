@@ -24,7 +24,7 @@ struct Test {
     b: String,
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut buffer: Vec<u8> = Vec::new();
     let test = Test {
         a: 27,
