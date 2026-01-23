@@ -16,11 +16,13 @@
 // under the License.
 
 mod de;
+mod derive;
 mod ser;
 pub(crate) mod ser_schema;
 mod util;
 mod with;
 
 pub use de::from_value;
+pub use derive::{AvroSchema, AvroSchemaComponent};
 pub use ser::to_value;
 pub use with::{bytes, bytes_opt, fixed, fixed_opt, slice, slice_opt};

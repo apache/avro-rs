@@ -21,8 +21,8 @@ use crate::{
     encode::{encode, encode_internal, encode_to_vec},
     error::Details,
     headers::{HeaderBuilder, RabinFingerprintHeader},
-    schema::{AvroSchema, Name, ResolvedOwnedSchema, ResolvedSchema, Schema},
-    serde::ser_schema::SchemaAwareWriteSerializer,
+    schema::{Name, ResolvedOwnedSchema, ResolvedSchema, Schema},
+    serde::{AvroSchema, ser_schema::SchemaAwareWriteSerializer},
     types::Value,
 };
 use serde::Serialize;
