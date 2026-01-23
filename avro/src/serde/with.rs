@@ -37,6 +37,36 @@ pub(crate) enum BytesType {
     Fixed,
 }
 
+struct BytesTypeGuard(BytesType);
+impl BytesTypeGuard {
+    fn set(temp: BytesType) -> Self {
+        let prev = SER_BYTES_TYPE.get();
+        SER_BYTES_TYPE.set(temp);
+        Self(prev)
+    }
+}
+
+impl Drop for BytesTypeGuard {
+    fn drop(&mut self) {
+        SER_BYTES_TYPE.set(self.0);
+    }
+}
+
+struct BorrowedGuard(bool);
+impl BorrowedGuard {
+    fn set(temp: bool) -> Self {
+        let prev = DE_BYTES_BORROWED.get();
+        DE_BYTES_BORROWED.set(temp);
+        Self(prev)
+    }
+}
+
+impl Drop for BorrowedGuard {
+    fn drop(&mut self) {
+        DE_BYTES_BORROWED.set(self.0);
+    }
+}
+
 /// Efficient (de)serialization of Avro bytes values.
 ///
 /// This module is intended to be used through the Serde `with` attribute.
@@ -167,7 +197,7 @@ pub mod bytes_opt {
 ///
 /// [`apache_avro::serde::fixed_opt`]: fixed_opt
 pub mod fixed {
-    use super::{BytesType, SER_BYTES_TYPE};
+    use super::BytesType;
     use serde::{Deserializer, Serializer};
 
     use crate::{
@@ -197,10 +227,8 @@ pub mod fixed {
     where
         S: Serializer,
     {
-        SER_BYTES_TYPE.set(BytesType::Fixed);
-        let res = serde_bytes::serialize(bytes, serializer);
-        SER_BYTES_TYPE.set(BytesType::Bytes);
-        res
+        let _guard = super::BytesTypeGuard::set(BytesType::Fixed);
+        serde_bytes::serialize(bytes, serializer)
     }
 
     pub fn deserialize<'de, D, const N: usize>(deserializer: D) -> Result<[u8; N], D::Error>
@@ -235,7 +263,7 @@ pub mod fixed {
 ///
 /// [`apache_avro::serde::fixed`]: fixed
 pub mod fixed_opt {
-    use super::{BytesType, SER_BYTES_TYPE};
+    use super::BytesType;
     use serde::{Deserializer, Serializer};
     use std::borrow::Borrow;
 
@@ -263,10 +291,8 @@ pub mod fixed_opt {
         S: Serializer,
         B: Borrow<[u8]> + serde_bytes::Serialize,
     {
-        SER_BYTES_TYPE.set(BytesType::Fixed);
-        let res = serde_bytes::serialize(bytes, serializer);
-        SER_BYTES_TYPE.set(BytesType::Bytes);
-        res
+        let _guard = super::BytesTypeGuard::set(BytesType::Fixed);
+        serde_bytes::serialize(bytes, serializer)
     }
 
     pub fn deserialize<'de, D, const N: usize>(deserializer: D) -> Result<Option<[u8; N]>, D::Error>
@@ -301,9 +327,8 @@ pub mod fixed_opt {
 ///
 /// [`Value::Bytes`]: crate::types::Value::Bytes
 /// [`Value::Fixed`]: crate::types::Value::Fixed
-/// [`apache_avro::serde::slice`]: slice_opt
+/// [`apache_avro::serde::slice_opt`]: slice_opt
 pub mod slice {
-    use super::DE_BYTES_BORROWED;
     use serde::{Deserializer, Serializer};
 
     use crate::{
@@ -327,10 +352,8 @@ pub mod slice {
     where
         D: Deserializer<'de>,
     {
-        DE_BYTES_BORROWED.set(true);
-        let res = serde_bytes::deserialize(deserializer);
-        DE_BYTES_BORROWED.set(false);
-        res
+        let _guard = super::BorrowedGuard::set(true);
+        serde_bytes::deserialize(deserializer)
     }
 }
 
@@ -360,7 +383,6 @@ pub mod slice {
 /// [`Value::Fixed`]: crate::types::Value::Fixed
 /// [`apache_avro::serde::slice`]: mod@slice
 pub mod slice_opt {
-    use super::DE_BYTES_BORROWED;
     use serde::{Deserializer, Serializer};
     use std::borrow::Borrow;
 
@@ -388,10 +410,8 @@ pub mod slice_opt {
     where
         D: Deserializer<'de>,
     {
-        DE_BYTES_BORROWED.set(true);
-        let res = serde_bytes::deserialize(deserializer);
-        DE_BYTES_BORROWED.set(false);
-        res
+        let _guard = super::BorrowedGuard::set(true);
+        serde_bytes::deserialize(deserializer)
     }
 }
 
