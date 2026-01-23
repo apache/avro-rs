@@ -19,7 +19,6 @@ use apache_avro::{
     AvroSchema, AvroSchemaComponent, Reader, Schema, Writer, from_value,
     schema::{Alias, EnumSchema, FixedSchema, Name, Names, Namespace, RecordSchema},
 };
-use apache_avro_derive::*;
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{borrow::Cow, collections::HashMap, sync::Mutex};
