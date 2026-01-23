@@ -34,6 +34,7 @@ use strum_macros::EnumString;
 #[derive(bon::Builder, Clone, Debug, PartialEq)]
 pub struct RecordField {
     /// Name of the field.
+    #[builder(into)]
     pub name: String,
     /// Documentation of the field.
     #[builder(default)]
@@ -263,6 +264,23 @@ mod tests {
             .build();
 
         assert!(!non_nullable_record_field.is_nullable());
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_419_name_into() -> TestResult {
+        let field = RecordField::builder()
+            .name("str_slice")
+            .schema(Schema::Boolean)
+            .build();
+        assert_eq!(field.name, "str_slice");
+
+        let field = RecordField::builder()
+            .name("String".to_string())
+            .schema(Schema::Boolean)
+            .build();
+        assert_eq!(field.name, "String");
+
         Ok(())
     }
 }

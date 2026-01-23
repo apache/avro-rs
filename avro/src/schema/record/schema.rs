@@ -152,11 +152,11 @@ mod tests {
         let name = Name::new("TestRecord")?;
         let fields = vec![
             RecordField::builder()
-                .name("field1_null".into())
+                .name("field1_null")
                 .schema(Schema::Null)
                 .build(),
             RecordField::builder()
-                .name("field2_bool".into())
+                .name("field2_bool")
                 .schema(Schema::Boolean)
                 .build(),
         ];
