@@ -48,11 +48,12 @@ pub struct RecordSchema {
 use record_schema_builder::{IsUnset, SetName, State};
 impl<S: State> RecordSchemaBuilder<S> {
     /// Try to set a Name from the given string.
-    pub fn try_name(self, name: impl Into<String>) -> AvroResult<RecordSchemaBuilder<SetName<S>>>
+    pub fn try_name<T>(self, name: T) -> Result<RecordSchemaBuilder<SetName<S>>, <T as TryInto<Name>>::Error>
     where
         <S as State>::Name: IsUnset,
+        T: TryInto<Name>,
     {
-        let name = Name::try_from(name.into())?;
+        let name = name.try_into()?;
         Ok(self.name(name))
     }
 }
