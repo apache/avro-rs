@@ -15,10 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::{
-    AvroResult,
-    schema::{Aliases, Documentation, Name, RecordField},
-};
+use crate::schema::{Aliases, Documentation, Name, RecordField};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
@@ -45,12 +42,14 @@ pub struct RecordSchema {
     pub attributes: BTreeMap<String, Value>,
 }
 
-use record_schema_builder::{IsUnset, SetName, State};
-impl<S: State> RecordSchemaBuilder<S> {
+impl<S: record_schema_builder::State> RecordSchemaBuilder<S> {
     /// Try to set a Name from the given string.
-    pub fn try_name<T>(self, name: T) -> Result<RecordSchemaBuilder<SetName<S>>, <T as TryInto<Name>>::Error>
+    pub fn try_name<T>(
+        self,
+        name: T,
+    ) -> Result<RecordSchemaBuilder<record_schema_builder::SetName<S>>, <T as TryInto<Name>>::Error>
     where
-        <S as State>::Name: IsUnset,
+        <S as record_schema_builder::State>::Name: record_schema_builder::IsUnset,
         T: TryInto<Name>,
     {
         let name = name.try_into()?;
