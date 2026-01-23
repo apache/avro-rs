@@ -16,7 +16,7 @@
 // under the License.
 
 //! Logic for serde-compatible deserialization.
-use crate::{Error, bytes::DE_BYTES_BORROWED, error::Details, types::Value};
+use crate::{Error, error::Details, serde::with::DE_BYTES_BORROWED, types::Value};
 use serde::{
     Deserialize,
     de::{self, DeserializeSeed, Deserializer as _, Visitor},

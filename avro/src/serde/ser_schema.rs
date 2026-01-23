@@ -3581,10 +3581,10 @@ mod tests {
         let mut buffer: Vec<u8> = Vec::new();
         let names = HashMap::new();
         let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
-        let bytes_written = crate::serde_avro_fixed::serialize(&[0, 1, 2, 3], &mut serializer)?;
+        let bytes_written = crate::serde::fixed::serialize(&[0, 1, 2, 3], &mut serializer)?;
         assert_eq!(bytes_written, 4);
         let bytes_written =
-            crate::serde_avro_fixed::serialize(&[4, 5, 6, 7, 8, 9, 10, 11], &mut serializer)?;
+            crate::serde::fixed::serialize(&[4, 5, 6, 7, 8, 9, 10, 11], &mut serializer)?;
         assert_eq!(bytes_written, 8);
 
         assert_eq!(buffer, &[0, 0, 1, 2, 3, 2, 4, 5, 6, 7, 8, 9, 10, 11][..]);

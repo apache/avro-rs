@@ -756,13 +756,13 @@ that need to be applied in the case of byte arrays.
 
  #[derive(Debug, Deserialize, Serialize)]
  struct SampleStruct {
-  #[serde(with = "apache_avro::serde_avro_bytes")]
+  #[serde(with = "apache_avro::serde::bytes")]
   non_optional_bytes: Vec<u8>,
-  #[serde(with = "apache_avro::serde_avro_bytes_opt")]
+  #[serde(with = "apache_avro::serde::bytes_opt")]
   optional_bytes: Option<Vec<u8>>,
-  #[serde(with = "apache_avro::serde_avro_fixed")]
+  #[serde(with = "apache_avro::serde::fixed")]
   non_optional_fixed: [u8; 6],
-  #[serde(with = "apache_avro::serde_avro_fixed_opt")]
+  #[serde(with = "apache_avro::serde::fixed_opt")]
   optional_fixed: Option<[u8; 6]>,
  }
 ```
@@ -774,7 +774,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 struct ExampleByteArray {
-    #[serde(with = "apache_avro::serde_avro_bytes_opt")]
+    #[serde(with = "apache_avro::serde::bytes_opt")]
     data_bytes: Option<Vec<u8>>,
     description: Option<String>,
 }
@@ -826,8 +826,6 @@ fn serde_byte_array() {
   assert_eq!(records, deserialized_records);
 }
 ```
-
-Full implementation and other options for things like fixed byte arrays can be found in src/bytes.rs
 
 <!-- cargo-rdme end -->
 

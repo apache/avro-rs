@@ -868,13 +868,13 @@
 //!
 //!  #[derive(Debug, Deserialize, Serialize)]
 //!  struct SampleStruct {
-//!   #[serde(with = "apache_avro::serde_avro_bytes")]
+//!   #[serde(with = "apache_avro::serde::bytes")]
 //!   non_optional_bytes: Vec<u8>,
-//!   #[serde(with = "apache_avro::serde_avro_bytes_opt")]
+//!   #[serde(with = "apache_avro::serde::bytes_opt")]
 //!   optional_bytes: Option<Vec<u8>>,
-//!   #[serde(with = "apache_avro::serde_avro_fixed")]
+//!   #[serde(with = "apache_avro::serde::fixed")]
 //!   non_optional_fixed: [u8; 6],
-//!   #[serde(with = "apache_avro::serde_avro_fixed_opt")]
+//!   #[serde(with = "apache_avro::serde::fixed_opt")]
 //!   optional_fixed: Option<[u8; 6]>,
 //!  }
 //! ```
@@ -886,7 +886,7 @@
 //!
 //! #[derive(Debug, Deserialize, PartialEq, Serialize)]
 //! struct ExampleByteArray {
-//!     #[serde(with = "apache_avro::serde_avro_bytes_opt")]
+//!     #[serde(with = "apache_avro::serde::bytes_opt")]
 //!     data_bytes: Option<Vec<u8>>,
 //!     description: Option<String>,
 //! }
@@ -938,9 +938,6 @@
 //!   assert_eq!(records, deserialized_records);
 //! }
 //! ```
-//!
-//! Full implementation and other options for things like fixed byte arrays can be found in src/bytes.rs
-//!
 
 mod bigdecimal;
 mod bytes;
@@ -950,7 +947,6 @@ mod decode;
 mod duration;
 mod encode;
 mod reader;
-mod serde;
 mod writer;
 
 pub mod error;
@@ -959,10 +955,12 @@ pub mod rabin;
 pub mod schema;
 pub mod schema_compatibility;
 pub mod schema_equality;
+pub mod serde;
 pub mod types;
 pub mod util;
 pub mod validator;
 
+#[expect(deprecated)]
 pub use crate::{
     bigdecimal::BigDecimal,
     bytes::{
@@ -985,7 +983,7 @@ pub use reader::{
     from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
 };
 pub use schema::{AvroSchema, AvroSchemaComponent, Schema};
-pub use serde::{de::from_value, ser::to_value};
+pub use serde::{from_value, to_value};
 pub use uuid::Uuid;
 pub use writer::{
     GenericSingleObjectWriter, SpecificSingleObjectWriter, Writer, WriterBuilder, to_avro_datum,

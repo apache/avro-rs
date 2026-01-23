@@ -15,7 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-pub mod de;
-pub mod ser;
-pub mod ser_schema;
+mod de;
+mod ser;
+pub(crate) mod ser_schema;
 mod util;
+mod with;
+
+pub use de::from_value;
+pub use ser::to_value;
+pub use with::{bytes, bytes_opt, fixed, fixed_opt, slice, slice_opt};

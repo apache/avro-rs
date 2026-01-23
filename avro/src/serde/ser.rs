@@ -18,7 +18,7 @@
 //! Logic for serde-compatible serialization.
 use crate::{
     Error,
-    bytes::{BytesType, SER_BYTES_TYPE},
+    serde::with::{BytesType, SER_BYTES_TYPE},
     types::Value,
 };
 use serde::{Serialize, ser};
