@@ -1048,7 +1048,7 @@ mod tests {
         logical_type_test(
             r#"{"type": {"type": "fixed", "name": "duration", "size": 12}, "logicalType": "duration"}"#,
             &Schema::Duration(FixedSchema {
-                name: Name::from("duration"),
+                name: Name::try_from("duration").expect("Name is valid"),
                 aliases: None,
                 doc: None,
                 size: 12,

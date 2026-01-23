@@ -273,7 +273,7 @@ mod tests {
     #[test]
     fn avro_rs_382_compare_schemata_duration_equal() {
         let schema_one = Schema::Duration(FixedSchema {
-            name: Name::from("name1"),
+            name: Name::try_from("name1").expect("Name is valid"),
             size: 12,
             aliases: None,
             doc: None,
@@ -281,7 +281,7 @@ mod tests {
             attributes: BTreeMap::new(),
         });
         let schema_two = Schema::Duration(FixedSchema {
-            name: Name::from("name1"),
+            name: Name::try_from("name1").expect("Name is valid"),
             size: 12,
             aliases: None,
             doc: None,
@@ -296,7 +296,7 @@ mod tests {
     #[test]
     fn avro_rs_382_compare_schemata_duration_different_names() {
         let schema_one = Schema::Duration(FixedSchema {
-            name: Name::from("name1"),
+            name: Name::try_from("name1").expect("Name is valid"),
             size: 12,
             aliases: None,
             doc: None,
@@ -304,7 +304,7 @@ mod tests {
             attributes: BTreeMap::new(),
         });
         let schema_two = Schema::Duration(FixedSchema {
-            name: Name::from("name2"),
+            name: Name::try_from("name2").expect("Name is valid"),
             size: 12,
             aliases: None,
             doc: None,
@@ -321,7 +321,7 @@ mod tests {
     #[test]
     fn avro_rs_382_compare_schemata_duration_different_attributes() {
         let schema_one = Schema::Duration(FixedSchema {
-            name: Name::from("name1"),
+            name: Name::try_from("name1").expect("Name is valid"),
             size: 12,
             aliases: None,
             doc: None,
@@ -331,7 +331,7 @@ mod tests {
                 .collect(),
         });
         let schema_two = Schema::Duration(FixedSchema {
-            name: Name::from("name1"),
+            name: Name::try_from("name1").expect("Name is valid"),
             size: 12,
             aliases: None,
             doc: None,
@@ -352,7 +352,7 @@ mod tests {
     #[test]
     fn avro_rs_382_compare_schemata_duration_different_sizes() {
         let schema_one = Schema::Duration(FixedSchema {
-            name: Name::from("name1"),
+            name: Name::try_from("name1").expect("Name is valid"),
             size: 8,
             aliases: None,
             doc: None,
@@ -360,7 +360,7 @@ mod tests {
             attributes: BTreeMap::new(),
         });
         let schema_two = Schema::Duration(FixedSchema {
-            name: Name::from("name1"),
+            name: Name::try_from("name1").expect("Name is valid"),
             size: 12,
             aliases: None,
             doc: None,
@@ -377,11 +377,11 @@ mod tests {
     #[test]
     fn test_avro_3939_compare_named_schemata_with_different_names() {
         let schema_one = Schema::Ref {
-            name: Name::from("name1"),
+            name: Name::try_from("name1").expect("Name is valid"),
         };
 
         let schema_two = Schema::Ref {
-            name: Name::from("name2"),
+            name: Name::try_from("name2").expect("Name is valid"),
         };
 
         let specification_eq_res = SPECIFICATION_EQ.compare(&schema_one, &schema_two);
@@ -496,7 +496,7 @@ mod tests {
     #[test]
     fn test_avro_3939_compare_fixed_schemata() {
         let schema_one = Schema::Fixed(FixedSchema {
-            name: Name::from("fixed"),
+            name: Name::try_from("fixed").expect("Name is valid"),
             doc: None,
             size: 10,
             default: None,
@@ -507,7 +507,7 @@ mod tests {
         assert!(!STRUCT_FIELD_EQ.compare(&schema_one, &Schema::Boolean));
 
         let schema_two = Schema::Fixed(FixedSchema {
-            name: Name::from("fixed"),
+            name: Name::try_from("fixed").expect("Name is valid"),
             doc: None,
             size: 10,
             default: None,
@@ -531,7 +531,7 @@ mod tests {
     #[test]
     fn test_avro_3939_compare_enum_schemata() {
         let schema_one = Schema::Enum(EnumSchema {
-            name: Name::from("enum"),
+            name: Name::try_from("enum").expect("Name is valid"),
             doc: None,
             symbols: vec!["A".to_string(), "B".to_string()],
             default: None,
@@ -542,7 +542,7 @@ mod tests {
         assert!(!STRUCT_FIELD_EQ.compare(&schema_one, &Schema::Boolean));
 
         let schema_two = Schema::Enum(EnumSchema {
-            name: Name::from("enum"),
+            name: Name::try_from("enum").expect("Name is valid"),
             doc: None,
             symbols: vec!["A".to_string(), "B".to_string()],
             default: None,
@@ -566,13 +566,13 @@ mod tests {
     #[test]
     fn test_avro_3939_compare_ref_schemata() {
         let schema_one = Schema::Ref {
-            name: Name::from("ref"),
+            name: Name::try_from("ref").expect("Name is valid"),
         };
         assert!(!SPECIFICATION_EQ.compare(&schema_one, &Schema::Boolean));
         assert!(!STRUCT_FIELD_EQ.compare(&schema_one, &Schema::Boolean));
 
         let schema_two = Schema::Ref {
-            name: Name::from("ref"),
+            name: Name::try_from("ref").expect("Name is valid"),
         };
 
         let specification_eq_res = SPECIFICATION_EQ.compare(&schema_one, &schema_two);
@@ -591,7 +591,7 @@ mod tests {
     #[test]
     fn test_avro_3939_compare_record_schemata() {
         let schema_one = Schema::Record(RecordSchema {
-            name: Name::from("record"),
+            name: Name::try_from("record").expect("Name is valid"),
             doc: None,
             fields: vec![RecordField {
                 name: "field".to_string(),
@@ -611,7 +611,7 @@ mod tests {
         assert!(!STRUCT_FIELD_EQ.compare(&schema_one, &Schema::Boolean));
 
         let schema_two = Schema::Record(RecordSchema {
-            name: Name::from("record"),
+            name: Name::try_from("record").expect("Name is valid"),
             doc: None,
             fields: vec![RecordField {
                 name: "field".to_string(),

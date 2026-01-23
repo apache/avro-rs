@@ -968,7 +968,7 @@ pub(crate) mod tests {
     fn avro_3926_encode_decode_uuid_to_fixed_wrong_schema_size() -> TestResult {
         let schema = Schema::Fixed(FixedSchema {
             size: 15,
-            name: "uuid".into(),
+            name: "uuid".try_into()?,
             aliases: None,
             doc: None,
             default: None,

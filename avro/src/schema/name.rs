@@ -15,14 +15,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::collections::HashMap;
-use std::fmt;
-
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{Map, Value};
+use std::collections::HashMap;
+use std::fmt;
+use std::str::FromStr;
 
 use crate::{
-    AvroResult, Schema,
+    AvroResult, Error, Schema,
     error::Details,
     util::MapHelper,
     validator::{validate_namespace, validate_schema_name},
@@ -145,9 +145,27 @@ impl Name {
     }
 }
 
-impl From<&str> for Name {
-    fn from(name: &str) -> Self {
-        Name::new(name).unwrap()
+impl TryFrom<&str> for Name {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl TryFrom<String> for Name {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(&value)
+    }
+}
+
+impl FromStr for Name {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::new(s)
     }
 }
 
@@ -200,9 +218,27 @@ impl Alias {
     }
 }
 
-impl From<&str> for Alias {
-    fn from(name: &str) -> Self {
-        Alias::new(name).unwrap()
+impl TryFrom<&str> for Alias {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl TryFrom<String> for Alias {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(&value)
+    }
+}
+
+impl FromStr for Alias {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::new(s)
     }
 }
 

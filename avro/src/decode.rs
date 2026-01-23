@@ -891,7 +891,7 @@ mod tests {
 
         let fixed = FixedSchema {
             size: 16,
-            name: "uuid".into(),
+            name: "uuid".try_into()?,
             aliases: None,
             doc: None,
             default: None,

@@ -1356,7 +1356,7 @@ mod tests {
             (
                 Value::Fixed(12, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
                 Schema::Duration(FixedSchema {
-                    name: Name::from("TestName"),
+                    name: Name::try_from("TestName")?,
                     aliases: None,
                     doc: None,
                     size: 12,
@@ -1369,7 +1369,7 @@ mod tests {
             (
                 Value::Fixed(11, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
                 Schema::Duration(FixedSchema {
-                    name: Name::from("TestName"),
+                    name: Name::try_from("TestName")?,
                     aliases: None,
                     doc: None,
                     size: 12,
@@ -1924,7 +1924,7 @@ Field with name '"b"' is not a member of the map items"#,
             value
                 .clone()
                 .resolve(&Schema::Duration(FixedSchema {
-                    name: Name::from("TestName"),
+                    name: Name::try_from("TestName").expect("Name is valid"),
                     aliases: None,
                     doc: None,
                     size: 12,
@@ -1937,7 +1937,7 @@ Field with name '"b"' is not a member of the map items"#,
         assert!(
             Value::Long(1i64)
                 .resolve(&Schema::Duration(FixedSchema {
-                    name: Name::from("TestName"),
+                    name: Name::try_from("TestName").expect("Name is valid"),
                     aliases: None,
                     doc: None,
                     size: 12,
@@ -3187,7 +3187,7 @@ Field with name '"b"' is not a member of the map items"#,
         let value = Value::Bytes(vec![97, 98, 99]);
         assert_eq!(
             value.resolve(&Schema::Fixed(FixedSchema {
-                name: "test".into(),
+                name: "test".try_into()?,
                 aliases: None,
                 doc: None,
                 size: 3,
@@ -3201,7 +3201,7 @@ Field with name '"b"' is not a member of the map items"#,
         assert!(
             value
                 .resolve(&Schema::Fixed(FixedSchema {
-                    name: "test".into(),
+                    name: "test".try_into()?,
                     aliases: None,
                     doc: None,
                     size: 3,
@@ -3215,7 +3215,7 @@ Field with name '"b"' is not a member of the map items"#,
         assert!(
             value
                 .resolve(&Schema::Fixed(FixedSchema {
-                    name: "test".into(),
+                    name: "test".try_into()?,
                     aliases: None,
                     doc: None,
                     size: 3,
