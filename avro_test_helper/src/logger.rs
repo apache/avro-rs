@@ -15,6 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#![cfg(not(target_arch = "wasm32"))]
+
 use crate::LOG_MESSAGES;
 use log::{LevelFilter, Log, Metadata};
 use std::sync::OnceLock;
@@ -85,7 +87,6 @@ pub fn assert_logged(expected_message: &str) {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn install() {
     log::set_logger(test_logger())
         .map(|_| log::set_max_level(LevelFilter::Trace))
