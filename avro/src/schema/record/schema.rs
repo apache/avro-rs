@@ -15,7 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::schema::{Aliases, Documentation, Name, RecordField};
+use crate::{
+    AvroResult,
+    schema::{Aliases, Documentation, Name, RecordField},
+};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
@@ -40,6 +43,18 @@ pub struct RecordSchema {
     /// The custom attributes of the schema
     #[builder(default)]
     pub attributes: BTreeMap<String, Value>,
+}
+
+use record_schema_builder::{IsUnset, SetName, State};
+impl<S: State> RecordSchemaBuilder<S> {
+    /// Try to set a Name from the given string.
+    pub fn try_name(self, name: impl Into<String>) -> AvroResult<RecordSchemaBuilder<SetName<S>>>
+    where
+        <S as State>::Name: IsUnset,
+    {
+        let name = Name::try_from(name.into())?;
+        Ok(self.name(name))
+    }
 }
 
 /// Calculate the lookup table for the given fields.
@@ -178,6 +193,19 @@ mod tests {
         assert_eq!(record_schema.fields, fields);
         assert_eq!(record_schema.lookup, expected_lookup);
         assert_eq!(record_schema.attributes.len(), 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_419_name_into() -> TestResult {
+        let schema = RecordSchema::builder().try_name("str_slice")?.build();
+        assert_eq!(schema.name, "str_slice".try_into()?);
+
+        let schema = RecordSchema::builder()
+            .try_name("String".to_string())?
+            .build();
+        assert_eq!(schema.name, "String".try_into()?);
 
         Ok(())
     }
