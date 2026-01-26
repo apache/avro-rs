@@ -648,8 +648,8 @@ where
         Ok(bytes_written)
     }
 
-    /// Write the Serialize object to the provided Write object. 
-    /// 
+    /// Write the Serialize object to the provided Write object.
+    ///
     /// Returns the number of bytes written.
     ///
     /// Each call writes a complete single-object encoded message (header + data),
