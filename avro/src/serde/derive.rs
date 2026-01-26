@@ -192,6 +192,8 @@ pub trait AvroSchema {
 /// implementation available through `derive` feature. This is what is implemented by
 /// the `derive(AvroSchema)` macro.
 ///
+/// TODO: Explain that field ordering is important
+///
 /// # Implementation guide
 ///
 /// ### Simple implementation

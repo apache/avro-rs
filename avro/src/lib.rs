@@ -34,6 +34,8 @@
 //! **[Apache Avro](https://avro.apache.org/)** is a data serialization system which provides rich
 //! data structures and a compact, fast, binary data format.
 //!
+//! If you are not familiar with the data format, please read [`documentation::primer`] first.
+//!
 //! All data in Avro is schematized, as in the following example:
 //!
 //! ```json
@@ -55,64 +57,13 @@
 //! **apache-avro** provides a way to read and write both these data representations easily and
 //! efficiently.
 //!
-//! # Installing the library
-//!
-//!
-//! Add to your `Cargo.toml`:
-//!
-//! ```toml
-//! [dependencies]
-//! apache-avro = "x.y"
-//! ```
-//!
-//! Or in case you want to leverage the **Snappy** codec:
-//!
-//! ```toml
-//! [dependencies.apache-avro]
-//! version = "x.y"
-//! features = ["snappy"]
-//! ```
-//!
-//! Or in case you want to leverage the **Zstandard** codec:
-//!
-//! ```toml
-//! [dependencies.apache-avro]
-//! version = "x.y"
-//! features = ["zstandard"]
-//! ```
-//!
-//! Or in case you want to leverage the **Bzip2** codec:
-//!
-//! ```toml
-//! [dependencies.apache-avro]
-//! version = "x.y"
-//! features = ["bzip"]
-//! ```
-//!
-//! Or in case you want to leverage the **Xz** codec:
-//!
-//! ```toml
-//! [dependencies.apache-avro]
-//! version = "x.y"
-//! features = ["xz"]
-//! ```
-//!
-//! # Upgrading to a newer minor version
-//!
-//! The library is still in beta, so there might be backward-incompatible changes between minor
-//! versions. If you have troubles upgrading, check the release notes.
-//!
-//! # Minimum supported Rust version
-//!
-//! 1.88.0
-//!
 //! # Defining a schema
 //!
-//! An Avro data cannot exist without an Avro schema. Schemas **must** be used while writing and
+//! Avro data cannot exist without an Avro schema. Schemas **must** be used while writing and
 //! **can** be used while reading and they carry the information regarding the type of data we are
 //! handling. Avro schemas are used for both schema validation and resolution of Avro data.
 //!
-//! Avro schemas are defined in **JSON** format and can just be parsed out of a raw string:
+//! Avro schemas are defined in JSON format and can just be parsed out of a raw string:
 //!
 //! ```
 //! use apache_avro::Schema;
@@ -128,14 +79,10 @@
 //!     }
 //! "#;
 //!
-//! // if the schema is not valid, this function will return an error
 //! let schema = Schema::parse_str(raw_schema).unwrap();
-//!
-//! // schemas can be printed for debugging
-//! println!("{:?}", schema);
 //! ```
 //!
-//! Additionally, a list of of definitions (which may depend on each other) can be given and all of
+//! Additionally, a list of definitions (which may depend on each other) can be given and all of
 //! them will be parsed into the corresponding schemas.
 //!
 //! ```
@@ -158,22 +105,12 @@
 //!         ]
 //!     }"#;
 //!
-//! // if the schemas are not valid, this function will return an error
 //! let schemas = Schema::parse_list(&[raw_schema_1, raw_schema_2]).unwrap();
-//!
-//! // schemas can be printed for debugging
-//! println!("{:?}", schemas);
 //! ```
-//! *N.B.* It is important to note that the composition of schema definitions requires schemas with names.
-//! For this reason, only schemas of type Record, Enum, and Fixed should be input into this function.
-//!
-//! The library provides also a programmatic interface to define schemas without encoding them in
-//! JSON (for advanced use), but we highly recommend the JSON interface. Please read the API
-//! reference in case you are interested.
 //!
 //! For more information about schemas and what kind of information you can encapsulate in them,
 //! please refer to the appropriate section of the
-//! [Avro Specification](https://avro.apache.org/docs/current/specification/#schema-declaration).
+//! [Avro Specification](https://avro.apache.org/docs/++version++/specification/#schema-declaration).
 //!
 //! # Writing data
 //!
@@ -279,10 +216,6 @@
 //! // you can also call `writer.flush()` yourself without consuming the writer
 //! let encoded = writer.into_inner();
 //! ```
-//!
-//! ### Importance of the fields' order
-//!
-//! *Important*: The order of the fields in the struct must match the order of the fields in the Avro schema!
 //!
 //! ### Simple types
 //!
@@ -752,37 +685,6 @@
 //!
 //! ```
 //!
-//! ## Check schemas compatibility
-//!
-//! This library supports checking for schemas compatibility.
-//!
-//! Examples of checking for compatibility:
-//!
-//! 1. Compatible schemas
-//!
-//! Explanation: an int array schema can be read by a long array schema- an int
-//! (32bit signed integer) fits into a long (64bit signed integer)
-//!
-//! ```rust
-//! use apache_avro::{Schema, schema_compatibility::SchemaCompatibility};
-//!
-//! let writers_schema = Schema::parse_str(r#"{"type": "array", "items":"int"}"#).unwrap();
-//! let readers_schema = Schema::parse_str(r#"{"type": "array", "items":"long"}"#).unwrap();
-//! assert!(SchemaCompatibility::can_read(&writers_schema, &readers_schema).is_ok());
-//! ```
-//!
-//! 2. Incompatible schemas (a long array schema cannot be read by an int array schema)
-//!
-//! Explanation: a long array schema cannot be read by an int array schema- a
-//! long (64bit signed integer) does not fit into an int (32bit signed integer)
-//!
-//! ```rust
-//! use apache_avro::{Schema, schema_compatibility::SchemaCompatibility};
-//!
-//! let writers_schema = Schema::parse_str(r#"{"type": "array", "items":"long"}"#).unwrap();
-//! let readers_schema = Schema::parse_str(r#"{"type": "array", "items":"int"}"#).unwrap();
-//! assert!(SchemaCompatibility::can_read(&writers_schema, &readers_schema).is_err());
-//! ```
 //! ## Custom names validators
 //!
 //! By default the library follows the rules by the
@@ -938,6 +840,21 @@
 //!   assert_eq!(records, deserialized_records);
 //! }
 //! ```
+//!
+//! # Features
+//!
+//! - `derive`: enable support for deriving [`AvroSchema`]
+//! - `snappy`: enable support for the Snappy codec
+//! - `zstandard`: enable support for the Zstandard codec
+//! - `bzip`: enable support for the Bzip2 codec
+//! - `xz`: enable support for the Xz codec
+//!
+//! # MSRV
+//!
+//! The current MSRV is 1.88.0.
+//!
+//! The MSRV may be bumped in minor releases.
+//!
 
 mod bigdecimal;
 mod bytes;
@@ -949,6 +866,8 @@ mod encode;
 mod reader;
 mod writer;
 
+#[cfg(doc)]
+pub mod documentation;
 pub mod error;
 pub mod headers;
 pub mod rabin;
