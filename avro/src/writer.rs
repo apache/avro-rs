@@ -629,8 +629,9 @@ impl<T> SpecificSingleObjectWriter<T>
 where
     T: AvroSchema + Serialize,
 {
-    /// Write the referenced `Serialize` object to the provided `Write` object. Returns a result with
-    /// the number of bytes written including the header.
+    /// Write the referenced `Serialize` object to the provided `Write` object. 
+    /// 
+    /// Returns the number of bytes written.
     ///
     /// Each call writes a complete single-object encoded message (header + data),
     /// making each message independently decodable.
@@ -647,8 +648,9 @@ where
         Ok(bytes_written)
     }
 
-    /// Write the Serialize object to the provided Write object. Returns a result with the number
-    /// of bytes written including the header.
+    /// Write the Serialize object to the provided Write object. 
+    /// 
+    /// Returns the number of bytes written.
     ///
     /// Each call writes a complete single-object encoded message (header + data),
     /// making each message independently decodable.
