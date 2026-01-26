@@ -16,9 +16,16 @@
 // under the License.
 
 //! Logic for parsing and interacting with schemas in Avro format.
+
+mod name;
+mod parser;
+mod record;
+mod union;
+
 use crate::{
     AvroResult,
     error::{Details, Error},
+    schema::{parser::Parser, record::RecordSchemaParseLocation},
     schema_equality, types,
 };
 use digest::Digest;
@@ -37,17 +44,13 @@ use std::{
 };
 use strum_macros::{Display, EnumDiscriminants};
 
-mod name;
-pub use name::{Alias, Aliases, Name, Names, NamesRef, Namespace};
-mod record;
-use record::RecordSchemaParseLocation;
-pub use record::{
-    RecordField, RecordFieldBuilder, RecordFieldOrder, RecordSchema, RecordSchemaBuilder,
+pub use crate::schema::{
+    name::{Alias, Aliases, Name, Names, NamesRef, Namespace},
+    record::{
+        RecordField, RecordFieldBuilder, RecordFieldOrder, RecordSchema, RecordSchemaBuilder,
+    },
+    union::UnionSchema,
 };
-mod union;
-pub use union::UnionSchema;
-mod parser;
-use parser::Parser;
 
 /// Represents documentation for complex Avro schemas.
 pub type Documentation = Option<String>;
