@@ -17,7 +17,7 @@
 
 use apache_avro::{AvroSchema, SpecificSingleObjectReader, SpecificSingleObjectWriter};
 use serde::{Deserialize, Serialize};
-use std::iter::repeat;
+use std::iter::repeat_n;
 
 #[derive(Debug, Clone, Serialize, Deserialize, AvroSchema, PartialEq)]
 struct Test {
@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut writer = SpecificSingleObjectWriter::<Test>::with_capacity(1024)?;
     let reader = SpecificSingleObjectReader::<Test>::new()?;
 
-    for test in repeat(test).take(2) {
+    for test in repeat_n(test, 2) {
         buffer.clear();
 
         match writer.write(test.clone(), &mut buffer) {
