@@ -15,9 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{AvroSchema, Schema, SpecificSingleObjectWriter};
+use apache_avro::{AvroSchema, Schema, SpecificSingleObjectWriter, schema::UuidSchema};
 use apache_avro_test_helper::TestResult;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[test]
 fn avro_rs_53_uuid_with_fixed() -> TestResult {
@@ -57,6 +58,85 @@ fn avro_rs_53_uuid_with_fixed() -> TestResult {
     let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)?
         .write_ref(&payload, &mut buffer)?;
     assert_eq!(bytes, 26);
+
+    Ok(())
+}
+
+#[test]
+fn avro_rs_440_uuid_string() -> TestResult {
+    #[derive(apache_avro_derive::AvroSchema, Serialize, Deserialize)]
+    #[serde(transparent)]
+    struct CustomUuid {
+        #[avro(with = || Schema::Uuid(UuidSchema::String))]
+        inner: Uuid,
+    }
+    let uuid = CustomUuid {
+        inner: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")?,
+    };
+    let mut buffer = Vec::new();
+
+    assert!(!apache_avro::util::set_serde_human_readable(false));
+    let mut writer = SpecificSingleObjectWriter::with_capacity(64)?;
+    assert!(writer.write(uuid, &mut buffer).unwrap_err().to_string().contains("Failed to serialize value of type bytes using schema Uuid(String): 55e840e29b41d4a7164466554400. Cause: Expected String, Bytes, Uuid, BigDecimal, Fixed, Duration, Decimal, Ref or Union schema. Got: Uuid"));
+
+    Ok(())
+}
+
+#[test]
+fn avro_rs_440_uuid_bytes() -> TestResult {
+    #[derive(apache_avro_derive::AvroSchema, Serialize, Deserialize)]
+    #[serde(transparent)]
+    struct CustomUuid {
+        #[avro(with = || Schema::Uuid(UuidSchema::Bytes))]
+        inner: Uuid,
+    }
+    let uuid = CustomUuid {
+        inner: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")?,
+    };
+    let mut buffer = Vec::new();
+
+    assert!(!apache_avro::util::set_serde_human_readable(false));
+    let mut writer = SpecificSingleObjectWriter::with_capacity(64)?;
+    writer.write(uuid, &mut buffer)?;
+
+    assert_eq!(
+        buffer.as_slice(),
+        &[
+            195, 1, 46, 208, 56, 148, 57, 0, 104, 249, 32, 85, 14, 132, 0, 226, 155, 65, 212, 167,
+            22, 68, 102, 85, 68, 0, 0
+        ][..]
+    );
+
+    Ok(())
+}
+
+#[test]
+fn avro_rs_440_uuid_fixed() -> TestResult {
+    #[derive(apache_avro_derive::AvroSchema, Serialize, Deserialize)]
+    #[serde(transparent)]
+    struct CustomUuid {
+        inner: Uuid,
+    }
+    assert!(matches!(
+        CustomUuid::get_schema(),
+        Schema::Uuid(UuidSchema::Fixed(_))
+    ));
+    let uuid = CustomUuid {
+        inner: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")?,
+    };
+    let mut buffer = Vec::new();
+
+    assert!(!apache_avro::util::set_serde_human_readable(false));
+    let mut writer = SpecificSingleObjectWriter::with_capacity(64)?;
+    writer.write(uuid, &mut buffer)?;
+
+    assert_eq!(
+        buffer.as_slice(),
+        &[
+            195, 1, 22, 19, 155, 41, 216, 175, 73, 144, 85, 14, 132, 0, 226, 155, 65, 212, 167, 22,
+            68, 102, 85, 68, 0, 0
+        ][..]
+    );
 
     Ok(())
 }

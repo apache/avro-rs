@@ -1218,10 +1218,17 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         };
 
         match schema {
-            Schema::String
-            | Schema::Bytes
-            | Schema::Uuid(UuidSchema::Bytes | UuidSchema::String)
-            | Schema::BigDecimal => self.write_bytes(value),
+            Schema::String | Schema::Bytes | Schema::BigDecimal => self.write_bytes(value),
+            Schema::Uuid(UuidSchema::Bytes) => {
+                if value.len() == 16 {
+                    self.write_bytes(value)
+                } else {
+                    Err(create_error(format!(
+                        "Expected 16 bytes for `Schema::Uuid(Bytes) but got {} bytes",
+                        value.len()
+                    )))
+                }
+            }
             Schema::Fixed(fixed_schema) | Schema::Uuid(UuidSchema::Fixed(fixed_schema)) => {
                 if value.len() == fixed_schema.size {
                     self.writer
@@ -1282,13 +1289,16 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     match variant_schema {
                         Schema::String
                         | Schema::Bytes
-                        | Schema::Uuid(UuidSchema::Bytes | UuidSchema::String)
                         | Schema::BigDecimal
                         | Schema::Decimal(DecimalSchema {
                             inner: InnerDecimalSchema::Bytes,
                             ..
                         })
                         | Schema::Ref { name: _ } => {
+                            encode_int(i as i32, &mut *self.writer)?;
+                            return self.serialize_bytes_with_schema(value, variant_schema);
+                        }
+                        Schema::Uuid(UuidSchema::Bytes) if value.len() == 16 => {
                             encode_int(i as i32, &mut *self.writer)?;
                             return self.serialize_bytes_with_schema(value, variant_schema);
                         }
