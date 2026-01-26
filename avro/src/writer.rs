@@ -596,7 +596,6 @@ where
 {
     inner: GenericSingleObjectWriter,
     schema: Schema,
-    header_written: bool,
     _model: PhantomData<T>,
 }
 
@@ -609,7 +608,6 @@ where
         Ok(SpecificSingleObjectWriter {
             inner: GenericSingleObjectWriter::new_with_capacity(&schema, buffer_cap)?,
             schema,
-            header_written: false,
             _model: PhantomData,
         })
     }
@@ -632,16 +630,16 @@ where
     T: AvroSchema + Serialize,
 {
     /// Write the referenced `Serialize` object to the provided `Write` object. Returns a result with
-    /// the number of bytes written including the header
+    /// the number of bytes written including the header.
+    ///
+    /// Each call writes a complete single-object encoded message (header + data),
+    /// making each message independently decodable.
     pub fn write_ref<W: Write>(&mut self, data: &T, writer: &mut W) -> AvroResult<usize> {
-        let mut bytes_written: usize = 0;
-
-        if !self.header_written {
-            bytes_written += writer
-                .write(self.inner.buffer.as_slice())
-                .map_err(Details::WriteBytes)?;
-            self.header_written = true;
-        }
+        // Always write the header for each message (single object encoding requires
+        // each message to be independently decodable)
+        let mut bytes_written = writer
+            .write(self.inner.buffer.as_slice())
+            .map_err(Details::WriteBytes)?;
 
         bytes_written += write_avro_datum_ref(&self.schema, data, writer)?;
 
@@ -649,7 +647,10 @@ where
     }
 
     /// Write the Serialize object to the provided Write object. Returns a result with the number
-    /// of bytes written including the header
+    /// of bytes written including the header.
+    ///
+    /// Each call writes a complete single-object encoded message (header + data),
+    /// making each message independently decodable.
     pub fn write<W: Write>(&mut self, data: T, writer: &mut W) -> AvroResult<usize> {
         self.write_ref(&data, writer)
     }
@@ -1575,6 +1576,7 @@ mod tests {
         let mut buf1: Vec<u8> = Vec::new();
         let mut buf2: Vec<u8> = Vec::new();
         let mut buf3: Vec<u8> = Vec::new();
+        let mut buf4: Vec<u8> = Vec::new();
 
         let mut generic_writer = GenericSingleObjectWriter::new_with_capacity(
             &TestSingleObjectWriter::get_schema(),
@@ -1585,16 +1587,22 @@ mod tests {
             SpecificSingleObjectWriter::<TestSingleObjectWriter>::with_capacity(1024)
                 .expect("Resolved should pass");
         specific_writer
-            .write(obj1.clone(), &mut buf1)
+            .write_ref(&obj1, &mut buf1)
             .expect("Serialization expected");
         specific_writer
-            .write_value(obj1.clone(), &mut buf2)
+            .write_ref(&obj1, &mut buf2)
             .expect("Serialization expected");
+        specific_writer
+            .write_value(obj1.clone(), &mut buf3)
+            .expect("Serialization expected");
+
         generic_writer
-            .write_value(obj1.into(), &mut buf3)
+            .write_value(obj1.into(), &mut buf4)
             .expect("Serialization expected");
+
         assert_eq!(buf1, buf2);
-        assert_eq!(buf1, buf3);
+        assert_eq!(buf2, buf3);
+        assert_eq!(buf3, buf4);
 
         Ok(())
     }
