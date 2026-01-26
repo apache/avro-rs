@@ -637,11 +637,12 @@ where
     pub fn write_ref<W: Write>(&mut self, data: &T, writer: &mut W) -> AvroResult<usize> {
         // Always write the header for each message (single object encoding requires
         // each message to be independently decodable)
-        let mut bytes_written = writer
-            .write(self.inner.buffer.as_slice())
+        writer
+            .write_all(self.inner.buffer.as_slice())
             .map_err(Details::WriteBytes)?;
 
-        bytes_written += write_avro_datum_ref(&self.schema, data, writer)?;
+        let bytes_written =
+            self.inner.buffer.len() + write_avro_datum_ref(&self.schema, data, writer)?;
 
         Ok(bytes_written)
     }
