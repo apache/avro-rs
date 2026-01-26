@@ -13,34 +13,6 @@ pub struct ResolvedSchema<'s> {
     schemata: Vec<&'s Schema>,
 }
 
-impl<'s> TryFrom<&'s Schema> for ResolvedSchema<'s> {
-    type Error = Error;
-
-    fn try_from(schema: &'s Schema) -> AvroResult<Self> {
-        let names = HashMap::new();
-        let mut rs = ResolvedSchema {
-            names_ref: names,
-            schemata: vec![schema],
-        };
-        rs.resolve(rs.get_schemata(), &None, None)?;
-        Ok(rs)
-    }
-}
-
-impl<'s> TryFrom<Vec<&'s Schema>> for ResolvedSchema<'s> {
-    type Error = Error;
-
-    fn try_from(schemata: Vec<&'s Schema>) -> AvroResult<Self> {
-        let names = HashMap::new();
-        let mut rs = ResolvedSchema {
-            names_ref: names,
-            schemata,
-        };
-        rs.resolve(rs.get_schemata(), &None, None)?;
-        Ok(rs)
-    }
-}
-
 impl<'s> ResolvedSchema<'s> {
     pub fn get_schemata(&self) -> Vec<&'s Schema> {
         self.schemata.clone()
@@ -48,6 +20,27 @@ impl<'s> ResolvedSchema<'s> {
 
     pub fn get_names(&self) -> &NamesRef<'s> {
         &self.names_ref
+    }
+
+    /// Resolve all references in this schema.
+    ///
+    /// If some references are to other schemas, see [`ResolvedSchema::new_with_schemata`].
+    pub fn new(schema: &'s Schema) -> AvroResult<Self> {
+        Self::new_with_schemata(vec![schema])
+    }
+
+    /// Resolve all references in these schemas.
+    ///
+    // TODO: Support this
+    /// These schemas will be resolved in order, so references to schemas later in the
+    /// list is not supported.
+    pub fn new_with_schemata(schemata: Vec<&'s Schema>) -> AvroResult<Self> {
+        let mut rs = ResolvedSchema {
+            names_ref: HashMap::new(),
+            schemata,
+        };
+        rs.resolve(rs.get_schemata(), &None, None)?;
+        Ok(rs)
     }
 
     /// Creates `ResolvedSchema` with some already known schemas.
@@ -138,31 +131,50 @@ impl<'s> ResolvedSchema<'s> {
     }
 }
 
+impl<'s> TryFrom<&'s Schema> for ResolvedSchema<'s> {
+    type Error = Error;
+
+    fn try_from(schema: &'s Schema) -> AvroResult<Self> {
+        Self::new(schema)
+    }
+}
+
+impl<'s> TryFrom<Vec<&'s Schema>> for ResolvedSchema<'s> {
+    type Error = Error;
+
+    fn try_from(schemata: Vec<&'s Schema>) -> AvroResult<Self> {
+        Self::new_with_schemata(schemata)
+    }
+}
+
 pub struct ResolvedOwnedSchema {
     names: Names,
     root_schema: Schema,
+}
+
+impl ResolvedOwnedSchema {
+    pub fn new(root_schema: Schema) -> AvroResult<Self> {
+        let mut rs = ResolvedOwnedSchema {
+            names: HashMap::new(),
+            root_schema,
+        };
+        resolve_names(&rs.root_schema, &mut rs.names, &None)?;
+        Ok(rs)
+    }
+
+    pub fn get_root_schema(&self) -> &Schema {
+        &self.root_schema
+    }
+    pub fn get_names(&self) -> &Names {
+        &self.names
+    }
 }
 
 impl TryFrom<Schema> for ResolvedOwnedSchema {
     type Error = Error;
 
     fn try_from(schema: Schema) -> AvroResult<Self> {
-        let names = HashMap::new();
-        let mut rs = ResolvedOwnedSchema {
-            names,
-            root_schema: schema,
-        };
-        resolve_names(&rs.root_schema, &mut rs.names, &None)?;
-        Ok(rs)
-    }
-}
-
-impl ResolvedOwnedSchema {
-    pub fn get_root_schema(&self) -> &Schema {
-        &self.root_schema
-    }
-    pub fn get_names(&self) -> &Names {
-        &self.names
+        Self::new(schema)
     }
 }
 
