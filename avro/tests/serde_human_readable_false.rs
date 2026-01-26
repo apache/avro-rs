@@ -17,6 +17,7 @@
 
 use apache_avro::{AvroSchema, Schema, SpecificSingleObjectWriter, schema::UuidSchema};
 use apache_avro_test_helper::TestResult;
+use pretty_assertions::assert_eq;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -77,7 +78,10 @@ fn avro_rs_440_uuid_string() -> TestResult {
 
     assert!(!apache_avro::util::set_serde_human_readable(false));
     let mut writer = SpecificSingleObjectWriter::with_capacity(64)?;
-    assert!(writer.write(uuid, &mut buffer).unwrap_err().to_string().contains("Failed to serialize value of type bytes using schema Uuid(String): 55e840e29b41d4a7164466554400. Cause: Expected String, Bytes, Uuid, BigDecimal, Fixed, Duration, Decimal, Ref or Union schema. Got: Uuid"));
+    assert_eq!(
+        writer.write(uuid, &mut buffer).unwrap_err().to_string(),
+        "Failed to serialize value of type bytes using schema Uuid(String): 55e840e29b41d4a7164466554400. Cause: Expected a string, but got 16 bytes. Did you mean to use `Schema::Uuid(UuidSchema::Fixed)` or `utils::serde_set_human_readable(true)`?"
+    );
 
     Ok(())
 }

@@ -17,6 +17,7 @@
 
 use apache_avro::{AvroSchema, Schema, SpecificSingleObjectWriter, schema::UuidSchema};
 use apache_avro_test_helper::TestResult;
+use pretty_assertions::assert_eq;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -103,7 +104,7 @@ fn avro_rs_440_uuid_bytes() -> TestResult {
     let mut writer = SpecificSingleObjectWriter::with_capacity(64)?;
     assert_eq!(
         writer.write(uuid, &mut buffer).unwrap_err().to_string(),
-        "Failed to serialize value of type string using schema Uuid(Bytes): 550e8400-e29b-41d4-a716-446655440000. Cause: Expected: Uuid. Got: String"
+        "Failed to serialize value of type string using schema Uuid(Bytes): 550e8400-e29b-41d4-a716-446655440000. Cause: Expected bytes but got a string. Did you mean to use `Schema::Uuid(UuidSchema::String)` or `utils::serde_set_human_readable(false)`?"
     );
 
     Ok(())
@@ -129,7 +130,7 @@ fn avro_rs_440_uuid_fixed() -> TestResult {
     let mut writer = SpecificSingleObjectWriter::with_capacity(64)?;
     assert_eq!(
         writer.write(uuid, &mut buffer).unwrap_err().to_string(),
-        r#"Failed to serialize value of type string using schema Uuid(Fixed(FixedSchema { name: Name { name: "uuid", namespace: None }, aliases: None, doc: None, size: 16, default: None, attributes: {} })): 550e8400-e29b-41d4-a716-446655440000. Cause: Expected: Uuid. Got: String"#
+        r#"Failed to serialize value of type string using schema Uuid(Fixed(FixedSchema { name: Name { name: "uuid", namespace: None }, aliases: None, doc: None, size: 16, default: None, attributes: {} })): 550e8400-e29b-41d4-a716-446655440000. Cause: Expected bytes but got a string. Did you mean to use `Schema::Uuid(UuidSchema::String)` or `utils::serde_set_human_readable(false)`?"#
     );
 
     Ok(())
