@@ -171,18 +171,24 @@ pub fn resolve_names<'s, 'n>(
         })
         | Schema::Duration(FixedSchema { name, .. }) => {
             let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
-            if names.insert(fully_qualified_name.clone(), schema).is_some() {
+            if names.contains_key(&fully_qualified_name)
+                || known_schemata.contains_key(&fully_qualified_name)
+            {
                 Err(Details::AmbiguousSchemaDefinition(fully_qualified_name).into())
             } else {
+                names.insert(fully_qualified_name, schema);
                 Ok(())
             }
         }
         Schema::Record(RecordSchema { name, fields, .. }) => {
             let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
-            if names.insert(fully_qualified_name.clone(), schema).is_some() {
+            if names.contains_key(&fully_qualified_name)
+                || known_schemata.contains_key(&fully_qualified_name)
+            {
                 Err(Details::AmbiguousSchemaDefinition(fully_qualified_name).into())
             } else {
-                let record_namespace = fully_qualified_name.namespace;
+                let record_namespace = fully_qualified_name.namespace.clone();
+                names.insert(fully_qualified_name, schema);
                 for field in fields {
                     resolve_names(&field.schema, names, &record_namespace, known_schemata)?
                 }
@@ -217,10 +223,13 @@ pub fn resolve_names_with_schemata<'s, 'n>(
 
 #[cfg(test)]
 mod tests {
-    use crate::Schema;
-    use crate::schema::Name;
-    use crate::schema::resolve::{ResolvedOwnedSchema, ResolvedSchema};
+    use super::{ResolvedOwnedSchema, ResolvedSchema};
+    use crate::{
+        Schema,
+        schema::{Name, NamesRef},
+    };
     use apache_avro_test_helper::TestResult;
+    use std::collections::HashMap;
 
     #[test]
     fn avro_3448_test_proper_resolution_inner_record_inherited_namespace() -> TestResult {
@@ -254,7 +263,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
+        let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
         for s in &["space.record_name", "space.inner_record_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -295,7 +304,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
+        let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
         for s in &["space.record_name", "space.inner_record_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -331,7 +340,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
+        let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
         for s in &["space.record_name", "space.inner_enum_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -367,7 +376,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
+        let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
         for s in &["space.record_name", "space.inner_enum_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -403,7 +412,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
+        let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
         for s in &["space.record_name", "space.inner_fixed_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -439,7 +448,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
+        let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
         for s in &["space.record_name", "space.inner_fixed_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -481,7 +490,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
+        let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
         for s in &["space.record_name", "inner_space.inner_record_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -518,7 +527,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
+        let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
         for s in &["space.record_name", "inner_space.inner_enum_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -555,7 +564,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
+        let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
         for s in &["space.record_name", "inner_space.inner_fixed_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -608,7 +617,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
+        let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 3);
         for s in &[
             "space.record_name",
@@ -666,7 +675,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
+        let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 3);
         for s in &[
             "space.record_name",
@@ -725,7 +734,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
+        let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 3);
         for s in &[
             "space.record_name",
@@ -770,7 +779,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
+        let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
         for s in &["space.record_name", "space.in_array_record"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -811,7 +820,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
+        let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
         for s in &["space.record_name", "space.in_map_record"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -848,7 +857,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
+        let rs = ResolvedSchema::new(&schema)?;
 
         // confirm we have expected 2 full-names
         assert_eq!(rs.get_names().len(), 2);
@@ -857,8 +866,8 @@ mod tests {
         }
 
         // convert Schema back to JSON string
-        let schema_str = serde_json::to_string(&schema).expect("test failed");
-        let _schema = Schema::parse_str(&schema_str).expect("test failed");
+        let schema_str = serde_json::to_string(&schema)?;
+        let _schema = Schema::parse_str(&schema_str)?;
         assert_eq!(schema, _schema);
 
         Ok(())
@@ -892,7 +901,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let rs = ResolvedSchema::try_from(&schema).expect("Schema didn't successfully parse");
+        let rs = ResolvedSchema::new(&schema)?;
 
         // confirm we have expected 2 full-names
         assert_eq!(rs.get_names().len(), 2);
@@ -901,8 +910,8 @@ mod tests {
         }
 
         // convert Schema back to JSON string
-        let schema_str = serde_json::to_string(&schema).expect("test failed");
-        let _schema = Schema::parse_str(&schema_str).expect("test failed");
+        let schema_str = serde_json::to_string(&schema)?;
+        let _schema = Schema::parse_str(&schema_str)?;
         assert_eq!(schema, _schema);
 
         Ok(())
@@ -931,7 +940,7 @@ mod tests {
             ]
         }"#,
         )?;
-        let _resolved = ResolvedSchema::try_from(&schema)?;
+        let _resolved = ResolvedSchema::new(&schema)?;
         let _resolved_owned = ResolvedOwnedSchema::try_from(schema)?;
 
         Ok(())
@@ -962,8 +971,57 @@ mod tests {
             ]
         }"#,
         )?;
-        let _resolved = ResolvedSchema::try_from(&schema)?;
+        let _resolved = ResolvedSchema::new(&schema)?;
         let _resolved_owned = ResolvedOwnedSchema::try_from(schema)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_444_do_not_allow_duplicate_names_in_known_schemata() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "foo",
+            "type": "record",
+            "fields": [
+                {
+                    "name": "a",
+                    "type": {
+                        "type": "fixed",
+                        "size": 16,
+                        "logicalType": "decimal",
+                        "precision": 4,
+                        "scale": 2,
+                        "name": "bar"
+                    }
+                },
+                {
+                    "name": "b",
+                    "type": "bar"
+                },
+                {
+                    "name": "c",
+                    "type": {
+                        "type": "fixed",
+                        "size": 16,
+                        "logicalType": "uuid",
+                        "name": "duplicated_name"
+                    }
+                }
+            ]
+        }"#,
+        )?;
+
+        let mut known_schemata: NamesRef = HashMap::default();
+        known_schemata.insert("duplicated_name".try_into()?, &Schema::Boolean);
+
+        let result = ResolvedSchema::new_with_known_schemata(vec![&schema], &None, &known_schemata)
+            .unwrap_err();
+
+        assert_eq!(
+            result.to_string(),
+            "Two named schema defined for same fullname: duplicated_name."
+        );
 
         Ok(())
     }
