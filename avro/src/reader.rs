@@ -226,21 +226,20 @@ impl<'r, R: Read> Block<'r, R> {
             })
             .ok_or(Details::GetAvroSchemaFromMap)?;
         if !self.schemata.is_empty() {
-            let rs = ResolvedSchema::try_from(self.schemata.clone())?;
-            let names: Names = rs
-                .get_names()
-                .iter()
-                .map(|(name, schema)| (name.clone(), (*schema).clone()))
-                .collect();
-            self.writer_schema = Schema::parse_with_names(&json, names)?;
+            let mut names = HashMap::new();
             resolve_names_with_schemata(
                 self.schemata.iter().copied(),
-                &mut self.names_refs,
+                &mut names,
                 &None,
+                &HashMap::new(),
             )?;
+            self.names_refs = names.into_iter().map(|(n, s)| (n, s.clone())).collect();
+            self.writer_schema = Schema::parse_with_names(&json, self.names_refs.clone())?;
         } else {
             self.writer_schema = Schema::parse(&json)?;
-            resolve_names(&self.writer_schema, &mut self.names_refs, &None)?;
+            let mut names = HashMap::new();
+            resolve_names(&self.writer_schema, &mut names, &None, &HashMap::new())?;
+            self.names_refs = names.into_iter().map(|(n, s)| (n, s.clone())).collect();
         }
         Ok(())
     }
