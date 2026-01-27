@@ -624,6 +624,12 @@ where
             _model: PhantomData,
         })
     }
+
+    /// Deprecated. Use [`SpecificSingleObjectWriter::new`] instead.
+    #[deprecated(since = "0.22.0", note = "Use new() instead")]
+    pub fn with_capacity(_buffer_cap: usize) -> AvroResult<Self> {
+        Self::new()
+    }
 }
 
 impl<T> SpecificSingleObjectWriter<T>
