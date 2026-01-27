@@ -1150,6 +1150,9 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
             Schema::String | Schema::Bytes | Schema::Uuid(UuidSchema::String) => {
                 self.write_bytes(value.as_bytes())
             }
+            Schema::Uuid(UuidSchema::Bytes | UuidSchema::Fixed(_)) => {
+                Err(create_error("Expected bytes but got a string. Did you mean to use `Schema::Uuid(UuidSchema::String)` or `utils::serde_set_human_readable(false)`?".to_string()))
+            }
             Schema::BigDecimal => {
                 // If we get a string for a `BigDecimal` type, expect a display string representation, such as "12.75"
                 let decimal_val =
@@ -1218,10 +1221,20 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         };
 
         match schema {
-            Schema::String
-            | Schema::Bytes
-            | Schema::Uuid(UuidSchema::Bytes | UuidSchema::String)
-            | Schema::BigDecimal => self.write_bytes(value),
+            Schema::String | Schema::Bytes | Schema::BigDecimal => self.write_bytes(value),
+            Schema::Uuid(UuidSchema::Bytes) => {
+                if value.len() == 16 {
+                    self.write_bytes(value)
+                } else {
+                    Err(create_error(format!(
+                        "Expected 16 bytes for `Schema::Uuid(Bytes)` but got {} bytes",
+                        value.len()
+                    )))
+                }
+            }
+            Schema::Uuid(UuidSchema::String) if value.len() == 16 => {
+                Err(create_error("Expected a string, but got 16 bytes. Did you mean to use `Schema::Uuid(UuidSchema::Fixed)` or `utils::serde_set_human_readable(true)`?".to_string()))
+            }
             Schema::Fixed(fixed_schema) | Schema::Uuid(UuidSchema::Fixed(fixed_schema)) => {
                 if value.len() == fixed_schema.size {
                     self.writer
@@ -1282,13 +1295,16 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     match variant_schema {
                         Schema::String
                         | Schema::Bytes
-                        | Schema::Uuid(UuidSchema::Bytes | UuidSchema::String)
                         | Schema::BigDecimal
                         | Schema::Decimal(DecimalSchema {
                             inner: InnerDecimalSchema::Bytes,
                             ..
                         })
                         | Schema::Ref { name: _ } => {
+                            encode_int(i as i32, &mut *self.writer)?;
+                            return self.serialize_bytes_with_schema(value, variant_schema);
+                        }
+                        Schema::Uuid(UuidSchema::Bytes) if value.len() == 16 => {
                             encode_int(i as i32, &mut *self.writer)?;
                             return self.serialize_bytes_with_schema(value, variant_schema);
                         }
