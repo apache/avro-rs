@@ -108,10 +108,10 @@ impl UnionSchema {
                     &collected_names,
                 )
                 .expect("Schema didn't successfully parse");
-                let resolved_names = resolved_schema.names_ref;
+                let resolved_names = resolved_schema.get_names();
 
                 // extend known schemas with just resolved names
-                collected_names.extend(resolved_names);
+                collected_names.extend(resolved_names.clone());
                 let namespace = &schema.namespace().or_else(|| enclosing_namespace.clone());
 
                 value

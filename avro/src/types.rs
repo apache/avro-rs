@@ -372,7 +372,7 @@ impl Value {
         schemata.iter().any(|schema| {
             let enclosing_namespace = schema.namespace();
 
-            match self.validate_internal(schema, rs.get_names(), &enclosing_namespace) {
+            match self.validate_internal(schema, &rs.get_names(), &enclosing_namespace) {
                 Some(reason) => {
                     let log_message =
                         format!("Invalid value: {self:?} for schema: {schema:?}. Reason: {reason}");
@@ -667,7 +667,7 @@ impl Value {
         } else {
             ResolvedSchema::try_from(schemata)?
         };
-        self.resolve_internal(schema, rs.get_names(), &enclosing_namespace, &None)
+        self.resolve_internal(schema, &rs.get_names(), &enclosing_namespace, &None)
     }
 
     pub(crate) fn resolve_internal<S: Borrow<Schema> + Debug>(

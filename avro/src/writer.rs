@@ -218,15 +218,12 @@ impl<'a, W: Write> Writer<'a, W> {
     /// written, then call [`flush`](Writer::flush).
     pub fn append_ser<S: Serialize>(&mut self, value: S) -> AvroResult<usize> {
         let n = self.maybe_write_header()?;
-
-        let mut serializer = SchemaAwareWriteSerializer::new(
-            &mut self.buffer,
-            self.schema,
-            self.resolved_schema.get_names(),
-            None,
-        );
+        let names = self.resolved_schema.get_names();
+        let mut serializer =
+            SchemaAwareWriteSerializer::new(&mut self.buffer, self.schema, &names, None);
         value.serialize(&mut serializer)?;
         self.num_values += 1;
+        drop(names);
 
         if self.buffer.len() >= self.block_size {
             return self.flush().map(|b| b + n);
@@ -525,7 +522,7 @@ fn write_avro_datum_schemata<T: Into<Value>>(
 ) -> AvroResult<usize> {
     let avro = value.into();
     let rs = ResolvedSchema::try_from(schemata)?;
-    let names = rs.get_names();
+    let names = &rs.get_names();
     let enclosing_namespace = schema.namespace();
     if let Some(_err) = avro.validate_internal(schema, names, &enclosing_namespace) {
         return Err(Details::Validation.into());
@@ -665,7 +662,7 @@ fn write_value_ref_resolved(
     value: &Value,
     buffer: &mut Vec<u8>,
 ) -> AvroResult<usize> {
-    match value.validate_internal(schema, resolved_schema.get_names(), &schema.namespace()) {
+    match value.validate_internal(schema, &resolved_schema.get_names(), &schema.namespace()) {
         Some(reason) => Err(Details::ValidationWithReason {
             value: value.clone(),
             schema: schema.clone(),
@@ -675,7 +672,7 @@ fn write_value_ref_resolved(
         None => encode_internal(
             value,
             schema,
-            resolved_schema.get_names(),
+            &resolved_schema.get_names(),
             &schema.namespace(),
             buffer,
         ),

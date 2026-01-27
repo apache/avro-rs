@@ -22,21 +22,22 @@ use crate::schema::{
 };
 use crate::{AvroResult, Error, Schema};
 use std::borrow::Borrow;
+use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct ResolvedSchema<'s> {
-    pub(super) names_ref: NamesRef<'s>,
+    names_ref: RefCell<NamesRef<'s>>,
     schemata: Vec<&'s Schema>,
 }
 
 impl<'s> ResolvedSchema<'s> {
-    pub fn get_schemata(&self) -> Vec<&'s Schema> {
-        self.schemata.clone()
+    pub fn get_schemata(&self) -> &[&'s Schema] {
+        &self.schemata
     }
 
-    pub fn get_names(&self) -> &NamesRef<'s> {
-        &self.names_ref
+    pub fn get_names(&self) -> Ref<'_, NamesRef<'s>> {
+        self.names_ref.borrow()
     }
 
     /// Resolve all references in this schema.
@@ -52,8 +53,8 @@ impl<'s> ResolvedSchema<'s> {
     /// These schemas will be resolved in order, so references to schemas later in the
     /// list is not supported.
     pub fn new_with_schemata(schemata: Vec<&'s Schema>) -> AvroResult<Self> {
-        let mut rs = ResolvedSchema {
-            names_ref: HashMap::new(),
+        let rs = ResolvedSchema {
+            names_ref: RefCell::new(HashMap::new()),
             schemata,
         };
         rs.resolve(rs.get_schemata(), &None, None)?;
@@ -69,8 +70,8 @@ impl<'s> ResolvedSchema<'s> {
         known_schemata: &'n NamesRef<'n>,
     ) -> AvroResult<Self> {
         let names = HashMap::new();
-        let mut rs = ResolvedSchema {
-            names_ref: names,
+        let rs = ResolvedSchema {
+            names_ref: RefCell::new(names),
             schemata: schemata_to_resolve,
         };
         rs.resolve(rs.get_schemata(), enclosing_namespace, Some(known_schemata))?;
@@ -78,22 +79,22 @@ impl<'s> ResolvedSchema<'s> {
     }
 
     fn resolve<'n>(
-        &mut self,
-        schemata: Vec<&'s Schema>,
+        &self,
+        schemata: &[&'s Schema],
         enclosing_namespace: &Namespace,
         known_schemata: Option<&'n NamesRef<'n>>,
     ) -> AvroResult<()> {
         for schema in schemata {
             match schema {
                 Schema::Array(schema) => {
-                    self.resolve(vec![&schema.items], enclosing_namespace, known_schemata)?
+                    self.resolve(&[&schema.items], enclosing_namespace, known_schemata)?
                 }
                 Schema::Map(schema) => {
-                    self.resolve(vec![&schema.types], enclosing_namespace, known_schemata)?
+                    self.resolve(&[&schema.types], enclosing_namespace, known_schemata)?
                 }
                 Schema::Union(UnionSchema { schemas, .. }) => {
                     for schema in schemas {
-                        self.resolve(vec![schema], enclosing_namespace, known_schemata)?
+                        self.resolve(&[schema], enclosing_namespace, known_schemata)?
                     }
                 }
                 Schema::Enum(EnumSchema { name, .. })
@@ -107,6 +108,7 @@ impl<'s> ResolvedSchema<'s> {
                     let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
                     if self
                         .names_ref
+                        .borrow_mut()
                         .insert(fully_qualified_name.clone(), schema)
                         .is_some()
                     {
@@ -117,6 +119,7 @@ impl<'s> ResolvedSchema<'s> {
                     let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
                     if self
                         .names_ref
+                        .borrow_mut()
                         .insert(fully_qualified_name.clone(), schema)
                         .is_some()
                     {
@@ -124,14 +127,14 @@ impl<'s> ResolvedSchema<'s> {
                     } else {
                         let record_namespace = fully_qualified_name.namespace;
                         for field in fields {
-                            self.resolve(vec![&field.schema], &record_namespace, known_schemata)?
+                            self.resolve(&[&field.schema], &record_namespace, known_schemata)?
                         }
                     }
                 }
                 Schema::Ref { name } => {
                     let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
                     // first search for reference in current schemata, then look into external references.
-                    if !self.names_ref.contains_key(&fully_qualified_name) {
+                    if !self.get_names().contains_key(&fully_qualified_name) {
                         let is_resolved_with_known_schemas = known_schemata
                             .as_ref()
                             .map(|names| names.contains_key(&fully_qualified_name))

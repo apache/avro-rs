@@ -74,7 +74,7 @@ fn decode_seq_len<R: Read>(reader: &mut R) -> AvroResult<usize> {
 /// Decode a `Value` from avro format given its `Schema`.
 pub fn decode<R: Read>(schema: &Schema, reader: &mut R) -> AvroResult<Value> {
     let rs = ResolvedSchema::try_from(schema)?;
-    decode_internal(schema, rs.get_names(), &None, reader)
+    decode_internal(schema, &rs.get_names(), &None, reader)
 }
 
 pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(

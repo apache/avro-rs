@@ -37,7 +37,7 @@ use std::{borrow::Borrow, collections::HashMap, io::Write};
 /// encoding for complex type values.
 pub fn encode<W: Write>(value: &Value, schema: &Schema, writer: &mut W) -> AvroResult<usize> {
     let rs = ResolvedSchema::try_from(schema)?;
-    encode_internal(value, schema, rs.get_names(), &None, writer)
+    encode_internal(value, schema, &rs.get_names(), &None, writer)
 }
 
 /// Encode `s` as the _bytes_ primitive type.

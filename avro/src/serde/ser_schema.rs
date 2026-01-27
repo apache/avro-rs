@@ -3031,8 +3031,8 @@ mod tests {
         assert!(!crate::util::is_human_readable());
         let mut buffer: Vec<u8> = Vec::new();
         let rs = ResolvedSchema::try_from(&schema)?;
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, rs.get_names(), None);
+        let names = rs.get_names();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         let good_record = TestRecord {
             string_field: String::from("test"),
@@ -3112,8 +3112,8 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let rs = ResolvedSchema::try_from(&schema)?;
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, rs.get_names(), None);
+        let names = rs.get_names();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         let foo_record = TestRecord {
             inner_union: InnerUnion::InnerVariantFoo(InnerRecordFoo {
@@ -3189,8 +3189,8 @@ mod tests {
 
         let mut buffer: Vec<u8> = Vec::new();
         let rs = ResolvedSchema::try_from(&schema)?;
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(&mut buffer, &schema, rs.get_names(), None);
+        let names = rs.get_names();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
 
         let null_record = TestRecord { inner_union: None };
         null_record.serialize(&mut serializer)?;
