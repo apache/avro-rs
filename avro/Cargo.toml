@@ -46,10 +46,6 @@ name = "serde"
 
 [[bench]]
 harness = false
-name = "serde_json"
-
-[[bench]]
-harness = false
 name = "single"
 
 [dependencies]
