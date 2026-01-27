@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         b: "foo".to_string(),
     };
 
-    let mut writer = SpecificSingleObjectWriter::<Test>::with_capacity(1024)?;
+    let writer = SpecificSingleObjectWriter::<Test>::new()?;
     let reader = SpecificSingleObjectReader::<Test>::new()?;
 
     for test in repeat_n(test, 2) {

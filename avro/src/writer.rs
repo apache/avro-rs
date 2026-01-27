@@ -21,7 +21,7 @@ use crate::{
     encode::{encode, encode_internal, encode_to_vec},
     error::Details,
     headers::{HeaderBuilder, RabinFingerprintHeader},
-    schema::{Name, ResolvedOwnedSchema, ResolvedSchema, Schema},
+    schema::{NamesRef, ResolvedOwnedSchema, ResolvedSchema, Schema},
     serde::{AvroSchema, ser_schema::SchemaAwareWriteSerializer},
     types::Value,
 };
@@ -594,8 +594,8 @@ pub struct SpecificSingleObjectWriter<T>
 where
     T: AvroSchema,
 {
-    inner: GenericSingleObjectWriter,
-    schema: Schema,
+    resolved: ResolvedOwnedSchema,
+    header: Vec<u8>,
     _model: PhantomData<T>,
 }
 
@@ -603,11 +603,24 @@ impl<T> SpecificSingleObjectWriter<T>
 where
     T: AvroSchema,
 {
-    pub fn with_capacity(buffer_cap: usize) -> AvroResult<SpecificSingleObjectWriter<T>> {
+    pub fn new() -> AvroResult<Self> {
         let schema = T::get_schema();
-        Ok(SpecificSingleObjectWriter {
-            inner: GenericSingleObjectWriter::new_with_capacity(&schema, buffer_cap)?,
-            schema,
+        let header = RabinFingerprintHeader::from_schema(&schema).build_header();
+        let resolved = ResolvedOwnedSchema::new(schema)?;
+        // We don't use Self::new_with_header_builder as that would mean calling T::get_schema() twice
+        Ok(Self {
+            resolved,
+            header,
+            _model: PhantomData,
+        })
+    }
+
+    pub fn new_with_header_builder(header_builder: impl HeaderBuilder) -> AvroResult<Self> {
+        let header = header_builder.build_header();
+        let resolved = ResolvedOwnedSchema::new(T::get_schema())?;
+        Ok(Self {
+            resolved,
+            header,
             _model: PhantomData,
         })
     }
@@ -617,11 +630,19 @@ impl<T> SpecificSingleObjectWriter<T>
 where
     T: AvroSchema + Into<Value>,
 {
-    /// Write the `Into<Value>` to the provided Write object. Returns a result with the number
-    /// of bytes written including the header
-    pub fn write_value<W: Write>(&mut self, data: T, writer: &mut W) -> AvroResult<usize> {
-        let v: Value = data.into();
-        self.inner.write_value_ref(&v, writer)
+    /// Write the value to the writer
+    ///
+    /// Returns the number of bytes written.
+    ///
+    /// Each call writes a complete single-object encoded message (header + data),
+    /// making each message independently decodable.
+    pub fn write_value<W: Write>(&self, data: T, writer: &mut W) -> AvroResult<usize> {
+        writer
+            .write_all(&self.header)
+            .map_err(Details::WriteBytes)?;
+        let value: Value = data.into();
+        let bytes = write_value_ref_owned_resolved(&self.resolved, &value, writer)?;
+        Ok(bytes + self.header.len())
     }
 }
 
@@ -629,32 +650,34 @@ impl<T> SpecificSingleObjectWriter<T>
 where
     T: AvroSchema + Serialize,
 {
-    /// Write the referenced `Serialize` object to the provided `Write` object.
+    /// Write the object to the writer.
     ///
     /// Returns the number of bytes written.
     ///
     /// Each call writes a complete single-object encoded message (header + data),
     /// making each message independently decodable.
-    pub fn write_ref<W: Write>(&mut self, data: &T, writer: &mut W) -> AvroResult<usize> {
-        // Always write the header for each message (single object encoding requires
-        // each message to be independently decodable)
+    pub fn write_ref<W: Write>(&self, data: &T, writer: &mut W) -> AvroResult<usize> {
         writer
-            .write_all(self.inner.buffer.as_slice())
+            .write_all(&self.header)
             .map_err(Details::WriteBytes)?;
 
-        let bytes_written =
-            self.inner.buffer.len() + write_avro_datum_ref(&self.schema, data, writer)?;
+        let bytes = write_avro_datum_ref(
+            self.resolved.get_root_schema(),
+            self.resolved.get_names(),
+            data,
+            writer,
+        )?;
 
-        Ok(bytes_written)
+        Ok(bytes + self.header.len())
     }
 
-    /// Write the Serialize object to the provided Write object.
+    /// Write the object to the writer.
     ///
     /// Returns the number of bytes written.
     ///
     /// Each call writes a complete single-object encoded message (header + data),
     /// making each message independently decodable.
-    pub fn write<W: Write>(&mut self, data: T, writer: &mut W) -> AvroResult<usize> {
+    pub fn write<W: Write>(&self, data: T, writer: &mut W) -> AvroResult<usize> {
         self.write_ref(&data, writer)
     }
 }
@@ -682,11 +705,11 @@ fn write_value_ref_resolved(
     }
 }
 
-fn write_value_ref_owned_resolved(
+fn write_value_ref_owned_resolved<W: Write>(
     resolved_schema: &ResolvedOwnedSchema,
     value: &Value,
-    buffer: &mut Vec<u8>,
-) -> AvroResult<()> {
+    writer: &mut W,
+) -> AvroResult<usize> {
     let root_schema = resolved_schema.get_root_schema();
     if let Some(reason) = value.validate_internal(
         root_schema,
@@ -705,9 +728,8 @@ fn write_value_ref_owned_resolved(
         root_schema,
         resolved_schema.get_names(),
         &root_schema.namespace(),
-        buffer,
-    )?;
-    Ok(())
+        writer,
+    )
 }
 
 /// Encode a compatible value (implementing the `ToAvro` trait) into Avro format, also
@@ -730,13 +752,12 @@ pub fn to_avro_datum<T: Into<Value>>(schema: &Schema, value: T) -> AvroResult<Ve
 /// if you don't know what you are doing, instead.
 pub fn write_avro_datum_ref<T: Serialize, W: Write>(
     schema: &Schema,
+    names: &NamesRef,
     data: &T,
     writer: &mut W,
 ) -> AvroResult<usize> {
-    let names: HashMap<Name, &Schema> = HashMap::new();
-    let mut serializer = SchemaAwareWriteSerializer::new(writer, schema, &names, None);
-    let bytes_written = data.serialize(&mut serializer)?;
-    Ok(bytes_written)
+    let mut serializer = SchemaAwareWriteSerializer::new(writer, schema, names, None);
+    data.serialize(&mut serializer)
 }
 
 /// Encode a compatible value (implementing the `ToAvro` trait) into Avro format, also
@@ -856,7 +877,7 @@ mod tests {
         zig_i64(3, &mut expected)?;
         expected.extend([b'f', b'o', b'o']);
 
-        let bytes = write_avro_datum_ref(&schema, &data, &mut writer)?;
+        let bytes = write_avro_datum_ref(&schema, &HashMap::new(), &data, &mut writer)?;
 
         assert_eq!(bytes, expected.len());
         assert_eq!(writer, expected);
@@ -1586,9 +1607,8 @@ mod tests {
             1024,
         )
         .expect("Should resolve schema");
-        let mut specific_writer =
-            SpecificSingleObjectWriter::<TestSingleObjectWriter>::with_capacity(1024)
-                .expect("Resolved should pass");
+        let specific_writer = SpecificSingleObjectWriter::<TestSingleObjectWriter>::new()
+            .expect("Resolved should pass");
         specific_writer
             .write_ref(&obj1, &mut buf1)
             .expect("Serialization expected");
@@ -1730,6 +1750,51 @@ mod tests {
             shared_buffer.len(),
             151,
             "the test buffer was not fully written to after Writer::flush was called"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_439_specific_single_object_writer_ref() -> TestResult {
+        #[derive(Serialize)]
+        struct Recursive {
+            field: bool,
+            recurse: Option<Box<Recursive>>,
+        }
+
+        impl AvroSchema for Recursive {
+            fn get_schema() -> Schema {
+                Schema::parse_str(
+                    r#"{
+                    "name": "Recursive",
+                    "type": "record",
+                    "fields": [
+                        { "name": "field", "type": "boolean" },
+                        { "name": "recurse", "type": ["null", "Recursive"] }
+                    ]
+                }"#,
+                )
+                .unwrap()
+            }
+        }
+
+        let mut buffer = Vec::new();
+        let writer = SpecificSingleObjectWriter::new()?;
+
+        writer.write(
+            Recursive {
+                field: true,
+                recurse: Some(Box::new(Recursive {
+                    field: false,
+                    recurse: None,
+                })),
+            },
+            &mut buffer,
+        )?;
+        assert_eq!(
+            buffer,
+            &[195, 1, 83, 223, 43, 26, 181, 179, 227, 224, 1, 2, 0, 0][..]
         );
 
         Ok(())

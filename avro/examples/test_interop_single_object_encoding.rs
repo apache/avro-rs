@@ -65,7 +65,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn test_write(expected: &[u8]) {
     let mut encoded: Vec<u8> = Vec::new();
-    apache_avro::SpecificSingleObjectWriter::<InteropMessage>::with_capacity(1024)
+    apache_avro::SpecificSingleObjectWriter::<InteropMessage>::new()
         .expect("Resolving failed")
         .write_value(InteropMessage, &mut encoded)
         .expect("Encoding failed");
