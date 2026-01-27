@@ -172,8 +172,7 @@ impl<'a, W: Write> Writer<'a, W> {
         self.schema
     }
 
-    /// Append a compatible value (implementing the `ToAvro` trait) to a `Writer`, also performing
-    /// schema validation.
+    /// Append a compatible value to a `Writer`, also performing schema validation.
     ///
     /// Returns the number of bytes written (it might be 0, see below).
     ///
@@ -181,10 +180,8 @@ impl<'a, W: Write> Writer<'a, W> {
     /// internal buffering for performance reasons. If you want to be sure the value has been
     /// written, then call [`flush`](Writer::flush).
     pub fn append<T: Into<Value>>(&mut self, value: T) -> AvroResult<usize> {
-        let n = self.maybe_write_header()?;
-
         let avro = value.into();
-        self.append_value_ref(&avro).map(|m| m + n)
+        self.append_value_ref(&avro)
     }
 
     /// Append a compatible value to a `Writer`, also performing schema validation.
@@ -195,9 +192,58 @@ impl<'a, W: Write> Writer<'a, W> {
     /// internal buffering for performance reasons. If you want to be sure the value has been
     /// written, then call [`flush`](Writer::flush).
     pub fn append_value_ref(&mut self, value: &Value) -> AvroResult<usize> {
-        let n = self.maybe_write_header()?;
+        if let Some(reason) = value.validate_internal(
+            self.schema,
+            self.resolved_schema.get_names(),
+            &self.schema.namespace(),
+        ) {
+            return Err(Details::ValidationWithReason {
+                value: value.clone(),
+                schema: self.schema.clone(),
+                reason,
+            }
+            .into());
+        }
+        self.unvalidated_append_value_ref(value)
+    }
 
-        write_value_ref_resolved(self.schema, &self.resolved_schema, value, &mut self.buffer)?;
+    /// Append a compatible value to a `Writer`.
+    ///
+    /// This function does **not** validate that the provided value matches the schema. If it does
+    /// not match, the file will contain corrupt data. Use [`Writer::append_value`] to have the
+    /// value validated during write or use [`Value::validate`] to validate the value.
+    ///
+    /// Returns the number of bytes written (it might be 0, see below).
+    ///
+    /// **NOTE**: This function is not guaranteed to perform any actual write, since it relies on
+    /// internal buffering for performance reasons. If you want to be sure the value has been
+    /// written, then call [`flush`](Writer::flush).
+    pub fn unvalidated_append_value<T: Into<Value>>(&mut self, value: T) -> AvroResult<usize> {
+        let value = value.into();
+        self.unvalidated_append_value_ref(&value)
+    }
+
+    /// Append a compatible value to a `Writer`.
+    ///
+    /// This function does **not** validate that the provided value matches the schema. If it does
+    /// not match, the file will contain corrupt data. Use [`Writer::append_value_ref`] to have the
+    /// value validated during write or use [`Value::validate`] to validate the value.
+    ///
+    /// Returns the number of bytes written (it might be 0, see below).
+    ///
+    /// **NOTE**: This function is not guaranteed to perform any actual write, since it relies on
+    /// internal buffering for performance reasons. If you want to be sure the value has been
+    /// written, then call [`flush`](Writer::flush).
+    pub fn unvalidated_append_value_ref(&mut self, value: &Value) -> AvroResult<usize> {
+        let n = self.maybe_write_header()?;
+        encode_internal(
+            value,
+            self.schema,
+            self.resolved_schema.get_names(),
+            &self.schema.namespace(),
+            &mut self.buffer,
+        )?;
+
         self.num_values += 1;
 
         if self.buffer.len() >= self.block_size {
@@ -685,29 +731,6 @@ where
     /// making each message independently decodable.
     pub fn write<W: Write>(&self, data: T, writer: &mut W) -> AvroResult<usize> {
         self.write_ref(&data, writer)
-    }
-}
-
-fn write_value_ref_resolved(
-    schema: &Schema,
-    resolved_schema: &ResolvedSchema,
-    value: &Value,
-    buffer: &mut Vec<u8>,
-) -> AvroResult<usize> {
-    match value.validate_internal(schema, resolved_schema.get_names(), &schema.namespace()) {
-        Some(reason) => Err(Details::ValidationWithReason {
-            value: value.clone(),
-            schema: schema.clone(),
-            reason,
-        }
-        .into()),
-        None => encode_internal(
-            value,
-            schema,
-            resolved_schema.get_names(),
-            &schema.namespace(),
-            buffer,
-        ),
     }
 }
 
@@ -1801,6 +1824,34 @@ mod tests {
         assert_eq!(
             buffer,
             &[195, 1, 83, 223, 43, 26, 181, 179, 227, 224, 1, 2, 0, 0][..]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_310_append_unvalidated_value() -> TestResult {
+        let schema = Schema::String;
+        let value = Value::Int(1);
+
+        let mut writer = Writer::new(&schema, Vec::new())?;
+        writer.unvalidated_append_value_ref(&value)?;
+        writer.unvalidated_append_value(value)?;
+        let buffer = writer.into_inner()?;
+
+        assert_eq!(&buffer[buffer.len() - 18..buffer.len() - 16], &[2, 2]);
+
+        let mut writer = Writer::new(&schema, Vec::new())?;
+        let value = Value::Int(1);
+        let err = writer.append_value_ref(&value).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Value Int(1) does not match schema String: Reason: Unsupported value-schema combination! Value: Int(1), schema: String"
+        );
+        let err = writer.append(value).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Value Int(1) does not match schema String: Reason: Unsupported value-schema combination! Value: Int(1), schema: String"
         );
 
         Ok(())
