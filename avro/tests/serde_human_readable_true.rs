@@ -55,8 +55,7 @@ fn avro_rs_53_uuid_with_string_true() -> TestResult {
 
     // serialize the Uuid as String
     assert!(apache_avro::util::set_serde_human_readable(true));
-    let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)?
-        .write_ref(&payload, &mut buffer)?;
+    let bytes = SpecificSingleObjectWriter::<Comment>::new()?.write_ref(&payload, &mut buffer)?;
     assert_eq!(bytes, 47);
 
     Ok(())
@@ -76,7 +75,7 @@ fn avro_rs_440_uuid_string() -> TestResult {
     let mut buffer = Vec::new();
 
     assert!(apache_avro::util::set_serde_human_readable(true));
-    let mut writer = SpecificSingleObjectWriter::with_capacity(64)?;
+    let writer = SpecificSingleObjectWriter::new()?;
     writer.write(uuid, &mut buffer)?;
 
     assert_eq!(
@@ -101,7 +100,7 @@ fn avro_rs_440_uuid_bytes() -> TestResult {
     let mut buffer = Vec::new();
 
     assert!(apache_avro::util::set_serde_human_readable(true));
-    let mut writer = SpecificSingleObjectWriter::with_capacity(64)?;
+    let writer = SpecificSingleObjectWriter::new()?;
     assert_eq!(
         writer.write(uuid, &mut buffer).unwrap_err().to_string(),
         "Failed to serialize value of type string using schema Uuid(Bytes): 550e8400-e29b-41d4-a716-446655440000. Cause: Expected bytes but got a string. Did you mean to use `Schema::Uuid(UuidSchema::String)` or `utils::serde_set_human_readable(false)`?"
@@ -127,7 +126,7 @@ fn avro_rs_440_uuid_fixed() -> TestResult {
     let mut buffer = Vec::new();
 
     assert!(apache_avro::util::set_serde_human_readable(true));
-    let mut writer = SpecificSingleObjectWriter::with_capacity(64)?;
+    let writer = SpecificSingleObjectWriter::new()?;
     assert_eq!(
         writer.write(uuid, &mut buffer).unwrap_err().to_string(),
         r#"Failed to serialize value of type string using schema Uuid(Fixed(FixedSchema { name: Name { name: "uuid", namespace: None }, aliases: None, doc: None, size: 16, default: None, attributes: {} })): 550e8400-e29b-41d4-a716-446655440000. Cause: Expected bytes but got a string. Did you mean to use `Schema::Uuid(UuidSchema::String)` or `utils::serde_set_human_readable(false)`?"#

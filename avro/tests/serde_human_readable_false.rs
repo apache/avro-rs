@@ -56,8 +56,7 @@ fn avro_rs_53_uuid_with_fixed() -> TestResult {
 
     // serialize the Uuid as Fixed
     assert!(!apache_avro::util::set_serde_human_readable(false));
-    let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)?
-        .write_ref(&payload, &mut buffer)?;
+    let bytes = SpecificSingleObjectWriter::<Comment>::new()?.write_ref(&payload, &mut buffer)?;
     assert_eq!(bytes, 26);
 
     Ok(())
@@ -77,7 +76,7 @@ fn avro_rs_440_uuid_string() -> TestResult {
     let mut buffer = Vec::new();
 
     assert!(!apache_avro::util::set_serde_human_readable(false));
-    let mut writer = SpecificSingleObjectWriter::with_capacity(64)?;
+    let writer = SpecificSingleObjectWriter::new()?;
     assert_eq!(
         writer.write(uuid, &mut buffer).unwrap_err().to_string(),
         "Failed to serialize value of type bytes using schema Uuid(String): 55e840e29b41d4a7164466554400. Cause: Expected a string, but got 16 bytes. Did you mean to use `Schema::Uuid(UuidSchema::Fixed)` or `utils::serde_set_human_readable(true)`?"
@@ -100,7 +99,7 @@ fn avro_rs_440_uuid_bytes() -> TestResult {
     let mut buffer = Vec::new();
 
     assert!(!apache_avro::util::set_serde_human_readable(false));
-    let mut writer = SpecificSingleObjectWriter::with_capacity(64)?;
+    let writer = SpecificSingleObjectWriter::new()?;
     writer.write(uuid, &mut buffer)?;
 
     assert_eq!(
@@ -131,7 +130,7 @@ fn avro_rs_440_uuid_fixed() -> TestResult {
     let mut buffer = Vec::new();
 
     assert!(!apache_avro::util::set_serde_human_readable(false));
-    let mut writer = SpecificSingleObjectWriter::with_capacity(64)?;
+    let writer = SpecificSingleObjectWriter::new()?;
     writer.write(uuid, &mut buffer)?;
 
     assert_eq!(

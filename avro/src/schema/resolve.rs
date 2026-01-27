@@ -17,11 +17,10 @@
 
 use crate::error::Details;
 use crate::schema::{
-    DecimalSchema, EnumSchema, FixedSchema, InnerDecimalSchema, Names, NamesRef, Namespace,
-    RecordSchema, UnionSchema, UuidSchema,
+    DecimalSchema, EnumSchema, FixedSchema, InnerDecimalSchema, NamesRef, Namespace, RecordSchema,
+    UnionSchema, UuidSchema,
 };
 use crate::{AvroResult, Error, Schema};
-use std::borrow::Borrow;
 use std::collections::HashMap;
 
 #[derive(Debug)]
@@ -31,8 +30,8 @@ pub struct ResolvedSchema<'s> {
 }
 
 impl<'s> ResolvedSchema<'s> {
-    pub fn get_schemata(&self) -> Vec<&'s Schema> {
-        self.schemata.clone()
+    pub fn get_schemata(&self) -> &[&'s Schema] {
+        &self.schemata
     }
 
     pub fn get_names(&self) -> &NamesRef<'s> {
@@ -52,12 +51,7 @@ impl<'s> ResolvedSchema<'s> {
     /// These schemas will be resolved in order, so references to schemas later in the
     /// list is not supported.
     pub fn new_with_schemata(schemata: Vec<&'s Schema>) -> AvroResult<Self> {
-        let mut rs = ResolvedSchema {
-            names_ref: HashMap::new(),
-            schemata,
-        };
-        rs.resolve(rs.get_schemata(), &None, None)?;
-        Ok(rs)
+        Self::new_with_known_schemata(schemata, &None, &HashMap::new())
     }
 
     /// Creates `ResolvedSchema` with some already known schemas.
@@ -68,83 +62,17 @@ impl<'s> ResolvedSchema<'s> {
         enclosing_namespace: &Namespace,
         known_schemata: &'n NamesRef<'n>,
     ) -> AvroResult<Self> {
-        let names = HashMap::new();
-        let mut rs = ResolvedSchema {
+        let mut names = HashMap::new();
+        resolve_names_with_schemata(
+            schemata_to_resolve.iter().copied(),
+            &mut names,
+            enclosing_namespace,
+            known_schemata,
+        )?;
+        Ok(ResolvedSchema {
             names_ref: names,
             schemata: schemata_to_resolve,
-        };
-        rs.resolve(rs.get_schemata(), enclosing_namespace, Some(known_schemata))?;
-        Ok(rs)
-    }
-
-    fn resolve<'n>(
-        &mut self,
-        schemata: Vec<&'s Schema>,
-        enclosing_namespace: &Namespace,
-        known_schemata: Option<&'n NamesRef<'n>>,
-    ) -> AvroResult<()> {
-        for schema in schemata {
-            match schema {
-                Schema::Array(schema) => {
-                    self.resolve(vec![&schema.items], enclosing_namespace, known_schemata)?
-                }
-                Schema::Map(schema) => {
-                    self.resolve(vec![&schema.types], enclosing_namespace, known_schemata)?
-                }
-                Schema::Union(UnionSchema { schemas, .. }) => {
-                    for schema in schemas {
-                        self.resolve(vec![schema], enclosing_namespace, known_schemata)?
-                    }
-                }
-                Schema::Enum(EnumSchema { name, .. })
-                | Schema::Fixed(FixedSchema { name, .. })
-                | Schema::Uuid(UuidSchema::Fixed(FixedSchema { name, .. }))
-                | Schema::Decimal(DecimalSchema {
-                    inner: InnerDecimalSchema::Fixed(FixedSchema { name, .. }),
-                    ..
-                })
-                | Schema::Duration(FixedSchema { name, .. }) => {
-                    let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
-                    if self
-                        .names_ref
-                        .insert(fully_qualified_name.clone(), schema)
-                        .is_some()
-                    {
-                        return Err(Details::AmbiguousSchemaDefinition(fully_qualified_name).into());
-                    }
-                }
-                Schema::Record(RecordSchema { name, fields, .. }) => {
-                    let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
-                    if self
-                        .names_ref
-                        .insert(fully_qualified_name.clone(), schema)
-                        .is_some()
-                    {
-                        return Err(Details::AmbiguousSchemaDefinition(fully_qualified_name).into());
-                    } else {
-                        let record_namespace = fully_qualified_name.namespace;
-                        for field in fields {
-                            self.resolve(vec![&field.schema], &record_namespace, known_schemata)?
-                        }
-                    }
-                }
-                Schema::Ref { name } => {
-                    let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
-                    // first search for reference in current schemata, then look into external references.
-                    if !self.names_ref.contains_key(&fully_qualified_name) {
-                        let is_resolved_with_known_schemas = known_schemata
-                            .as_ref()
-                            .map(|names| names.contains_key(&fully_qualified_name))
-                            .unwrap_or(false);
-                        if !is_resolved_with_known_schemas {
-                            return Err(Details::SchemaResolutionError(fully_qualified_name).into());
-                        }
-                    }
-                }
-                _ => (),
-            }
-        }
-        Ok(())
+        })
     }
 }
 
@@ -164,26 +92,43 @@ impl<'s> TryFrom<Vec<&'s Schema>> for ResolvedSchema<'s> {
     }
 }
 
-pub struct ResolvedOwnedSchema {
-    names: Names,
+/// Implementation detail of [`ResolvedOwnedSchema`]
+///
+/// This struct is self-referencing. The references in `names` point to `root_schema`.
+/// This allows resolving an owned schema without having to clone all the named schemas.
+#[ouroboros::self_referencing]
+struct InnerResolvedOwnedSchema {
     root_schema: Schema,
+    #[borrows(root_schema)]
+    #[covariant]
+    names: NamesRef<'this>,
+}
+
+/// A variant of [`ResolvedSchema`] that owns the schema
+pub struct ResolvedOwnedSchema {
+    inner: InnerResolvedOwnedSchema,
 }
 
 impl ResolvedOwnedSchema {
     pub fn new(root_schema: Schema) -> AvroResult<Self> {
-        let mut rs = ResolvedOwnedSchema {
-            names: HashMap::new(),
-            root_schema,
-        };
-        resolve_names(&rs.root_schema, &mut rs.names, &None)?;
-        Ok(rs)
+        Ok(Self {
+            inner: InnerResolvedOwnedSchemaTryBuilder {
+                root_schema,
+                names_builder: |schema: &Schema| {
+                    let mut names = HashMap::new();
+                    resolve_names(schema, &mut names, &None, &HashMap::new())?;
+                    Ok::<_, Error>(names)
+                },
+            }
+            .try_build()?,
+        })
     }
 
     pub fn get_root_schema(&self) -> &Schema {
-        &self.root_schema
+        self.inner.borrow_root_schema()
     }
-    pub fn get_names(&self) -> &Names {
-        &self.names
+    pub fn get_names(&self) -> &NamesRef<'_> {
+        self.inner.borrow_names()
     }
 }
 
@@ -195,17 +140,25 @@ impl TryFrom<Schema> for ResolvedOwnedSchema {
     }
 }
 
-pub fn resolve_names(
-    schema: &Schema,
-    names: &mut Names,
+/// Resolve all references in the schema, saving any named type found in `names`
+///
+/// `known_schemata` will be used to resolve references but they won't be added to `names`.
+pub fn resolve_names<'s, 'n>(
+    schema: &'s Schema,
+    names: &mut NamesRef<'s>,
     enclosing_namespace: &Namespace,
+    known_schemata: &NamesRef<'n>,
 ) -> AvroResult<()> {
     match schema {
-        Schema::Array(schema) => resolve_names(&schema.items, names, enclosing_namespace),
-        Schema::Map(schema) => resolve_names(&schema.types, names, enclosing_namespace),
+        Schema::Array(schema) => {
+            resolve_names(&schema.items, names, enclosing_namespace, known_schemata)
+        }
+        Schema::Map(schema) => {
+            resolve_names(&schema.types, names, enclosing_namespace, known_schemata)
+        }
         Schema::Union(UnionSchema { schemas, .. }) => {
             for schema in schemas {
-                resolve_names(schema, names, enclosing_namespace)?
+                resolve_names(schema, names, enclosing_namespace, known_schemata)?
             }
             Ok(())
         }
@@ -218,10 +171,7 @@ pub fn resolve_names(
         })
         | Schema::Duration(FixedSchema { name, .. }) => {
             let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
-            if names
-                .insert(fully_qualified_name.clone(), schema.clone())
-                .is_some()
-            {
+            if names.insert(fully_qualified_name.clone(), schema).is_some() {
                 Err(Details::AmbiguousSchemaDefinition(fully_qualified_name).into())
             } else {
                 Ok(())
@@ -229,37 +179,38 @@ pub fn resolve_names(
         }
         Schema::Record(RecordSchema { name, fields, .. }) => {
             let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
-            if names
-                .insert(fully_qualified_name.clone(), schema.clone())
-                .is_some()
-            {
+            if names.insert(fully_qualified_name.clone(), schema).is_some() {
                 Err(Details::AmbiguousSchemaDefinition(fully_qualified_name).into())
             } else {
                 let record_namespace = fully_qualified_name.namespace;
                 for field in fields {
-                    resolve_names(&field.schema, names, &record_namespace)?
+                    resolve_names(&field.schema, names, &record_namespace, known_schemata)?
                 }
                 Ok(())
             }
         }
         Schema::Ref { name } => {
             let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
-            names
-                .get(&fully_qualified_name)
-                .map(|_| ())
-                .ok_or_else(|| Details::SchemaResolutionError(fully_qualified_name).into())
+            if names.contains_key(&fully_qualified_name)
+                || known_schemata.contains_key(&fully_qualified_name)
+            {
+                Ok(())
+            } else {
+                Err(Details::SchemaResolutionError(fully_qualified_name).into())
+            }
         }
         _ => Ok(()),
     }
 }
 
-pub fn resolve_names_with_schemata(
-    schemata: impl IntoIterator<Item = impl Borrow<Schema>>,
-    names: &mut Names,
+pub fn resolve_names_with_schemata<'s, 'n>(
+    schemata: impl IntoIterator<Item = &'s Schema>,
+    names: &mut NamesRef<'s>,
     enclosing_namespace: &Namespace,
+    known_schemata: &NamesRef<'n>,
 ) -> AvroResult<()> {
     for schema in schemata {
-        resolve_names(schema.borrow(), names, enclosing_namespace)?;
+        resolve_names(schema, names, enclosing_namespace, known_schemata)?;
     }
     Ok(())
 }
