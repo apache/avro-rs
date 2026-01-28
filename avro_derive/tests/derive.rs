@@ -2155,3 +2155,65 @@ fn avro_rs_414_round_trip_char_u64_u128_i128() {
         d: i128::MAX,
     });
 }
+
+#[test]
+fn avro_rs_xxx_transparent_recurring_type() {
+    #[derive(AvroSchema)]
+    #[expect(dead_code, reason = "Only testing derived schema")]
+    pub enum Color {
+        G,
+    }
+
+    #[derive(AvroSchema)]
+    #[expect(dead_code, reason = "Only testing derived schema")]
+    pub struct A {
+        pub color: Color,
+    }
+
+    #[derive(AvroSchema)]
+    #[expect(dead_code, reason = "Only testing derived schema")]
+    pub struct C {
+        #[serde(flatten)]
+        pub a: A,
+    }
+
+    #[derive(AvroSchema)]
+    #[expect(dead_code, reason = "Only testing derived schema")]
+    pub struct TestStruct {
+        pub a: Color,
+        pub c: C,
+    }
+
+    let schema = Schema::parse_str(
+        r#"{
+        "name": "TestStruct",
+        "type":"record",
+        "fields": [
+            {
+                "name":"a",
+                "type": {
+                    "name": "Color",
+                    "type": "enum",
+                    "symbols": ["G"]
+                }
+            },
+            {
+                "name":"c",
+                "type": {
+                    "name":"C",
+                    "type":"record",
+                    "fields": [
+                        {
+                            "name": "color",
+                            "type": "Color"
+                        }
+                    ]
+                }
+            }
+        ]
+    }"#,
+    )
+    .unwrap();
+
+    assert_eq!(TestStruct::get_schema(), schema);
+}
