@@ -2911,7 +2911,7 @@ mod tests {
         let mut writer = crate::Writer::new(&schema, Vec::new())?;
 
         // schema validation happens here
-        writer.append(avro_value)?;
+        writer.append_value(avro_value)?;
 
         Ok(())
     }

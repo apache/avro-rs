@@ -70,7 +70,7 @@ fn write_read() {
         Codec::Null,
     )
     .unwrap();
-    writer.append(record).unwrap();
+    writer.append_value(record).unwrap();
     writer.flush().unwrap();
     let bytes = writer.into_inner().unwrap().into_inner().unwrap();
 

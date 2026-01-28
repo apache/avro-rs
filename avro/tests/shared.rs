@@ -120,7 +120,9 @@ fn test_folder(folder: &Path) -> Result<(), ErrorsDesc> {
 
         for r in reader {
             let record: Value = r.expect("Error on reading");
-            writer.append(record.clone()).expect("Error on write item");
+            writer
+                .append_value(record.clone())
+                .expect("Error on write item");
             records.push(record);
         }
 

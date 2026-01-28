@@ -76,7 +76,7 @@ fn avro_4032_codec_settings(codec: Codec) -> TestResult {
     let mut record = Record::new(writer.schema()).unwrap();
     record.put("f1", 27_i32);
     record.put("f2", "foo");
-    writer.append(record)?;
+    writer.append_value(record)?;
     let input = writer.into_inner()?;
     let mut reader = Reader::new(&input[..])?;
     assert_eq!(

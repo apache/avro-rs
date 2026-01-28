@@ -216,7 +216,7 @@
 //! record.put("b", "foo");
 //!
 //! // schema validation happens here
-//! writer.append(record).unwrap();
+//! writer.append_value(record).unwrap();
 //!
 //! // this is how to get back the resulting avro bytecode
 //! // this performs a flush operation to make sure data has been written, so it can fail
@@ -357,7 +357,7 @@
 //! # let mut record = Record::new(writer.schema()).unwrap();
 //! # record.put("a", 27i64);
 //! # record.put("b", "foo");
-//! # writer.append(record).unwrap();
+//! # writer.append_value(record).unwrap();
 //! # let input = writer.into_inner().unwrap();
 //! // reader creation can fail in case the input to read from is not Avro-compatible or malformed
 //! let reader = Reader::new(&input[..]).unwrap();
@@ -386,7 +386,7 @@
 //! # let mut record = Record::new(writer.schema()).unwrap();
 //! # record.put("a", 27i64);
 //! # record.put("b", "foo");
-//! # writer.append(record).unwrap();
+//! # writer.append_value(record).unwrap();
 //! # let input = writer.into_inner().unwrap();
 //!
 //! let reader_raw_schema = r#"
@@ -446,7 +446,7 @@
 //! # let mut record = Record::new(writer.schema()).unwrap();
 //! # record.put("a", 27i64);
 //! # record.put("b", "foo");
-//! # writer.append(record).unwrap();
+//! # writer.append_value(record).unwrap();
 //! # let input = writer.into_inner().unwrap();
 //! let reader = Reader::new(&input[..]).unwrap();
 //!
@@ -539,7 +539,7 @@
 //!     record.put("a", 27i64);
 //!     record.put("b", "foo");
 //!
-//!     writer.append(record)?;
+//!     writer.append_value(record)?;
 //!
 //!     let test = Test {
 //!         a: 27,
@@ -676,7 +676,7 @@
 //!     record.put("local_timestamp_nanos", Value::LocalTimestampMicros(6));
 //!     record.put("duration", Duration::new(Months::new(6), Days::new(7), Millis::new(8)));
 //!
-//!     writer.append(record)?;
+//!     writer.append_value(record)?;
 //!
 //!     let input = writer.into_inner()?;
 //!     let reader = Reader::with_schema(&schema, &input[..])?;
@@ -1079,7 +1079,7 @@ mod tests {
         let mut record = Record::new(writer.schema()).unwrap();
         record.put("a", 27i64);
         record.put("b", "foo");
-        writer.append(record).unwrap();
+        writer.append_value(record).unwrap();
         let input = writer.into_inner().unwrap();
         let mut reader = Reader::with_schema(&reader_schema, &input[..]).unwrap();
         assert_eq!(
@@ -1121,7 +1121,7 @@ mod tests {
         record.put("a", 27i64);
         record.put("b", "foo");
         record.put("c", "clubs");
-        writer.append(record).unwrap();
+        writer.append_value(record).unwrap();
         let input = writer.into_inner().unwrap();
         let mut reader = Reader::with_schema(&schema, &input[..]).unwrap();
         assert_eq!(
@@ -1163,7 +1163,7 @@ mod tests {
         record.put("a", 27i64);
         record.put("b", "foo");
         record.put("c", "clubs");
-        writer.append(record).unwrap();
+        writer.append_value(record).unwrap();
         let input = writer.into_inner().unwrap();
         let mut reader = Reader::new(&input[..]).unwrap();
         assert_eq!(

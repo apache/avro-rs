@@ -101,7 +101,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         write_user_metadata(&mut writer)?;
 
         let datum = create_datum(&schema);
-        writer.append(datum)?;
+        writer.append_value(datum)?;
         writer.flush()?;
         println!("Wrote {file_name}");
     }

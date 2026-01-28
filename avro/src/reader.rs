@@ -826,8 +826,8 @@ mod tests {
         record.put("a", 27i64);
         record.put("b", "foo");
 
-        writer.append(record.clone())?;
-        writer.append(record.clone())?;
+        writer.append_value(record.clone())?;
+        writer.append_value(record.clone())?;
         writer.flush()?;
         let result = writer.into_inner()?;
 
