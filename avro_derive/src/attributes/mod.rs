@@ -169,7 +169,7 @@ impl VariantOptions {
 }
 
 /// How to get the schema for this field or variant.
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq, Default, Clone)]
 pub enum With {
     /// Use `<T as AvroSchemaComponent>::get_schema_in_ctxt`.
     #[default]

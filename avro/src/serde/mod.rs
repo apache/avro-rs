@@ -26,3 +26,6 @@ pub use de::from_value;
 pub use derive::{AvroSchema, AvroSchemaComponent};
 pub use ser::to_value;
 pub use with::{bytes, bytes_opt, fixed, fixed_opt, slice, slice_opt};
+
+#[doc(hidden)]
+pub use derive::get_record_fields_in_ctxt;
