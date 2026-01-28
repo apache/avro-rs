@@ -214,7 +214,7 @@ record.put("a", 27i64);
 record.put("b", "foo");
 
 // schema validation happens here
-writer.append(record).unwrap();
+writer.append_value(record).unwrap();
 
 // this is how to get back the resulting avro bytecode
 // this performs a flush operation to make sure data has been written, so it can fail
@@ -427,7 +427,7 @@ fn main() -> Result<(), Error> {
     record.put("a", 27i64);
     record.put("b", "foo");
 
-    writer.append(record)?;
+    writer.append_value(record)?;
 
     let test = Test {
         a: 27,
@@ -564,7 +564,7 @@ fn main() -> Result<(), Error> {
     record.put("local_timestamp_nanos", Value::LocalTimestampMicros(6));
     record.put("duration", Duration::new(Months::new(6), Days::new(7), Millis::new(8)));
 
-    writer.append(record)?;
+    writer.append_value(record)?;
 
     let input = writer.into_inner()?;
     let reader = Reader::with_schema(&schema, &input[..])?;
