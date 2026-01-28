@@ -172,6 +172,12 @@ impl<'a, W: Write> Writer<'a, W> {
         self.schema
     }
 
+    /// Deprecated. Use [`Writer::append_value`] instead.
+    #[deprecated(since = "0.22.0", note = "Use `Writer::append_value` instead")]
+    pub fn append<T: Into<Value>>(&mut self, value: T) -> AvroResult<usize> {
+        self.append_value(value)
+    }
+
     /// Append a compatible value to a `Writer`, also performing schema validation.
     ///
     /// Returns the number of bytes written (it might be 0, see below).
@@ -179,7 +185,7 @@ impl<'a, W: Write> Writer<'a, W> {
     /// **NOTE**: This function is not guaranteed to perform any actual write, since it relies on
     /// internal buffering for performance reasons. If you want to be sure the value has been
     /// written, then call [`flush`](Writer::flush).
-    pub fn append<T: Into<Value>>(&mut self, value: T) -> AvroResult<usize> {
+    pub fn append_value<T: Into<Value>>(&mut self, value: T) -> AvroResult<usize> {
         let avro = value.into();
         self.append_value_ref(&avro)
     }
@@ -308,7 +314,7 @@ impl<'a, W: Write> Writer<'a, W> {
 
         let mut num_bytes = 0;
         for value in values {
-            num_bytes += self.append(value)?;
+            num_bytes += self.append_value(value)?;
         }
         num_bytes += self.flush()?;
 
@@ -1124,8 +1130,8 @@ mod tests {
         record.put("a", 27i64);
         record.put("b", "foo");
 
-        let n1 = writer.append(record.clone())?;
-        let n2 = writer.append(record.clone())?;
+        let n1 = writer.append_value(record.clone())?;
+        let n2 = writer.append_value(record.clone())?;
         let n3 = writer.flush()?;
         let result = writer.into_inner()?;
 
@@ -1281,8 +1287,8 @@ mod tests {
         record.put("a", 27i64);
         record.put("b", "foo");
 
-        let n1 = writer.append(record.clone())?;
-        let n2 = writer.append(record.clone())?;
+        let n1 = writer.append_value(record.clone())?;
+        let n2 = writer.append_value(record.clone())?;
         let n3 = writer.flush()?;
         let result = writer.into_inner()?;
 
@@ -1358,8 +1364,8 @@ mod tests {
         let mut record2 = Record::new(&schema).unwrap();
         record2.put("a", Value::Union(0, Box::new(Value::Null)));
 
-        let n1 = writer.append(record1)?;
-        let n2 = writer.append(record2)?;
+        let n1 = writer.append_value(record1)?;
+        let n2 = writer.append_value(record2)?;
         let n3 = writer.flush()?;
         let result = writer.into_inner()?;
 
@@ -1400,8 +1406,8 @@ mod tests {
         record.put("a", 27i64);
         record.put("b", "foo");
 
-        writer.append(record.clone())?;
-        writer.append(record.clone())?;
+        writer.append_value(record.clone())?;
+        writer.append_value(record.clone())?;
         writer.flush()?;
         let result = writer.into_inner()?;
 
@@ -1434,7 +1440,7 @@ mod tests {
         let mut record = Record::new(&schema).unwrap();
         record.put("a", 27i64);
         record.put("b", "foo");
-        writer.append(record.clone())?;
+        writer.append_value(record.clone())?;
 
         match writer
             .add_user_metadata("stringKey".to_string(), String::from("value2"))
@@ -1772,7 +1778,7 @@ mod tests {
         let mut record = Record::new(writer.schema()).unwrap();
         record.put("exampleField", "value");
 
-        writer.append(record)?;
+        writer.append_value(record)?;
         writer.flush()?;
 
         assert_eq!(
@@ -1839,6 +1845,7 @@ mod tests {
         writer.unvalidated_append_value(value)?;
         let buffer = writer.into_inner()?;
 
+        // Check the last two bytes for the sync marker
         assert_eq!(&buffer[buffer.len() - 18..buffer.len() - 16], &[2, 2]);
 
         let mut writer = Writer::new(&schema, Vec::new())?;
@@ -1848,7 +1855,7 @@ mod tests {
             err.to_string(),
             "Value Int(1) does not match schema String: Reason: Unsupported value-schema combination! Value: Int(1), schema: String"
         );
-        let err = writer.append(value).unwrap_err();
+        let err = writer.append_value(value).unwrap_err();
         assert_eq!(
             err.to_string(),
             "Value Int(1) does not match schema String: Reason: Unsupported value-schema combination! Value: Int(1), schema: String"

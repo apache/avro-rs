@@ -814,7 +814,7 @@ fn test_record_schema_with_cyclic_references() -> TestResult {
     );
 
     let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Null)?;
-    if let Err(err) = writer.append(datum) {
+    if let Err(err) = writer.append_value(datum) {
         panic!("An error occurred while writing datum: {err:?}")
     }
     let bytes = writer.into_inner()?;
@@ -1027,7 +1027,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref() -> TestResult {
     let mut writer = Writer::new(&writer_schema, Vec::new())?;
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Record(vec![("f1_1".to_string(), 10.into())]));
-    writer.append(record)?;
+    writer.append_value(record)?;
 
     let reader_schema_str = r#"
     {
@@ -1100,7 +1100,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref() -> TestResult {
     let mut writer = Writer::new(&writer_schema, Vec::new())?;
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Enum(1, "b".to_string()));
-    writer.append(record)?;
+    writer.append_value(record)?;
 
     let reader_schema_str = r#"
     {
@@ -1160,7 +1160,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref() -> TestResult {
     let mut writer = Writer::new(&writer_schema, Vec::new())?;
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Fixed(3, vec![0, 1, 2]));
-    writer.append(record)?;
+    writer.append_value(record)?;
 
     let reader_schema_str = r#"
     {
@@ -1231,7 +1231,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_namespace() -> Test
     let mut writer = Writer::new(&writer_schema, Vec::new())?;
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Record(vec![("f1_1".to_string(), 10.into())]));
-    writer.append(record)?;
+    writer.append_value(record)?;
 
     let reader_schema_str = r#"
     {
@@ -1306,7 +1306,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_namespace() -> Test
     let mut writer = Writer::new(&writer_schema, Vec::new())?;
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Enum(1, "b".to_string()));
-    writer.append(record)?;
+    writer.append_value(record)?;
 
     let reader_schema_str = r#"
     {
@@ -1368,7 +1368,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_namespace() -> Test
     let mut writer = Writer::new(&writer_schema, Vec::new())?;
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Fixed(3, vec![0, 1, 2]));
-    writer.append(record)?;
+    writer.append_value(record)?;
 
     let reader_schema_str = r#"
     {
@@ -1440,7 +1440,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_enclosing_namespace
     let mut writer = Writer::new(&writer_schema, Vec::new())?;
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Record(vec![("f1_1".to_string(), 10.into())]));
-    writer.append(record)?;
+    writer.append_value(record)?;
 
     let reader_schema_str = r#"
     {
@@ -1515,7 +1515,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_enclosing_namespace
     let mut writer = Writer::new(&writer_schema, Vec::new())?;
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Enum(1, "b".to_string()));
-    writer.append(record)?;
+    writer.append_value(record)?;
 
     let reader_schema_str = r#"
     {
@@ -1577,7 +1577,7 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_enclosing_namespace
     let mut writer = Writer::new(&writer_schema, Vec::new())?;
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Fixed(3, vec![0, 1, 2]));
-    writer.append(record)?;
+    writer.append_value(record)?;
 
     let reader_schema_str = r#"
     {
@@ -1640,7 +1640,7 @@ fn write_schema_for_default_value_test() -> apache_avro::AvroResult<Vec<u8>> {
         .ok_or("Expected Some(Record), but got None")
         .unwrap();
     record.put("f1", 10);
-    writer.append(record)?;
+    writer.append_value(record)?;
 
     writer.into_inner()
 }
@@ -1921,7 +1921,7 @@ fn test_avro_3851_read_default_value_for_ref_record_field() -> TestResult {
     let mut writer = Writer::new(&writer_schema, Vec::new())?;
     let mut record = Record::new(writer.schema()).ok_or("Expected Some(Record), but got None")?;
     record.put("f1", Value::Record(vec![("f1_1".to_string(), 10.into())]));
-    writer.append(record)?;
+    writer.append_value(record)?;
 
     let reader_schema_str = r#"
     {
@@ -1984,7 +1984,7 @@ fn test_avro_3851_read_default_value_for_enum() -> TestResult {
     "#;
     let writer_schema = Schema::parse_str(writer_schema_str)?;
     let mut writer = Writer::new(&writer_schema, Vec::new())?;
-    writer.append("c")?;
+    writer.append_value("c")?;
 
     let reader_schema_str = r#"
     {
@@ -2351,7 +2351,7 @@ fn avro_rs_181_single_null_record() -> TestResult {
     let mut buff = Cursor::new(Vec::new());
     let schema = Schema::parse_str(r#""null""#)?;
     let mut writer = Writer::new(&schema, &mut buff)?;
-    writer.append(serde_json::Value::Null)?;
+    writer.append_value(serde_json::Value::Null)?;
     writer.into_inner()?;
     buff.set_position(0);
 

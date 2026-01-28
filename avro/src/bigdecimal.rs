@@ -158,7 +158,7 @@ mod tests {
             .writer(Vec::new())
             .build()?;
 
-        writer.append(record.clone())?;
+        writer.append_value(record.clone())?;
         writer.flush()?;
 
         // read record

@@ -40,7 +40,7 @@ fn avro_3630_append_to_an_existing_file() -> TestResult {
     let mut writer = Writer::append_to(&schema, bytes, marker)?;
 
     writer
-        .append(create_datum(&schema, 2))
+        .append_value(create_datum(&schema, 2))
         .expect("An error occurred while appending more data");
 
     let new_bytes = writer.into_inner().expect("Cannot get the new bytes");
@@ -63,7 +63,7 @@ fn avro_4031_append_to_file_using_multiple_writers() -> TestResult {
         .schema(&schema)
         .writer(Vec::new())
         .build()?;
-    first_writer.append(create_datum(&schema, -42))?;
+    first_writer.append_value(create_datum(&schema, -42))?;
     let mut resulting_bytes = first_writer.into_inner()?;
     let first_marker = read_marker(&resulting_bytes);
 
@@ -73,7 +73,7 @@ fn avro_4031_append_to_file_using_multiple_writers() -> TestResult {
         .marker(first_marker)
         .writer(Vec::new())
         .build()?;
-    second_writer.append(create_datum(&schema, 42))?;
+    second_writer.append_value(create_datum(&schema, 42))?;
     resulting_bytes.append(&mut second_writer.into_inner()?);
 
     let values: Vec<_> = Reader::new(&resulting_bytes[..])?.collect();
@@ -86,7 +86,7 @@ fn avro_4031_append_to_file_using_multiple_writers() -> TestResult {
 fn get_avro_bytes(schema: &Schema) -> Vec<u8> {
     let mut writer = Writer::new(schema, Vec::new()).unwrap();
     writer
-        .append(create_datum(schema, 1))
+        .append_value(create_datum(schema, 1))
         .expect("An error while appending data");
     writer.into_inner().expect("Cannot get the Avro bytes")
 }

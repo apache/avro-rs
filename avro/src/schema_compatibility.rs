@@ -1288,7 +1288,7 @@ mod tests {
         record.put("a", 27i64);
         record.put("b", "foo");
         record.put("c", "clubs");
-        writer.append(record).unwrap();
+        writer.append_value(record).unwrap();
         let input = writer.into_inner()?;
         let mut reader = Reader::with_schema(&reader_schema, &input[..])?;
         assert_eq!(
@@ -1352,7 +1352,7 @@ mod tests {
         record.put("a", 27i64);
         record.put("b", "foo");
         record.put("c", "hearts");
-        writer.append(record).unwrap();
+        writer.append_value(record).unwrap();
         let input = writer.into_inner()?;
         let mut reader = Reader::with_schema(&reader_schema, &input[..])?;
         assert_eq!(

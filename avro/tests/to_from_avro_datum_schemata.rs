@@ -108,7 +108,7 @@ fn test_avro_3683_multiple_schemata_writer_reader() -> TestResult {
     let mut output: Vec<u8> = Vec::new();
 
     let mut writer = Writer::with_schemata(schema_b, schemata.clone(), &mut output, Codec::Null)?;
-    writer.append(record.clone())?;
+    writer.append_value(record.clone())?;
     writer.flush()?;
     drop(writer); //drop the writer so that `output` is no more referenced mutably
 
