@@ -19,7 +19,6 @@ use crate::Schema;
 use crate::schema::{
     FixedSchema, Name, Names, Namespace, RecordField, RecordSchema, UnionSchema, UuidSchema,
 };
-use serde_json::Map;
 use std::borrow::Cow;
 use std::collections::HashMap;
 
@@ -84,6 +83,7 @@ pub trait AvroSchema {
 ///}
 /// ```
 pub trait AvroSchemaComponent {
+    /// Get the schema for this component
     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema;
 
     /// Get the fields of this schema if it is a record.
@@ -100,6 +100,8 @@ pub trait AvroSchemaComponent {
     }
 }
 
+/// Get the record fields from `schema_fn` without polluting `named_schemas` or causing duplicate names
+///
 /// This is public so the derive macro can use it for `#[avro(with = ||)]` and `#[avro(with = path)]`
 pub fn get_record_fields_in_ctxt(
     named_schemas: &mut Names,
@@ -240,50 +242,44 @@ impl_schema!(String, Schema::String);
 impl_schema!(str, Schema::String);
 impl_schema!(char, Schema::String);
 
-impl<T> AvroSchemaComponent for &T
-where
-    T: AvroSchemaComponent + ?Sized,
-{
-    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
-        T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
-    }
+macro_rules! impl_passthrough_schema (
+    ($type:ty where T: AvroSchemaComponent + ?Sized $(+ $bound:tt)*) => (
+        impl<T: AvroSchemaComponent $(+ $bound)* + ?Sized> AvroSchemaComponent for $type {
+            fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+                T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
+            }
 
-    fn get_record_fields_in_ctxt(
-        named_schemas: &mut Names,
-        enclosing_namespace: &Namespace,
-    ) -> Option<Vec<RecordField>> {
-        T::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)
-    }
-}
+            fn get_record_fields_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Option<Vec<RecordField>> {
+                T::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)
+            }
+        }
+    );
+);
 
-impl<T> AvroSchemaComponent for &mut T
-where
-    T: AvroSchemaComponent + ?Sized,
-{
-    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
-        T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
-    }
+impl_passthrough_schema!(&T where T: AvroSchemaComponent + ?Sized);
+impl_passthrough_schema!(&mut T where T: AvroSchemaComponent + ?Sized);
+impl_passthrough_schema!(Box<T> where T: AvroSchemaComponent + ?Sized);
+impl_passthrough_schema!(Cow<'_, T> where T: AvroSchemaComponent + ?Sized + ToOwned);
+impl_passthrough_schema!(std::sync::Mutex<T> where T: AvroSchemaComponent + ?Sized);
 
-    fn get_record_fields_in_ctxt(
-        named_schemas: &mut Names,
-        enclosing_namespace: &Namespace,
-    ) -> Option<Vec<RecordField>> {
-        T::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)
-    }
-}
+macro_rules! impl_array_schema (
+    ($type:ty where T: AvroSchemaComponent) => (
+        impl<T: AvroSchemaComponent> AvroSchemaComponent for $type {
+            fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
+                Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
+            }
 
-impl<T> AvroSchemaComponent for [T]
-where
-    T: AvroSchemaComponent,
-{
-    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
-        Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
-    }
+            fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+                None
+            }
+        }
+    );
+);
 
-    fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
-        None
-    }
-}
+impl_array_schema!([T] where T: AvroSchemaComponent);
+impl_array_schema!(Vec<T> where T: AvroSchemaComponent);
+// This doesn't work as the macro doesn't allow specifying the N parameter
+// impl_array_schema!([T; N] where T: AvroSchemaComponent);
 
 impl<const N: usize, T> AvroSchemaComponent for [T; N]
 where
@@ -298,12 +294,12 @@ where
     }
 }
 
-impl<T> AvroSchemaComponent for Vec<T>
+impl<T> AvroSchemaComponent for HashMap<String, T>
 where
     T: AvroSchemaComponent,
 {
     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
-        Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
+        Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
     }
 
     fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
@@ -328,80 +324,6 @@ where
 
     fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
         None
-    }
-}
-
-impl<T> AvroSchemaComponent for Map<String, T>
-where
-    T: AvroSchemaComponent,
-{
-    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
-        Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
-    }
-
-    fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
-        None
-    }
-}
-
-impl<T> AvroSchemaComponent for HashMap<String, T>
-where
-    T: AvroSchemaComponent,
-{
-    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
-        Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
-    }
-
-    fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
-        None
-    }
-}
-
-impl<T> AvroSchemaComponent for Box<T>
-where
-    T: AvroSchemaComponent,
-{
-    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
-        T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
-    }
-
-    fn get_record_fields_in_ctxt(
-        named_schemas: &mut Names,
-        enclosing_namespace: &Namespace,
-    ) -> Option<Vec<RecordField>> {
-        T::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)
-    }
-}
-
-impl<T> AvroSchemaComponent for std::sync::Mutex<T>
-where
-    T: AvroSchemaComponent,
-{
-    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
-        T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
-    }
-
-    fn get_record_fields_in_ctxt(
-        named_schemas: &mut Names,
-        enclosing_namespace: &Namespace,
-    ) -> Option<Vec<RecordField>> {
-        T::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)
-    }
-}
-
-impl<T> AvroSchemaComponent for Cow<'_, T>
-where
-    T: AvroSchemaComponent + ToOwned + ?Sized,
-{
-    fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
-        T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
-    }
-
-    fn get_record_fields_in_ctxt(
-        named_schemas: &mut Names,
-        enclosing_namespace: &Namespace,
-    ) -> Option<Vec<RecordField>> {
-        T::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)
     }
 }
 
