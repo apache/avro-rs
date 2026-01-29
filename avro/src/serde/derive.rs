@@ -184,6 +184,9 @@ pub fn get_record_fields_in_ctxt(
         })
         .collect();
 
+    // Remove the name in case it is not used
+    named_schemas.remove(&record.name);
+
     // Find the first reference to this schema so we can replace it with the actual schema
     for field in &mut record.fields {
         if let Some(schema) = find_first_ref(&mut field.schema, &record.name) {
@@ -196,7 +199,12 @@ pub fn get_record_fields_in_ctxt(
                 attributes: record.attributes,
             };
 
-            let _old = std::mem::replace(schema, Schema::Record(new_schema));
+            let Schema::Ref { name } = std::mem::replace(schema, Schema::Record(new_schema)) else {
+                panic!("Expected only Refs from find_first_ref");
+            };
+
+            // The schema is used, so reinsert it
+            named_schemas.insert(name.clone(), Schema::Ref { name });
 
             break;
         }
