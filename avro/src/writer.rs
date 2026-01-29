@@ -172,8 +172,7 @@ impl<'a, W: Write> Writer<'a, W> {
         self.schema
     }
 
-    /// Append a compatible value (implementing the `ToAvro` trait) to a `Writer`, also performing
-    /// schema validation.
+    /// Append a value to the `Writer`, also performs schema validation.
     ///
     /// Returns the number of bytes written (it might be 0, see below).
     ///
@@ -187,7 +186,7 @@ impl<'a, W: Write> Writer<'a, W> {
         self.append_value_ref(&avro).map(|m| m + n)
     }
 
-    /// Append a compatible value to a `Writer`, also performing schema validation.
+    /// Append a compatible value to a `Writer`, also performs schema validation.
     ///
     /// Returns the number of bytes written (it might be 0, see below).
     ///
@@ -235,8 +234,7 @@ impl<'a, W: Write> Writer<'a, W> {
         Ok(n)
     }
 
-    /// Extend a `Writer` with an `Iterator` of compatible values (implementing the `ToAvro`
-    /// trait), also performing schema validation.
+    /// Extend a `Writer` with an `Iterator` of values, also performs schema validation.
     ///
     /// Returns the number of bytes written.
     ///
@@ -499,8 +497,7 @@ impl<W: Write> Drop for Writer<'_, W> {
     }
 }
 
-/// Encode a compatible value (implementing the `ToAvro` trait) into Avro format, also performing
-/// schema validation.
+/// Encode a value into raw Avro data, also performs schema validation.
 ///
 /// This is an internal function which gets the bytes buffer where to write as parameter instead of
 /// creating a new one like `to_avro_datum`.
@@ -706,8 +703,7 @@ fn write_value_ref_owned_resolved(
     Ok(())
 }
 
-/// Encode a compatible value (implementing the `ToAvro` trait) into Avro format, also
-/// performing schema validation.
+/// Encode a value into raw Avro data, also performs schema validation.
 ///
 /// **NOTE**: This function has a quite small niche of usage and does NOT generate headers and sync
 /// markers; use [`Writer`] to be fully Avro-compatible if you don't know what
@@ -719,6 +715,7 @@ pub fn to_avro_datum<T: Into<Value>>(schema: &Schema, value: T) -> AvroResult<Ve
 }
 
 /// Write the referenced [Serialize]able object to the provided [Write] object.
+///
 /// Returns a result with the number of bytes written.
 ///
 /// **NOTE**: This function has a quite small niche of usage and does **NOT** generate headers and sync
@@ -735,8 +732,8 @@ pub fn write_avro_datum_ref<T: Serialize, W: Write>(
     Ok(bytes_written)
 }
 
-/// Encode a compatible value (implementing the `ToAvro` trait) into Avro format, also
-/// performing schema validation.
+/// Encode a value into raw Avro data, also performs schema validation.
+///
 /// If the provided `schema` is incomplete then its dependencies must be
 /// provided in `schemata`
 pub fn to_avro_datum_schemata<T: Into<Value>>(

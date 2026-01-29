@@ -41,7 +41,6 @@
 //! # use std::io::Cursor;
 //! # use serde::{Serialize, Deserialize};
 //! # use apache_avro::{AvroSchema, Error, Reader, Writer, serde::{from_value, to_value}};
-//!
 //! #[derive(AvroSchema, Serialize, Deserialize, PartialEq, Debug)]
 //! struct Foo {
 //!     a: i64,
@@ -57,14 +56,12 @@
 //!     b: "Hello".to_string(),
 //! };
 //!
-//! // There are two ways to serialize data.
-//! // 1: Serialize directly to the writer:
+//! // Serialize as many items as you want.
 //! writer.append_ser(&foo)?;
-//! // 2: First serialize to an Avro `Value` then write that:
-//! let foo_value = to_value(&foo)?;
-//! writer.append(foo_value)?;
 //!
-//! // Always flush or consume the writer
+//! // Always flush
+//! writer.flush();
+//! // Or consume the writer
 //! let data = writer.into_inner()?;
 //!
 //! // The reader does not need a schema as it's included in the data

@@ -30,24 +30,24 @@ pub enum RenameRule {
     /// Don't apply a default rename rule.
     #[default]
     None,
-    /// Rename direct children to "lowercase" style.
+    /// Rename direct children to `lowercase` style.
     LowerCase,
-    /// Rename direct children to "UPPERCASE" style.
+    /// Rename direct children to `UPPERCASE` style.
     UpperCase,
-    /// Rename direct children to "PascalCase" style, as typically used for
+    /// Rename direct children to `PascalCase` style, as typically used for
     /// enum variants.
     PascalCase,
-    /// Rename direct children to "camelCase" style.
+    /// Rename direct children to `camelCase` style.
     CamelCase,
-    /// Rename direct children to "snake_case" style, as commonly used for
+    /// Rename direct children to `snake_case` style, as commonly used for
     /// fields.
     SnakeCase,
-    /// Rename direct children to "SCREAMING_SNAKE_CASE" style, as commonly
+    /// Rename direct children to `SCREAMING_SNAKE_CASE` style, as commonly
     /// used for constants.
     ScreamingSnakeCase,
-    /// Rename direct children to "kebab-case" style.
+    /// Rename direct children to `kebab-case` style.
     KebabCase,
-    /// Rename direct children to "SCREAMING-KEBAB-CASE" style.
+    /// Rename direct children to `SCREAMING-KEBAB-CASE` style.
     ScreamingKebabCase,
 }
 

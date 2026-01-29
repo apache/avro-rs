@@ -16,7 +16,7 @@
 // under the License.
 
 use crate::Schema;
-use crate::schema::{FixedSchema, Name, Names, Namespace, UnionSchema, UuidSchema};
+use crate::schema::{FixedSchema, Name, Names, Namespace, RecordField, UnionSchema, UuidSchema};
 use serde_json::Map;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -57,14 +57,14 @@ use std::collections::HashMap;
 /// This will implement [`AvroSchemaComponent`] for the type, and `AvroSchema`
 /// through the blanket implementation for `T: AvroSchemaComponent`.
 ///
-/// Every member of the `struct` and `enum` must also implement `AvroSchemaComponent`.
+/// When deriving `struct`s, every member must also implement `AvroSchemaComponent`.
 ///
 /// ## Changing the generated schema
 ///
 /// The derive macro will read both the `avro` and `serde` attributes to modify the generated schema.
 /// It will also check for compatibility between the various attributes.
 ///
-/// ### Container attributes
+/// #### Container attributes
 ///
 ///  - `#[serde(rename = "name")]`
 ///
@@ -95,14 +95,14 @@ use std::collections::HashMap;
 ///    Use the schema of the inner field directly. Is only allowed on structs with only unskipped field.
 ///
 ///
-/// ### Variant attributes
+/// #### Variant attributes
 ///
 ///  - `#[serde(rename = "name")]`
 ///
 ///    Rename the variant to the given name.
 ///
 ///
-/// ### Field attributes
+/// #### Field attributes
 ///
 ///  - `#[serde(rename = "name")]`
 ///
@@ -145,7 +145,7 @@ use std::collections::HashMap;
 ///
 ///    Override the schema used for this field. See [Working with foreign types](#working-with-foreign-types).
 ///
-/// ### Incompatible Serde attributes
+/// #### Incompatible Serde attributes
 ///
 /// The derive macro is compatible with most Serde attributes, but it is incompatible with
 /// the following attributes:
@@ -167,83 +167,147 @@ use std::collections::HashMap;
 /// ## Working with foreign types
 ///
 /// Most foreign types won't have a [`AvroSchema`] implementation. This crate implements it only
-/// for built-in types, [`serde_json::Map`] and [`uuid::Uuid`]. Notable exceptions are [`char`] and
-/// [`u64`] types, as there is no equivalent for char in Avro and the largest integer type in Avro
-/// is `long` (equal to an [`i64`]).
+/// for built-in types and [`uuid::Uuid`].
 ///
 /// To still be able to derive schemas for fields of foreign types, the `#[avro(with)`]
 /// attribute can be used to get the schema for those fields. It can be used in two ways:
 ///
 /// 1. In combination with `#[serde(with = "path::to::module)]`
 ///
-///    To get the schema, it will call the function `fn get_schema_in_ctxt(&mut Names, &Namespace) -> Schema`
-///    in the module provided to the Serde attribute.
+///    To get the schema, it will call the functions `fn get_schema_in_ctxt(&mut Names, &Namespace) -> Schema`
+///    and `fn get_record_fields_in_ctxt(&mut Names, &Namespace) -> Schema` in the module provided
+///    to the Serde attribute.
 ///
 /// 2. By providing a function directly, `#[avro(with = some_fn)]`.
 ///
 ///    To get the schema, it will call the function provided. It must have the signature
-///    `fn(&mut Names, &Namespace) -> Schema`
+///    `fn(&mut Names, &Namespace) -> Schema`. When this is used for a `transparent` struct, the
+///    default implementation of [`AvroSchemaComponent::get_record_fields_in_ctxt`] will be used
+///    which is implemented with a lot of backtracking and cloning.
 ///
 pub trait AvroSchema {
+    /// Construct the full schema that represents this type.
+    ///
+    /// The returned schema is fully independent and contains only `Schema::Ref` to named types defined
+    /// earlier in the schema.
     fn get_schema() -> Schema;
 }
 
-/// Trait for types that serve as fully defined components inside an Avro data model. Derive
-/// implementation available through `derive` feature. This is what is implemented by
-/// the `derive(AvroSchema)` macro.
+/// Trait for types that serve as fully defined components inside an Avro data model.
 ///
-/// TODO: Explain that field ordering is important
+/// This trait can be derived with [`#[derive(AvroSchema)]`](AvroSchema) when the `derive` feature is enabled.
 ///
 /// # Implementation guide
 ///
-/// ### Simple implementation
-/// To construct a non named simple schema, it is possible to ignore the input argument making the
-/// general form implementation look like
-/// ```ignore
-/// impl AvroSchemaComponent for AType {
+/// ### Implementation for returning primitive types
+/// When the schema you want to return is a primitive type (a type without a name), the function
+/// arguments can be ignored.
+///
+/// For example, you have a custom integer type:
+/// ```
+/// # use apache_avro::{Schema, serde::{AvroSchemaComponent}, schema::{Names, Namespace, RecordField}};
+/// // Make sure to implement `Serialize` and `Deserialize` to use the right serialization methods
+/// pub struct U24([u8; 3]);
+/// impl AvroSchemaComponent for U24 {
 ///     fn get_schema_in_ctxt(_: &mut Names, _: &Namespace) -> Schema {
-///        Schema::?
-///    }
+///         Schema::Int
+///     }
+///
+///     fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+///         None // A Schema::Int is not a Schema::Record so there are no fields to return
+///     }
 ///}
 /// ```
 ///
 /// ### Passthrough implementation
 ///
-/// To construct a schema for a Type that acts as in "inner" type, such as for smart pointers, simply
-/// pass through the arguments to the inner type
-/// ```ignore
-/// impl AvroSchemaComponent for PassthroughType {
+/// To construct a schema for a type is "transparent", such as for smart pointers, simply
+/// pass through the arguments to the inner type:
+/// ```
+/// # use apache_avro::{Schema, serde::{AvroSchemaComponent}, schema::{Names, Namespace, RecordField}};
+/// # use serde::{Serialize, Deserialize};
+/// #[derive(Serialize, Deserialize)]
+/// #[serde(transparent)] // This attribute is important for all passthrough implementations!
+/// pub struct Transparent<T>(T);
+/// impl<T: AvroSchemaComponent> AvroSchemaComponent for Transparent<T> {
 ///     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
-///        InnerType::get_schema_in_ctxt(named_schemas, enclosing_namespace)
-///    }
+///         T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
+///     }
+///
+///     fn get_record_fields_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Option<Vec<RecordField>> {
+///         T::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)
+///     }
 ///}
 /// ```
 ///
-/// ### Complex implementation
+/// ### Implementation for complex types
+/// When the schema you want to return is a complex type (a type with a name), special care has to
+/// be taken to avoid duplicate type definitions and getting the correct namespace.
 ///
-/// To implement this for Named schema there is a general form needed to avoid creating invalid
-/// schemas or infinite loops.
-/// ```ignore
-/// impl AvroSchemaComponent for ComplexType {
+/// Things to keep in mind:
+///  - If the fully qualified name already exists, return a [`Schema::Ref`]
+///  - Use the `AvroSchemaComponent` implementations to get the schemas for the subtypes
+///  - The ordering of fields in the schema **must** match with the ordering in Serde
+///  - Implement `get_record_fields_in_ctxt` as the default implementation has to be implemented
+///    with backtracking and a lot of cloning.
+///      - Even if your schema is not a record, still implement the function and just return `None`
+///
+/// ```rust
+/// # use apache_avro::{Schema, serde::{AvroSchemaComponent}, schema::{Name, Names, Namespace, RecordField, RecordSchema}};
+/// # use serde::{Serialize, Deserialize};
+/// # use std::time::Duration;
+/// pub struct Foo {
+///     one: String,
+///     two: i32,
+///     three: Option<Duration>
+/// }
+///
+/// impl AvroSchemaComponent for Foo {
 ///     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema {
 ///         // Create the fully qualified name for your type given the enclosing namespace
-///         let name =  apache_avro::schema::Name::new("MyName")
-///             .expect("Unable to parse schema name")
-///             .fully_qualified_name(enclosing_namespace);
-///         let enclosing_namespace = &name.namespace;
-///         // Check, if your name is already defined, and if so, return a ref to that name
+///         let name = Name::new("Foo").unwrap().fully_qualified_name(enclosing_namespace);
 ///         if named_schemas.contains_key(&name) {
-///             apache_avro::schema::Schema::Ref{name: name.clone()}
+///             Schema::Ref { name }
 ///         } else {
-///             named_schemas.insert(name.clone(), apache_avro::schema::Schema::Ref{name: name.clone()});
-///             // YOUR SCHEMA DEFINITION HERE with the name equivalent to "MyName".
-///             // For non-simple sub types delegate to their implementation of AvroSchemaComponent
+///             let enclosing_namespace = &name.namespace;
+///             // This is needed because otherwise recursive types will recurse forever and cause a stack overflow
+///             named_schemas.insert(name.clone(), Schema::Ref { name: name.clone() });
+///             let schema = Schema::Record(RecordSchema::builder()
+///                 .name(name.clone())
+///                 .fields(Self::get_record_fields_in_ctxt(named_schemas, enclosing_namespace).expect("Impossible!"))
+///                 .build()
+///             );
+///             named_schemas.insert(name, schema.clone());
+///             schema
 ///         }
-///    }
+///     }
+///
+///     fn get_record_fields_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Option<Vec<RecordField>> {
+///         Some(vec![
+///             RecordField::builder()
+///                 .name("one")
+///                 .schema(String::get_schema_in_ctxt(named_schemas, enclosing_namespace))
+///                 .build(),
+///             RecordField::builder()
+///                 .name("two")
+///                 .schema(i32::get_schema_in_ctxt(named_schemas, enclosing_namespace))
+///                 .build(),
+///             RecordField::builder()
+///                 .name("three")
+///                 .schema(<Option<Duration>>::get_schema_in_ctxt(named_schemas, enclosing_namespace))
+///                 .build(),
+///         ])
+///     }
 ///}
 /// ```
 pub trait AvroSchemaComponent {
     fn get_schema_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema;
+    fn get_record_fields_in_ctxt(
+        named_schemas: &mut Names,
+        enclosing_namespace: &Namespace,
+    ) -> Option<Vec<RecordField>> {
+        None
+    }
 }
 
 impl<T> AvroSchema for T

@@ -240,11 +240,10 @@ impl Record<'_> {
         }
     }
 
-    /// Put a compatible value (implementing the `ToAvro` trait) in the
-    /// `Record` for a given `field` name.
+    /// Add a field to the `Record`.
     ///
-    /// **NOTE** Only ensure that the field name is present in the `Schema` given when creating
-    /// this `Record`. Does not perform any schema validation.
+    // TODO: This should return an error at least panic
+    /// **NOTE**: If the field name does not exist in the schema, the value is silently dropped.
     pub fn put<V>(&mut self, field: &str, value: V)
     where
         V: Into<Value>,
@@ -255,6 +254,7 @@ impl Record<'_> {
     }
 
     /// Get the value for a given field name.
+    ///
     /// Returns `None` if the field is not present in the schema
     pub fn get(&self, field: &str) -> Option<&Value> {
         self.schema_lookup

@@ -54,4 +54,9 @@ opt-level = "s"
 [workspace.lints]
 # By setting the priority to -1, this lint group can be overridden for specific lints
 clippy.all = { level = "warn", priority = -1 }
+clippy.too_long_first_doc_paragraph = "warn"
+clippy.doc_markdown = "warn"
+# TODO: Needs more work
+#clippy.missing_errors_doc = "warn"
+#clippy.missing_panics_doc = "warn"
 rust.unexpected_cfgs = { level = "warn", check-cfg = ['cfg(nightly)'] }

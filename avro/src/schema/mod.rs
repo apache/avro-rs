@@ -52,7 +52,8 @@ use parser::Parser;
 /// Represents documentation for complex Avro schemas.
 pub type Documentation = Option<String>;
 
-/// Represents an Avro schema fingerprint
+/// Represents an Avro schema fingerprint.
+///
 /// More information about Avro schema fingerprints can be found in the
 /// [Avro Schema Fingerprint documentation](https://avro.apache.org/docs/current/specification/#schema-fingerprints)
 pub struct SchemaFingerprint {
@@ -75,7 +76,7 @@ impl fmt::Display for SchemaFingerprint {
 
 /// Represents any valid Avro schema
 /// More information about Avro schemas can be found in the
-/// [Avro Specification](https://avro.apache.org/docs/current/specification/#schema-declaration)
+/// [Avro Specification](https://avro.apache.org/docs/++version++/specification/#schema-declaration)
 #[derive(Clone, Debug, EnumDiscriminants, Display)]
 #[strum_discriminants(name(SchemaKind), derive(Hash, Ord, PartialOrd))]
 pub enum Schema {
@@ -92,17 +93,20 @@ pub enum Schema {
     /// A `double` Avro schema.
     Double,
     /// A `bytes` Avro schema.
+    ///
     /// `Bytes` represents a sequence of 8-bit unsigned bytes.
     Bytes,
     /// A `string` Avro schema.
+    ///
     /// `String` represents a unicode character sequence.
     String,
-    /// A `array` Avro schema. Avro arrays are required to have the same type for each element.
-    /// This variant holds the `Schema` for the array element type.
+    /// A `array` Avro schema.
+    ///
+    /// All items will have the same schema.
     Array(ArraySchema),
     /// A `map` Avro schema.
-    /// `Map` holds a pointer to the `Schema` of its values, which must all be the same schema.
-    /// `Map` keys are assumed to be `string`.
+    ///
+    /// Keys are always a `Schema::String` and all values will have the same schema.
     Map(MapSchema),
     /// A `union` Avro schema.
     Union(UnionSchema),
@@ -112,22 +116,27 @@ pub enum Schema {
     Enum(EnumSchema),
     /// A `fixed` Avro schema.
     Fixed(FixedSchema),
-    /// Logical type which represents `Decimal` values. The underlying type is serialized and
-    /// deserialized as `Schema::Bytes` or `Schema::Fixed`.
+    /// Logical type which represents `Decimal` values.
+    ///
+    /// The underlying type is serialized and deserialized as `Schema::Bytes` or `Schema::Fixed`.
     Decimal(DecimalSchema),
     /// Logical type which represents `Decimal` values without predefined scale.
+    ///
     /// The underlying type is serialized and deserialized as `Schema::Bytes`
     BigDecimal,
     /// A universally unique identifier, annotating a string, bytes or fixed.
     Uuid(UuidSchema),
     /// Logical type which represents the number of days since the unix epoch.
+    ///
     /// Serialization format is `Schema::Int`.
     Date,
-    /// The time of day in number of milliseconds after midnight with no reference any calendar,
-    /// time zone or date in particular.
+    /// The time of day in number of milliseconds after midnight.
+    ///
+    /// This type has no reference to any calendar, time zone or date in particular.
     TimeMillis,
-    /// The time of day in number of microseconds after midnight with no reference any calendar,
-    /// time zone or date in particular.
+    /// The time of day in number of microseconds after midnight.
+    ///
+    /// This type has no reference to any calendar, time zone or date in particular.
     TimeMicros,
     /// An instant in time represented as the number of milliseconds after the UNIX epoch.
     TimestampMillis,
@@ -829,7 +838,7 @@ impl Schema {
         }
     }
 
-    /// Returns a Schema::Map with the given types.
+    /// Returns a `Schema::Map` with the given types.
     pub fn map(types: Schema) -> Self {
         Schema::Map(MapSchema {
             types: Box::new(types),
@@ -837,7 +846,7 @@ impl Schema {
         })
     }
 
-    /// Returns a Schema::Map with the given types and custom attributes.
+    /// Returns a `Schema::Map` with the given types and custom attributes.
     pub fn map_with_attributes(types: Schema, attributes: BTreeMap<String, Value>) -> Self {
         Schema::Map(MapSchema {
             types: Box::new(types),
@@ -845,7 +854,7 @@ impl Schema {
         })
     }
 
-    /// Returns a Schema::Array with the given items.
+    /// Returns a `Schema::Array` with the given items.
     pub fn array(items: Schema) -> Self {
         Schema::Array(ArraySchema {
             items: Box::new(items),
@@ -853,7 +862,7 @@ impl Schema {
         })
     }
 
-    /// Returns a Schema::Array with the given items and custom attributes.
+    /// Returns a `Schema::Array` with the given items and custom attributes.
     pub fn array_with_attributes(items: Schema, attributes: BTreeMap<String, Value>) -> Self {
         Schema::Array(ArraySchema {
             items: Box::new(items),
@@ -1124,8 +1133,9 @@ impl Serialize for Schema {
     }
 }
 
-/// Parses a **valid** avro schema into the Parsing Canonical Form.
-/// https://avro.apache.org/docs/current/specification/#parsing-canonical-form-for-schemas
+/// Parses a valid Avro schema into [the Parsing Canonical Form].
+///
+/// [the Parsing Canonical From](https://avro.apache.org/docs/current/specification/#parsing-canonical-form-for-schemas)
 fn parsing_canonical_form(schema: &Value, defined_names: &mut HashSet<String>) -> String {
     match schema {
         Value::Object(map) => pcf_map(map, defined_names),

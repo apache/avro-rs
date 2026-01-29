@@ -32,85 +32,16 @@
 //! Please check our [documentation](https://docs.rs/apache-avro) for examples, tutorials and API reference.
 //!
 //! **[Apache Avro](https://avro.apache.org/)** is a data serialization system which provides rich
-//! data structures and a compact, fast, binary data format.
+//! data structures and a compact, fast, binary data format. If you are not familiar with the data
+//! format, please read [`documentation::primer`] first.
 //!
-//! If you are not familiar with the data format, please read [`documentation::primer`] first.
+//! There are two ways of working with Avro data in this crate:
 //!
-//! All data in Avro is schematized, as in the following example:
-//!
-//! ```json
-//! {
-//!     "type": "record",
-//!     "name": "test",
-//!     "fields": [
-//!         {"name": "a", "type": "long", "default": 42},
-//!         {"name": "b", "type": "string"}
-//!     ]
-//! }
-//! ```
-//!
-//! There are basically two ways of handling Avro data in Rust:
-//!
-//! * **as Avro-specialized data types** based on an Avro schema;
-//! * **as generic Rust serde-compatible types** implementing/deriving `Serialize` and `Deserialize`;
+//! * Via the generic [`Value`](types::Value) type, which allows for dynamically dealing with data at runtime.
+//! * Via types implementing [`Serialize`](::serde::Serialize), [`Deserialize`](::serde::Deserialize), and [`AvroSchema`].
 //!
 //! **apache-avro** provides a way to read and write both these data representations easily and
 //! efficiently.
-//!
-//! # Defining a schema
-//!
-//! Avro data cannot exist without an Avro schema. Schemas **must** be used while writing and
-//! **can** be used while reading and they carry the information regarding the type of data we are
-//! handling. Avro schemas are used for both schema validation and resolution of Avro data.
-//!
-//! Avro schemas are defined in JSON format and can just be parsed out of a raw string:
-//!
-//! ```
-//! use apache_avro::Schema;
-//!
-//! let raw_schema = r#"
-//!     {
-//!         "type": "record",
-//!         "name": "test",
-//!         "fields": [
-//!             {"name": "a", "type": "long", "default": 42},
-//!             {"name": "b", "type": "string"}
-//!         ]
-//!     }
-//! "#;
-//!
-//! let schema = Schema::parse_str(raw_schema).unwrap();
-//! ```
-//!
-//! Additionally, a list of definitions (which may depend on each other) can be given and all of
-//! them will be parsed into the corresponding schemas.
-//!
-//! ```
-//! use apache_avro::Schema;
-//!
-//! let raw_schema_1 = r#"{
-//!         "name": "A",
-//!         "type": "record",
-//!         "fields": [
-//!             {"name": "field_one", "type": "float"}
-//!         ]
-//!     }"#;
-//!
-//! // This definition depends on the definition of A above
-//! let raw_schema_2 = r#"{
-//!         "name": "B",
-//!         "type": "record",
-//!         "fields": [
-//!             {"name": "field_one", "type": "A"}
-//!         ]
-//!     }"#;
-//!
-//! let schemas = Schema::parse_list(&[raw_schema_1, raw_schema_2]).unwrap();
-//! ```
-//!
-//! For more information about schemas and what kind of information you can encapsulate in them,
-//! please refer to the appropriate section of the
-//! [Avro Specification](https://avro.apache.org/docs/++version++/specification/#schema-declaration).
 //!
 //! # Writing data
 //!
@@ -724,14 +655,13 @@
 //!
 //! The library provides two implementations of schema equality comparators:
 //! 1. `SpecificationEq` - a comparator that serializes the schemas to their
-//!    canonical forms (i.e. JSON) and compares them as strings. It is the only implementation
-//!    until apache_avro 0.16.0.
+//!    canonical forms (i.e. JSON) and compares them as strings.
 //!    See the [Avro specification](https://avro.apache.org/docs/1.11.1/specification/#parsing-canonical-form-for-schemas)
 //!    for more information!
 //! 2. `StructFieldEq` - a comparator that compares the schemas structurally.
 //!    It is faster than the `SpecificationEq` because it returns `false` as soon as a difference
-//!    is found and is recommended for use!
-//!    It is the default comparator since apache_avro 0.17.0.
+//!    is found and does not require encoding the schema to JSON.
+//!    It is the default comparator.
 //!
 //! To use a custom comparator, you need to implement the `SchemataEq` trait and set it using the
 //! `set_schemata_equality_comparator` function:

@@ -554,11 +554,11 @@ pub enum Details {
     #[error("Failed to convert JSON to string: {0}")]
     ConvertJsonToString(#[source] serde_json::Error),
 
-    /// Error while converting float to json value
+    /// Error while converting float to JSON value
     #[error("failed to convert avro float to json: {0}")]
     ConvertF64ToJson(f64),
 
-    /// Error while resolving Schema::Ref
+    /// Error while resolving [`Schema::Ref`]
     #[error("Unresolved schema reference: {0}")]
     SchemaResolutionError(Name),
 

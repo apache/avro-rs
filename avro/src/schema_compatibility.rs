@@ -20,7 +20,7 @@
 //! To allow for schema evolution, Avro supports resolving the writer's schema to the reader's schema.
 //! To check if this is possible, [`SchemaCompatibility`] can be used. For the complete rules see
 //! [the specification](https://avro.apache.org/docs/++version++/specification/#schema-resolution).
-//! 
+//!
 //! There are three levels of compatibility.
 //!
 //! 1. Fully compatible schemas (`Ok(Compatibility::Full)`)
@@ -44,11 +44,11 @@
 //! let readers_schema = Schema::array(Schema::Int);
 //! assert!(SchemaCompatibility::can_read(&writers_schema, &readers_schema).is_err());
 //! ```
-//! 
+//!
 //! 3. Partially compatible schemas (`Ok(Compatibility::Partial)`)
 //!
 //! For example, a union of a string and integer is only compatible with an integer if an integer was written:
-//! 
+//!
 //! ```rust
 //! # use apache_avro::{Error, Schema, schema_compatibility::{Compatibility, SchemaCompatibility}};
 //! let writers_schema = Schema::union(vec![Schema::Int, Schema::String])?;
@@ -56,7 +56,7 @@
 //! assert_eq!(SchemaCompatibility::can_read(&writers_schema, &readers_schema), Ok(Compatibility::Partial));
 //! # Ok::<(), Error>(())
 //! ```
-//! 
+//!
 use crate::{
     error::CompatibilityError,
     schema::{
@@ -73,9 +73,9 @@ use std::{
 };
 
 /// Check if two schemas can be resolved.
-/// 
+///
 /// See [the module documentation] for more details.
-/// 
+///
 /// [the module documentation]: crate::schema_compatibility
 pub struct SchemaCompatibility;
 
