@@ -104,7 +104,11 @@ pub mod bytes {
     }
 
     /// Returns `None`
-    pub fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+    pub fn get_record_fields_in_ctxt(
+        _: usize,
+        _: &mut Names,
+        _: &Namespace,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 
@@ -163,7 +167,11 @@ pub mod bytes_opt {
     }
 
     /// Returns `None`
-    pub fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+    pub fn get_record_fields_in_ctxt(
+        _: usize,
+        _: &mut Names,
+        _: &Namespace,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 
@@ -234,7 +242,11 @@ pub mod fixed {
     }
 
     /// Returns `None`
-    pub fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+    pub fn get_record_fields_in_ctxt(
+        _: usize,
+        _: &mut Names,
+        _: &Namespace,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 
@@ -302,7 +314,11 @@ pub mod fixed_opt {
     }
 
     /// Returns `None`
-    pub fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+    pub fn get_record_fields_in_ctxt(
+        _: usize,
+        _: &mut Names,
+        _: &Namespace,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 
@@ -362,7 +378,11 @@ pub mod slice {
     }
 
     /// Returns `None`
-    pub fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+    pub fn get_record_fields_in_ctxt(
+        _: usize,
+        _: &mut Names,
+        _: &Namespace,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 
@@ -424,7 +444,11 @@ pub mod slice_opt {
     }
 
     /// Returns `None`
-    pub fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+    pub fn get_record_fields_in_ctxt(
+        _: usize,
+        _: &mut Names,
+        _: &Namespace,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 

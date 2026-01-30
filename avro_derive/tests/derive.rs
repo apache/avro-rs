@@ -2296,7 +2296,7 @@ fn avro_rs_448_transparent_with() {
 
     let mut named_schemas = HashMap::new();
     assert_eq!(
-        TestStruct::get_record_fields_in_ctxt(&mut named_schemas, &None),
+        TestStruct::get_record_fields_in_ctxt(0, &mut named_schemas, &None),
         None
     );
     assert!(
@@ -2321,7 +2321,7 @@ fn avro_rs_448_transparent_with_2() {
     }
 
     let mut named_schemas = HashMap::new();
-    let fields = TestStruct::get_record_fields_in_ctxt(&mut named_schemas, &None).unwrap();
+    let fields = TestStruct::get_record_fields_in_ctxt(0, &mut named_schemas, &None).unwrap();
     assert!(
         named_schemas.is_empty(),
         "No name should've been added: {named_schemas:?}"
@@ -2335,7 +2335,7 @@ fn avro_rs_448_transparent_with_2() {
         "One name should've been added: {named_schemas:?}"
     );
 
-    let fields = TestStruct::get_record_fields_in_ctxt(&mut named_schemas, &None).unwrap();
+    let fields = TestStruct::get_record_fields_in_ctxt(0, &mut named_schemas, &None).unwrap();
     assert_eq!(
         named_schemas.len(),
         1,

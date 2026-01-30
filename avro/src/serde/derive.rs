@@ -93,10 +93,16 @@ pub trait AvroSchemaComponent {
     /// The default implementation has to do a lot of extra work, so it is strongly recommended to
     /// implement this function when manually implementing this trait.
     fn get_record_fields_in_ctxt(
+        first_field_position: usize,
         named_schemas: &mut Names,
         enclosing_namespace: &Namespace,
     ) -> Option<Vec<RecordField>> {
-        get_record_fields_in_ctxt(named_schemas, enclosing_namespace, Self::get_schema_in_ctxt)
+        get_record_fields_in_ctxt(
+            first_field_position,
+            named_schemas,
+            enclosing_namespace,
+            Self::get_schema_in_ctxt,
+        )
     }
 }
 
@@ -104,6 +110,7 @@ pub trait AvroSchemaComponent {
 ///
 /// This is public so the derive macro can use it for `#[avro(with = ||)]` and `#[avro(with = path)]`
 pub fn get_record_fields_in_ctxt(
+    first_field_position: usize,
     named_schemas: &mut Names,
     enclosing_namespace: &Namespace,
     schema_fn: fn(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Schema,
@@ -125,7 +132,15 @@ pub fn get_record_fields_in_ctxt(
             let Schema::Record(record) = schema else {
                 return None;
             };
-            return Some(record.fields);
+            let fields = record
+                .fields
+                .into_iter()
+                .map(|mut f| {
+                    f.position += first_field_position;
+                    f
+                })
+                .collect();
+            return Some(fields);
         }
         _ => return None,
     };
@@ -213,7 +228,15 @@ pub fn get_record_fields_in_ctxt(
         }
     }
 
-    Some(record.fields)
+    let fields = record
+        .fields
+        .into_iter()
+        .map(|mut f| {
+            f.position += first_field_position;
+            f
+        })
+        .collect();
+    Some(fields)
 }
 
 impl<T> AvroSchema for T
@@ -232,7 +255,7 @@ macro_rules! impl_schema (
                 $variant_constructor
             }
 
-            fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+            fn get_record_fields_in_ctxt(_: usize, _: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
                 None
             }
         }
@@ -260,8 +283,8 @@ macro_rules! impl_passthrough_schema (
                 T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
             }
 
-            fn get_record_fields_in_ctxt(named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Option<Vec<RecordField>> {
-                T::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)
+            fn get_record_fields_in_ctxt(first_field_position: usize, named_schemas: &mut Names, enclosing_namespace: &Namespace) -> Option<Vec<RecordField>> {
+                T::get_record_fields_in_ctxt(first_field_position, named_schemas, enclosing_namespace)
             }
         }
     );
@@ -280,7 +303,7 @@ macro_rules! impl_array_schema (
                 Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
             }
 
-            fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+            fn get_record_fields_in_ctxt(_: usize, _: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
                 None
             }
         }
@@ -300,7 +323,11 @@ where
         Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
     }
 
-    fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+    fn get_record_fields_in_ctxt(
+        _: usize,
+        _: &mut Names,
+        _: &Namespace,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 }
@@ -313,7 +340,11 @@ where
         Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
     }
 
-    fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+    fn get_record_fields_in_ctxt(
+        _: usize,
+        _: &mut Names,
+        _: &Namespace,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 }
@@ -333,7 +364,11 @@ where
         )
     }
 
-    fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+    fn get_record_fields_in_ctxt(
+        _: usize,
+        _: &mut Names,
+        _: &Namespace,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 }
@@ -363,7 +398,11 @@ impl AvroSchemaComponent for core::time::Duration {
         }
     }
 
-    fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+    fn get_record_fields_in_ctxt(
+        _: usize,
+        _: &mut Names,
+        _: &Namespace,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 }
@@ -393,7 +432,11 @@ impl AvroSchemaComponent for uuid::Uuid {
         }
     }
 
-    fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+    fn get_record_fields_in_ctxt(
+        _: usize,
+        _: &mut Names,
+        _: &Namespace,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 }
@@ -421,7 +464,11 @@ impl AvroSchemaComponent for u64 {
         }
     }
 
-    fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+    fn get_record_fields_in_ctxt(
+        _: usize,
+        _: &mut Names,
+        _: &Namespace,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 }
@@ -449,7 +496,11 @@ impl AvroSchemaComponent for u128 {
         }
     }
 
-    fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+    fn get_record_fields_in_ctxt(
+        _: usize,
+        _: &mut Names,
+        _: &Namespace,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 }
@@ -477,7 +528,11 @@ impl AvroSchemaComponent for i128 {
         }
     }
 
-    fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+    fn get_record_fields_in_ctxt(
+        _: usize,
+        _: &mut Names,
+        _: &Namespace,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 }
