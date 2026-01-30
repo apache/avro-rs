@@ -36,18 +36,30 @@ fn avro_rs_448_default_get_record_fields_no_recursion() -> TestResult {
         get_record_fields_in_ctxt(&mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
 
     assert_eq!(fields.len(), 2);
-    assert!(named_schemas.is_empty(), "Name shouldn't have been added");
+    assert!(
+        named_schemas.is_empty(),
+        "Name shouldn't have been added: {named_schemas:?}"
+    );
 
     // Insert Foo into named_schemas
-    let Schema::Record(_) = Foo::get_schema_in_ctxt(&mut named_schemas, &None) else {
-        panic!("This should be a record");
-    };
-    assert_eq!(named_schemas.len(), 1, "Name should have been added");
+    match Foo::get_schema_in_ctxt(&mut named_schemas, &None) {
+        Schema::Record(_) => {}
+        schema => panic!("Expected a record got {schema:?}"),
+    }
+    assert_eq!(
+        named_schemas.len(),
+        1,
+        "Name should have been added: {named_schemas:?}"
+    );
 
     let fields =
         get_record_fields_in_ctxt(&mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
     assert_eq!(fields.len(), 2);
-    assert_eq!(named_schemas.len(), 1, "Name shouldn't have been removed");
+    assert_eq!(
+        named_schemas.len(),
+        1,
+        "Name shouldn't have been removed: {named_schemas:?}"
+    );
 
     Ok(())
 }
@@ -65,18 +77,27 @@ fn avro_rs_448_default_get_record_fields_recursion() -> TestResult {
         get_record_fields_in_ctxt(&mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
 
     assert_eq!(fields.len(), 2);
-    assert_eq!(named_schemas.len(), 1, "Name shouldn't have been removed");
+    assert_eq!(
+        named_schemas.len(),
+        1,
+        "Name shouldn't have been removed: {named_schemas:?}"
+    );
 
     // Insert Foo into named_schemas
-    let Schema::Ref { name: _ } = Foo::get_schema_in_ctxt(&mut named_schemas, &None) else {
-        panic!("This should be a reference")
-    };
+    match Foo::get_schema_in_ctxt(&mut named_schemas, &None) {
+        Schema::Ref { name: _ } => {}
+        schema => panic!("Expected a ref got {schema:?}"),
+    }
     assert_eq!(named_schemas.len(), 1);
 
     let fields =
         get_record_fields_in_ctxt(&mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
     assert_eq!(fields.len(), 2);
-    assert_eq!(named_schemas.len(), 1, "Name shouldn't have been removed");
+    assert_eq!(
+        named_schemas.len(),
+        1,
+        "Name shouldn't have been removed: {named_schemas:?}"
+    );
 
     Ok(())
 }

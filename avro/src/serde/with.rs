@@ -95,12 +95,17 @@ pub mod bytes {
 
     use crate::{
         Schema,
-        schema::{Names, Namespace},
+        schema::{Names, Namespace, RecordField},
     };
 
     /// Returns [`Schema::Bytes`]
-    pub fn get_schema_in_ctxt(_names: &mut Names, _enclosing_namespace: &Namespace) -> Schema {
+    pub fn get_schema_in_ctxt(_: &mut Names, _: &Namespace) -> Schema {
         Schema::Bytes
+    }
+
+    /// Returns `None`
+    pub fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+        None
     }
 
     pub fn serialize<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
@@ -147,14 +152,19 @@ pub mod bytes_opt {
 
     use crate::{
         Schema,
-        schema::{Names, Namespace, UnionSchema},
+        schema::{Names, Namespace, RecordField, UnionSchema},
     };
 
     /// Returns `Schema::Union(Schema::Null, Schema::Bytes)`
-    pub fn get_schema_in_ctxt(_names: &mut Names, _enclosing_namespace: &Namespace) -> Schema {
+    pub fn get_schema_in_ctxt(_: &mut Names, _: &Namespace) -> Schema {
         Schema::Union(
             UnionSchema::new(vec![Schema::Null, Schema::Bytes]).expect("This is a valid union"),
         )
+    }
+
+    /// Returns `None`
+    pub fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+        None
     }
 
     pub fn serialize<S, B>(bytes: &Option<B>, serializer: S) -> Result<S::Ok, S::Error>
@@ -202,18 +212,18 @@ pub mod fixed {
 
     use crate::{
         Schema,
-        schema::{FixedSchema, Name, Names, Namespace},
+        schema::{FixedSchema, Name, Names, Namespace, RecordField},
     };
 
     /// Returns `Schema::Fixed(N)` named `serde_avro_fixed_{N}`
     #[expect(clippy::map_entry, reason = "We don't use the value from the map")]
     pub fn get_schema_in_ctxt<const N: usize>(
         named_schemas: &mut Names,
-        enclosing_namespace: &Namespace,
+        enclosing_pace: &Namespace,
     ) -> Schema {
         let name = Name::new(&format!("serde_avro_fixed_{N}"))
             .expect("Name is valid")
-            .fully_qualified_name(enclosing_namespace);
+            .fully_qualified_name(enclosing_pace);
         if named_schemas.contains_key(&name) {
             Schema::Ref { name }
         } else {
@@ -221,6 +231,11 @@ pub mod fixed {
             named_schemas.insert(name, schema.clone());
             schema
         }
+    }
+
+    /// Returns `None`
+    pub fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+        None
     }
 
     pub fn serialize<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
@@ -269,21 +284,26 @@ pub mod fixed_opt {
 
     use crate::{
         Schema,
-        schema::{Names, Namespace, UnionSchema},
+        schema::{Names, Namespace, RecordField, UnionSchema},
     };
 
     /// Returns `Schema::Union(Schema::Null, Schema::Fixed(N))` where the fixed schema is named `serde_avro_fixed_{N}`
     pub fn get_schema_in_ctxt<const N: usize>(
         named_schemas: &mut Names,
-        enclosing_namespace: &Namespace,
+        enclosing_pace: &Namespace,
     ) -> Schema {
         Schema::Union(
             UnionSchema::new(vec![
                 Schema::Null,
-                super::fixed::get_schema_in_ctxt::<N>(named_schemas, enclosing_namespace),
+                super::fixed::get_schema_in_ctxt::<N>(named_schemas, enclosing_pace),
             ])
             .expect("This is a valid union"),
         )
+    }
+
+    /// Returns `None`
+    pub fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+        None
     }
 
     pub fn serialize<S, B>(bytes: &Option<B>, serializer: S) -> Result<S::Ok, S::Error>
@@ -333,12 +353,17 @@ pub mod slice {
 
     use crate::{
         Schema,
-        schema::{Names, Namespace},
+        schema::{Names, Namespace, RecordField},
     };
 
     /// Returns [`Schema::Bytes`]
-    pub fn get_schema_in_ctxt(_names: &mut Names, _enclosing_namespace: &Namespace) -> Schema {
+    pub fn get_schema_in_ctxt(_: &mut Names, _: &Namespace) -> Schema {
         Schema::Bytes
+    }
+
+    /// Returns `None`
+    pub fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+        None
     }
 
     pub fn serialize<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
@@ -388,14 +413,19 @@ pub mod slice_opt {
 
     use crate::{
         Schema,
-        schema::{Names, Namespace, UnionSchema},
+        schema::{Names, Namespace, RecordField, UnionSchema},
     };
 
     /// Returns `Schema::Union(Schema::Null, Schema::Bytes)`
-    pub fn get_schema_in_ctxt(_names: &mut Names, _enclosing_namespace: &Namespace) -> Schema {
+    pub fn get_schema_in_ctxt(_: &mut Names, _: &Namespace) -> Schema {
         Schema::Union(
             UnionSchema::new(vec![Schema::Null, Schema::Bytes]).expect("This is a valid union"),
         )
+    }
+
+    /// Returns `None`
+    pub fn get_record_fields_in_ctxt(_: &mut Names, _: &Namespace) -> Option<Vec<RecordField>> {
+        None
     }
 
     pub fn serialize<S, B>(bytes: &Option<B>, serializer: S) -> Result<S::Ok, S::Error>

@@ -2299,7 +2299,10 @@ fn avro_rs_448_transparent_with() {
         TestStruct::get_record_fields_in_ctxt(&mut named_schemas, &None),
         None
     );
-    assert!(named_schemas.is_empty());
+    assert!(
+        named_schemas.is_empty(),
+        "No name should've been added: {named_schemas:?}"
+    );
 }
 
 #[test]
@@ -2319,13 +2322,52 @@ fn avro_rs_448_transparent_with_2() {
 
     let mut named_schemas = HashMap::new();
     let fields = TestStruct::get_record_fields_in_ctxt(&mut named_schemas, &None).unwrap();
-    assert!(named_schemas.is_empty());
+    assert!(
+        named_schemas.is_empty(),
+        "No name should've been added: {named_schemas:?}"
+    );
     assert_eq!(fields.len(), 2);
 
     TestStruct::get_schema_in_ctxt(&mut named_schemas, &None);
-    assert_eq!(named_schemas.len(), 1);
+    assert_eq!(
+        named_schemas.len(),
+        1,
+        "One name should've been added: {named_schemas:?}"
+    );
 
     let fields = TestStruct::get_record_fields_in_ctxt(&mut named_schemas, &None).unwrap();
-    assert_eq!(named_schemas.len(), 1);
+    assert_eq!(
+        named_schemas.len(),
+        1,
+        "No name should've been added: {named_schemas:?}"
+    );
     assert_eq!(fields.len(), 2);
+}
+
+#[test]
+fn avro_rs_448_flatten_field_positions() {
+    #[derive(AvroSchema)]
+    struct Foo {
+        _a: i32,
+        _b: String,
+    }
+
+    #[derive(AvroSchema)]
+    struct Bar {
+        _c: Vec<i64>,
+        #[serde(flatten)]
+        _d: Foo,
+        _e: bool,
+    }
+
+    let Schema::Record(schema) = Bar::get_schema() else {
+        panic!("Structs should generate records")
+    };
+
+    let positions = schema
+        .fields
+        .into_iter()
+        .map(|f| f.position)
+        .collect::<Vec<_>>();
+    assert_eq!(positions.as_slice(), &[0, 1, 2, 3][..]);
 }

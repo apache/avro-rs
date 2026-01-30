@@ -199,8 +199,11 @@ pub fn get_record_fields_in_ctxt(
                 attributes: record.attributes,
             };
 
-            let Schema::Ref { name } = std::mem::replace(schema, Schema::Record(new_schema)) else {
-                panic!("Expected only Refs from find_first_ref");
+            let name = match std::mem::replace(schema, Schema::Record(new_schema)) {
+                Schema::Ref { name } => name,
+                schema => {
+                    panic!("Only expected `Schema::Ref` from `find_first_ref`, got: {schema:?}")
+                }
             };
 
             // The schema is used, so reinsert it

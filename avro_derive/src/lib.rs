@@ -168,9 +168,13 @@ fn get_struct_schema_def(
                         get_field_get_record_fields_expr(&field, field_attrs.with)?;
                     record_field_exprs.push(quote! {
                         if let Some(flattened_fields) = #get_record_fields {
-                            schema_fields.extend(flattened_fields)
+                            let position = schema_fields.len();
+                            schema_fields.extend(flattened_fields.into_iter().map(|mut field| {
+                                field.position += position;
+                                field
+                            }));
                         } else {
-                            panic!("#field does not have any fields to flatten to")
+                            panic!("{} does not have any fields to flatten to", stringify!(#field));
                         }
                     });
 
