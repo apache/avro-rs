@@ -122,7 +122,7 @@ pub fn get_record_fields_in_ctxt(
             // get the actual schema.
             let temp = named_schemas
                 .remove(&name)
-                .expect("Name should exist in `named_schemas` otherwise Ref is invalid");
+                .unwrap_or_else(|| panic!("Name '{name}' should exist in `named_schemas` otherwise Ref is invalid: {named_schemas:?}"));
             // Get the schema
             let schema = schema_fn(named_schemas, enclosing_namespace);
             // Reinsert the old value
