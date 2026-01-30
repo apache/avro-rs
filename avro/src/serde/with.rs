@@ -227,11 +227,11 @@ pub mod fixed {
     #[expect(clippy::map_entry, reason = "We don't use the value from the map")]
     pub fn get_schema_in_ctxt<const N: usize>(
         named_schemas: &mut Names,
-        enclosing_pace: &Namespace,
+        enclosing_namespace: &Namespace,
     ) -> Schema {
         let name = Name::new(&format!("serde_avro_fixed_{N}"))
             .expect("Name is valid")
-            .fully_qualified_name(enclosing_pace);
+            .fully_qualified_name(enclosing_namespace);
         if named_schemas.contains_key(&name) {
             Schema::Ref { name }
         } else {
@@ -302,12 +302,12 @@ pub mod fixed_opt {
     /// Returns `Schema::Union(Schema::Null, Schema::Fixed(N))` where the fixed schema is named `serde_avro_fixed_{N}`
     pub fn get_schema_in_ctxt<const N: usize>(
         named_schemas: &mut Names,
-        enclosing_pace: &Namespace,
+        enclosing_namespace: &Namespace,
     ) -> Schema {
         Schema::Union(
             UnionSchema::new(vec![
                 Schema::Null,
-                super::fixed::get_schema_in_ctxt::<N>(named_schemas, enclosing_pace),
+                super::fixed::get_schema_in_ctxt::<N>(named_schemas, enclosing_namespace),
             ])
             .expect("This is a valid union"),
         )
