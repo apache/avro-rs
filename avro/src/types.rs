@@ -145,7 +145,7 @@ to_value!(f32, Value::Float);
 to_value!(f64, Value::Double);
 to_value!(String, Value::String);
 to_value!(Vec<u8>, Value::Bytes);
-to_value!(uuid::Uuid, Value::Uuid);
+to_value!(Uuid, Value::Uuid);
 to_value!(Decimal, Value::Decimal);
 to_value!(BigDecimal, Value::BigDecimal);
 to_value!(Duration, Value::Duration);
@@ -283,7 +283,7 @@ impl From<JsonValue> for Value {
                 }
             }
             JsonValue::Number(ref n) if n.is_f64() => Value::Double(n.as_f64().unwrap()),
-            JsonValue::Number(n) => Value::Long(n.as_u64().unwrap() as i64), // TODO: Not so great
+            JsonValue::Number(n) => panic!("{n:?} does not fit into an Avro long"),
             JsonValue::String(s) => s.into(),
             JsonValue::Array(items) => Value::Array(items.into_iter().map(Value::from).collect()),
             JsonValue::Object(items) => Value::Map(
@@ -3240,7 +3240,6 @@ Field with name '"b"' is not a member of the map items"#,
         assert_eq!(Value::from(json!(1.23)), Value::Double(1.23));
         assert_eq!(Value::from(json!(-1.23)), Value::Double(-1.23));
         assert_eq!(Value::from(json!(u64::MIN)), Value::Int(u64::MIN as i32));
-        assert_eq!(Value::from(json!(u64::MAX)), Value::Long(u64::MAX as i64));
         assert_eq!(
             Value::from(json!("some text")),
             Value::String("some text".into())
@@ -3499,5 +3498,11 @@ Field with name '"b"' is not a member of the map items"#,
             value.resolve(&Schema::Int).unwrap_err().details(),
             Details::ZagI32(_, _)
         ));
+    }
+
+    #[test]
+    #[should_panic(expected = "Number(18446744073709551615) does not fit into an Avro long")]
+    fn avro_rs_450_serde_json_number_u64_max() {
+        let _ = Value::from(json!(u64::MAX));
     }
 }
