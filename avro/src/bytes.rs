@@ -15,20 +15,21 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! Deprecated. See [`apache_avro::serde::*`] instead.
+//! Deprecated. Use [`apache_avro::serde::*`] instead.
 //!
 //! [`apache_avro::serde::*`](crate::serde)
 
-// Deprecated. See [`apache_avro::serde::bytes`] instead.
-//
-// [`apache_avro::serde::bytes`](crate::serde::bytes)
+#[cfg(doc)]
+use crate as apache_avro;
+
+/// Deprecated. Use [`apache_avro::serde::bytes`] instead.
 #[deprecated(since = "0.22.0", note = "Use `apache_avro::serde::bytes` instead")]
 pub mod serde_avro_bytes {
+    #[cfg(doc)]
+    use crate as apache_avro;
     use serde::{Deserializer, Serializer};
 
-    // Deprecated. See [`apache_avro::serde::bytes::serialize`] instead.
-    //
-    // [`apache_avro::serde::bytes::serialize`](crate::serde::bytes::serialize)
+    /// Deprecated. Use [`apache_avro::serde::bytes::serialize`] instead.
     #[deprecated(
         since = "0.22.0",
         note = "Use `apache_avro::serde::bytes::serialize` instead"
@@ -40,9 +41,7 @@ pub mod serde_avro_bytes {
         crate::serde::bytes::serialize(bytes, serializer)
     }
 
-    // Deprecated. See [`apache_avro::serde::bytes::deserialize`] instead.
-    //
-    // [`apache_avro::serde::bytes::deserialize`](crate::serde::bytes::deserialize)
+    /// Deprecated. Use [`apache_avro::serde::bytes::deserialize`] instead.
     #[deprecated(
         since = "0.22.0",
         note = "Use `apache_avro::serde::bytes::deserialize` instead"
@@ -55,17 +54,17 @@ pub mod serde_avro_bytes {
     }
 }
 
-// Deprecated. See [`apache_avro::serde::bytes_opt`] instead.
-//
-// [`apache_avro::serde::bytes_opt`](crate::serde::bytes_opt)
+/// Deprecated. Use [`apache_avro::serde::bytes_opt`] instead.
+///
+/// [`apache_avro::serde::bytes_opt`](crate::serde::bytes_opt)
 #[deprecated(since = "0.22.0", note = "Use `apache_avro::serde::bytes_opt` instead")]
 pub mod serde_avro_bytes_opt {
+    #[cfg(doc)]
+    use crate as apache_avro;
     use serde::{Deserializer, Serializer};
     use std::borrow::Borrow;
 
-    // Deprecated. See [`apache_avro::serde::bytes_opt::serialize`] instead.
-    //
-    // [`apache_avro::serde::bytes_opt::serialize`](crate::serde::bytes_opt::serialize)
+    /// Deprecated. Use [`apache_avro::serde::bytes_opt::serialize`] instead.
     #[deprecated(
         since = "0.22.0",
         note = "Use `apache_avro::serde::bytes_opt::serialize` instead"
@@ -78,9 +77,7 @@ pub mod serde_avro_bytes_opt {
         crate::serde::bytes_opt::serialize(bytes, serializer)
     }
 
-    // Deprecated. See [`apache_avro::serde::bytes_opt::deserialize`] instead.
-    //
-    // [`apache_avro::serde::bytes_opt::deserialize`](crate::serde::bytes_opt::deserialize)
+    /// Deprecated. Use [`apache_avro::serde::bytes_opt::deserialize`] instead.
     #[deprecated(
         since = "0.22.0",
         note = "Use `apache_avro::serde::bytes_opt::deserialize` instead"
@@ -93,16 +90,14 @@ pub mod serde_avro_bytes_opt {
     }
 }
 
-// Deprecated. See [`apache_avro::serde::fixed`] instead.
-//
-// [`apache_avro::serde::fixed`](crate::serde::fixed)
+/// Deprecated. Use [`apache_avro::serde::fixed`] instead.
 #[deprecated(since = "0.22.0", note = "Use `apache_avro::serde::fixed` instead")]
 pub mod serde_avro_fixed {
+    #[cfg(doc)]
+    use crate as apache_avro;
     use serde::{Deserializer, Serializer};
 
-    // Deprecated. See [`apache_avro::serde::fixed::serialize`] instead.
-    //
-    // [`apache_avro::serde::fixed::serialize`](crate::serde::fixed::serialize)
+    /// Deprecated. Use [`apache_avro::serde::fixed::serialize`] instead.
     #[deprecated(
         since = "0.22.0",
         note = "Use `apache_avro::serde::fixed::serialize` instead"
@@ -114,9 +109,7 @@ pub mod serde_avro_fixed {
         crate::serde::fixed::serialize(bytes, serializer)
     }
 
-    // Deprecated. See [`apache_avro::serde::fixed::deserialize`] instead.
-    //
-    // [`apache_avro::serde::fixed::deserialize`](crate::serde::fixed::deserialize)
+    /// Deprecated. Use [`apache_avro::serde::fixed::deserialize`] instead.
     #[deprecated(
         since = "0.22.0",
         note = "Use `apache_avro::serde::fixed::deserialize` instead"
@@ -129,17 +122,15 @@ pub mod serde_avro_fixed {
     }
 }
 
-// Deprecated. See [`apache_avro::serde::fixed_opt`] instead.
-//
-// [`apache_avro::serde::fixed_opt`](crate::serde::fixed_opt)
+/// Deprecated. Use [`apache_avro::serde::fixed_opt`] instead.
 #[deprecated(since = "0.22.0", note = "Use `apache_avro::serde::fixed_opt` instead")]
 pub mod serde_avro_fixed_opt {
+    #[cfg(doc)]
+    use crate as apache_avro;
     use serde::{Deserializer, Serializer};
     use std::borrow::Borrow;
 
-    // Deprecated. See [`apache_avro::serde::fixed_opt::serialize`] instead.
-    //
-    // [`apache_avro::serde::fixed_opt::serialize`](crate::serde::fixed_opt::serialize)
+    /// Deprecated. Use [`apache_avro::serde::fixed_opt::serialize`] instead.
     #[deprecated(
         since = "0.22.0",
         note = "Use `apache_avro::serde::fixed_opt::serialize` instead"
@@ -152,9 +143,7 @@ pub mod serde_avro_fixed_opt {
         crate::serde::fixed_opt::serialize(bytes, serializer)
     }
 
-    // Deprecated. See [`apache_avro::serde::fixed_opt::deserialize`] instead.
-    //
-    // [`apache_avro::serde::fixed_opt::deserialize`](crate::serde::fixed_opt::deserialize)
+    /// Deprecated. Use [`apache_avro::serde::fixed_opt::deserialize`] instead.
     #[deprecated(
         since = "0.22.0",
         note = "Use `apache_avro::serde::fixed_opt::deserialize` instead"
@@ -167,16 +156,14 @@ pub mod serde_avro_fixed_opt {
     }
 }
 
-// Deprecated. See [`apache_avro::serde::slice`] instead.
-//
-// [`apache_avro::serde::slice`](crate::serde::slice)
+/// Deprecated. Use [`apache_avro::serde::slice`] instead.
 #[deprecated(since = "0.22.0", note = "Use `apache_avro::serde::slice` instead")]
 pub mod serde_avro_slice {
+    #[cfg(doc)]
+    use crate as apache_avro;
     use serde::{Deserializer, Serializer};
 
-    // Deprecated. See [`apache_avro::serde::slice::serialize`] instead.
-    //
-    // [`apache_avro::serde::slice::serialize`](crate::serde::slice::serialize)
+    /// Deprecated. Use [`apache_avro::serde::slice::serialize`] instead.
     #[deprecated(
         since = "0.22.0",
         note = "Use `apache_avro::serde::slice::serialize` instead"
@@ -188,9 +175,7 @@ pub mod serde_avro_slice {
         crate::serde::slice::serialize(bytes, serializer)
     }
 
-    // Deprecated. See [`apache_avro::serde::slice::deserialize`] instead.
-    //
-    // [`apache_avro::serde::slice::deserialize`](crate::serde::slice::deserialize)
+    /// Deprecated. Use [`apache_avro::serde::slice::deserialize`] instead.
     #[deprecated(
         since = "0.22.0",
         note = "Use `apache_avro::serde::slice::deserialize` instead"
@@ -203,17 +188,15 @@ pub mod serde_avro_slice {
     }
 }
 
-// Deprecated. See [`apache_avro::serde::slice_opt`] instead.
-//
-// [`apache_avro::serde::slice_opt`](crate::serde::slice_opt)
+/// Deprecated. Use [`apache_avro::serde::slice_opt`] instead.
 #[deprecated(since = "0.22.0", note = "Use `apache_avro::serde::slice_opt` instead")]
 pub mod serde_avro_slice_opt {
+    #[cfg(doc)]
+    use crate as apache_avro;
     use serde::{Deserializer, Serializer};
     use std::borrow::Borrow;
 
-    // Deprecated. See [`apache_avro::serde::slice_opt::serialize`] instead.
-    //
-    // [`apache_avro::serde::slice_opt::serialize`](crate::serde::slice_opt::serialize)
+    /// Deprecated. Use [`apache_avro::serde::slice_opt::serialize`] instead.
     #[deprecated(
         since = "0.22.0",
         note = "Use `apache_avro::serde::slice_opt::serialize` instead"
@@ -226,9 +209,7 @@ pub mod serde_avro_slice_opt {
         crate::serde::slice_opt::serialize(bytes, serializer)
     }
 
-    // Deprecated. See [`apache_avro::serde::slice_opt::deserialize`] instead.
-    //
-    // [`apache_avro::serde::slice_opt::deserialize`](crate::serde::slice_opt::deserialize)
+    /// Deprecated. Use [`apache_avro::serde::slice_opt::deserialize`] instead.
     #[deprecated(
         since = "0.22.0",
         note = "Use `apache_avro::serde::slice_opt::deserialize` instead"

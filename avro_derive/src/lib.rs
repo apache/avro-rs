@@ -17,6 +17,18 @@
 
 #![cfg_attr(nightly, feature(proc_macro_diagnostic))]
 
+//! This crate is the implementation of the `AvroSchema` derive macro.
+//! Please use it via the [`apache-avro`](https://crates.io/crates/apache-avro) crate:
+//! 
+//! ```no_run
+//! use apache_avro::AvroSchema;
+//!
+//! #[derive(AvroSchema)]
+//! ```
+//! Please see the documentation of the [`AvroSchema`] trait for instructions on how to use it.
+//!
+//! [`AvroSchema`]: https://docs.rs/apache-avro/latest/apache_avro/serde/trait.AvroSchema.html
+
 mod attributes;
 mod case;
 

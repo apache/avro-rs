@@ -43,12 +43,12 @@ fn fp_table() -> &'static [i64; 256] {
     })
 }
 
-/// Implementation of the Rabin fingerprint algorithm using the Digest trait as described in [schema_fingerprints](https://avro.apache.org/docs/current/specification/#schema-fingerprints).
+/// Implementation of the Rabin fingerprint algorithm using the [`Digest`](digest::Digest) trait as described in [schema fingerprints].
 ///
 /// The digest is returned as the 8-byte little-endian encoding of the Rabin hash.
-/// This is what is used for avro [single object encoding](https://avro.apache.org/docs/current/specification/#single-object-encoding)
+/// This is what is used for Avro [single object encoding]
 ///
-/// ```rust
+/// ```
 /// use apache_avro::rabin::Rabin;
 /// use digest::Digest;
 /// use hex_literal::hex;
@@ -65,9 +65,9 @@ fn fp_table() -> &'static [i64; 256] {
 /// assert_eq!(result[..], hex!("60335ba6d0415528"));
 /// ```
 ///
-/// To convert the digest to the commonly used 64-bit integer value, you can use the i64::from_le_bytes() function
+/// To convert the digest to the commonly used 64-bit integer value, you can use the [`i64::from_le_bytes()`] function
 ///
-/// ```rust
+/// ```
 /// # use apache_avro::rabin::Rabin;
 /// # use digest::Digest;
 /// # use hex_literal::hex;
@@ -84,6 +84,8 @@ fn fp_table() -> &'static [i64; 256] {
 ///
 /// assert_eq!(i, 2906301498937520992)
 /// ```
+/// [single object encoding](https://avro.apache.org/docs/++version++/specification/#single-object-encoding)
+/// [schema fingerprints](https://avro.apache.org/docs/++version++/specification/#schema-fingerprints)
 #[derive(Clone)]
 pub struct Rabin {
     result: i64,
@@ -122,7 +124,7 @@ impl Reset for Rabin {
 
 impl OutputSizeUser for Rabin {
     // 8-byte little-endian form of the i64
-    // See: https://avro.apache.org/docs/current/specification/#single-object-encoding
+    // See: https://avro.apache.org/docs/++version++/specification/#single-object-encoding
     type OutputSize = U8;
 }
 

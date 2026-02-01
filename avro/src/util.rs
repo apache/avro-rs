@@ -24,20 +24,21 @@ use std::{
     sync::OnceLock,
 };
 
-/// Maximum number of bytes that can be allocated when decoding
-/// Avro-encoded values. This is a protection against ill-formed
-/// data, whose length field might be interpreted as enormous.
-/// See max_allocation_bytes to change this limit.
+/// Maximum number of bytes that can be allocated when decoding Avro-encoded values.
+///
+/// This is a protection against ill-formed data, whose length field might be interpreted as enormous.
+///
+/// See [`max_allocation_bytes`] to change this limit.
 pub const DEFAULT_MAX_ALLOCATION_BYTES: usize = 512 * 1024 * 1024;
 static MAX_ALLOCATION_BYTES: OnceLock<usize> = OnceLock::new();
 
-/// Whether to set serialization & deserialization traits
-/// as `human_readable` or not.
-/// See [set_serde_human_readable] to change this value.
+/// Whether to set serialization & deserialization traits as `human_readable` or not.
+///
+/// See [`set_serde_human_readable`] to change this value.
+pub const DEFAULT_SERDE_HUMAN_READABLE: bool = false;
+/// Whether the serializer and deserializer should indicate to types that the format is human-readable.
 // crate-visible for testing
 pub(crate) static SERDE_HUMAN_READABLE: OnceLock<bool> = OnceLock::new();
-/// Whether the serializer and deserializer should indicate to types that the format is human-readable.
-pub const DEFAULT_SERDE_HUMAN_READABLE: bool = false;
 
 pub(crate) trait MapHelper {
     fn string(&self, key: &str) -> Option<String>;

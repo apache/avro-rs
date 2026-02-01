@@ -109,7 +109,9 @@ pub enum Details {
         reason: String,
     },
 
-    #[error("Unable to allocate {desired} bytes (maximum allowed: {maximum})")]
+    #[error(
+        "Unable to allocate {desired} bytes (maximum allowed: {maximum}). Change the limit using `apache_avro::util::max_allocation_bytes`"
+    )]
     MemoryAllocation { desired: usize, maximum: usize },
 
     /// Describe a specific error happening with decimal representation
@@ -554,11 +556,11 @@ pub enum Details {
     #[error("Failed to convert JSON to string: {0}")]
     ConvertJsonToString(#[source] serde_json::Error),
 
-    /// Error while converting float to json value
+    /// Error while converting float to JSON value
     #[error("failed to convert avro float to json: {0}")]
     ConvertF64ToJson(f64),
 
-    /// Error while resolving Schema::Ref
+    /// Error while resolving [`Schema::Ref`]
     #[error("Unresolved schema reference: {0}")]
     SchemaResolutionError(Name),
 

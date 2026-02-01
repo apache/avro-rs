@@ -15,15 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! Set the `nightly` cfg value on nightly toolchains.
+//! # General documentation that does not fit in a particular module
 //!
-//! We would prefer to just do `#![rustversion::attr(nightly, feature(proc_macro_diagnostic)]`
-//! but that's currently not possible, see <https://github.com/dtolnay/rustversion/issues/8>
+//! This module does not contain any code, and is only available during `rustdoc` builds.
+//!
 
-#[rustversion::nightly]
-fn main() {
-    println!("cargo:rustc-cfg=nightly");
-}
-
-#[rustversion::not(nightly)]
-fn main() {}
+pub mod dynamic;
+pub mod primer;

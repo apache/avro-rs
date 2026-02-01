@@ -459,12 +459,12 @@ pub fn from_avro_datum<R: Read>(
     }
 }
 
-/// Decode a `Value` encoded in Avro format given the provided `Schema` and anything implementing `io::Read`
-/// to read from.
+/// Decode a `Value` from raw Avro data.
+///
 /// If the writer schema is incomplete, i.e. contains `Schema::Ref`s then it will use the provided
 /// schemata to resolve any dependencies.
 ///
-/// In case a reader `Schema` is provided, schema resolution will also be performed.
+/// When a reader `Schema` is provided, schema resolution will also be performed.
 pub fn from_avro_datum_schemata<R: Read>(
     writer_schema: &Schema,
     writer_schemata: Vec<&Schema>,
@@ -480,12 +480,12 @@ pub fn from_avro_datum_schemata<R: Read>(
     )
 }
 
-/// Decode a `Value` encoded in Avro format given the provided `Schema` and anything implementing `io::Read`
-/// to read from.
+/// Decode a `Value` from raw Avro data.
+///
 /// If the writer schema is incomplete, i.e. contains `Schema::Ref`s then it will use the provided
 /// schemata to resolve any dependencies.
 ///
-/// In case a reader `Schema` is provided, schema resolution will also be performed.
+/// When a reader `Schema` is provided, schema resolution will also be performed.
 pub fn from_avro_datum_reader_schemata<R: Read>(
     writer_schema: &Schema,
     writer_schemata: Vec<&Schema>,

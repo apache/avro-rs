@@ -36,7 +36,7 @@ pub struct UnionSchema {
 }
 
 impl UnionSchema {
-    /// Creates a new UnionSchema from a vector of schemas.
+    /// Creates a new `UnionSchema` from a vector of schemas.
     ///
     /// # Errors
     /// Will return an error if `schemas` has duplicate unnamed schemas or if `schemas`
