@@ -19,7 +19,7 @@
 
 //! This crate is the implementation of the `AvroSchema` derive macro.
 //! Please use it via the [`apache-avro`](https://crates.io/crates/apache-avro) crate:
-//! 
+//!
 //! ```no_run
 //! use apache_avro::AvroSchema;
 //!

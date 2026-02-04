@@ -24,7 +24,7 @@ use std::collections::HashMap;
 
 /// Trait for types that serve as an Avro data model.
 ///
-/// Do not implement directly! Either derive it or implement [`AvroSchemaComponent`] to get this trait
+/// **Do not implement directly!** Either derive it or implement [`AvroSchemaComponent`] to get this trait
 /// through a blanket implementation.
 ///
 /// ## Deriving `AvroSchema`

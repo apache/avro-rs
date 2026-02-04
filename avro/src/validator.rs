@@ -37,7 +37,10 @@
 //!
 //! // don't parse any schema before registering the custom validator(s)!
 //!
-//! set_schema_name_validator(Box::new(MyCustomValidator)).unwrap();
+//! if set_schema_name_validator(Box::new(MyCustomValidator)).is_err() {
+//!     // `.unwrap()` doesn't work as the return type does not implement `Debug`
+//!     panic!("There was already a schema validator configured")
+//! }
 //!
 //! // ... use the library
 //! ```

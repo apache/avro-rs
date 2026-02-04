@@ -49,7 +49,7 @@ format, please read [`documentation::primer`] first.
 There are two ways of working with Avro data in this crate:
 
 1. Via the generic [`Value`](types::Value) type.
-2. Via types implementing `Serialize`, `Deserialize`, and [`AvroSchema`].
+2. Via types implementing [`AvroSchema`] and Serde's [`Serialize`] and [`Deserialize`].
 
 The first option is great for dealing with Avro data in a dynamic way. For example, when working
 with unknown or rapidly changing schemas or when you don't want or need to map to Rust types. The
@@ -71,6 +71,9 @@ from Rust types. The module documentation of [`serde`] explains how to work in t
 The current MSRV is 1.88.0.
 
 The MSRV may be bumped in minor releases.
+
+[`Serialize`]: https://docs.rs/serde/latest/serde/trait.Serialize.html
+[`Deserialize`]: https://docs.rs/serde/latest/serde/trait.Deserialize.html
 
 <!-- cargo-rdme end -->
 

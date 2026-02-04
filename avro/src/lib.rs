@@ -22,7 +22,7 @@
 //! There are two ways of working with Avro data in this crate:
 //!
 //! 1. Via the generic [`Value`](types::Value) type.
-//! 2. Via types implementing [`Serialize`](::serde::Serialize), [`Deserialize`](::serde::Deserialize), and [`AvroSchema`].
+//! 2. Via types implementing [`AvroSchema`] and Serde's [`Serialize`] and [`Deserialize`].
 //!
 //! The first option is great for dealing with Avro data in a dynamic way. For example, when working
 //! with unknown or rapidly changing schemas or when you don't want or need to map to Rust types. The
@@ -45,6 +45,9 @@
 //!
 //! The MSRV may be bumped in minor releases.
 //!
+// These are links because otherwise `cargo rdme` gets angry
+//! [`Serialize`]: https://docs.rs/serde/latest/serde/trait.Serialize.html
+//! [`Deserialize`]: https://docs.rs/serde/latest/serde/trait.Deserialize.html
 
 mod bigdecimal;
 mod bytes;
