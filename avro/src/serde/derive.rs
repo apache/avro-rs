@@ -93,7 +93,7 @@ use std::collections::HashMap;
 ///
 ///  - `#[serde(transparent)]`
 ///
-///    Use the schema of the inner field directly. Is only allowed on structs with only unskipped field.
+///    Use the schema of the inner field directly. Is only allowed on structs with only one unskipped field.
 ///
 ///
 /// #### Variant attributes
@@ -176,7 +176,7 @@ use std::collections::HashMap;
 /// 1. In combination with `#[serde(with = "path::to::module)]`
 ///
 ///    To get the schema, it will call the functions `fn get_schema_in_ctxt(&mut Names, &Namespace) -> Schema`
-///    and `fn get_record_fields_in_ctxt(usize, &mut Names, &Namespace) -> Schema` in the module provided
+///    and `fn get_record_fields_in_ctxt(usize, &mut Names, &Namespace) -> Option<Vec<RecordField>>` in the module provided
 ///    to the Serde attribute. See [`AvroSchemaComponent`] for details on how to implement those
 ///    functions.
 ///
