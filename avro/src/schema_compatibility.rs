@@ -15,7 +15,48 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! Logic for checking schema compatibility
+//! Check if the reader's schema is compatible with the writer's schema.
+//!
+//! To allow for schema evolution, Avro supports resolving the writer's schema to the reader's schema.
+//! To check if this is possible, [`SchemaCompatibility`] can be used. For the complete rules see
+//! [the specification](https://avro.apache.org/docs/++version++/specification/#schema-resolution).
+//!
+//! There are three levels of compatibility.
+//!
+//! 1. Fully compatible schemas (`Ok(Compatibility::Full)`)
+//!
+//! For example, an integer can always be resolved to a long:
+//!
+//! ```
+//! # use apache_avro::{Schema, schema_compatibility::{Compatibility, SchemaCompatibility}};
+//! let writers_schema = Schema::array(Schema::Int);
+//! let readers_schema = Schema::array(Schema::Long);
+//! assert_eq!(SchemaCompatibility::can_read(&writers_schema, &readers_schema), Ok(Compatibility::Full));
+//! ```
+//!
+//! 2. Incompatible schemas (`Err`)
+//!
+//! For example, a long can never be resolved to an int:
+//!
+//! ```
+//! # use apache_avro::{Schema, schema_compatibility::SchemaCompatibility};
+//! let writers_schema = Schema::array(Schema::Long);
+//! let readers_schema = Schema::array(Schema::Int);
+//! assert!(SchemaCompatibility::can_read(&writers_schema, &readers_schema).is_err());
+//! ```
+//!
+//! 3. Partially compatible schemas (`Ok(Compatibility::Partial)`)
+//!
+//! For example, a union of a string and integer is only compatible with an integer if an integer was written:
+//!
+//! ```
+//! # use apache_avro::{Error, Schema, schema_compatibility::{Compatibility, SchemaCompatibility}};
+//! let writers_schema = Schema::union(vec![Schema::Int, Schema::String])?;
+//! let readers_schema = Schema::Int;
+//! assert_eq!(SchemaCompatibility::can_read(&writers_schema, &readers_schema), Ok(Compatibility::Partial));
+//! # Ok::<(), Error>(())
+//! ```
+//!
 use crate::{
     error::CompatibilityError,
     schema::{
@@ -31,9 +72,35 @@ use std::{
     ptr,
 };
 
+/// Check if two schemas can be resolved.
+///
+/// See [the module documentation] for more details.
+///
+/// [the module documentation]: crate::schema_compatibility
 pub struct SchemaCompatibility;
 
-/// How compatible are two schemas.
+impl SchemaCompatibility {
+    /// Recursively check if the reader's schema can be resolved to the writer's schema
+    pub fn can_read(
+        writers_schema: &Schema,
+        readers_schema: &Schema,
+    ) -> Result<Compatibility, CompatibilityError> {
+        let mut c = Checker::new();
+        c.can_read(writers_schema, readers_schema)
+    }
+
+    /// Recursively check if both schemas can be resolved to each other
+    pub fn mutual_read(
+        schema_a: &Schema,
+        schema_b: &Schema,
+    ) -> Result<Compatibility, CompatibilityError> {
+        let mut c = SchemaCompatibility::can_read(schema_a, schema_b)?;
+        c &= SchemaCompatibility::can_read(schema_b, schema_a)?;
+        Ok(c)
+    }
+}
+
+/// How compatible two schemas are.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Compatibility {
     /// Full compatibility, resolving will always work.
@@ -372,29 +439,6 @@ impl Checker {
         readers_schema: &Schema,
     ) -> Result<Compatibility, CompatibilityError> {
         self.full_match_schemas(writers_schema, readers_schema)
-    }
-}
-
-impl SchemaCompatibility {
-    /// `can_read` performs a full, recursive check that a datum written using the
-    /// writers_schema can be read using the readers_schema.
-    pub fn can_read(
-        writers_schema: &Schema,
-        readers_schema: &Schema,
-    ) -> Result<Compatibility, CompatibilityError> {
-        let mut c = Checker::new();
-        c.can_read(writers_schema, readers_schema)
-    }
-
-    /// `mutual_read` performs a full, recursive check that a datum written using either
-    /// the writers_schema or the readers_schema can be read using the other schema.
-    pub fn mutual_read(
-        writers_schema: &Schema,
-        readers_schema: &Schema,
-    ) -> Result<Compatibility, CompatibilityError> {
-        let mut c = SchemaCompatibility::can_read(writers_schema, readers_schema)?;
-        c &= SchemaCompatibility::can_read(readers_schema, writers_schema)?;
-        Ok(c)
     }
 }
 

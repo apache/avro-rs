@@ -15,10 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-/// A struct representing duration that hides the details of endianness and conversion between
-/// platform-native u32 and byte arrays.
 use serde::{Deserialize, Serialize, de};
 
+/// A struct representing duration that hides the details of endianness and conversion between
+/// platform-native u32 and byte arrays.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Duration {
     months: Months,

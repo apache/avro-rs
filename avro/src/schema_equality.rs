@@ -15,6 +15,40 @@
 // specific language governing permissions and limitations
 // under the License.
 
+//! # Custom schema equality comparators
+//!
+//! The library provides two implementations of schema equality comparators:
+//! 1. `StructFieldEq` (default) - compares the schemas structurally, may slightly deviate from the specification.
+//! 2. `SpecificationEq` - compares the schemas by serializing them to their canonical form and comparing
+//!    the resulting JSON.
+//!
+//! To use a custom comparator, you need to implement the `SchemataEq` trait and set it using the
+//! `set_schemata_equality_comparator` function:
+//!
+//! ```
+//! use apache_avro::{AvroResult, Schema};
+//! use apache_avro::schema::Namespace;
+//! use apache_avro::schema_equality::{SchemataEq, set_schemata_equality_comparator};
+//!
+//! #[derive(Debug)]
+//! struct MyCustomSchemataEq;
+//!
+//! impl SchemataEq for MyCustomSchemataEq {
+//!     fn compare(&self, schema_one: &Schema, schema_two: &Schema) -> bool {
+//!         todo!()
+//!     }
+//! }
+//!
+//! // don't parse any schema before registering the custom comparator!
+//!
+//! set_schemata_equality_comparator(Box::new(MyCustomSchemataEq));
+//!
+//! // ... use the library
+//! ```
+//! **Note**: the library allows to set a comparator only once per the application lifetime!
+//! If the application parses schemas before setting a comparator, the default comparator will be
+//! registered and used!
+
 use crate::schema::{InnerDecimalSchema, UuidSchema};
 use crate::{
     Schema,
@@ -27,15 +61,16 @@ use log::debug;
 use std::{fmt::Debug, sync::OnceLock};
 
 /// A trait that compares two schemata for equality.
-/// To register a custom one use [set_schemata_equality_comparator].
+///
+/// To register a custom one use [`set_schemata_equality_comparator`].
 pub trait SchemataEq: Debug + Send + Sync {
     /// Compares two schemata for equality.
     fn compare(&self, schema_one: &Schema, schema_two: &Schema) -> bool;
 }
 
-/// Compares two schemas according to the Avro specification by using
-/// their canonical forms.
-/// See <https://avro.apache.org/docs/1.11.1/specification/#parsing-canonical-form-for-schemas>
+/// Compares two schemas according to the Avro specification by using [their canonical forms].
+///
+/// [their canonical forms](https://avro.apache.org/docs/1.11.1/specification/#parsing-canonical-form-for-schemas)
 #[derive(Debug)]
 pub struct SpecificationEq;
 impl SchemataEq for SpecificationEq {
@@ -44,12 +79,15 @@ impl SchemataEq for SpecificationEq {
     }
 }
 
-/// Compares two schemas for equality field by field, using only the fields that
-/// are used to construct their canonical forms.
-/// See <https://avro.apache.org/docs/1.11.1/specification/#parsing-canonical-form-for-schemas>
+/// Compares [the canonical forms] of two schemas for equality field by field.
+///
+/// This means that attributes like `aliases`, `doc`, `default` and `logicalType` are ignored.
+///
+/// [the canonical forms](https://avro.apache.org/docs/1.11.1/specification/#parsing-canonical-form-for-schemas)
 #[derive(Debug)]
 pub struct StructFieldEq {
     /// Whether to include custom attributes in the comparison.
+    ///
     /// The custom attributes are not used to construct the canonical form of the schema!
     pub include_attributes: bool,
 }

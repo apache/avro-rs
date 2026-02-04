@@ -18,14 +18,14 @@
 use std::cell::Cell;
 
 thread_local! {
-    /// A thread local that is used to decide how to serialize Rust bytes into an Avro
-    /// `types::Value` of type bytes.
+    /// A thread local that is used to decide if Rust bytes need to be serialized to
+    /// [`Value::Bytes`] or [`Value::Fixed`].
     ///
     /// Relies on the fact that serde's serialization process is single-threaded.
     pub(crate) static SER_BYTES_TYPE: Cell<BytesType> = const { Cell::new(BytesType::Bytes) };
 
-    /// A thread local that is used to decide how to deserialize an Avro `types::Value`
-    /// of type bytes into Rust bytes.
+    /// A thread local that is used to decide if a [`Value::Bytes`] needs to be deserialized to
+    /// a [`Vec`] or slice.
     ///
     /// Relies on the fact that serde's deserialization process is single-threaded.
     pub(crate) static DE_BYTES_BORROWED: Cell<bool> = const { Cell::new(false) };
@@ -72,11 +72,12 @@ impl Drop for BorrowedGuard {
 /// This module is intended to be used through the Serde `with` attribute.
 /// Use [`apache_avro::serde::bytes_opt`] for optional bytes.
 ///
+/// When used with different serialization formats, this is equivalent to [`serde_bytes`].
+///
 /// See usage with below example:
 /// ```
 /// # use apache_avro::AvroSchema;
 /// # use serde::{Deserialize, Serialize};
-///
 /// #[derive(AvroSchema, Serialize, Deserialize)]
 /// struct StructWithBytes {
 ///     #[avro(with)]
@@ -132,11 +133,12 @@ pub mod bytes {
 /// This module is intended to be used through the Serde `with` attribute.
 /// Use [`apache_avro::serde::bytes`] for non-optional bytes.
 ///
+/// When used with different serialization formats, this is equivalent to [`serde_bytes`].
+///
 /// See usage with below example:
 /// ```
 /// # use apache_avro::AvroSchema;
 /// # use serde::{Deserialize, Serialize};
-///
 /// #[derive(AvroSchema, Serialize, Deserialize)]
 /// struct StructWithBytes {
 ///     #[avro(with)]
@@ -196,11 +198,12 @@ pub mod bytes_opt {
 /// This module is intended to be used through the Serde `with` attribute.
 /// Use [`apache_avro::serde::fixed_opt`] for optional fixed values.
 ///
+/// When used with different serialization formats, this is equivalent to [`serde_bytes`].
+///
 /// See usage with below example:
 /// ```
 /// # use apache_avro::AvroSchema;
 /// # use serde::{Deserialize, Serialize};
-///
 /// #[derive(AvroSchema, Serialize, Deserialize)]
 /// struct StructWithBytes {
 ///     #[avro(with)]
@@ -271,11 +274,12 @@ pub mod fixed {
 /// This module is intended to be used through the Serde `with` attribute.
 /// Use [`apache_avro::serde::fixed`] for non-optional fixed values.
 ///
+/// When used with different serialization formats, this is equivalent to [`serde_bytes`].
+///
 /// See usage with below example:
 /// ```
 /// # use apache_avro::AvroSchema;
 /// # use serde::{Deserialize, Serialize};
-///
 /// #[derive(AvroSchema, Serialize, Deserialize)]
 /// struct StructWithBytes {
 ///     #[avro(with)]
@@ -348,11 +352,12 @@ pub mod fixed_opt {
 ///
 /// Use [`apache_avro::serde::slice_opt`] for optional bytes/fixed borrowed values.
 ///
+/// When used with different serialization formats, this is equivalent to [`serde_bytes`].
+///
 /// See usage with below example:
-/// ```rust
+/// ```
 /// # use apache_avro::AvroSchema;
 /// # use serde::{Deserialize, Serialize};
-///
 /// #[derive(AvroSchema, Serialize, Deserialize)]
 /// struct StructWithBytes<'a> {
 ///     #[avro(with)]
@@ -411,11 +416,12 @@ pub mod slice {
 ///
 /// Use [`apache_avro::serde::slice`] for non-optional bytes/fixed borrowed values.
 ///
+/// When used with different serialization formats, this is equivalent to [`serde_bytes`].
+///
 /// See usage with below example:
 /// ```
 /// # use apache_avro::AvroSchema;
 /// # use serde::{Deserialize, Serialize};
-///
 /// #[derive(AvroSchema, Serialize, Deserialize)]
 /// struct StructWithBytes<'a> {
 ///     #[avro(with)]

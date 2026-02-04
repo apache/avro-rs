@@ -37,7 +37,7 @@ use crate::{
 /// `aliases` can also be defined, to facilitate schema evolution.
 ///
 /// More information about schema names can be found in the
-/// [Avro specification](https://avro.apache.org/docs/current/specification/#names)
+/// [Avro specification](https://avro.apache.org/docs/++version++/specification/#names)
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Name {
     pub name: String,
@@ -105,7 +105,7 @@ impl Name {
     /// Return the `fullname` of this `Name`
     ///
     /// More information about fullnames can be found in the
-    /// [Avro specification](https://avro.apache.org/docs/current/specification/#names)
+    /// [Avro specification](https://avro.apache.org/docs/++version++/specification/#names)
     pub fn fullname(&self, default_namespace: Namespace) -> String {
         if self.name.contains('.') {
             self.name.clone()
@@ -121,18 +121,19 @@ impl Name {
         }
     }
 
-    /// Return the fully qualified name needed for indexing or searching for the schema within a schema/schema env context. Puts the enclosing namespace into the name's namespace for clarity in schema/schema env parsing
-    /// ```ignore
-    /// use apache_avro::schema::Name;
+    /// Construct the fully qualified name
     ///
+    /// ```
+    /// # use apache_avro::{Error, schema::Name};
     /// assert_eq!(
-    /// Name::new("some_name")?.fully_qualified_name(&Some("some_namespace".into())),
-    /// Name::new("some_namespace.some_name")?
+    ///     Name::new("some_name")?.fully_qualified_name(&Some("some_namespace".into())),
+    ///     Name::new("some_namespace.some_name")?
     /// );
     /// assert_eq!(
-    /// Name::new("some_namespace.some_name")?.fully_qualified_name(&Some("other_namespace".into())),
-    /// Name::new("some_namespace.some_name")?
+    ///     Name::new("some_namespace.some_name")?.fully_qualified_name(&Some("other_namespace".into())),
+    ///     Name::new("some_namespace.some_name")?
     /// );
+    /// # Ok::<(), Error>(())
     /// ```
     pub fn fully_qualified_name(&self, enclosing_namespace: &Namespace) -> Name {
         Name {

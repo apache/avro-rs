@@ -33,12 +33,10 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 #[derive(Default)]
 pub(crate) struct Parser {
     input_schemas: HashMap<Name, Value>,
-    /// A map of name -> Schema::Ref
     /// Used to resolve cyclic references, i.e. when a
     /// field's type is a reference to its record's type
     resolving_schemas: Names,
     input_order: Vec<Name>,
-    /// A map of name -> fully parsed Schema
     /// Used to avoid parsing the same schema twice
     parsed_schemas: Names,
 }
@@ -67,8 +65,9 @@ impl Parser {
         self.parse(&value, &None)
     }
 
-    /// Create an array of `Schema`'s from an iterator of JSON Avro schemas. It is allowed that
-    /// the schemas have cross-dependencies; these will be resolved during parsing.
+    /// Create an array of `Schema`s from an iterator of JSON Avro schemas.
+    ///
+    /// It is allowed that the schemas have cross-dependencies; these will be resolved during parsing.
     pub(super) fn parse_list(&mut self) -> AvroResult<Vec<Schema>> {
         self.parse_input_schemas()?;
 
@@ -83,7 +82,7 @@ impl Parser {
         Ok(parsed_schemas)
     }
 
-    /// Convert the input schemas to parsed_schemas
+    /// Convert the input schemas to `parsed_schemas`.
     pub(super) fn parse_input_schemas(&mut self) -> Result<(), Error> {
         while !self.input_schemas.is_empty() {
             let next_name = self
@@ -103,8 +102,7 @@ impl Parser {
         Ok(())
     }
 
-    /// Create a `Schema` from a `serde_json::Value` representing a JSON Avro
-    /// schema.
+    /// Create a `Schema` from a `serde_json::Value` representing a JSON Avro schema.
     pub(super) fn parse(
         &mut self,
         value: &Value,
@@ -120,9 +118,7 @@ impl Parser {
         }
     }
 
-    /// Parse a `serde_json::Value` representing an Avro type whose Schema is known into a
-    /// `Schema`. A Schema for a `serde_json::Value` is known if it is primitive or has
-    /// been parsed previously by the parsed and stored in its map of parsed_schemas.
+    /// Parse a string as a primitive type or reference to `parsed_schemas`.
     fn parse_known_schema(
         &mut self,
         name: &str,
@@ -142,9 +138,10 @@ impl Parser {
     }
 
     /// Given a name, tries to retrieve the parsed schema from `parsed_schemas`.
+    ///
     /// If a parsed schema is not found, it checks if a currently resolving
     /// schema with that name exists.
-    /// If a resolving schema is not found, it checks if a json with that name exists
+    /// If a resolving schema is not found, it checks if a JSON with that name exists
     /// in `input_schemas` and then parses it (removing it from `input_schemas`)
     /// and adds the parsed schema to `parsed_schemas`.
     ///
@@ -240,11 +237,10 @@ impl Parser {
         }
     }
 
-    /// Parse a `serde_json::Value` representing a complex Avro type into a
-    /// `Schema`.
+    /// Parse a `serde_json::Value` representing a complex Avro type into a `Schema`.
     ///
     /// Avro supports "recursive" definition of types.
-    /// e.g: {"type": {"type": "string"}}
+    /// e.g: `{"type": {"type": "string"}}`
     pub(super) fn parse_complex(
         &mut self,
         complex: &Map<String, Value>,
@@ -539,8 +535,7 @@ impl Parser {
         }
     }
 
-    /// Parse a `serde_json::Value` representing a Avro record type into a
-    /// `Schema`.
+    /// Parse a `serde_json::Value` representing an Avro record type into a `Schema`.
     fn parse_record(
         &mut self,
         complex: &Map<String, Value>,
@@ -619,8 +614,7 @@ impl Parser {
         custom_attributes
     }
 
-    /// Parse a `serde_json::Value` representing a Avro enum type into a
-    /// `Schema`.
+    /// Parse a `serde_json::Value` representing a Avro enum type into a `Schema`.
     fn parse_enum(
         &mut self,
         complex: &Map<String, Value>,
@@ -697,8 +691,7 @@ impl Parser {
         Ok(schema)
     }
 
-    /// Parse a `serde_json::Value` representing a Avro array type into a
-    /// `Schema`.
+    /// Parse a `serde_json::Value` representing a Avro array type into a `Schema`.
     fn parse_array(
         &mut self,
         complex: &Map<String, Value>,
@@ -716,8 +709,7 @@ impl Parser {
             })
     }
 
-    /// Parse a `serde_json::Value` representing a Avro map type into a
-    /// `Schema`.
+    /// Parse a `serde_json::Value` representing a Avro map type into a `Schema`.
     fn parse_map(
         &mut self,
         complex: &Map<String, Value>,
@@ -735,8 +727,7 @@ impl Parser {
             })
     }
 
-    /// Parse a `serde_json::Value` representing a Avro union type into a
-    /// `Schema`.
+    /// Parse a `serde_json::Value` representing a Avro union type into a `Schema`.
     fn parse_union(
         &mut self,
         items: &[Value],
@@ -764,8 +755,7 @@ impl Parser {
             })
     }
 
-    /// Parse a `serde_json::Value` representing a Avro fixed type into a
-    /// `Schema`.
+    /// Parse a `serde_json::Value` representing a Avro fixed type into a `Schema`.
     fn parse_fixed(
         &mut self,
         complex: &Map<String, Value>,
@@ -824,7 +814,7 @@ impl Parser {
     // to the namespace of the name it is an alias for. For example, if a type named "a.b"
     // has aliases of "c" and "x.y", then the fully qualified names of its aliases are "a.c"
     // and "x.y".
-    // https://avro.apache.org/docs/current/specification/#aliases
+    // https://avro.apache.org/docs/++version++/specification/#aliases
     fn fix_aliases_namespace(
         &self,
         aliases: Option<Vec<String>>,

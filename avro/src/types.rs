@@ -49,7 +49,7 @@ fn max_prec_for_len(len: usize) -> Result<usize, Error> {
 /// A valid Avro value.
 ///
 /// More information about Avro values can be found in the [Avro
-/// Specification](https://avro.apache.org/docs/current/specification/#schema-declaration)
+/// Specification](https://avro.apache.org/docs/++version++/specification/#schema-declaration)
 #[derive(Clone, Debug, PartialEq, strum_macros::EnumDiscriminants)]
 #[strum_discriminants(name(ValueKind))]
 pub enum Value {
@@ -240,11 +240,10 @@ impl Record<'_> {
         }
     }
 
-    /// Put a compatible value (implementing the `ToAvro` trait) in the
-    /// `Record` for a given `field` name.
+    /// Add a field to the `Record`.
     ///
-    /// **NOTE** Only ensure that the field name is present in the `Schema` given when creating
-    /// this `Record`. Does not perform any schema validation.
+    // TODO: This should return an error at least panic
+    /// **NOTE**: If the field name does not exist in the schema, the value is silently dropped.
     pub fn put<V>(&mut self, field: &str, value: V)
     where
         V: Into<Value>,
@@ -255,6 +254,7 @@ impl Record<'_> {
     }
 
     /// Get the value for a given field name.
+    ///
     /// Returns `None` if the field is not present in the schema
     pub fn get(&self, field: &str) -> Option<&Value> {
         self.schema_lookup
@@ -359,7 +359,7 @@ impl TryFrom<Value> for JsonValue {
 impl Value {
     /// Validate the value against the given [Schema](../schema/enum.Schema.html).
     ///
-    /// See the [Avro specification](https://avro.apache.org/docs/current/specification)
+    /// See the [Avro specification](https://avro.apache.org/docs/++version++/specification)
     /// for the full set of rules of schema validation.
     pub fn validate(&self, schema: &Schema) -> bool {
         self.validate_schemata(vec![schema])
@@ -647,7 +647,7 @@ impl Value {
     /// Attempt to perform schema resolution on the value, with the given
     /// [Schema](../schema/enum.Schema.html).
     ///
-    /// See [Schema Resolution](https://avro.apache.org/docs/current/specification/#schema-resolution)
+    /// See [Schema Resolution](https://avro.apache.org/docs/++version++/specification/#schema-resolution)
     /// in the Avro specification for the full set of rules of schema
     /// resolution.
     pub fn resolve(self, schema: &Schema) -> AvroResult<Self> {
@@ -657,7 +657,7 @@ impl Value {
     /// Attempt to perform schema resolution on the value, with the given
     /// [Schema](../schema/enum.Schema.html) and set of schemas to use for Refs resolution.
     ///
-    /// See [Schema Resolution](https://avro.apache.org/docs/current/specification/#schema-resolution)
+    /// See [Schema Resolution](https://avro.apache.org/docs/++version++/specification/#schema-resolution)
     /// in the Avro specification for the full set of rules of schema
     /// resolution.
     pub fn resolve_schemata(self, schema: &Schema, schemata: Vec<&Schema>) -> AvroResult<Self> {

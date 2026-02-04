@@ -53,7 +53,8 @@ fn after_all() {
 #[derive(Debug)]
 pub struct TestError;
 
-/// A converter of any error into [TestError].
+/// A converter of any error into [`TestError`].
+///
 /// It is used to print better error messages in the tests.
 /// Borrowed from <https://bluxte.net/musings/2023/01/08/improving_failure_messages_rust_tests/>
 // The Display bound is needed so that the `From` implementation doesn't
