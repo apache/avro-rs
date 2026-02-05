@@ -42,7 +42,7 @@ uuid = { workspace = true }
 [dev-dependencies]
 apache-avro = { default-features = false, path = "../avro", features = ["derive"] }
 pretty_assertions = { workspace = true }
-proptest = { default-features = false, version = "1.9.0", features = ["std"] }
+proptest = { default-features = false, version = "1.10.0", features = ["std"] }
 rustversion = "1.0.22"
 serde = { workspace = true }
 trybuild = "1.0.115"
