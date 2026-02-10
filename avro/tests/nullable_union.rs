@@ -971,12 +971,15 @@ mod nullable_untagged_pitfall {
     }
 
     #[test]
-    #[ignore]
-    fn deserialize_rusty_untagged_my_record_b_27() -> AvroResult<()> {
+    // This is expected to fail because untagged derived deserialize will try each in order and
+    // early break at the first variant that can deserialize
+    #[should_panic]
+    fn deserialize_rusty_untagged_my_record_b_27_should_fail() {
         test_deserialize(TestCase {
             input: Some(MyUnionUntagged::MyRecordB(MyRecordB { a: 27 })),
             schema: &schema(),
             expected_avro: &record_b_variant_expected_avro(27),
         })
+        .unwrap();
     }
 }
