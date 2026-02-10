@@ -674,7 +674,7 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
                         .deserialize_byte_buf(visitor)
                         .map_err(|e| {
                             de::Error::custom(format!(
-                                "Attempted to deserialize Value::Union({i}, {x:?}) as bytes: {e:?}"
+                                "Attempted to deserialize Value::Union({i}, {x:?}) as byte_buf: {e:?}"
                             ))
                         })
                 }
