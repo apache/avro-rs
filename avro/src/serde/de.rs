@@ -850,6 +850,14 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
             Value::Record(fields) => visitor.visit_enum(EnumDeserializer::new(fields)),
             Value::String(field) => visitor.visit_enum(EnumUnitDeserializer::new(field)),
             Value::Union(idx, inner) => {
+                // if we came here from a some, we need to check if we are deserializing a
+                // non-newtype enum
+                if self.deserializing_some
+                    && let Value::Enum(_index, field) = inner.deref()
+                    && variants.contains(&&**field)
+                {
+                    return visitor.visit_enum(EnumUnitDeserializer::new(field));
+                }
                 // Assume `null` is the first branch if deserializing some so decrement the variant index
                 let variant_idx = *idx as usize - usize::from(self.deserializing_some);
                 if (variant_idx) < variants.len() {
