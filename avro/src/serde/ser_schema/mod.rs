@@ -606,6 +606,7 @@ pub struct SchemaAwareWriteSerializer<'s, W: Write> {
     root_schema: &'s Schema,
     names: &'s NamesRef<'s>,
     enclosing_namespace: Namespace,
+    serializing_some: bool,
 }
 
 impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
@@ -629,6 +630,22 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
             root_schema: schema,
             names,
             enclosing_namespace,
+            serializing_some: false,
+        }
+    }
+
+    pub fn new_serializing_some(
+        writer: &'s mut W,
+        schema: &'s Schema,
+        names: &'s NamesRef<'s>,
+        enclosing_namespace: Namespace,
+    ) -> SchemaAwareWriteSerializer<'s, W> {
+        SchemaAwareWriteSerializer {
+            writer,
+            root_schema: schema,
+            names,
+            enclosing_namespace,
+            serializing_some: true,
         }
     }
 
@@ -1368,7 +1385,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     where
         T: ?Sized + ser::Serialize,
     {
-        let mut inner_ser = SchemaAwareWriteSerializer::new(
+        let mut inner_ser = SchemaAwareWriteSerializer::new_serializing_some(
             &mut *self.writer,
             schema,
             self.names,
@@ -1454,7 +1471,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 encode_int(variant_index as i32, &mut self.writer)
             }
             Schema::Union(union_schema) => {
-                if variant_index as usize >= union_schema.schemas.len() {
+                let branch_index = variant_index as usize + usize::from(self.serializing_some);
+                if branch_index >= union_schema.schemas.len() {
                     return Err(create_error(format!(
                         "Variant index out of bounds: {}. The union schema has '{}' schemas",
                         variant_index,
@@ -1462,11 +1480,8 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     )));
                 }
 
-                encode_int(variant_index as i32, &mut self.writer)?;
-                self.serialize_unit_struct_with_schema(
-                    name,
-                    &union_schema.schemas[variant_index as usize],
-                )
+                encode_int(branch_index as i32, &mut self.writer)?;
+                self.serialize_unit_struct_with_schema(name, &union_schema.schemas[branch_index])
             }
             Schema::Ref { name: ref_name } => {
                 let ref_schema = self.get_ref_schema(ref_name)?;
@@ -1518,17 +1533,21 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
         match schema {
             Schema::Union(union_schema) => {
-                let variant_schema = union_schema
-                    .schemas
-                    .get(variant_index as usize)
-                    .ok_or_else(|| {
-                        create_error(format!(
-                            "No variant schema at position {variant_index} for {union_schema:?}"
-                        ))
-                    })?;
+                let branch_index = variant_index as usize + usize::from(self.serializing_some);
+                if branch_index >= union_schema.schemas.len() {
+                    return Err(create_error(format!(
+                        "Variant index out of bounds: {}. The union schema has '{}' schemas",
+                        variant_index,
+                        union_schema.schemas.len()
+                    )));
+                }
 
-                encode_int(variant_index as i32, &mut self.writer)?;
-                self.serialize_newtype_struct_with_schema(variant, value, variant_schema)
+                encode_int(branch_index as i32, &mut self.writer)?;
+                self.serialize_newtype_struct_with_schema(
+                    name,
+                    value,
+                    &union_schema.schemas[branch_index],
+                )
             }
             _ => Err(create_error(format!(
                 "Expected Union schema. Got: {schema}"
@@ -1697,17 +1716,21 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
         match schema {
             Schema::Union(union_schema) => {
-                let variant_schema = union_schema
-                    .schemas
-                    .get(variant_index as usize)
-                    .ok_or_else(|| {
-                        create_error(format!(
-                            "Cannot find a variant at position {variant_index} in {union_schema:?}"
-                        ))
-                    })?;
+                let branch_index = variant_index as usize + usize::from(self.serializing_some);
+                if branch_index >= union_schema.schemas.len() {
+                    return Err(create_error(format!(
+                        "Variant index out of bounds: {}. The union schema has '{}' schemas",
+                        variant_index,
+                        union_schema.schemas.len()
+                    )));
+                }
 
-                encode_int(variant_index as i32, &mut self.writer)?;
-                self.serialize_tuple_struct_with_schema(variant, len, variant_schema)
+                encode_int(branch_index as i32, &mut self.writer)?;
+                self.serialize_tuple_struct_with_schema(
+                    name,
+                    len,
+                    &union_schema.schemas[branch_index],
+                )
             }
             _ => Err(create_error(format!(
                 "Expected Union schema. Got: {schema}"
@@ -1829,17 +1852,17 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
         match schema {
             Schema::Union(union_schema) => {
-                let variant_schema = union_schema
-                    .schemas
-                    .get(variant_index as usize)
-                    .ok_or_else(|| {
-                        create_error(format!(
-                            "Cannot find variant at position {variant_index} in {union_schema:?}"
-                        ))
-                    })?;
+                let branch_index = variant_index as usize + usize::from(self.serializing_some);
+                if branch_index >= union_schema.schemas.len() {
+                    return Err(create_error(format!(
+                        "Variant index out of bounds: {}. The union schema has '{}' schemas",
+                        variant_index,
+                        union_schema.schemas.len()
+                    )));
+                }
 
-                encode_int(variant_index as i32, &mut self.writer)?;
-                self.serialize_struct_with_schema(variant, len, variant_schema)
+                encode_int(branch_index as i32, &mut self.writer)?;
+                self.serialize_struct_with_schema(name, len, &union_schema.schemas[branch_index])
             }
             _ => Err(create_error(format!(
                 "Expected Union schema. Got: {schema}"
