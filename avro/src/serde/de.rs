@@ -859,7 +859,9 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
                     return visitor.visit_enum(EnumUnitDeserializer::new(field));
                 }
                 // Assume `null` is the first branch if deserializing some so decrement the variant index
-                let variant_idx = *idx as usize - usize::from(self.deserializing_some);
+                let variant_idx = (*idx as usize)
+                    .checked_sub(usize::from(self.deserializing_some))
+                    .ok_or_else(|| Details::GetNull(inner.deref().clone()))?;
                 if (variant_idx) < variants.len() {
                     visitor.visit_enum(UnionDeserializer::new(
                         variants[variant_idx],
@@ -867,7 +869,7 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
                     ))
                 } else {
                     Err(Details::GetUnionVariant {
-                        index: *idx as i64,
+                        index: variant_idx as i64,
                         num_variants: variants.len(),
                     }
                     .into())
@@ -1962,6 +1964,39 @@ mod tests {
             result,
             "Failed to deserialize Avro value into value: Expected a String|Bytes|Fixed(4) for char, but got Fixed(3, [97, 0, 0])"
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn deserialize_union_using_some_with_null_not_as_first_fails() -> TestResult {
+        #[derive(Debug, Deserialize)]
+        enum MyEnum {
+            A,
+            B,
+        }
+
+        #[derive(Debug, Deserialize)]
+        #[allow(dead_code)]
+        struct MyRecord {
+            a: i32,
+        }
+
+        #[derive(Debug, Deserialize)]
+        #[allow(dead_code)]
+        enum MyUnion {
+            Int(i32),
+            MyEnum(MyEnum),
+            MyRecord(MyRecord),
+        }
+
+        let int_variant_avro = Value::Union(0, Box::new(Value::Int(1)));
+        match from_value::<Option<MyUnion>>(&int_variant_avro) {
+            Ok(value) => panic!("Expected an error, but got {value:?}"),
+            Err(e) => {
+                assert_eq!(e.to_string(), r#"Expected Value::Null, got: Int(1)"#,);
+            }
+        }
 
         Ok(())
     }
