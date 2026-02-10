@@ -1477,6 +1477,26 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 encode_int(variant_index as i32, &mut self.writer)
             }
             Schema::Union(union_schema) => {
+                // If we came here from a some, we need to check if we are serializing a
+                // non-newtype enum
+                if self.serializing_some {
+                    for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
+                        match variant_schema {
+                            Schema::Enum(enum_schema) if enum_schema.name.name == name => {
+                                if variant_index as usize >= enum_schema.symbols.len() {
+                                    return Err(create_error(format!(
+                                        "Variant index out of bounds: {}. The Enum schema has '{}' symbols",
+                                        variant_index,
+                                        enum_schema.symbols.len()
+                                    )));
+                                }
+                                encode_int(i as i32, &mut self.writer)?;
+                                return encode_int(variant_index as i32, &mut self.writer);
+                            }
+                            _ => { /* skip */ }
+                        }
+                    }
+                }
                 let branch_index = variant_index as usize + usize::from(self.serializing_some);
                 if branch_index >= union_schema.schemas.len() {
                     return Err(create_error(format!(
