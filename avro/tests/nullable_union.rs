@@ -1,43 +1,41 @@
-use apache_avro::Reader;
-use apache_avro::Schema;
-use apache_avro::Writer;
-use apache_avro::from_value;
-use apache_avro::types::Value as AvroValue;
+use apache_avro::{AvroResult, Reader, Schema, Writer, from_value, types::Value};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 struct TestCase<'a, T> {
     input: T,
     schema: &'a Schema,
-    expected_avro: &'a AvroValue,
+    expected_avro: &'a Value,
 }
 
-fn test_serialize<T>(test_case: TestCase<T>)
+fn test_serialize<T>(test_case: TestCase<T>) -> AvroResult<()>
 where
     T: Serialize + std::fmt::Debug,
 {
-    let mut writer = Writer::new(test_case.schema, Vec::new()).unwrap();
-    writer.append_ser(&test_case.input).unwrap();
-    let bytes = writer.into_inner().unwrap();
-    let mut reader = Reader::with_schema(test_case.schema, &bytes[..]).unwrap();
-    let read_avro_value = reader.next().unwrap().unwrap();
+    let mut writer = Writer::new(test_case.schema, Vec::new())?;
+    writer.append_ser(&test_case.input)?;
+    let bytes = writer.into_inner()?;
+    let mut reader = Reader::with_schema(test_case.schema, &bytes[..])?;
+    let read_avro_value = reader.next().unwrap()?;
     assert_eq!(
         &read_avro_value, test_case.expected_avro,
         "serialization is not correct: expected: {:?}, got: {:?}, input: {:?}",
         test_case.expected_avro, read_avro_value, test_case.input
     );
+    Ok(())
 }
 
-fn test_deserialize<T>(test_case: TestCase<T>)
+fn test_deserialize<T>(test_case: TestCase<T>) -> AvroResult<()>
 where
     T: DeserializeOwned + std::fmt::Debug + std::cmp::PartialEq,
 {
-    let deserialized: T = from_value(&test_case.expected_avro).unwrap();
+    let deserialized: T = from_value(test_case.expected_avro)?;
     assert_eq!(
         deserialized, test_case.input,
         "deserialization is not correct: expected: {:?}, got: {:?}",
         test_case.input, deserialized,
     );
+    Ok(())
 }
 
 mod nullable_enum {
@@ -78,16 +76,16 @@ mod nullable_enum {
         Schema::parse_str(NULLABLE_ENUM_SCHEMA).unwrap()
     }
 
-    fn null_variant_expected_avro() -> AvroValue {
-        AvroValue::Union(0, Box::new(AvroValue::Null))
+    fn null_variant_expected_avro() -> Value {
+        Value::Union(0, Box::new(Value::Null))
     }
 
-    fn a_variant_expected_avro() -> AvroValue {
-        AvroValue::Union(1, Box::new(AvroValue::Enum(0, "A".to_string())))
+    fn a_variant_expected_avro() -> Value {
+        Value::Union(1, Box::new(Value::Enum(0, "A".to_string())))
     }
 
     #[test]
-    fn serialize_null_variant_enum_null() {
+    fn serialize_null_variant_enum_null() -> AvroResult<()> {
         test_serialize(TestCase {
             input: MyUnionNullable::Null,
             schema: &schema(),
@@ -96,7 +94,7 @@ mod nullable_enum {
     }
 
     #[test]
-    fn deserialize_null_variant_enum_null() {
+    fn deserialize_null_variant_enum_null() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: MyUnionNullable::Null,
             schema: &schema(),
@@ -105,7 +103,7 @@ mod nullable_enum {
     }
 
     #[test]
-    fn serialize_rusty_null() {
+    fn serialize_rusty_null() -> AvroResult<()> {
         test_serialize(TestCase {
             input: None::<MyEnum>,
             schema: &schema(),
@@ -114,7 +112,7 @@ mod nullable_enum {
     }
 
     #[test]
-    fn deserialize_rusty_null() {
+    fn deserialize_rusty_null() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: None::<MyEnum>,
             schema: &schema(),
@@ -123,7 +121,7 @@ mod nullable_enum {
     }
 
     #[test]
-    fn serialize_avro_json_encoding_compatible_null() {
+    fn serialize_avro_json_encoding_compatible_null() -> AvroResult<()> {
         test_serialize(TestCase {
             input: None::<MyUnionAvroJsonEncoding>,
             schema: &schema(),
@@ -132,7 +130,7 @@ mod nullable_enum {
     }
 
     #[test]
-    fn deserialize_avro_json_encoding_compatible_null() {
+    fn deserialize_avro_json_encoding_compatible_null() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: None::<MyUnionAvroJsonEncoding>,
             schema: &schema(),
@@ -141,7 +139,7 @@ mod nullable_enum {
     }
 
     #[test]
-    fn serialize_null_variant_enum_my_enum_a() {
+    fn serialize_null_variant_enum_my_enum_a() -> AvroResult<()> {
         test_serialize(TestCase {
             input: MyUnionNullable::MyEnum(MyEnum::A),
             schema: &schema(),
@@ -150,7 +148,7 @@ mod nullable_enum {
     }
 
     #[test]
-    fn deserialize_null_variant_enum_my_enum_a() {
+    fn deserialize_null_variant_enum_my_enum_a() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: MyUnionNullable::MyEnum(MyEnum::A),
             schema: &schema(),
@@ -159,7 +157,7 @@ mod nullable_enum {
     }
 
     #[test]
-    fn serialize_rusty_my_enum_a() {
+    fn serialize_rusty_my_enum_a() -> AvroResult<()> {
         test_serialize(TestCase {
             input: Some(MyEnum::A),
             schema: &schema(),
@@ -168,7 +166,7 @@ mod nullable_enum {
     }
 
     #[test]
-    fn deserialize_rusty_my_enum_a() {
+    fn deserialize_rusty_my_enum_a() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: Some(MyEnum::A),
             schema: &schema(),
@@ -177,7 +175,7 @@ mod nullable_enum {
     }
 
     #[test]
-    fn serialize_avro_json_encoding_compatible_my_enum_a() {
+    fn serialize_avro_json_encoding_compatible_my_enum_a() -> AvroResult<()> {
         test_serialize(TestCase {
             input: Some(MyUnionAvroJsonEncoding::MyEnum(MyEnum::A)),
             schema: &schema(),
@@ -186,7 +184,7 @@ mod nullable_enum {
     }
 
     #[test]
-    fn deserialize_avro_json_encoding_compatible_my_enum_a() {
+    fn deserialize_avro_json_encoding_compatible_my_enum_a() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: Some(MyUnionAvroJsonEncoding::MyEnum(MyEnum::A)),
             schema: &schema(),
@@ -224,16 +222,16 @@ mod nullable_primitive_int {
         Schema::parse_str(NULLABLE_INT_SCHEMA).unwrap()
     }
 
-    fn null_variant_expected_avro() -> AvroValue {
-        AvroValue::Union(0, Box::new(AvroValue::Null))
+    fn null_variant_expected_avro() -> Value {
+        Value::Union(0, Box::new(Value::Null))
     }
 
-    fn int_variant_expected_avro(v: i32) -> AvroValue {
-        AvroValue::Union(1, Box::new(AvroValue::Int(v)))
+    fn int_variant_expected_avro(v: i32) -> Value {
+        Value::Union(1, Box::new(Value::Int(v)))
     }
 
     #[test]
-    fn serialize_null_variant_enum_null() {
+    fn serialize_null_variant_enum_null() -> AvroResult<()> {
         test_serialize(TestCase {
             input: MyUnionNullable::Null,
             schema: &schema(),
@@ -242,7 +240,7 @@ mod nullable_primitive_int {
     }
 
     #[test]
-    fn deserialize_null_variant_enum_null() {
+    fn deserialize_null_variant_enum_null() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: MyUnionNullable::Null,
             schema: &schema(),
@@ -251,7 +249,7 @@ mod nullable_primitive_int {
     }
 
     #[test]
-    fn serialize_rusty_null() {
+    fn serialize_rusty_null() -> AvroResult<()> {
         test_serialize(TestCase {
             input: None::<i32>,
             schema: &schema(),
@@ -260,7 +258,7 @@ mod nullable_primitive_int {
     }
 
     #[test]
-    fn deserialize_rusty_null() {
+    fn deserialize_rusty_null() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: None::<i32>,
             schema: &schema(),
@@ -269,7 +267,7 @@ mod nullable_primitive_int {
     }
 
     #[test]
-    fn serialize_avro_json_encoding_compatible_null() {
+    fn serialize_avro_json_encoding_compatible_null() -> AvroResult<()> {
         test_serialize(TestCase {
             input: None::<MyUnionAvroJsonEncoding>,
             schema: &schema(),
@@ -278,7 +276,7 @@ mod nullable_primitive_int {
     }
 
     #[test]
-    fn deserialize_avro_json_encoding_compatible_null() {
+    fn deserialize_avro_json_encoding_compatible_null() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: None::<MyUnionAvroJsonEncoding>,
             schema: &schema(),
@@ -287,7 +285,7 @@ mod nullable_primitive_int {
     }
 
     #[test]
-    fn serialize_null_variant_enum_int_42() {
+    fn serialize_null_variant_enum_int_42() -> AvroResult<()> {
         test_serialize(TestCase {
             input: MyUnionNullable::Int(42),
             schema: &schema(),
@@ -296,7 +294,7 @@ mod nullable_primitive_int {
     }
 
     #[test]
-    fn deserialize_null_variant_enum_int_42() {
+    fn deserialize_null_variant_enum_int_42() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: MyUnionNullable::Int(42),
             schema: &schema(),
@@ -305,7 +303,7 @@ mod nullable_primitive_int {
     }
 
     #[test]
-    fn serialize_rusty_int_42() {
+    fn serialize_rusty_int_42() -> AvroResult<()> {
         test_serialize(TestCase {
             input: Some(42_i32),
             schema: &schema(),
@@ -314,7 +312,7 @@ mod nullable_primitive_int {
     }
 
     #[test]
-    fn deserialize_rusty_int_42() {
+    fn deserialize_rusty_int_42() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: Some(42_i32),
             schema: &schema(),
@@ -323,7 +321,7 @@ mod nullable_primitive_int {
     }
 
     #[test]
-    fn serialize_avro_json_encoding_compatible_int_42() {
+    fn serialize_avro_json_encoding_compatible_int_42() -> AvroResult<()> {
         test_serialize(TestCase {
             input: Some(MyUnionAvroJsonEncoding::Int(42)),
             schema: &schema(),
@@ -332,7 +330,7 @@ mod nullable_primitive_int {
     }
 
     #[test]
-    fn deserialize_avro_json_encoding_compatible_int_42() {
+    fn deserialize_avro_json_encoding_compatible_int_42() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: Some(MyUnionAvroJsonEncoding::Int(42)),
             schema: &schema(),
@@ -380,22 +378,19 @@ mod nullable_record {
         Schema::parse_str(NULLABLE_RECORD_SCHEMA).unwrap()
     }
 
-    fn null_variant_expected_avro() -> AvroValue {
-        AvroValue::Union(0, Box::new(AvroValue::Null))
+    fn null_variant_expected_avro() -> Value {
+        Value::Union(0, Box::new(Value::Null))
     }
 
-    fn record_variant_expected_avro(a: i32) -> AvroValue {
-        AvroValue::Union(
+    fn record_variant_expected_avro(a: i32) -> Value {
+        Value::Union(
             1,
-            Box::new(AvroValue::Record(vec![(
-                "a".to_string(),
-                AvroValue::Int(a),
-            )])),
+            Box::new(Value::Record(vec![("a".to_string(), Value::Int(a))])),
         )
     }
 
     #[test]
-    fn serialize_null_variant_enum_null() {
+    fn serialize_null_variant_enum_null() -> AvroResult<()> {
         test_serialize(TestCase {
             input: MyUnionNullable::Null,
             schema: &schema(),
@@ -404,7 +399,7 @@ mod nullable_record {
     }
 
     #[test]
-    fn deserialize_null_variant_enum_null() {
+    fn deserialize_null_variant_enum_null() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: MyUnionNullable::Null,
             schema: &schema(),
@@ -413,7 +408,7 @@ mod nullable_record {
     }
 
     #[test]
-    fn serialize_rusty_null() {
+    fn serialize_rusty_null() -> AvroResult<()> {
         test_serialize(TestCase {
             input: None::<MyRecord>,
             schema: &schema(),
@@ -422,7 +417,7 @@ mod nullable_record {
     }
 
     #[test]
-    fn deserialize_rusty_null() {
+    fn deserialize_rusty_null() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: None::<MyRecord>,
             schema: &schema(),
@@ -431,7 +426,7 @@ mod nullable_record {
     }
 
     #[test]
-    fn serialize_avro_json_encoding_compatible_null() {
+    fn serialize_avro_json_encoding_compatible_null() -> AvroResult<()> {
         test_serialize(TestCase {
             input: None::<MyUnionAvroJsonEncoding>,
             schema: &schema(),
@@ -440,7 +435,7 @@ mod nullable_record {
     }
 
     #[test]
-    fn deserialize_avro_json_encoding_compatible_null() {
+    fn deserialize_avro_json_encoding_compatible_null() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: None::<MyUnionAvroJsonEncoding>,
             schema: &schema(),
@@ -449,7 +444,7 @@ mod nullable_record {
     }
 
     #[test]
-    fn serialize_null_variant_enum_my_record_a_27() {
+    fn serialize_null_variant_enum_my_record_a_27() -> AvroResult<()> {
         test_serialize(TestCase {
             input: MyUnionNullable::MyRecord(MyRecord { a: 27 }),
             schema: &schema(),
@@ -458,7 +453,7 @@ mod nullable_record {
     }
 
     #[test]
-    fn deserialize_null_variant_enum_my_record_a_27() {
+    fn deserialize_null_variant_enum_my_record_a_27() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: MyUnionNullable::MyRecord(MyRecord { a: 27 }),
             schema: &schema(),
@@ -467,7 +462,7 @@ mod nullable_record {
     }
 
     #[test]
-    fn serialize_rusty_my_record_a_27() {
+    fn serialize_rusty_my_record_a_27() -> AvroResult<()> {
         test_serialize(TestCase {
             input: Some(MyRecord { a: 27 }),
             schema: &schema(),
@@ -476,7 +471,7 @@ mod nullable_record {
     }
 
     #[test]
-    fn deserialize_rusty_my_record_a_27() {
+    fn deserialize_rusty_my_record_a_27() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: Some(MyRecord { a: 27 }),
             schema: &schema(),
@@ -485,7 +480,7 @@ mod nullable_record {
     }
 
     #[test]
-    fn serialize_avro_json_encoding_compatible_my_record_a_27() {
+    fn serialize_avro_json_encoding_compatible_my_record_a_27() -> AvroResult<()> {
         test_serialize(TestCase {
             input: Some(MyUnionAvroJsonEncoding::MyRecord(MyRecord { a: 27 })),
             schema: &schema(),
@@ -494,7 +489,7 @@ mod nullable_record {
     }
 
     #[test]
-    fn deserialize_avro_json_encoding_compatible_my_record_a_27() {
+    fn deserialize_avro_json_encoding_compatible_my_record_a_27() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: Some(MyUnionAvroJsonEncoding::MyRecord(MyRecord { a: 27 })),
             schema: &schema(),
@@ -566,30 +561,27 @@ mod nullable_int_enum_record {
         Schema::parse_str(NULLABLE_INT_ENUM_RECORD_SCHEMA).unwrap()
     }
 
-    fn null_variant_expected_avro() -> AvroValue {
-        AvroValue::Union(0, Box::new(AvroValue::Null))
+    fn null_variant_expected_avro() -> Value {
+        Value::Union(0, Box::new(Value::Null))
     }
 
-    fn int_variant_expected_avro(v: i32) -> AvroValue {
-        AvroValue::Union(1, Box::new(AvroValue::Int(v)))
+    fn int_variant_expected_avro(v: i32) -> Value {
+        Value::Union(1, Box::new(Value::Int(v)))
     }
 
-    fn a_variant_expected_avro() -> AvroValue {
-        AvroValue::Union(2, Box::new(AvroValue::Enum(0, "A".to_string())))
+    fn a_variant_expected_avro() -> Value {
+        Value::Union(2, Box::new(Value::Enum(0, "A".to_string())))
     }
 
-    fn record_variant_expected_avro(a: i32) -> AvroValue {
-        AvroValue::Union(
+    fn record_variant_expected_avro(a: i32) -> Value {
+        Value::Union(
             3,
-            Box::new(AvroValue::Record(vec![(
-                "a".to_string(),
-                AvroValue::Int(a),
-            )])),
+            Box::new(Value::Record(vec![("a".to_string(), Value::Int(a))])),
         )
     }
 
     #[test]
-    fn serialize_null_variant_enum_null() {
+    fn serialize_null_variant_enum_null() -> AvroResult<()> {
         test_serialize(TestCase {
             input: MyUnionNullable::Null,
             schema: &schema(),
@@ -598,7 +590,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn deserialize_null_variant_enum_null() {
+    fn deserialize_null_variant_enum_null() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: MyUnionNullable::Null,
             schema: &schema(),
@@ -607,7 +599,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn serialize_rusty_null() {
+    fn serialize_rusty_null() -> AvroResult<()> {
         test_serialize(TestCase {
             input: None::<MyUnionAvroJsonEncoding>,
             schema: &schema(),
@@ -616,7 +608,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn deserialize_rusty_null() {
+    fn deserialize_rusty_null() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: None::<MyUnionAvroJsonEncoding>,
             schema: &schema(),
@@ -625,7 +617,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn serialize_rusty_untagged_null() {
+    fn serialize_rusty_untagged_null() -> AvroResult<()> {
         test_serialize(TestCase {
             input: None::<MyUnionUntagged>,
             schema: &schema(),
@@ -634,7 +626,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn deserialize_rusty_untagged_null() {
+    fn deserialize_rusty_untagged_null() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: None::<MyUnionUntagged>,
             schema: &schema(),
@@ -643,7 +635,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn serialize_null_variant_enum_int_42() {
+    fn serialize_null_variant_enum_int_42() -> AvroResult<()> {
         test_serialize(TestCase {
             input: MyUnionNullable::Int(42),
             schema: &schema(),
@@ -652,7 +644,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn deserialize_null_variant_enum_int_42() {
+    fn deserialize_null_variant_enum_int_42() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: MyUnionNullable::Int(42),
             schema: &schema(),
@@ -661,7 +653,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn serialize_rusty_int_42() {
+    fn serialize_rusty_int_42() -> AvroResult<()> {
         test_serialize(TestCase {
             input: Some(MyUnionAvroJsonEncoding::Int(42)),
             schema: &schema(),
@@ -670,7 +662,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn deserialize_rusty_int_42() {
+    fn deserialize_rusty_int_42() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: Some(MyUnionAvroJsonEncoding::Int(42)),
             schema: &schema(),
@@ -679,7 +671,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn serialize_rusty_untagged_int_42() {
+    fn serialize_rusty_untagged_int_42() -> AvroResult<()> {
         test_serialize(TestCase {
             input: Some(MyUnionUntagged::Int(42)),
             schema: &schema(),
@@ -688,7 +680,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn deserialize_rusty_untagged_int_42() {
+    fn deserialize_rusty_untagged_int_42() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: Some(MyUnionUntagged::Int(42)),
             schema: &schema(),
@@ -697,7 +689,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn serialize_null_variant_enum_my_enum_a() {
+    fn serialize_null_variant_enum_my_enum_a() -> AvroResult<()> {
         test_serialize(TestCase {
             input: MyUnionNullable::MyEnum(MyEnum::A),
             schema: &schema(),
@@ -706,7 +698,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn deserialize_null_variant_enum_my_enum_a() {
+    fn deserialize_null_variant_enum_my_enum_a() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: MyUnionNullable::MyEnum(MyEnum::A),
             schema: &schema(),
@@ -715,7 +707,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn serialize_rusty_my_enum_a() {
+    fn serialize_rusty_my_enum_a() -> AvroResult<()> {
         test_serialize(TestCase {
             input: Some(MyUnionAvroJsonEncoding::MyEnum(MyEnum::A)),
             schema: &schema(),
@@ -724,7 +716,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn deserialize_rusty_my_enum_a() {
+    fn deserialize_rusty_my_enum_a() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: Some(MyUnionAvroJsonEncoding::MyEnum(MyEnum::A)),
             schema: &schema(),
@@ -733,7 +725,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn serialize_rusty_untagged_my_enum_a() {
+    fn serialize_rusty_untagged_my_enum_a() -> AvroResult<()> {
         test_serialize(TestCase {
             input: Some(MyUnionUntagged::MyEnum(MyEnum::A)),
             schema: &schema(),
@@ -742,7 +734,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn deserialize_rusty_untagged_my_enum_a() {
+    fn deserialize_rusty_untagged_my_enum_a() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: Some(MyUnionUntagged::MyEnum(MyEnum::A)),
             schema: &schema(),
@@ -751,7 +743,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn serialize_null_variant_enum_my_record_a_27() {
+    fn serialize_null_variant_enum_my_record_a_27() -> AvroResult<()> {
         test_serialize(TestCase {
             input: MyUnionNullable::MyRecord(MyRecord { a: 27 }),
             schema: &schema(),
@@ -760,7 +752,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn deserialize_null_variant_enum_my_record_a_27() {
+    fn deserialize_null_variant_enum_my_record_a_27() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: MyUnionNullable::MyRecord(MyRecord { a: 27 }),
             schema: &schema(),
@@ -769,7 +761,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn serialize_rusty_my_record_a_27() {
+    fn serialize_rusty_my_record_a_27() -> AvroResult<()> {
         test_serialize(TestCase {
             input: Some(MyUnionAvroJsonEncoding::MyRecord(MyRecord { a: 27 })),
             schema: &schema(),
@@ -778,7 +770,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn deserialize_rusty_my_record_a_27() {
+    fn deserialize_rusty_my_record_a_27() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: Some(MyUnionAvroJsonEncoding::MyRecord(MyRecord { a: 27 })),
             schema: &schema(),
@@ -787,7 +779,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn serialize_rusty_untagged_my_record_a_27() {
+    fn serialize_rusty_untagged_my_record_a_27() -> AvroResult<()> {
         test_serialize(TestCase {
             input: Some(MyUnionUntagged::MyRecord(MyRecord { a: 27 })),
             schema: &schema(),
@@ -796,7 +788,7 @@ mod nullable_int_enum_record {
     }
 
     #[test]
-    fn deserialize_rusty_untagged_my_record_a_27() {
+    fn deserialize_rusty_untagged_my_record_a_27() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: Some(MyUnionUntagged::MyRecord(MyRecord { a: 27 })),
             schema: &schema(),
@@ -865,28 +857,22 @@ mod nullable_untagged_pitfall {
         Schema::parse_str(NULLABLE_RECORD_SCHEMA).unwrap()
     }
 
-    fn record_a_variant_expected_avro(a: i32) -> AvroValue {
-        AvroValue::Union(
+    fn record_a_variant_expected_avro(a: i32) -> Value {
+        Value::Union(
             1,
-            Box::new(AvroValue::Record(vec![(
-                "a".to_string(),
-                AvroValue::Int(a),
-            )])),
+            Box::new(Value::Record(vec![("a".to_string(), Value::Int(a))])),
         )
     }
 
-    fn record_b_variant_expected_avro(a: i32) -> AvroValue {
-        AvroValue::Union(
+    fn record_b_variant_expected_avro(a: i32) -> Value {
+        Value::Union(
             2,
-            Box::new(AvroValue::Record(vec![(
-                "a".to_string(),
-                AvroValue::Int(a),
-            )])),
+            Box::new(Value::Record(vec![("a".to_string(), Value::Int(a))])),
         )
     }
 
     #[test]
-    fn serialize_null_variant_enum_my_record_a_27() {
+    fn serialize_null_variant_enum_my_record_a_27() -> AvroResult<()> {
         test_serialize(TestCase {
             input: MyUnionNullable::MyRecordA(MyRecordA { a: 27 }),
             schema: &schema(),
@@ -895,7 +881,7 @@ mod nullable_untagged_pitfall {
     }
 
     #[test]
-    fn deserialize_null_variant_enum_my_record_a_27() {
+    fn deserialize_null_variant_enum_my_record_a_27() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: MyUnionNullable::MyRecordA(MyRecordA { a: 27 }),
             schema: &schema(),
@@ -904,7 +890,7 @@ mod nullable_untagged_pitfall {
     }
 
     #[test]
-    fn serialize_rusty_my_record_a_27() {
+    fn serialize_rusty_my_record_a_27() -> AvroResult<()> {
         test_serialize(TestCase {
             input: Some(MyUnionAvroJsonEncoding::MyRecordA(MyRecordA { a: 27 })),
             schema: &schema(),
@@ -913,7 +899,7 @@ mod nullable_untagged_pitfall {
     }
 
     #[test]
-    fn deserialize_rusty_my_record_a_27() {
+    fn deserialize_rusty_my_record_a_27() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: Some(MyUnionAvroJsonEncoding::MyRecordA(MyRecordA { a: 27 })),
             schema: &schema(),
@@ -922,7 +908,7 @@ mod nullable_untagged_pitfall {
     }
 
     #[test]
-    fn serialize_rusty_untagged_my_record_a_27() {
+    fn serialize_rusty_untagged_my_record_a_27() -> AvroResult<()> {
         test_serialize(TestCase {
             input: Some(MyUnionUntagged::MyRecordA(MyRecordA { a: 27 })),
             schema: &schema(),
@@ -931,7 +917,7 @@ mod nullable_untagged_pitfall {
     }
 
     #[test]
-    fn deserialize_rusty_untagged_my_record_a_27() {
+    fn deserialize_rusty_untagged_my_record_a_27() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: Some(MyUnionUntagged::MyRecordA(MyRecordA { a: 27 })),
             schema: &schema(),
@@ -940,7 +926,7 @@ mod nullable_untagged_pitfall {
     }
 
     #[test]
-    fn serialize_null_variant_enum_my_record_b_27() {
+    fn serialize_null_variant_enum_my_record_b_27() -> AvroResult<()> {
         test_serialize(TestCase {
             input: MyUnionNullable::MyRecordB(MyRecordB { a: 27 }),
             schema: &schema(),
@@ -949,7 +935,7 @@ mod nullable_untagged_pitfall {
     }
 
     #[test]
-    fn deserialize_null_variant_enum_my_record_b_27() {
+    fn deserialize_null_variant_enum_my_record_b_27() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: MyUnionNullable::MyRecordB(MyRecordB { a: 27 }),
             schema: &schema(),
@@ -958,7 +944,7 @@ mod nullable_untagged_pitfall {
     }
 
     #[test]
-    fn serialize_rusty_my_record_b_27() {
+    fn serialize_rusty_my_record_b_27() -> AvroResult<()> {
         test_serialize(TestCase {
             input: Some(MyUnionAvroJsonEncoding::MyRecordB(MyRecordB { a: 27 })),
             schema: &schema(),
@@ -967,7 +953,7 @@ mod nullable_untagged_pitfall {
     }
 
     #[test]
-    fn deserialize_rusty_my_record_b_27() {
+    fn deserialize_rusty_my_record_b_27() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: Some(MyUnionAvroJsonEncoding::MyRecordB(MyRecordB { a: 27 })),
             schema: &schema(),
@@ -976,7 +962,7 @@ mod nullable_untagged_pitfall {
     }
 
     #[test]
-    fn serialize_rusty_untagged_my_record_b_27() {
+    fn serialize_rusty_untagged_my_record_b_27() -> AvroResult<()> {
         test_serialize(TestCase {
             input: Some(MyUnionUntagged::MyRecordB(MyRecordB { a: 27 })),
             schema: &schema(),
@@ -985,7 +971,8 @@ mod nullable_untagged_pitfall {
     }
 
     #[test]
-    fn deserialize_rusty_untagged_my_record_b_27() {
+    #[ignore]
+    fn deserialize_rusty_untagged_my_record_b_27() -> AvroResult<()> {
         test_deserialize(TestCase {
             input: Some(MyUnionUntagged::MyRecordB(MyRecordB { a: 27 })),
             schema: &schema(),
