@@ -82,7 +82,7 @@ impl<'de> Deserializer<'de> {
         }
     }
 
-    pub fn new_deserializing_some(input: &'de Value) -> Self {
+    fn new_deserializing_some(input: &'de Value) -> Self {
         Deserializer {
             input,
             deserializing_some: true,
