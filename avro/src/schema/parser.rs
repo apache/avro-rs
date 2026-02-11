@@ -187,7 +187,14 @@ impl Parser {
             .input_schemas
             .remove(&fully_qualified_name)
             // TODO make a better descriptive error message here that conveys that a named schema cannot be found
-            .ok_or_else(|| Details::ParsePrimitive(fully_qualified_name.fullname(None)))?;
+            .ok_or_else(|| {
+                let full_name = fully_qualified_name.fullname(None);
+                if full_name == "bool" {
+                    Details::ParsePrimitiveSimilar(full_name, "boolean")
+                } else {
+                    Details::ParsePrimitive(full_name)
+                }
+            })?;
 
         // parsing a full schema from inside another schema. Other full schema will not inherit namespace
         let parsed = self.parse(&value, &None)?;
