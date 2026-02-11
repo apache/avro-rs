@@ -42,17 +42,14 @@ mod nullable_enum {
     use super::*;
 
     const NULLABLE_ENUM_SCHEMA: &str = r#"
-    {
-        "name": "MyUnion",
-        "type": [
-            "null",
-            {
-                "type": "enum",
-                "name": "MyEnum",
-                "symbols": ["A", "B"]
-            }
-        ]
-    }
+    [
+        "null",
+        {
+            "type": "enum",
+            "name": "MyEnum",
+            "symbols": ["A", "B"]
+        }
+    ]
     "#;
 
     #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -197,13 +194,10 @@ mod nullable_primitive_int {
     use super::*;
 
     const NULLABLE_INT_SCHEMA: &str = r#"
-    {
-        "name": "MyUnion",
-        "type": [
-            "null",
-            "int"
-        ]
-    }
+    [
+        "null",
+        "int"
+    ]
     "#;
 
     #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -343,19 +337,16 @@ mod nullable_record {
     use super::*;
 
     const NULLABLE_RECORD_SCHEMA: &str = r#"
-    {
-        "name": "MyUnion",
-        "type": [
-            "null",
-            {
-                "type": "record",
-                "name": "MyRecord",
-                "fields": [
-                    {"name": "a", "type": "int"}
-                ]
-            }
-        ]
-    }
+    [
+        "null",
+        {
+            "type": "record",
+            "name": "MyRecord",
+            "fields": [
+                {"name": "a", "type": "int"}
+            ]
+        }
+    ]
     "#;
 
     #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -502,25 +493,22 @@ mod nullable_int_enum_record {
     use super::*;
 
     const NULLABLE_INT_ENUM_RECORD_SCHEMA: &str = r#"
-    {
-        "name": "MyUnion",
-        "type": [
-            "null",
-            "int",
-            {
-                "type": "enum",
-                "name": "MyEnum",
-                "symbols": ["A", "B"]
-            },
-            {
-                "type": "record",
-                "name": "MyRecord",
-                "fields": [
-                    {"name": "a", "type": "int"}
-                ]
-            }
-        ]
-    }
+    [
+        "null",
+        "int",
+        {
+            "type": "enum",
+            "name": "MyEnum",
+            "symbols": ["A", "B"]
+        },
+        {
+            "type": "record",
+            "name": "MyRecord",
+            "fields": [
+                {"name": "a", "type": "int"}
+            ]
+        }
+    ]
     "#;
 
     #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -801,26 +789,23 @@ mod nullable_untagged_pitfall {
     use super::*;
 
     const NULLABLE_RECORD_SCHEMA: &str = r#"
-    {
-        "name": "MyUnion",
-        "type": [
-            "null",
-            {
-                "type": "record",
-                "name": "MyRecordA",
-                "fields": [
-                    {"name": "a", "type": "int"}
-                ]
-            },
-            {
-                "type": "record",
-                "name": "MyRecordB",
-                "fields": [
-                    {"name": "a", "type": "int"}
-                ]
-            }
-        ]
-    }
+    [
+        "null",
+        {
+            "type": "record",
+            "name": "MyRecordA",
+            "fields": [
+                {"name": "a", "type": "int"}
+            ]
+        },
+        {
+            "type": "record",
+            "name": "MyRecordB",
+            "fields": [
+                {"name": "a", "type": "int"}
+            ]
+        }
+    ]
     "#;
 
     #[derive(Debug, Serialize, Deserialize, PartialEq)]
