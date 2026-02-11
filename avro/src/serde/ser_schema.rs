@@ -1500,6 +1500,22 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                                 encode_int(i as i32, &mut self.writer)?;
                                 return encode_int(variant_index as i32, &mut self.writer);
                             }
+                            Schema::Ref { name: ref_name } => {
+                                let ref_schema = self.get_ref_schema(ref_name)?;
+                                if let Schema::Enum(enum_schema) = ref_schema
+                                    && enum_schema.name.name == name
+                                {
+                                    if variant_index as usize >= enum_schema.symbols.len() {
+                                        return Err(create_error(format!(
+                                            "Variant index out of bounds: {}. The Enum schema has '{}' symbols",
+                                            variant_index,
+                                            enum_schema.symbols.len()
+                                        )));
+                                    }
+                                    encode_int(i as i32, &mut self.writer)?;
+                                    return encode_int(variant_index as i32, &mut self.writer);
+                                }
+                            }
                             _ => { /* skip */ }
                         }
                     }
@@ -2129,7 +2145,7 @@ mod tests {
     use crate::schema::FixedSchema;
     use crate::{
         Days, Duration, Millis, Months, Reader, Writer, decimal::Decimal, error::Details,
-        from_value, schema::ResolvedSchema,
+        from_value, schema::ResolvedSchema, types::Value,
     };
     use apache_avro_test_helper::TestResult;
     use bigdecimal::BigDecimal;
@@ -3752,6 +3768,64 @@ mod tests {
                 )
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn serialize_option_enum_using_ref() -> TestResult {
+        let enum_schema = r#"
+        {
+            "type": "enum",
+            "name": "MyEnum",
+            "symbols": ["A", "B"]
+        }
+        "#;
+
+        let outer_schema = r#"
+        {
+            "type": "record",
+            "name": "MyRecord",
+            "fields": [
+                {"name": "a", "type": ["null", "MyEnum"]}
+            ]
+        }
+        "#;
+
+        let schemas = Schema::parse_list([enum_schema, outer_schema])?;
+
+        #[derive(Debug, Serialize)]
+        #[allow(dead_code)]
+        enum MyEnum {
+            A,
+            B,
+        }
+
+        #[derive(Debug, Serialize)]
+        struct MyRecord {
+            a: Option<MyEnum>,
+        }
+
+        let input = MyRecord { a: Some(MyEnum::A) };
+        let expected = Value::Record(vec![(
+            "a".to_string(),
+            Value::Union(1, Box::new(Value::Enum(0, "A".to_string()))),
+        )]);
+
+        let mut writer = Writer::with_schemata(
+            &schemas[1],
+            schemas.iter().collect(),
+            Vec::new(),
+            crate::Codec::Null,
+        )?;
+        writer.append_ser(&input)?;
+        let bytes = writer.into_inner()?;
+        let mut reader = Reader::with_schemata(&schemas[1], schemas.iter().collect(), &bytes[..])?;
+        let read_avro_value = reader.next().unwrap()?;
+        assert_eq!(
+            &read_avro_value, &expected,
+            "serialization is not correct: expected: {:?}, got: {:?}, input: {:?}",
+            expected, read_avro_value, input
+        );
         Ok(())
     }
 }
