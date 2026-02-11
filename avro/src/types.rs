@@ -766,6 +766,13 @@ impl Value {
                 }
                 Value::Uuid(Uuid::from_slice(bytes).map_err(Details::ConvertSliceToUuid)?)
             }
+            (Value::String(ref string), UuidSchema::Fixed(_)) => {
+                let bytes = string.as_bytes();
+                if bytes.len() != 16 {
+                    return Err(Details::ConvertFixedToUuid(bytes.len()).into());
+                }
+                Value::Uuid(Uuid::from_slice(bytes).map_err(Details::ConvertSliceToUuid)?)
+            }
             (other, _) => return Err(Details::GetUuid(other).into()),
         };
         Ok(value)

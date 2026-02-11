@@ -25,7 +25,9 @@ use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
     sync::Mutex,
+    time::Duration,
 };
+use uuid::Uuid;
 
 use pretty_assertions::assert_eq;
 
@@ -1369,6 +1371,7 @@ fn test_basic_struct_with_defaults() {
         #[avro(default = "true")]
         condition: bool,
         // no default value for 'c'
+        #[avro(default = false)]
         c: f64,
         #[avro(default = r#"{"a": 1, "b": 2}"#)]
         map: HashMap<String, i32>,
@@ -1942,6 +1945,7 @@ fn avro_rs_397_uuid() {
                     "type":"fixed",
                     "logicalType":"uuid",
                     "name":"uuid",
+                    "default":"\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
                     "size":16
                 }
             }
@@ -2373,4 +2377,204 @@ fn avro_rs_448_flatten_field_positions() {
         .map(|f| f.position)
         .collect::<Vec<_>>();
     assert_eq!(positions.as_slice(), &[0, 1, 2, 3][..]);
+}
+
+#[test]
+fn avro_rs_476_field_default() {
+    #[derive(AvroSchema)]
+    struct Bar {
+        _field: Box<Bar>,
+    }
+
+    #[derive(AvroSchema)]
+    #[avro(default = r#"{"_field": true}"#)]
+    struct Spam {
+        _field: bool,
+    }
+
+    #[derive(AvroSchema)]
+    struct Foo {
+        _a: bool,
+        _b: i8,
+        _c: i16,
+        _d: i32,
+        _e: i64,
+        _f: u8,
+        _g: u16,
+        _h: u32,
+        _i: f32,
+        _j: f64,
+        _k: String,
+        _l: Box<str>,
+        _m: char,
+        _n: Box<Spam>,
+        _o: Vec<bool>,
+        _p: [u8; 5],
+        _p_alt: [Bar; 5],
+        _q: HashMap<String, String>,
+        _r: Option<f64>,
+        _s: Duration,
+        _t: Uuid,
+        _u: u64,
+        _v: u128,
+        _w: i128,
+        _x: Bar,
+    }
+
+    let schema = Foo::get_schema();
+    assert_eq!(
+        serde_json::to_string(&schema).unwrap(),
+        r#"{"type":"record","name":"Foo","fields":[{"name":"_a","type":"boolean","default":false},{"name":"_b","type":"int","default":0},{"name":"_c","type":"int","default":0},{"name":"_d","type":"int","default":0},{"name":"_e","type":"long","default":0},{"name":"_f","type":"int","default":0},{"name":"_g","type":"int","default":0},{"name":"_h","type":"long","default":0},{"name":"_i","type":"float","default":0.0},{"name":"_j","type":"double","default":0.0},{"name":"_k","type":"string","default":""},{"name":"_l","type":"string","default":""},{"name":"_m","type":"string","default":"\u0000"},{"name":"_n","type":{"type":"record","name":"Spam","fields":[{"name":"_field","type":"boolean","default":false}]},"default":{"_field":true}},{"name":"_o","type":{"type":"array","items":"boolean"},"default":[]},{"name":"_p","type":{"type":"array","items":"int"},"default":[0,0,0,0,0]},{"name":"_p_alt","type":{"type":"array","items":{"type":"record","name":"Bar","fields":[{"name":"_field","type":"Bar"}]}}},{"name":"_q","type":{"type":"map","values":"string"},"default":{}},{"name":"_r","type":["null","double"],"default":null},{"name":"_s","type":{"type":"fixed","name":"duration","size":12,"logicalType":"duration"},"default":"\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"},{"name":"_t","type":{"type":"fixed","name":"uuid","size":16,"logicalType":"uuid"},"default":"\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"},{"name":"_u","type":{"type":"fixed","name":"u64","size":8},"default":"\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"},{"name":"_v","type":{"type":"fixed","name":"u128","size":16},"default":"\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"},{"name":"_w","type":{"type":"fixed","name":"i128","size":16},"default":"\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"},{"name":"_x","type":"Bar"}]}"#
+    );
+}
+
+#[test]
+fn avro_rs_476_field_default_false() {
+    #[derive(AvroSchema)]
+    struct Bar {
+        _field: Box<Bar>,
+    }
+
+    #[derive(AvroSchema)]
+    #[avro(default = r#"{"_field": true}"#)]
+    struct Spam {
+        _field: bool,
+    }
+
+    #[derive(AvroSchema)]
+    struct Foo {
+        #[avro(default = false)]
+        _a: bool,
+        #[avro(default = false)]
+        _b: i8,
+        #[avro(default = false)]
+        _c: i16,
+        #[avro(default = false)]
+        _d: i32,
+        #[avro(default = false)]
+        _e: i64,
+        #[avro(default = false)]
+        _f: u8,
+        #[avro(default = false)]
+        _g: u16,
+        #[avro(default = false)]
+        _h: u32,
+        #[avro(default = false)]
+        _i: f32,
+        #[avro(default = false)]
+        _j: f64,
+        #[avro(default = false)]
+        _k: String,
+        #[avro(default = false)]
+        _l: Box<str>,
+        #[avro(default = false)]
+        _m: char,
+        #[avro(default = false)]
+        _n: Box<Spam>,
+        #[avro(default = false)]
+        _o: Vec<bool>,
+        #[avro(default = false)]
+        _p: [u8; 5],
+        #[avro(default = false)]
+        _p_alt: [Bar; 5],
+        #[avro(default = false)]
+        _q: HashMap<String, String>,
+        #[avro(default = false)]
+        _r: Option<f64>,
+        #[avro(default = false)]
+        _s: Duration,
+        #[avro(default = false)]
+        _t: Uuid,
+        #[avro(default = false)]
+        _u: u64,
+        #[avro(default = false)]
+        _v: u128,
+        #[avro(default = false)]
+        _w: i128,
+        #[avro(default = false)]
+        _x: Bar,
+    }
+
+    let schema = Foo::get_schema();
+    assert_eq!(
+        serde_json::to_string(&schema).unwrap(),
+        r#"{"type":"record","name":"Foo","fields":[{"name":"_a","type":"boolean"},{"name":"_b","type":"int"},{"name":"_c","type":"int"},{"name":"_d","type":"int"},{"name":"_e","type":"long"},{"name":"_f","type":"int"},{"name":"_g","type":"int"},{"name":"_h","type":"long"},{"name":"_i","type":"float"},{"name":"_j","type":"double"},{"name":"_k","type":"string"},{"name":"_l","type":"string"},{"name":"_m","type":"string"},{"name":"_n","type":{"type":"record","name":"Spam","fields":[{"name":"_field","type":"boolean","default":false}]}},{"name":"_o","type":{"type":"array","items":"boolean"}},{"name":"_p","type":{"type":"array","items":"int"}},{"name":"_p_alt","type":{"type":"array","items":{"type":"record","name":"Bar","fields":[{"name":"_field","type":"Bar"}]}}},{"name":"_q","type":{"type":"map","values":"string"}},{"name":"_r","type":["null","double"]},{"name":"_s","type":{"type":"fixed","name":"duration","size":12,"logicalType":"duration"}},{"name":"_t","type":{"type":"fixed","name":"uuid","size":16,"logicalType":"uuid"}},{"name":"_u","type":{"type":"fixed","name":"u64","size":8}},{"name":"_v","type":{"type":"fixed","name":"u128","size":16}},{"name":"_w","type":{"type":"fixed","name":"i128","size":16}},{"name":"_x","type":"Bar"}]}"#
+    );
+}
+
+#[test]
+fn avro_rs_476_field_default_provided() {
+    #[derive(AvroSchema)]
+    #[avro(default = r#"{"_field": true}"#)]
+    struct Spam {
+        _field: bool,
+    }
+
+    #[derive(AvroSchema)]
+    struct Foo {
+        #[avro(default = "true")]
+        _a: bool,
+        #[avro(default = "42")]
+        _b: i8,
+        #[avro(default = "42")]
+        _c: i16,
+        #[avro(default = "42")]
+        _d: i32,
+        #[avro(default = "42")]
+        _e: i64,
+        #[avro(default = "42")]
+        _f: u8,
+        #[avro(default = "42")]
+        _g: u16,
+        #[avro(default = "42")]
+        _h: u32,
+        #[avro(default = "42.0")]
+        _i: f32,
+        #[avro(default = "42.0")]
+        _j: f64,
+        #[avro(default = r#""String""#)]
+        _k: String,
+        #[avro(default = r#""str""#)]
+        _l: Box<str>,
+        #[avro(default = r#""Z""#)]
+        _m: char,
+        #[avro(default = r#"{"_field": false}"#)]
+        _n: Box<Spam>,
+        #[avro(default = "[true, false, true]")]
+        _o: Vec<bool>,
+        #[avro(default = "[1,2,3,4,5]")]
+        _p: [u8; 5],
+        #[avro(
+            default = r#"[{"_field": true},{"_field": false},{"_field": true},{"_field": false},{"_field": true}]"#
+        )]
+        _p_alt: [Spam; 5],
+        #[avro(default = r#"{"A": "B"}"#)]
+        _q: HashMap<String, String>,
+        #[avro(default = "42.0")]
+        _r: Option<f64>,
+        #[avro(
+            default = r#""\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001""#
+        )]
+        _s: Duration,
+        #[avro(
+            default = r#""\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001""#
+        )]
+        _t: Uuid,
+        #[avro(default = r#""\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001""#)]
+        _u: u64,
+        #[avro(
+            default = r#""\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001""#
+        )]
+        _v: u128,
+        #[avro(
+            default = r#""\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001""#
+        )]
+        _w: i128,
+    }
+
+    let schema = Foo::get_schema();
+    assert_eq!(
+        serde_json::to_string(&schema).unwrap(),
+        r#"{"type":"record","name":"Foo","fields":[{"name":"_a","type":"boolean","default":true},{"name":"_b","type":"int","default":42},{"name":"_c","type":"int","default":42},{"name":"_d","type":"int","default":42},{"name":"_e","type":"long","default":42},{"name":"_f","type":"int","default":42},{"name":"_g","type":"int","default":42},{"name":"_h","type":"long","default":42},{"name":"_i","type":"float","default":42.0},{"name":"_j","type":"double","default":42.0},{"name":"_k","type":"string","default":"String"},{"name":"_l","type":"string","default":"str"},{"name":"_m","type":"string","default":"Z"},{"name":"_n","type":{"type":"record","name":"Spam","fields":[{"name":"_field","type":"boolean","default":false}]},"default":{"_field":false}},{"name":"_o","type":{"type":"array","items":"boolean"},"default":[true,false,true]},{"name":"_p","type":{"type":"array","items":"int"},"default":[1,2,3,4,5]},{"name":"_p_alt","type":{"type":"array","items":"Spam"},"default":[{"_field":true},{"_field":false},{"_field":true},{"_field":false},{"_field":true}]},{"name":"_q","type":{"type":"map","values":"string"},"default":{"A":"B"}},{"name":"_r","type":["null","double"],"default":42.0},{"name":"_s","type":{"type":"fixed","name":"duration","size":12,"logicalType":"duration"},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_t","type":{"type":"fixed","name":"uuid","size":16,"logicalType":"uuid"},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_u","type":{"type":"fixed","name":"u64","size":8},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_v","type":{"type":"fixed","name":"u128","size":16},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_w","type":{"type":"fixed","name":"i128","size":16},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"}]}"#
+    );
 }
