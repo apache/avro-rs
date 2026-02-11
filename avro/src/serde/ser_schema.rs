@@ -1508,7 +1508,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 if branch_index >= union_schema.schemas.len() {
                     return Err(create_error(format!(
                         "Variant index out of bounds: {}. The union schema has '{}' schemas",
-                        variant_index,
+                        branch_index,
                         union_schema.schemas.len()
                     )));
                 }
@@ -1577,7 +1577,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 if branch_index >= union_schema.schemas.len() {
                     return Err(create_error(format!(
                         "Variant index out of bounds: {}. The union schema has '{}' schemas",
-                        variant_index,
+                        branch_index,
                         union_schema.schemas.len()
                     )));
                 }
@@ -1767,7 +1767,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 if branch_index >= union_schema.schemas.len() {
                     return Err(create_error(format!(
                         "Variant index out of bounds: {}. The union schema has '{}' schemas",
-                        variant_index,
+                        branch_index,
                         union_schema.schemas.len()
                     )));
                 }
@@ -1910,7 +1910,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 if branch_index >= union_schema.schemas.len() {
                     return Err(create_error(format!(
                         "Variant index out of bounds: {}. The union schema has '{}' schemas",
-                        variant_index,
+                        branch_index,
                         union_schema.schemas.len()
                     )));
                 }
