@@ -5128,4 +5128,25 @@ mod tests {
         );
         Ok(())
     }
+
+    #[test]
+    fn avro_rs_456_bool_instead_of_boolean() -> TestResult {
+        let error = Schema::parse_str(
+            r#"{
+            "type": "record",
+            "name": "defaults",
+            "fields": [
+                {"name": "boolean", "type": "bool", "default": true}
+            ]
+        }"#,
+        )
+        .unwrap_err()
+        .into_details()
+        .to_string();
+        assert_eq!(
+            error,
+            Details::ParsePrimitiveSimilar("bool".to_string(), "boolean").to_string()
+        );
+        Ok(())
+    }
 }

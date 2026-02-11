@@ -358,6 +358,9 @@ pub enum Details {
     #[error("Unknown primitive type: {0}")]
     ParsePrimitive(String),
 
+    #[error("Unknown primitive type: '{0}'. Did you mean '{1}' ?")]
+    ParsePrimitiveSimilar(String, &'static str),
+
     #[error("invalid JSON for {key:?}: {value:?}")]
     GetDecimalMetadataValueFromJson {
         key: String,
