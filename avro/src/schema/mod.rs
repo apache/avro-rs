@@ -294,17 +294,21 @@ impl FixedSchema {
         S: Serializer,
     {
         map.serialize_entry("type", "fixed")?;
-        if let Some(ref n) = self.name.namespace {
+        if let Some(n) = self.name.namespace.as_ref() {
             map.serialize_entry("namespace", n)?;
         }
         map.serialize_entry("name", &self.name.name)?;
-        if let Some(ref docstr) = self.doc {
+        if let Some(docstr) = self.doc.as_ref() {
             map.serialize_entry("doc", docstr)?;
         }
         map.serialize_entry("size", &self.size)?;
 
-        if let Some(ref aliases) = self.aliases {
+        if let Some(aliases) = self.aliases.as_ref() {
             map.serialize_entry("aliases", aliases)?;
+        }
+
+        if let Some(default) = self.default.as_ref() {
+            map.serialize_entry("default", default)?;
         }
 
         for attr in &self.attributes {
@@ -783,7 +787,7 @@ impl Serialize for Schema {
                 doc,
                 fields,
                 attributes,
-                ..
+                lookup: _lookup,
             }) => {
                 let mut map = serializer.serialize_map(None)?;
                 map.serialize_entry("type", "record")?;
@@ -808,7 +812,8 @@ impl Serialize for Schema {
                 symbols,
                 aliases,
                 attributes,
-                ..
+                default,
+                doc,
             }) => {
                 let mut map = serializer.serialize_map(None)?;
                 map.serialize_entry("type", "enum")?;
@@ -820,6 +825,12 @@ impl Serialize for Schema {
 
                 if let Some(aliases) = aliases {
                     map.serialize_entry("aliases", aliases)?;
+                }
+                if let Some(default) = default {
+                    map.serialize_entry("default", default)?;
+                }
+                if let Some(doc) = doc {
+                    map.serialize_entry("doc", doc)?;
                 }
                 for attr in attributes {
                     map.serialize_entry(attr.0, attr.1)?;
@@ -5147,6 +5158,58 @@ mod tests {
             error,
             Details::ParsePrimitiveSimilar("bool".to_string(), "boolean").to_string()
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_460_fixed_default_in_custom_attributes() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "fixed_with_default",
+            "type": "fixed",
+            "size": 1,
+            "default": "\u0000",
+            "doc": "a docstring"
+        }"#,
+        )?;
+
+        assert_eq!(schema.custom_attributes().unwrap(), &BTreeMap::new());
+
+        let json = serde_json::to_string(&schema)?;
+        let schema2 = Schema::parse_str(&json)?;
+
+        let Schema::Fixed(fixed) = schema2 else {
+            panic!("Expected Schema::Fixed, got {schema2:?}");
+        };
+        assert!(fixed.default.is_some());
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_460_enum_default_in_custom_attributes() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "fixed_with_default",
+            "type": "enum",
+            "symbols": ["A", "B", "C"],
+            "default": "A",
+            "doc": "a docstring"
+        }"#,
+        )?;
+
+        assert_eq!(schema.custom_attributes().unwrap(), &BTreeMap::new());
+
+        let json = serde_json::to_string(&schema)?;
+        let schema2 = Schema::parse_str(&json)?;
+
+        let Schema::Enum(enum_schema) = schema2 else {
+            panic!("Expected Schema::Fixed, got {schema2:?}");
+        };
+        assert!(enum_schema.default.is_some());
+        assert!(enum_schema.doc.is_some());
+
         Ok(())
     }
 }
