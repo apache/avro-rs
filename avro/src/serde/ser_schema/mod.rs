@@ -3809,8 +3809,7 @@ mod tests {
         let read_avro_value = reader.next().unwrap()?;
         assert_eq!(
             &read_avro_value, &expected,
-            "serialization is not correct: expected: {:?}, got: {:?}, input: {:?}",
-            expected, read_avro_value, input
+            "serialization is not correct: expected: {expected:?}, got: {read_avro_value:?}, input: {input:?}",
         );
         Ok(())
     }
