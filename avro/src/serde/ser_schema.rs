@@ -634,7 +634,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         }
     }
 
-    pub fn new_serializing_some(
+    fn new_serializing_some(
         writer: &'s mut W,
         schema: &'s Schema,
         names: &'s NamesRef<'s>,
