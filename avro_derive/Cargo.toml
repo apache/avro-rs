@@ -45,7 +45,7 @@ pretty_assertions = { workspace = true }
 proptest = { default-features = false, version = "1.10.0", features = ["std"] }
 rustversion = "1.0.22"
 serde = { workspace = true }
-trybuild = "1.0.115"
+trybuild = "1.0.116"
 
 [build-dependencies]
 rustversion = "1.0.22"
