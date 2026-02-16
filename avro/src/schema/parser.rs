@@ -18,9 +18,9 @@
 use crate::error::Details;
 use crate::schema::record::RecordSchemaParseLocation;
 use crate::schema::{
-    Alias, Aliases, DecimalMetadata, DecimalSchema, EnumSchema, FixedSchema, Name, Names,
-    Namespace, Precision, RecordField, RecordSchema, Scale, Schema, SchemaKind, UnionSchema,
-    UuidSchema,
+    Alias, Aliases, ArraySchema, DecimalMetadata, DecimalSchema, EnumSchema, FixedSchema,
+    MapSchema, Name, Names, Namespace, Precision, RecordField, RecordSchema, Scale, Schema,
+    SchemaKind, UnionSchema, UuidSchema,
 };
 use crate::types;
 use crate::util::MapHelper;
@@ -704,16 +704,31 @@ impl Parser {
         complex: &Map<String, Value>,
         enclosing_namespace: &Namespace,
     ) -> AvroResult<Schema> {
-        complex
+        let items = complex
             .get("items")
             .ok_or_else(|| Details::GetArrayItemsField.into())
-            .and_then(|items| self.parse(items, enclosing_namespace))
-            .map(|items| {
-                Schema::array_with_attributes(
-                    items,
-                    self.get_custom_attributes(complex, vec!["items"]),
-                )
-            })
+            .and_then(|items| self.parse(items, enclosing_namespace))?;
+        let default = if let Some(default) = complex.get("default").cloned() {
+            if let Value::Array(_) = default {
+                let crate::types::Value::Array(array) = crate::types::Value::from(default) else {
+                    unreachable!("JsonValue::Array can only become a Value::Array")
+                };
+                // Check that the default type matches the schema type
+                if let Some(value) = array.iter().find(|v| !v.validate(&items)) {
+                    return Err(Details::ArrayDefaultWrongInnerType(items, value.clone()).into());
+                }
+                Some(array)
+            } else {
+                return Err(Details::ArrayDefaultWrongType(default).into());
+            }
+        } else {
+            None
+        };
+        Ok(Schema::Array(ArraySchema {
+            items: Box::new(items),
+            default,
+            attributes: self.get_custom_attributes(complex, vec!["items", "default"]),
+        }))
     }
 
     /// Parse a `serde_json::Value` representing a Avro map type into a `Schema`.
@@ -722,16 +737,33 @@ impl Parser {
         complex: &Map<String, Value>,
         enclosing_namespace: &Namespace,
     ) -> AvroResult<Schema> {
-        complex
+        let types = complex
             .get("values")
             .ok_or_else(|| Details::GetMapValuesField.into())
-            .and_then(|items| self.parse(items, enclosing_namespace))
-            .map(|items| {
-                Schema::map_with_attributes(
-                    items,
-                    self.get_custom_attributes(complex, vec!["values"]),
-                )
-            })
+            .and_then(|types| self.parse(types, enclosing_namespace))?;
+
+        let default = if let Some(default) = complex.get("default").cloned() {
+            if let Value::Object(_) = default {
+                let crate::types::Value::Map(map) = crate::types::Value::from(default) else {
+                    unreachable!("JsonValue::Object can only become a Value::Map")
+                };
+                // Check that the default type matches the schema type
+                if let Some(value) = map.values().find(|v| !v.validate(&types)) {
+                    return Err(Details::MapDefaultWrongInnerType(types, value.clone()).into());
+                }
+                Some(map)
+            } else {
+                return Err(Details::MapDefaultWrongType(default).into());
+            }
+        } else {
+            None
+        };
+
+        Ok(Schema::Map(MapSchema {
+            types: Box::new(types),
+            default,
+            attributes: self.get_custom_attributes(complex, vec!["values", "default"]),
+        }))
     }
 
     /// Parse a `serde_json::Value` representing a Avro union type into a `Schema`.

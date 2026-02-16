@@ -1346,7 +1346,7 @@ mod tests {
                 Value::Array(vec![Value::Boolean(true)]),
                 Schema::array(Schema::Long),
                 false,
-                "Invalid value: Array([Boolean(true)]) for schema: Array(ArraySchema { items: Long, attributes: {} }). Reason: Unsupported value-schema combination! Value: Boolean(true), schema: Long",
+                "Invalid value: Array([Boolean(true)]) for schema: Array(ArraySchema { items: Long, default: None, attributes: {} }). Reason: Unsupported value-schema combination! Value: Boolean(true), schema: Long",
             ),
             (
                 Value::Record(vec![]),

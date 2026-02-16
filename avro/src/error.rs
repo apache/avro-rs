@@ -431,8 +431,20 @@ pub enum Details {
     #[error("Duplicate enum symbol {0}")]
     EnumSymbolDuplicate(String),
 
-    #[error("Default value for enum must be a string! Got: {0}")]
+    #[error("Default value for an enum must be a string! Got: {0}")]
     EnumDefaultWrongType(serde_json::Value),
+
+    #[error("Default value for an array must be an array! Got: {0}")]
+    ArrayDefaultWrongType(serde_json::Value),
+
+    #[error("Default value for an array must be an array of {0}! Found: {1:?}")]
+    ArrayDefaultWrongInnerType(Schema, Value),
+
+    #[error("Default value for a map must be a object! Got: {0}")]
+    MapDefaultWrongType(serde_json::Value),
+
+    #[error("Default value for a map must be a object with (String, {0})! Found: (String, {1:?})")]
+    MapDefaultWrongInnerType(Schema, Value),
 
     #[error("No `items` in array")]
     GetArrayItemsField,
@@ -446,6 +458,7 @@ pub enum Details {
     #[error("Fixed schema has no `size`")]
     GetFixedSizeField,
 
+    #[deprecated(since = "0.22.0", note = "This error variant is not generated anymore")]
     #[error("Fixed schema's default value length ({0}) does not match its size ({1})")]
     FixedDefaultLenSizeMismatch(usize, u64),
 
