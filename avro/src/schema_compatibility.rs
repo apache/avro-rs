@@ -857,7 +857,6 @@ mod tests {
             aliases: None,
             doc: None,
             size: 16,
-            default: None,
             attributes: Default::default(),
         };
 
@@ -1700,7 +1699,6 @@ mod tests {
                 aliases: None,
                 doc: None,
                 size: 20,
-                default: None,
                 attributes: BTreeMap::default(),
             }),
         });

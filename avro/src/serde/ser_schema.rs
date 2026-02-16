@@ -3322,7 +3322,6 @@ mod tests {
             aliases: None,
             doc: None,
             size: 4,
-            default: None,
             attributes: Default::default(),
         });
 
@@ -3374,7 +3373,6 @@ mod tests {
             aliases: None,
             doc: None,
             size: 4,
-            default: None,
             attributes: Default::default(),
         });
 
@@ -3398,7 +3396,6 @@ mod tests {
             aliases: None,
             doc: None,
             size: 4,
-            default: None,
             attributes: Default::default(),
         });
 
@@ -3421,7 +3418,6 @@ mod tests {
             aliases: None,
             doc: None,
             size: 1,
-            default: None,
             attributes: Default::default(),
         });
 
@@ -3444,7 +3440,6 @@ mod tests {
             aliases: None,
             doc: None,
             size: 16,
-            default: None,
             attributes: Default::default(),
         });
 
@@ -3473,7 +3468,6 @@ mod tests {
             aliases: None,
             doc: None,
             size: 16,
-            default: None,
             attributes: Default::default(),
         });
 
@@ -3496,7 +3490,6 @@ mod tests {
             aliases: None,
             doc: None,
             size: 8,
-            default: None,
             attributes: Default::default(),
         });
 
@@ -3519,7 +3512,6 @@ mod tests {
             aliases: None,
             doc: None,
             size: 16,
-            default: None,
             attributes: Default::default(),
         });
 
@@ -3548,7 +3540,6 @@ mod tests {
             aliases: None,
             doc: None,
             size: 16,
-            default: None,
             attributes: Default::default(),
         });
 
@@ -3571,7 +3562,6 @@ mod tests {
             aliases: None,
             doc: None,
             size: 8,
-            default: None,
             attributes: Default::default(),
         });
 

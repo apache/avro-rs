@@ -1361,7 +1361,6 @@ mod tests {
                     aliases: None,
                     doc: None,
                     size: 12,
-                    default: None,
                     attributes: BTreeMap::new(),
                 }),
                 true,
@@ -1374,11 +1373,10 @@ mod tests {
                     aliases: None,
                     doc: None,
                     size: 12,
-                    default: None,
                     attributes: BTreeMap::new(),
                 }),
                 false,
-                "Invalid value: Fixed(11, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) for schema: Duration(FixedSchema { name: Name { name: \"TestName\", namespace: None }, aliases: None, doc: None, size: 12, default: None, attributes: {} }). Reason: The value's size ('11') must be exactly 12 to be a Duration",
+                "Invalid value: Fixed(11, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) for schema: Duration(FixedSchema { name: Name { name: \"TestName\", namespace: None }, aliases: None, doc: None, size: 12, attributes: {} }). Reason: The value's size ('11') must be exactly 12 to be a Duration",
             ),
             (
                 Value::Record(vec![("unknown_field_name".to_string(), Value::Null)]),
@@ -1453,7 +1451,6 @@ mod tests {
             name: Name::new("some_fixed").unwrap(),
             aliases: None,
             doc: None,
-            default: None,
             attributes: Default::default(),
         });
 
@@ -1824,7 +1821,6 @@ Field with name '"b"' is not a member of the map items"#,
                         aliases: None,
                         size: 20,
                         doc: None,
-                        default: None,
                         attributes: Default::default(),
                     })
                 }))
@@ -1929,7 +1925,6 @@ Field with name '"b"' is not a member of the map items"#,
                     aliases: None,
                     doc: None,
                     size: 12,
-                    default: None,
                     attributes: BTreeMap::new()
                 }))
                 .is_ok()
@@ -1942,7 +1937,6 @@ Field with name '"b"' is not a member of the map items"#,
                     aliases: None,
                     doc: None,
                     size: 12,
-                    default: None,
                     attributes: BTreeMap::new()
                 }))
                 .is_err()
@@ -1975,7 +1969,6 @@ Field with name '"b"' is not a member of the map items"#,
                     aliases: None,
                     doc: None,
                     size: 16,
-                    default: None,
                     attributes: Default::default(),
                 })))
                 .is_ok()
@@ -3184,7 +3177,6 @@ Field with name '"b"' is not a member of the map items"#,
                 aliases: None,
                 doc: None,
                 size: 3,
-                default: None,
                 attributes: Default::default()
             }))?,
             Value::Fixed(3, vec![97, 98, 99])
@@ -3198,7 +3190,6 @@ Field with name '"b"' is not a member of the map items"#,
                     aliases: None,
                     doc: None,
                     size: 3,
-                    default: None,
                     attributes: Default::default()
                 }))
                 .is_err(),
@@ -3212,7 +3203,6 @@ Field with name '"b"' is not a member of the map items"#,
                     aliases: None,
                     doc: None,
                     size: 3,
-                    default: None,
                     attributes: Default::default()
                 }))
                 .is_err(),
