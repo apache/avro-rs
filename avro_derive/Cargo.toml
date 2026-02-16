@@ -36,7 +36,7 @@ darling = { default-features = false, version = "0.21.3" }
 proc-macro2 = { default-features = false, version = "1.0.106" }
 quote = { default-features = false, version = "1.0.44" }
 serde_json = { workspace = true }
-syn = { default-features = false, version = "2.0.115", features = ["full", "fold"] }
+syn = { default-features = false, version = "2.0.116", features = ["full", "fold"] }
 uuid = { workspace = true }
 
 [dev-dependencies]
