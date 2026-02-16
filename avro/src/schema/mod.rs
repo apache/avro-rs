@@ -5150,7 +5150,7 @@ mod tests {
     fn avro_rs_460_enum_default_in_custom_attributes() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
-            "name": "fixed_with_default",
+            "name": "enum_with_default",
             "type": "enum",
             "symbols": ["A", "B", "C"],
             "default": "A",
