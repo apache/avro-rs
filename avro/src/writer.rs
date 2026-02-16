@@ -1054,7 +1054,6 @@ mod tests {
             aliases: None,
             doc: None,
             size,
-            default: None,
             attributes: Default::default(),
         };
         let inner = InnerDecimalSchema::Fixed(fixed.clone());
@@ -1095,7 +1094,6 @@ mod tests {
             aliases: None,
             doc: None,
             size: 12,
-            default: None,
             attributes: Default::default(),
         });
         let value = Value::Duration(Duration::new(
@@ -1110,7 +1108,6 @@ mod tests {
                 aliases: None,
                 doc: None,
                 size: 12,
-                default: None,
                 attributes: Default::default(),
             }),
             value,

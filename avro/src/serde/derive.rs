@@ -614,7 +614,6 @@ impl AvroSchemaComponent for core::time::Duration {
                 aliases: None,
                 doc: None,
                 size: 12,
-                default: None,
                 attributes: Default::default(),
             });
             named_schemas.insert(name, schema.clone());
@@ -648,7 +647,6 @@ impl AvroSchemaComponent for uuid::Uuid {
                 aliases: None,
                 doc: None,
                 size: 16,
-                default: None,
                 attributes: Default::default(),
             }));
             named_schemas.insert(name, schema.clone());
@@ -680,7 +678,6 @@ impl AvroSchemaComponent for u64 {
                 aliases: None,
                 doc: None,
                 size: 8,
-                default: None,
                 attributes: Default::default(),
             });
             named_schemas.insert(name, schema.clone());
@@ -712,7 +709,6 @@ impl AvroSchemaComponent for u128 {
                 aliases: None,
                 doc: None,
                 size: 16,
-                default: None,
                 attributes: Default::default(),
             });
             named_schemas.insert(name, schema.clone());
@@ -744,7 +740,6 @@ impl AvroSchemaComponent for i128 {
                 aliases: None,
                 doc: None,
                 size: 16,
-                default: None,
                 attributes: Default::default(),
             });
             named_schemas.insert(name, schema.clone());
@@ -834,7 +829,6 @@ mod tests {
                 aliases: None,
                 doc: None,
                 size: 8,
-                default: None,
                 attributes: Default::default(),
             })
         );
@@ -852,7 +846,6 @@ mod tests {
                 aliases: None,
                 doc: None,
                 size: 16,
-                default: None,
                 attributes: Default::default(),
             })
         );
@@ -870,7 +863,6 @@ mod tests {
                 aliases: None,
                 doc: None,
                 size: 16,
-                default: None,
                 attributes: Default::default(),
             })
         );

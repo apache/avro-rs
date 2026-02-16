@@ -971,7 +971,6 @@ pub(crate) mod tests {
             name: "uuid".try_into()?,
             aliases: None,
             doc: None,
-            default: None,
             attributes: Default::default(),
         });
         let value = Value::Uuid(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")?);

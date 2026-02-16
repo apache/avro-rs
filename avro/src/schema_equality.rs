@@ -315,7 +315,6 @@ mod tests {
             size: 12,
             aliases: None,
             doc: None,
-            default: None,
             attributes: BTreeMap::new(),
         });
         let schema_two = Schema::Duration(FixedSchema {
@@ -323,7 +322,6 @@ mod tests {
             size: 12,
             aliases: None,
             doc: None,
-            default: None,
             attributes: BTreeMap::new(),
         });
         let specification_eq_res = SPECIFICATION_EQ.compare(&schema_one, &schema_two);
@@ -338,7 +336,6 @@ mod tests {
             size: 12,
             aliases: None,
             doc: None,
-            default: None,
             attributes: BTreeMap::new(),
         });
         let schema_two = Schema::Duration(FixedSchema {
@@ -346,7 +343,6 @@ mod tests {
             size: 12,
             aliases: None,
             doc: None,
-            default: None,
             attributes: BTreeMap::new(),
         });
         let specification_eq_res = SPECIFICATION_EQ.compare(&schema_one, &schema_two);
@@ -363,7 +359,6 @@ mod tests {
             size: 12,
             aliases: None,
             doc: None,
-            default: None,
             attributes: vec![(String::from("attr1"), serde_json::Value::Bool(true))]
                 .into_iter()
                 .collect(),
@@ -373,7 +368,6 @@ mod tests {
             size: 12,
             aliases: None,
             doc: None,
-            default: None,
             attributes: BTreeMap::new(),
         });
         let specification_eq_res = SPECIFICATION_EQ.compare(&schema_one, &schema_two);
@@ -394,7 +388,6 @@ mod tests {
             size: 8,
             aliases: None,
             doc: None,
-            default: None,
             attributes: BTreeMap::new(),
         });
         let schema_two = Schema::Duration(FixedSchema {
@@ -402,7 +395,6 @@ mod tests {
             size: 12,
             aliases: None,
             doc: None,
-            default: None,
             attributes: BTreeMap::new(),
         });
         let specification_eq_res = SPECIFICATION_EQ.compare(&schema_one, &schema_two);
@@ -537,7 +529,6 @@ mod tests {
             name: Name::try_from("fixed").expect("Name is valid"),
             doc: None,
             size: 10,
-            default: None,
             aliases: None,
             attributes: BTreeMap::new(),
         });
@@ -548,7 +539,6 @@ mod tests {
             name: Name::try_from("fixed").expect("Name is valid"),
             doc: None,
             size: 10,
-            default: None,
             aliases: None,
             attributes: BTreeMap::new(),
         });
@@ -713,7 +703,6 @@ mod tests {
             aliases: None,
             doc: None,
             size: 16,
-            default: None,
             attributes: Default::default(),
         };
         let fixed = Schema::Uuid(UuidSchema::Fixed(fixed_schema.clone()));

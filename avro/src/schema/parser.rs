@@ -787,18 +787,6 @@ impl Parser {
             None => Err(Details::GetFixedSizeField),
         }?;
 
-        let default = complex.get("default").and_then(|v| match &v {
-            &Value::String(default) => Some(default.clone()),
-            _ => None,
-        });
-
-        if let Some(default) = &default {
-            let len = default.len();
-            if len != size as usize {
-                return Err(Details::FixedDefaultLenSizeMismatch(len, size).into());
-            }
-        }
-
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
         let aliases =
             self.fix_aliases_namespace(complex.aliases(), &fully_qualified_name.namespace);
@@ -808,8 +796,7 @@ impl Parser {
             aliases: aliases.clone(),
             doc,
             size: size as usize,
-            default,
-            attributes: self.get_custom_attributes(complex, vec!["size", "default"]),
+            attributes: self.get_custom_attributes(complex, vec!["size"]),
         });
 
         self.register_parsed_schema(&fully_qualified_name, &schema, &aliases);

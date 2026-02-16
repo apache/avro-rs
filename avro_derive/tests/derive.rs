@@ -1910,7 +1910,6 @@ fn avro_rs_397_with_generic() {
             aliases: None,
             doc: None,
             size: N,
-            default: None,
             attributes: Default::default(),
         })
     }

@@ -450,7 +450,6 @@ mod tests {
                 name: Name::new("decimal")?,
                 aliases: None,
                 doc: None,
-                default: None,
                 attributes: Default::default(),
             }),
             precision: 4,
@@ -894,7 +893,6 @@ mod tests {
             name: "uuid".try_into()?,
             aliases: None,
             doc: None,
-            default: None,
             attributes: Default::default(),
         };
 

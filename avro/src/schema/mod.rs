@@ -281,8 +281,6 @@ pub struct FixedSchema {
     pub doc: Documentation,
     /// The size of the fixed schema
     pub size: usize,
-    /// An optional default symbol used for compatibility
-    pub default: Option<String>,
     /// The custom attributes of the schema
     #[builder(default = BTreeMap::new())]
     pub attributes: BTreeMap<String, Value>,
@@ -307,10 +305,6 @@ impl FixedSchema {
             map.serialize_entry("aliases", aliases)?;
         }
 
-        if let Some(default) = self.default.as_ref() {
-            map.serialize_entry("default", default)?;
-        }
-
         for attr in &self.attributes {
             map.serialize_entry(attr.0, attr.1)?;
         }
@@ -330,7 +324,6 @@ impl FixedSchema {
             aliases: None,
             doc: None,
             size: self.size,
-            default: None,
             attributes: Default::default(),
         }
     }
@@ -1958,7 +1951,6 @@ mod tests {
                         aliases: None,
                         doc: None,
                         size: 456,
-                        default: None,
                         attributes: Default::default(),
                     }),
                     order: RecordFieldOrder::Ascending,
@@ -1978,7 +1970,6 @@ mod tests {
                         aliases: None,
                         doc: None,
                         size: 456,
-                        default: None,
                         attributes: Default::default(),
                     }),
                     order: RecordFieldOrder::Ascending,
@@ -2054,7 +2045,6 @@ mod tests {
             aliases: None,
             doc: None,
             size: 16_usize,
-            default: None,
             attributes: Default::default(),
         });
 
@@ -2074,7 +2064,6 @@ mod tests {
             aliases: None,
             doc: Some(String::from("FixedSchema documentation")),
             size: 16_usize,
-            default: None,
             attributes: Default::default(),
         });
 
@@ -4320,7 +4309,6 @@ mod tests {
             aliases: None,
             doc: None,
             size: 1,
-            default: None,
             attributes: attributes.clone(),
         });
         let serialized = serde_json::to_string(&schema)?;
@@ -4415,7 +4403,6 @@ mod tests {
                 aliases: None,
                 doc: None,
                 size: 16,
-                default: None,
                 attributes: Default::default(),
             }))
         );
@@ -4458,12 +4445,11 @@ mod tests {
                 aliases: None,
                 doc: None,
                 size: 6,
-                default: None,
                 attributes: BTreeMap::new(),
             })
         );
         assert_logged(
-            r#"Ignoring uuid logical type for a Fixed schema because its size (6) is not 16! Schema: Fixed(FixedSchema { name: Name { name: "FixedUUID", namespace: None }, aliases: None, doc: None, size: 6, default: None, attributes: {} })"#,
+            r#"Ignoring uuid logical type for a Fixed schema because its size (6) is not 16! Schema: Fixed(FixedSchema { name: Name { name: "FixedUUID", namespace: None }, aliases: None, doc: None, size: 6, attributes: {} })"#,
         );
 
         Ok(())
@@ -4607,7 +4593,6 @@ mod tests {
                 aliases: None,
                 doc: None,
                 size: 16,
-                default: None,
                 attributes: Default::default(),
             }),
         });
@@ -4774,28 +4759,6 @@ mod tests {
                     Please enable debug logging to find out which Record schema \
                     declares the union with 'RUST_LOG=apache_avro::schema=debug'.",
         );
-
-        Ok(())
-    }
-
-    #[test]
-    fn avro_3965_fixed_schema_with_default_bigger_than_size() -> TestResult {
-        match Schema::parse_str(
-            r#"{
-                "type": "fixed",
-                "name": "test",
-                "size": 1,
-                "default": "123456789"
-               }"#,
-        ) {
-            Ok(_schema) => panic!("Must fail!"),
-            Err(err) => {
-                assert_eq!(
-                    err.to_string(),
-                    "Fixed schema's default value length (9) does not match its size (1)"
-                );
-            }
-        }
 
         Ok(())
     }
@@ -5026,7 +4989,6 @@ mod tests {
             aliases: None,
             doc: None,
             size: 12,
-            default: None,
             attributes: BTreeMap::new(),
         });
 
@@ -5174,15 +5136,12 @@ mod tests {
         }"#,
         )?;
 
-        assert_eq!(schema.custom_attributes().unwrap(), &BTreeMap::new());
+        assert_eq!(schema.custom_attributes().unwrap().len(), 1);
 
         let json = serde_json::to_string(&schema)?;
         let schema2 = Schema::parse_str(&json)?;
 
-        let Schema::Fixed(fixed) = schema2 else {
-            panic!("Expected Schema::Fixed, got {schema2:?}");
-        };
-        assert!(fixed.default.is_some());
+        assert_eq!(schema2.custom_attributes().unwrap().len(), 1);
 
         Ok(())
     }
@@ -5205,7 +5164,7 @@ mod tests {
         let schema2 = Schema::parse_str(&json)?;
 
         let Schema::Enum(enum_schema) = schema2 else {
-            panic!("Expected Schema::Fixed, got {schema2:?}");
+            panic!("Expected Schema::Enum, got {schema2:?}");
         };
         assert!(enum_schema.default.is_some());
         assert!(enum_schema.doc.is_some());
