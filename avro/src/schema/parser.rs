@@ -714,7 +714,10 @@ impl Parser {
                     unreachable!("JsonValue::Array can only become a Value::Array")
                 };
                 // Check that the default type matches the schema type
-                if let Some(value) = array.iter().find(|v| !v.validate(&items)) {
+                if let Some(value) = array.iter().find(|v| {
+                    v.validate_internal(&items, &self.parsed_schemas, enclosing_namespace)
+                        .is_some()
+                }) {
                     return Err(Details::ArrayDefaultWrongInnerType(items, value.clone()).into());
                 }
                 Some(array)
@@ -748,7 +751,10 @@ impl Parser {
                     unreachable!("JsonValue::Object can only become a Value::Map")
                 };
                 // Check that the default type matches the schema type
-                if let Some(value) = map.values().find(|v| !v.validate(&types)) {
+                if let Some(value) = map.values().find(|v| {
+                    v.validate_internal(&types, &self.parsed_schemas, enclosing_namespace)
+                        .is_some()
+                }) {
                     return Err(Details::MapDefaultWrongInnerType(types, value.clone()).into());
                 }
                 Some(map)

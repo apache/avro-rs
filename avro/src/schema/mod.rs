@@ -5301,6 +5301,49 @@ mod tests {
     }
 
     #[test]
+    fn avro_rs_467_array_default_with_reference() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "record",
+            "name": "Something",
+            "fields": [
+                {
+                    "name": "one",
+                    "type": "enum",
+                    "name": "ABC",
+                    "symbols": ["A", "B", "C"]
+                },
+                {
+                    "name": "two",
+                    "type": "array",
+                    "items": "ABC",
+                    "default": ["A", "B", "C"]
+                }
+            ]
+        }"#,
+        )?;
+
+        let Schema::Record(record) = schema else {
+            panic!("Expected Schema::Record, got {schema:?}");
+        };
+        let Schema::Array(array) = &record.fields[1].schema else {
+            panic!("Expected Schema::Array, got {:?}", record.fields[1].schema);
+        };
+
+        assert_eq!(array.attributes, BTreeMap::new());
+        assert_eq!(
+            array.default,
+            Some(vec![
+                Value::String("A".into()),
+                Value::String("B".into()),
+                Value::String("C".into())
+            ])
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn avro_rs_467_map_default() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
@@ -5382,6 +5425,44 @@ mod tests {
             err.to_string(),
             "Default value for a map must be an object with (String, String)! Found: (String, Boolean(true))"
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_467_map_default_with_reference() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "record",
+            "name": "Something",
+            "fields": [
+                {
+                    "name": "one",
+                    "type": "enum",
+                    "name": "ABC",
+                    "symbols": ["A", "B", "C"]
+                },
+                {
+                    "name": "two",
+                    "type": "map",
+                    "values": "ABC",
+                    "default": {"foo": "A"}
+                }
+            ]
+        }"#,
+        )?;
+
+        let Schema::Record(record) = schema else {
+            panic!("Expected Schema::Record, got {schema:?}");
+        };
+        let Schema::Map(map) = &record.fields[1].schema else {
+            panic!("Expected Schema::Map, got {:?}", record.fields[1].schema);
+        };
+
+        let mut hashmap = HashMap::new();
+        hashmap.insert("foo".to_string(), Value::String("A".into()));
+        assert_eq!(map.attributes, BTreeMap::new());
+        assert_eq!(map.default, Some(hashmap));
 
         Ok(())
     }
