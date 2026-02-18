@@ -2351,7 +2351,7 @@ fn avro_rs_181_single_null_record() -> TestResult {
     let mut buff = Cursor::new(Vec::new());
     let schema = Schema::parse_str(r#""null""#)?;
     let mut writer = Writer::new(&schema, &mut buff)?;
-    writer.append_value(serde_json::Value::Null)?;
+    writer.append_value(Value::Null)?;
     writer.into_inner()?;
     buff.set_position(0);
 

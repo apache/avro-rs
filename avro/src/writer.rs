@@ -390,8 +390,8 @@ impl<'a, W: Write> Writer<'a, W> {
         let num_values = self.num_values;
         let stream_len = self.buffer.len();
 
-        num_bytes += self.append_raw(&num_values.into(), &Schema::Long)?
-            + self.append_raw(&stream_len.into(), &Schema::Long)?
+        num_bytes += self.append_raw(&num_values.try_into()?, &Schema::Long)?
+            + self.append_raw(&stream_len.try_into()?, &Schema::Long)?
             + self
                 .writer
                 .write(self.buffer.as_ref())

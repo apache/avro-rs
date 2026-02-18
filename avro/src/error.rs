@@ -312,6 +312,9 @@ pub enum Details {
     #[error("`default`'s value type of field {0:?} in {1:?} must be {2:?}")]
     GetDefaultRecordField(String, String, String),
 
+    #[error("JSON number {0} could not be converted into an Avro value as it's too large")]
+    JsonNumberTooLarge(serde_json::Number),
+
     #[error("JSON value {0} claims to be u64 but cannot be converted")]
     GetU64FromJson(serde_json::Number),
 
@@ -342,6 +345,9 @@ pub enum Details {
 
     #[error("Cannot convert i32 to u128: {1}")]
     ConvertI32ToU128(#[source] std::num::TryFromIntError, i32),
+
+    #[error("Cannot convert usize to i64: {1}")]
+    ConvertUsizeToI64(#[source] std::num::TryFromIntError, usize),
 
     #[error("Invalid JSON value for decimal precision/scale integer: {0}")]
     GetPrecisionOrScaleFromJson(serde_json::Number),
@@ -431,8 +437,20 @@ pub enum Details {
     #[error("Duplicate enum symbol {0}")]
     EnumSymbolDuplicate(String),
 
-    #[error("Default value for enum must be a string! Got: {0}")]
+    #[error("Default value for an enum must be a string! Got: {0}")]
     EnumDefaultWrongType(serde_json::Value),
+
+    #[error("Default value for an array must be an array! Got: {0}")]
+    ArrayDefaultWrongType(serde_json::Value),
+
+    #[error("Default value for an array must be an array of {0}! Found: {1:?}")]
+    ArrayDefaultWrongInnerType(Schema, Value),
+
+    #[error("Default value for a map must be an object! Got: {0}")]
+    MapDefaultWrongType(serde_json::Value),
+
+    #[error("Default value for a map must be an object with (String, {0})! Found: (String, {1:?})")]
+    MapDefaultWrongInnerType(Schema, Value),
 
     #[error("No `items` in array")]
     GetArrayItemsField,
@@ -446,6 +464,7 @@ pub enum Details {
     #[error("Fixed schema has no `size`")]
     GetFixedSizeField,
 
+    #[deprecated(since = "0.22.0", note = "This error variant is not generated anymore")]
     #[error("Fixed schema's default value length ({0}) does not match its size ({1})")]
     FixedDefaultLenSizeMismatch(usize, u64),
 

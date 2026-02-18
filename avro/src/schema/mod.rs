@@ -27,14 +27,15 @@ use crate::{
     AvroResult,
     error::{Details, Error},
     schema::{parser::Parser, record::RecordSchemaParseLocation},
-    schema_equality, types,
+    schema_equality,
+    types::{self, Value},
 };
 use digest::Digest;
 use serde::{
     Serialize, Serializer,
-    ser::{SerializeMap, SerializeSeq},
+    ser::{Error as _, SerializeMap, SerializeSeq},
 };
-use serde_json::{Map, Value};
+use serde_json::{Map, Value as JsonValue};
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fmt,
@@ -166,13 +167,15 @@ pub enum Schema {
 #[derive(Clone, Debug, PartialEq)]
 pub struct MapSchema {
     pub types: Box<Schema>,
-    pub attributes: BTreeMap<String, Value>,
+    pub default: Option<HashMap<String, Value>>,
+    pub attributes: BTreeMap<String, JsonValue>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ArraySchema {
     pub items: Box<Schema>,
-    pub attributes: BTreeMap<String, Value>,
+    pub default: Option<Vec<Value>>,
+    pub attributes: BTreeMap<String, JsonValue>,
 }
 
 impl PartialEq for Schema {
@@ -265,7 +268,7 @@ pub struct EnumSchema {
     pub default: Option<String>,
     /// The custom attributes of the schema
     #[builder(default = BTreeMap::new())]
-    pub attributes: BTreeMap<String, Value>,
+    pub attributes: BTreeMap<String, JsonValue>,
 }
 
 /// A description of a Fixed schema.
@@ -283,7 +286,7 @@ pub struct FixedSchema {
     pub size: usize,
     /// The custom attributes of the schema
     #[builder(default = BTreeMap::new())]
-    pub attributes: BTreeMap<String, Value>,
+    pub attributes: BTreeMap<String, JsonValue>,
 }
 
 impl FixedSchema {
@@ -459,12 +462,12 @@ impl Schema {
     pub fn parse_list(input: impl IntoIterator<Item = impl AsRef<str>>) -> AvroResult<Vec<Schema>> {
         let input = input.into_iter();
         let input_len = input.size_hint().0;
-        let mut input_schemas: HashMap<Name, Value> = HashMap::with_capacity(input_len);
+        let mut input_schemas: HashMap<Name, JsonValue> = HashMap::with_capacity(input_len);
         let mut input_order: Vec<Name> = Vec::with_capacity(input_len);
         for json in input {
             let json = json.as_ref();
-            let schema: Value = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
-            if let Value::Object(inner) = &schema {
+            let schema: JsonValue = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
+            if let JsonValue::Object(inner) = &schema {
                 let name = Name::parse(inner, &None)?;
                 let previous_value = input_schemas.insert(name.clone(), schema);
                 if previous_value.is_some() {
@@ -501,12 +504,12 @@ impl Schema {
     ) -> AvroResult<(Schema, Vec<Schema>)> {
         let schemata = schemata.into_iter();
         let schemata_len = schemata.size_hint().0;
-        let mut input_schemas: HashMap<Name, Value> = HashMap::with_capacity(schemata_len);
+        let mut input_schemas: HashMap<Name, JsonValue> = HashMap::with_capacity(schemata_len);
         let mut input_order: Vec<Name> = Vec::with_capacity(schemata_len);
         for json in schemata {
             let json = json.as_ref();
-            let schema: Value = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
-            if let Value::Object(inner) = &schema {
+            let schema: JsonValue = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
+            if let JsonValue::Object(inner) = &schema {
                 let name = Name::parse(inner, &None)?;
                 if let Some(_previous) = input_schemas.insert(name.clone(), schema) {
                     return Err(Details::NameCollision(name.fullname(None)).into());
@@ -539,20 +542,20 @@ impl Schema {
     }
 
     /// Parses an Avro schema from JSON.
-    pub fn parse(value: &Value) -> AvroResult<Schema> {
+    pub fn parse(value: &JsonValue) -> AvroResult<Schema> {
         let mut parser = Parser::default();
         parser.parse(value, &None)
     }
 
     /// Parses an Avro schema from JSON.
     /// Any `Schema::Ref`s must be known in the `names` map.
-    pub(crate) fn parse_with_names(value: &Value, names: Names) -> AvroResult<Schema> {
+    pub(crate) fn parse_with_names(value: &JsonValue, names: Names) -> AvroResult<Schema> {
         let mut parser = Parser::new(HashMap::with_capacity(1), Vec::with_capacity(1), names);
         parser.parse(value, &None)
     }
 
     /// Returns the custom attributes (metadata) if the schema supports them.
-    pub fn custom_attributes(&self) -> Option<&BTreeMap<String, Value>> {
+    pub fn custom_attributes(&self) -> Option<&BTreeMap<String, JsonValue>> {
         match self {
             Schema::Record(RecordSchema { attributes, .. })
             | Schema::Enum(EnumSchema { attributes, .. })
@@ -644,14 +647,16 @@ impl Schema {
     pub fn map(types: Schema) -> Self {
         Schema::Map(MapSchema {
             types: Box::new(types),
+            default: None,
             attributes: Default::default(),
         })
     }
 
     /// Returns a `Schema::Map` with the given types and custom attributes.
-    pub fn map_with_attributes(types: Schema, attributes: BTreeMap<String, Value>) -> Self {
+    pub fn map_with_attributes(types: Schema, attributes: BTreeMap<String, JsonValue>) -> Self {
         Schema::Map(MapSchema {
             types: Box::new(types),
+            default: None,
             attributes,
         })
     }
@@ -660,14 +665,16 @@ impl Schema {
     pub fn array(items: Schema) -> Self {
         Schema::Array(ArraySchema {
             items: Box::new(items),
+            default: None,
             attributes: Default::default(),
         })
     }
 
     /// Returns a `Schema::Array` with the given items and custom attributes.
-    pub fn array_with_attributes(items: Schema, attributes: BTreeMap<String, Value>) -> Self {
+    pub fn array_with_attributes(items: Schema, attributes: BTreeMap<String, JsonValue>) -> Self {
         Schema::Array(ArraySchema {
             items: Box::new(items),
+            default: None,
             attributes,
         })
     }
@@ -748,21 +755,43 @@ impl Serialize for Schema {
             Schema::Double => serializer.serialize_str("double"),
             Schema::Bytes => serializer.serialize_str("bytes"),
             Schema::String => serializer.serialize_str("string"),
-            Schema::Array(inner) => {
-                let mut map = serializer.serialize_map(Some(2 + inner.attributes.len()))?;
+            Schema::Array(ArraySchema {
+                items,
+                default,
+                attributes,
+            }) => {
+                let mut map = serializer.serialize_map(Some(
+                    2 + attributes.len() + if default.is_some() { 1 } else { 0 },
+                ))?;
                 map.serialize_entry("type", "array")?;
-                map.serialize_entry("items", &*inner.items.clone())?;
-                for attr in &inner.attributes {
-                    map.serialize_entry(attr.0, attr.1)?;
+                map.serialize_entry("items", items)?;
+                if let Some(default) = default {
+                    let value = JsonValue::try_from(Value::Array(default.clone()))
+                        .map_err(S::Error::custom)?;
+                    map.serialize_entry("default", &value)?;
+                }
+                for (key, value) in attributes {
+                    map.serialize_entry(key, value)?;
                 }
                 map.end()
             }
-            Schema::Map(inner) => {
-                let mut map = serializer.serialize_map(Some(2 + inner.attributes.len()))?;
+            Schema::Map(MapSchema {
+                types,
+                default,
+                attributes,
+            }) => {
+                let mut map = serializer.serialize_map(Some(
+                    2 + attributes.len() + if default.is_some() { 1 } else { 0 },
+                ))?;
                 map.serialize_entry("type", "map")?;
-                map.serialize_entry("values", &*inner.types.clone())?;
-                for attr in &inner.attributes {
-                    map.serialize_entry(attr.0, attr.1)?;
+                map.serialize_entry("values", types)?;
+                if let Some(default) = default {
+                    let value = JsonValue::try_from(Value::Map(default.clone()))
+                        .map_err(S::Error::custom)?;
+                    map.serialize_entry("default", &value)?;
+                }
+                for (key, value) in attributes {
+                    map.serialize_entry(key, value)?;
                 }
                 map.end()
             }
@@ -945,16 +974,16 @@ impl Serialize for Schema {
 /// Parses a valid Avro schema into [the Parsing Canonical Form].
 ///
 /// [the Parsing Canonical Form](https://avro.apache.org/docs/++version++/specification/#parsing-canonical-form-for-schemas)
-fn parsing_canonical_form(schema: &Value, defined_names: &mut HashSet<String>) -> String {
+fn parsing_canonical_form(schema: &JsonValue, defined_names: &mut HashSet<String>) -> String {
     match schema {
-        Value::Object(map) => pcf_map(map, defined_names),
-        Value::String(s) => pcf_string(s),
-        Value::Array(v) => pcf_array(v, defined_names),
+        JsonValue::Object(map) => pcf_map(map, defined_names),
+        JsonValue::String(s) => pcf_string(s),
+        JsonValue::Array(v) => pcf_array(v, defined_names),
         json => panic!("got invalid JSON value for canonical form of schema: {json}"),
     }
 }
 
-fn pcf_map(schema: &Map<String, Value>, defined_names: &mut HashSet<String>) -> String {
+fn pcf_map(schema: &Map<String, JsonValue>, defined_names: &mut HashSet<String>) -> String {
     let typ = schema.get("type").and_then(|v| v.as_str());
     let name = if is_named_type(typ) {
         let ns = schema.get("namespace").and_then(|v| v.as_str());
@@ -982,7 +1011,7 @@ fn pcf_map(schema: &Map<String, Value>, defined_names: &mut HashSet<String>) -> 
         // Reduce primitive types to their simple form. ([PRIMITIVE] rule)
         if schema.len() == 1 && k == "type" {
             // Invariant: function is only callable from a valid schema, so this is acceptable.
-            if let Value::String(s) = v {
+            if let JsonValue::String(s) = v {
                 return pcf_string(s);
             }
         }
@@ -1043,7 +1072,7 @@ fn is_named_type(typ: Option<&str>) -> bool {
     )
 }
 
-fn pcf_array(arr: &[Value], defined_names: &mut HashSet<String>) -> String {
+fn pcf_array(arr: &[JsonValue], defined_names: &mut HashSet<String>) -> String {
     let inter = arr
         .iter()
         .map(|a| parsing_canonical_form(a, defined_names))
@@ -1426,7 +1455,7 @@ mod tests {
             fields: vec![RecordField {
                 name: "field_one".to_string(),
                 doc: None,
-                default: Some(Value::Null),
+                default: Some(JsonValue::Null),
                 aliases: None,
                 schema: Schema::Union(UnionSchema::new(vec![
                     Schema::Null,
@@ -1474,7 +1503,7 @@ mod tests {
                 RecordField {
                     name: "a".to_string(),
                     doc: None,
-                    default: Some(Value::Number(42i64.into())),
+                    default: Some(JsonValue::Number(42i64.into())),
                     aliases: None,
                     schema: Schema::Long,
                     order: RecordFieldOrder::Ascending,
@@ -2654,17 +2683,20 @@ mod tests {
         Ok(())
     }
 
-    fn expected_custom_attributes() -> BTreeMap<String, Value> {
-        let mut expected_attributes: BTreeMap<String, Value> = Default::default();
-        expected_attributes.insert("string_key".to_string(), Value::String("value".to_string()));
+    fn expected_custom_attributes() -> BTreeMap<String, JsonValue> {
+        let mut expected_attributes: BTreeMap<String, JsonValue> = Default::default();
+        expected_attributes.insert(
+            "string_key".to_string(),
+            JsonValue::String("value".to_string()),
+        );
         expected_attributes.insert("number_key".to_string(), json!(1.23));
-        expected_attributes.insert("null_key".to_string(), Value::Null);
+        expected_attributes.insert("null_key".to_string(), JsonValue::Null);
         expected_attributes.insert(
             "array_key".to_string(),
-            Value::Array(vec![json!(1), json!(2), json!(3)]),
+            JsonValue::Array(vec![json!(1), json!(2), json!(3)]),
         );
-        let mut object_value: HashMap<String, Value> = HashMap::new();
-        object_value.insert("key".to_string(), Value::String("value".to_string()));
+        let mut object_value: HashMap<String, JsonValue> = HashMap::new();
+        object_value.insert("key".to_string(), JsonValue::String("value".to_string()));
         expected_attributes.insert("object_key".to_string(), json!(object_value));
         expected_attributes
     }
@@ -2726,7 +2758,7 @@ mod tests {
                 assert_eq!(fields.len(), 1);
                 let field = &fields[0];
                 assert_eq!(&field.name, "a");
-                assert_eq!(&field.default, &Some(Value::Null));
+                assert_eq!(&field.default, &Some(JsonValue::Null));
                 match &field.schema {
                     Schema::Union(union) => {
                         assert_eq!(union.variants().len(), 2);
@@ -3107,7 +3139,7 @@ mod tests {
             Err(err) => {
                 assert_eq!(
                     err.to_string(),
-                    "Default value for enum must be a string! Got: 123"
+                    "Default value for an enum must be a string! Got: 123"
                 );
             }
             _ => panic!("Expected an error"),
@@ -3918,19 +3950,17 @@ mod tests {
             ]
         }
         "#;
-        let expected = Details::GetDefaultRecordField(
-            "f1".to_string(),
-            "ns.record1".to_string(),
-            r#"{"type":"array","items":"int"}"#.to_string(),
-        )
-        .to_string();
+
         let result = Schema::parse_str(schema_str);
         assert!(result.is_err());
         let err = result
             .map_err(|e| e.to_string())
             .err()
             .unwrap_or_else(|| "unexpected".to_string());
-        assert_eq!(expected, err);
+        assert_eq!(
+            r#"Default value for an array must be an array! Got: "invalid""#,
+            err
+        );
 
         Ok(())
     }
@@ -3952,19 +3982,17 @@ mod tests {
             ]
         }
         "#;
-        let expected = Details::GetDefaultRecordField(
-            "f1".to_string(),
-            "ns.record1".to_string(),
-            r#"{"type":"map","values":"string"}"#.to_string(),
-        )
-        .to_string();
+
         let result = Schema::parse_str(schema_str);
         assert!(result.is_err());
         let err = result
             .map_err(|e| e.to_string())
             .err()
             .unwrap_or_else(|| "unexpected".to_string());
-        assert_eq!(expected, err);
+        assert_eq!(
+            r#"Default value for a map must be an object! Got: "invalid""#,
+            err
+        );
 
         Ok(())
     }
@@ -4280,12 +4308,12 @@ mod tests {
         let attributes = BTreeMap::from([
             ("string_key".into(), "value".into()),
             ("number_key".into(), 1.23.into()),
-            ("null_key".into(), Value::Null),
+            ("null_key".into(), JsonValue::Null),
             (
                 "array_key".into(),
-                Value::Array(vec![1.into(), 2.into(), 3.into()]),
+                JsonValue::Array(vec![1.into(), 2.into(), 3.into()]),
             ),
-            ("object_key".into(), Value::Object(Map::default())),
+            ("object_key".into(), JsonValue::Object(Map::default())),
         ]);
 
         // Test serialize enum attributes
@@ -4701,7 +4729,7 @@ mod tests {
                 assert_eq!(field.name, "birthday");
                 assert_eq!(field.schema, Schema::Date);
                 assert_eq!(
-                    types::Value::from(field.default.clone().unwrap()),
+                    types::Value::try_from(field.default.clone().unwrap())?,
                     types::Value::Int(1681601653)
                 );
             }
@@ -4873,7 +4901,11 @@ mod tests {
 
         let schema1 = Schema::parse_str(raw_schema)?;
         match &schema1 {
-            Schema::Array(ArraySchema { items, attributes }) => {
+            Schema::Array(ArraySchema {
+                items,
+                default: _,
+                attributes,
+            }) => {
                 assert!(attributes.is_empty());
 
                 match **items {
@@ -4892,6 +4924,7 @@ mod tests {
                         match &fields[0].schema {
                             Schema::Array(ArraySchema {
                                 items: _,
+                                default: _,
                                 attributes,
                             }) => {
                                 assert!(attributes.is_empty());
@@ -4941,7 +4974,11 @@ mod tests {
 
         let schema1 = Schema::parse_str(raw_schema)?;
         match &schema1 {
-            Schema::Array(ArraySchema { items, attributes }) => {
+            Schema::Array(ArraySchema {
+                items,
+                default: _,
+                attributes,
+            }) => {
                 assert!(attributes.is_empty());
 
                 match **items {
@@ -4960,6 +4997,7 @@ mod tests {
                         match &fields[0].schema {
                             Schema::Map(MapSchema {
                                 types: _,
+                                default: _,
                                 attributes,
                             }) => {
                                 assert!(attributes.is_empty());
@@ -5147,7 +5185,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_460_enum_default_in_custom_attributes() -> TestResult {
+    fn avro_rs_460_enum_default_not_in_custom_attributes() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "name": "enum_with_default",
@@ -5168,6 +5206,263 @@ mod tests {
         };
         assert!(enum_schema.default.is_some());
         assert!(enum_schema.doc.is_some());
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_467_array_default() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "array",
+            "items": "string",
+            "default": []
+        }"#,
+        )?;
+
+        let Schema::Array(array) = schema else {
+            panic!("Expected Schema::Array, got {schema:?}");
+        };
+
+        assert_eq!(array.attributes, BTreeMap::new());
+        assert_eq!(array.default, Some(Vec::new()));
+
+        let json = serde_json::to_string(&Schema::Array(array))?;
+        assert!(json.contains(r#""default":[]"#));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_467_array_default_with_actual_values() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "array",
+            "items": "string",
+            "default": ["foo", "bar"]
+        }"#,
+        )?;
+
+        let Schema::Array(array) = schema else {
+            panic!("Expected Schema::Array, got {schema:?}");
+        };
+
+        assert_eq!(array.attributes, BTreeMap::new());
+        assert_eq!(
+            array.default,
+            Some(vec![
+                Value::String("foo".into()),
+                Value::String("bar".into())
+            ])
+        );
+
+        let json = serde_json::to_string(&Schema::Array(array))?;
+        assert!(json.contains(r#""default":["foo","bar"]"#));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_467_array_default_with_invalid_values() -> TestResult {
+        let err = Schema::parse_str(
+            r#"{
+            "type": "array",
+            "items": "string",
+            "default": [false, true]
+        }"#,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "Default value for an array must be an array of String! Found: Boolean(false)"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_467_array_default_with_mixed_values() -> TestResult {
+        let err = Schema::parse_str(
+            r#"{
+            "type": "array",
+            "items": "string",
+            "default": ["foo", true]
+        }"#,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "Default value for an array must be an array of String! Found: Boolean(true)"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_467_array_default_with_reference() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "record",
+            "name": "Something",
+            "fields": [
+                {
+                    "name": "one",
+                    "type": "enum",
+                    "name": "ABC",
+                    "symbols": ["A", "B", "C"]
+                },
+                {
+                    "name": "two",
+                    "type": "array",
+                    "items": "ABC",
+                    "default": ["A", "B", "C"]
+                }
+            ]
+        }"#,
+        )?;
+
+        let Schema::Record(record) = schema else {
+            panic!("Expected Schema::Record, got {schema:?}");
+        };
+        let Schema::Array(array) = &record.fields[1].schema else {
+            panic!("Expected Schema::Array, got {:?}", record.fields[1].schema);
+        };
+
+        assert_eq!(array.attributes, BTreeMap::new());
+        assert_eq!(
+            array.default,
+            Some(vec![
+                Value::String("A".into()),
+                Value::String("B".into()),
+                Value::String("C".into())
+            ])
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_467_map_default() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "map",
+            "values": "string",
+            "default": {}
+        }"#,
+        )?;
+
+        let Schema::Map(map) = schema else {
+            panic!("Expected Schema::Map, got {schema:?}");
+        };
+
+        assert_eq!(map.attributes, BTreeMap::new());
+        assert_eq!(map.default, Some(HashMap::new()));
+
+        let json = serde_json::to_string(&Schema::Map(map))?;
+        assert!(json.contains(r#""default":{}"#));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_467_map_default_with_actual_values() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "map",
+            "values": "string",
+            "default": {"foo": "bar"}
+        }"#,
+        )?;
+
+        let Schema::Map(map) = schema else {
+            panic!("Expected Schema::Map, got {schema:?}");
+        };
+
+        let mut hashmap = HashMap::new();
+        hashmap.insert("foo".to_string(), Value::String("bar".into()));
+        assert_eq!(map.attributes, BTreeMap::new());
+        assert_eq!(map.default, Some(hashmap));
+
+        let json = serde_json::to_string(&Schema::Map(map))?;
+        assert!(json.contains(r#""default":{"foo":"bar"}"#));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_467_map_default_with_invalid_values() -> TestResult {
+        let err = Schema::parse_str(
+            r#"{
+            "type": "map",
+            "values": "string",
+            "default": {"foo": true}
+        }"#,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "Default value for a map must be an object with (String, String)! Found: (String, Boolean(true))"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_467_map_default_with_mixed_values() -> TestResult {
+        let err = Schema::parse_str(
+            r#"{
+            "type": "map",
+            "values": "string",
+            "default": {"foo": "bar", "spam": true}
+        }"#,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "Default value for a map must be an object with (String, String)! Found: (String, Boolean(true))"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_467_map_default_with_reference() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "record",
+            "name": "Something",
+            "fields": [
+                {
+                    "name": "one",
+                    "type": "enum",
+                    "name": "ABC",
+                    "symbols": ["A", "B", "C"]
+                },
+                {
+                    "name": "two",
+                    "type": "map",
+                    "values": "ABC",
+                    "default": {"foo": "A"}
+                }
+            ]
+        }"#,
+        )?;
+
+        let Schema::Record(record) = schema else {
+            panic!("Expected Schema::Record, got {schema:?}");
+        };
+        let Schema::Map(map) = &record.fields[1].schema else {
+            panic!("Expected Schema::Map, got {:?}", record.fields[1].schema);
+        };
+
+        let mut hashmap = HashMap::new();
+        hashmap.insert("foo".to_string(), Value::String("A".into()));
+        assert_eq!(map.attributes, BTreeMap::new());
+        assert_eq!(map.default, Some(hashmap));
 
         Ok(())
     }

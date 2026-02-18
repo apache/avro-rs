@@ -156,11 +156,13 @@ impl From<()> for Value {
     }
 }
 
-impl From<usize> for Value {
-    fn from(value: usize) -> Self {
-        i64::try_from(value)
-            .expect("cannot convert usize to i64")
-            .into()
+impl TryFrom<usize> for Value {
+    type Error = Error;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        Ok(i64::try_from(value)
+            .map_err(|e| Details::ConvertUsizeToI64(e, value))?
+            .into())
     }
 }
 
@@ -269,29 +271,38 @@ impl<'a> From<Record<'a>> for Value {
     }
 }
 
-impl From<JsonValue> for Value {
-    fn from(value: JsonValue) -> Self {
+impl TryFrom<JsonValue> for Value {
+    type Error = Error;
+
+    fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
         match value {
-            JsonValue::Null => Self::Null,
-            JsonValue::Bool(b) => b.into(),
+            JsonValue::Null => Ok(Self::Null),
+            JsonValue::Bool(b) => Ok(b.into()),
             JsonValue::Number(ref n) if n.is_i64() => {
                 let n = n.as_i64().unwrap();
                 if n >= i32::MIN as i64 && n <= i32::MAX as i64 {
-                    Value::Int(n as i32)
+                    Ok(Value::Int(n as i32))
                 } else {
-                    Value::Long(n)
+                    Ok(Value::Long(n))
                 }
             }
-            JsonValue::Number(ref n) if n.is_f64() => Value::Double(n.as_f64().unwrap()),
-            JsonValue::Number(n) => panic!("{n:?} does not fit into an Avro long"),
-            JsonValue::String(s) => s.into(),
-            JsonValue::Array(items) => Value::Array(items.into_iter().map(Value::from).collect()),
-            JsonValue::Object(items) => Value::Map(
-                items
+            JsonValue::Number(ref n) if n.is_f64() => Ok(Value::Double(n.as_f64().unwrap())),
+            JsonValue::Number(n) => Err(Details::JsonNumberTooLarge(n).into()),
+            JsonValue::String(s) => Ok(s.into()),
+            JsonValue::Array(items) => {
+                let items = items
                     .into_iter()
-                    .map(|(key, value)| (key, value.into()))
-                    .collect(),
-            ),
+                    .map(Value::try_from)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(Value::Array(items))
+            }
+            JsonValue::Object(items) => {
+                let items = items
+                    .into_iter()
+                    .map(|(key, value)| Value::try_from(value).map(|v| (key, v)))
+                    .collect::<Result<HashMap<_, _>, _>>()?;
+                Ok(Value::Map(items))
+            }
         }
     }
 }
@@ -1161,7 +1172,7 @@ impl Value {
                                 ref symbols,
                                 ref default,
                                 ..
-                            }) => Value::from(value.clone()).resolve_enum(
+                            }) => Value::try_from(value.clone())?.resolve_enum(
                                 symbols,
                                 default,
                                 &field.default.clone(),
@@ -1174,16 +1185,18 @@ impl Value {
                                     Schema::Null => Value::Union(0, Box::new(Value::Null)),
                                     _ => Value::Union(
                                         0,
-                                        Box::new(Value::from(value.clone()).resolve_internal(
-                                            first,
-                                            names,
-                                            enclosing_namespace,
-                                            &field.default,
-                                        )?),
+                                        Box::new(
+                                            Value::try_from(value.clone())?.resolve_internal(
+                                                first,
+                                                names,
+                                                enclosing_namespace,
+                                                &field.default,
+                                            )?,
+                                        ),
                                     ),
                                 }
                             }
-                            _ => Value::from(value.clone()),
+                            _ => Value::try_from(value.clone())?,
                         },
                         None => {
                             return Err(Details::GetField(field.name.clone()).into());
@@ -1346,7 +1359,7 @@ mod tests {
                 Value::Array(vec![Value::Boolean(true)]),
                 Schema::array(Schema::Long),
                 false,
-                "Invalid value: Array([Boolean(true)]) for schema: Array(ArraySchema { items: Long, attributes: {} }). Reason: Unsupported value-schema combination! Value: Boolean(true), schema: Long",
+                "Invalid value: Array([Boolean(true)]) for schema: Array(ArraySchema { items: Long, default: None, attributes: {} }). Reason: Unsupported value-schema combination! Value: Boolean(true), schema: Long",
             ),
             (
                 Value::Record(vec![]),
@@ -3073,7 +3086,7 @@ Field with name '"b"' is not a member of the map items"#,
         "#,
         )?;
 
-        let avro_value = Value::from(value);
+        let avro_value = Value::try_from(value)?;
 
         let schemas = Schema::parse_list([main_schema, referenced_schema])?;
 
@@ -3113,7 +3126,7 @@ Field with name '"b"' is not a member of the map items"#,
         "#,
         )?;
 
-        let avro_value = Value::from(value);
+        let avro_value = Value::try_from(value)?;
 
         let schemata = Schema::parse_list([referenced_enum, referenced_record, main_schema])?;
 
@@ -3212,30 +3225,33 @@ Field with name '"b"' is not a member of the map items"#,
     }
 
     #[test]
-    fn avro_3928_from_serde_value_to_types_value() {
-        assert_eq!(Value::from(serde_json::Value::Null), Value::Null);
-        assert_eq!(Value::from(json!(true)), Value::Boolean(true));
-        assert_eq!(Value::from(json!(false)), Value::Boolean(false));
-        assert_eq!(Value::from(json!(0)), Value::Int(0));
-        assert_eq!(Value::from(json!(i32::MIN)), Value::Int(i32::MIN));
-        assert_eq!(Value::from(json!(i32::MAX)), Value::Int(i32::MAX));
+    fn avro_3928_from_serde_value_to_types_value() -> TestResult {
+        assert_eq!(Value::try_from(serde_json::Value::Null)?, Value::Null);
+        assert_eq!(Value::try_from(json!(true))?, Value::Boolean(true));
+        assert_eq!(Value::try_from(json!(false))?, Value::Boolean(false));
+        assert_eq!(Value::try_from(json!(0))?, Value::Int(0));
+        assert_eq!(Value::try_from(json!(i32::MIN))?, Value::Int(i32::MIN));
+        assert_eq!(Value::try_from(json!(i32::MAX))?, Value::Int(i32::MAX));
         assert_eq!(
-            Value::from(json!(i32::MIN as i64 - 1)),
+            Value::try_from(json!(i32::MIN as i64 - 1))?,
             Value::Long(i32::MIN as i64 - 1)
         );
         assert_eq!(
-            Value::from(json!(i32::MAX as i64 + 1)),
+            Value::try_from(json!(i32::MAX as i64 + 1))?,
             Value::Long(i32::MAX as i64 + 1)
         );
-        assert_eq!(Value::from(json!(1.23)), Value::Double(1.23));
-        assert_eq!(Value::from(json!(-1.23)), Value::Double(-1.23));
-        assert_eq!(Value::from(json!(u64::MIN)), Value::Int(u64::MIN as i32));
+        assert_eq!(Value::try_from(json!(1.23))?, Value::Double(1.23));
+        assert_eq!(Value::try_from(json!(-1.23))?, Value::Double(-1.23));
         assert_eq!(
-            Value::from(json!("some text")),
+            Value::try_from(json!(u64::MIN))?,
+            Value::Int(u64::MIN as i32)
+        );
+        assert_eq!(
+            Value::try_from(json!("some text"))?,
             Value::String("some text".into())
         );
         assert_eq!(
-            Value::from(json!(["text1", "text2", "text3"])),
+            Value::try_from(json!(["text1", "text2", "text3"]))?,
             Value::Array(vec![
                 Value::String("text1".into()),
                 Value::String("text2".into()),
@@ -3243,7 +3259,7 @@ Field with name '"b"' is not a member of the map items"#,
             ])
         );
         assert_eq!(
-            Value::from(json!({"key1": "value1", "key2": "value2"})),
+            Value::try_from(json!({"key1": "value1", "key2": "value2"}))?,
             Value::Map(
                 vec![
                     ("key1".into(), Value::String("value1".into())),
@@ -3253,6 +3269,7 @@ Field with name '"b"' is not a member of the map items"#,
                 .collect()
             )
         );
+        Ok(())
     }
 
     #[test]
@@ -3491,8 +3508,13 @@ Field with name '"b"' is not a member of the map items"#,
     }
 
     #[test]
-    #[should_panic(expected = "Number(18446744073709551615) does not fit into an Avro long")]
     fn avro_rs_450_serde_json_number_u64_max() {
-        let _ = Value::from(json!(u64::MAX));
+        assert_eq!(
+            Value::try_from(json!(u64::MAX))
+                .unwrap_err()
+                .into_details()
+                .to_string(),
+            "JSON number 18446744073709551615 could not be converted into an Avro value as it's too large"
+        );
     }
 }
