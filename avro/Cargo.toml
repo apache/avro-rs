@@ -68,7 +68,7 @@ strum = { default-features = false, version = "0.27.2" }
 strum_macros = { default-features = false, version = "0.27.2" }
 thiserror = { default-features = false, version = "2.0.18" }
 uuid = { workspace = true }
-liblzma = { default-features = false, version = "0.4.5", optional = true }
+liblzma = { default-features = false, version = "0.4.6", optional = true }
 zstd = { default-features = false, version = "0.13.3", optional = true }
 
 
