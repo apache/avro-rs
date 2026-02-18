@@ -542,6 +542,60 @@ impl<'a, W: Write> Writer<'a, W> {
     }
 }
 
+/// A buffer that can be cleared.
+pub trait Clearable {
+    /// Clear the buffer, keeping the capacity.
+    fn clear(&mut self);
+}
+
+impl Clearable for Vec<u8> {
+    fn clear(&mut self) {
+        self.clear();
+    }
+}
+
+impl<'a, W: Clearable + Write> Writer<'a, W> {
+    /// Reset the writer.
+    ///
+    /// This will clear the underlying writer and the internal buffer.
+    /// It will also clear any user metadata added.
+    ///
+    /// # Example
+    /// ```
+    /// # use apache_avro::{Writer, Schema, Error};
+    /// # let schema = Schema::Boolean;
+    /// # let values = [true, false];
+    /// # fn send(_: &Vec<u8>) {}
+    /// let mut writer = Writer::new(&schema, Vec::new())?;
+    ///
+    /// // Write some values
+    /// for value in values {
+    ///     writer.append_value(value)?;
+    /// }
+    ///
+    /// // Flush the buffer and only then do something with buffer
+    /// writer.flush()?;
+    /// send(writer.get_ref());
+    ///
+    /// // Reset the writer
+    /// writer.reset();
+    ///
+    /// // Write some values again
+    /// for value in values {
+    ///     writer.append(value)?;
+    /// }
+    ///
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn reset(&mut self) {
+        self.buffer.clear();
+        self.writer.clear();
+        self.has_header = false;
+        self.num_values = 0;
+        self.user_metadata.clear();
+    }
+}
+
 impl<W: Write> Drop for Writer<'_, W> {
     /// Drop the writer, will try to flush ignoring any errors.
     fn drop(&mut self) {
@@ -1855,6 +1909,33 @@ mod tests {
             err.to_string(),
             "Value Int(1) does not match schema String: Reason: Unsupported value-schema combination! Value: Int(1), schema: String"
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_469_reset_writer() -> TestResult {
+        let schema = Schema::Boolean;
+        let values = [true, false, true, false];
+        let mut writer = Writer::new(&schema, Vec::new())?;
+
+        for value in values {
+            writer.append_value(value)?;
+        }
+
+        writer.flush()?;
+        let first_buffer = writer.get_ref().clone();
+
+        writer.reset();
+        assert_eq!(writer.get_ref().len(), 0);
+
+        for value in values {
+            writer.append_value(value)?;
+        }
+
+        writer.flush()?;
+        let second_buffer = writer.get_ref().clone();
+        assert_eq!(first_buffer, second_buffer);
 
         Ok(())
     }
