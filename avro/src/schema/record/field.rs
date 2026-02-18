@@ -133,7 +133,7 @@ impl RecordField {
         default: &Option<Value>,
     ) -> AvroResult<()> {
         if let Some(value) = default {
-            let avro_value = types::Value::from(value.clone());
+            let avro_value = types::Value::try_from(value.clone())?;
             match field_schema {
                 Schema::Union(union_schema) => {
                     let schemas = &union_schema.schemas;

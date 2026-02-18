@@ -4729,7 +4729,7 @@ mod tests {
                 assert_eq!(field.name, "birthday");
                 assert_eq!(field.schema, Schema::Date);
                 assert_eq!(
-                    types::Value::from(field.default.clone().unwrap()),
+                    types::Value::try_from(field.default.clone().unwrap())?,
                     types::Value::Int(1681601653)
                 );
             }

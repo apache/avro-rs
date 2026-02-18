@@ -710,7 +710,8 @@ impl Parser {
             .and_then(|items| self.parse(items, enclosing_namespace))?;
         let default = if let Some(default) = complex.get("default").cloned() {
             if let Value::Array(_) = default {
-                let crate::types::Value::Array(array) = crate::types::Value::from(default) else {
+                let crate::types::Value::Array(array) = crate::types::Value::try_from(default)?
+                else {
                     unreachable!("JsonValue::Array can only become a Value::Array")
                 };
                 // Check that the default type matches the schema type
@@ -747,7 +748,7 @@ impl Parser {
 
         let default = if let Some(default) = complex.get("default").cloned() {
             if let Value::Object(_) = default {
-                let crate::types::Value::Map(map) = crate::types::Value::from(default) else {
+                let crate::types::Value::Map(map) = crate::types::Value::try_from(default)? else {
                     unreachable!("JsonValue::Object can only become a Value::Map")
                 };
                 // Check that the default type matches the schema type

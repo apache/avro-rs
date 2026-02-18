@@ -312,6 +312,9 @@ pub enum Details {
     #[error("`default`'s value type of field {0:?} in {1:?} must be {2:?}")]
     GetDefaultRecordField(String, String, String),
 
+    #[error("JSON number {0} could not be converted into an Avro value as it's too large")]
+    JsonNumberTooLarge(serde_json::Number),
+
     #[error("JSON value {0} claims to be u64 but cannot be converted")]
     GetU64FromJson(serde_json::Number),
 
@@ -342,6 +345,9 @@ pub enum Details {
 
     #[error("Cannot convert i32 to u128: {1}")]
     ConvertI32ToU128(#[source] std::num::TryFromIntError, i32),
+
+    #[error("Cannot convert usize to i64: {1}")]
+    ConvertUsizeToI64(#[source] std::num::TryFromIntError, usize),
 
     #[error("Invalid JSON value for decimal precision/scale integer: {0}")]
     GetPrecisionOrScaleFromJson(serde_json::Number),
