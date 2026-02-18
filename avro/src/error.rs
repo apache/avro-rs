@@ -440,10 +440,10 @@ pub enum Details {
     #[error("Default value for an array must be an array of {0}! Found: {1:?}")]
     ArrayDefaultWrongInnerType(Schema, Value),
 
-    #[error("Default value for a map must be a object! Got: {0}")]
+    #[error("Default value for a map must be an object! Got: {0}")]
     MapDefaultWrongType(serde_json::Value),
 
-    #[error("Default value for a map must be a object with (String, {0})! Found: (String, {1:?})")]
+    #[error("Default value for a map must be an object with (String, {0})! Found: (String, {1:?})")]
     MapDefaultWrongInnerType(Schema, Value),
 
     #[error("No `items` in array")]

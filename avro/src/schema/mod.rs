@@ -3990,7 +3990,7 @@ mod tests {
             .err()
             .unwrap_or_else(|| "unexpected".to_string());
         assert_eq!(
-            r#"Default value for a map must be a object! Got: "invalid""#,
+            r#"Default value for a map must be an object! Got: "invalid""#,
             err
         );
 
@@ -5228,7 +5228,7 @@ mod tests {
         assert_eq!(array.default, Some(Vec::new()));
 
         let json = serde_json::to_string(&Schema::Array(array))?;
-        json.contains(r#""default":[]"#);
+        assert!(json.contains(r#""default":[]"#));
 
         Ok(())
     }
@@ -5257,7 +5257,7 @@ mod tests {
         );
 
         let json = serde_json::to_string(&Schema::Array(array))?;
-        json.contains(r#""default":["foo","bar"]"#);
+        assert!(json.contains(r#""default":["foo","bar"]"#));
 
         Ok(())
     }
@@ -5318,7 +5318,7 @@ mod tests {
         assert_eq!(map.default, Some(HashMap::new()));
 
         let json = serde_json::to_string(&Schema::Map(map))?;
-        json.contains(r#""default":{}"#);
+        assert!(json.contains(r#""default":{}"#));
 
         Ok(())
     }
@@ -5343,7 +5343,7 @@ mod tests {
         assert_eq!(map.default, Some(hashmap));
 
         let json = serde_json::to_string(&Schema::Map(map))?;
-        json.contains(r#""default":{"foo":"bar"}"#);
+        assert!(json.contains(r#""default":{"foo":"bar"}"#));
 
         Ok(())
     }
@@ -5361,7 +5361,7 @@ mod tests {
 
         assert_eq!(
             err.to_string(),
-            "Default value for a map must be a object with (String, String)! Found: (String, Boolean(true))"
+            "Default value for a map must be an object with (String, String)! Found: (String, Boolean(true))"
         );
 
         Ok(())
@@ -5380,7 +5380,7 @@ mod tests {
 
         assert_eq!(
             err.to_string(),
-            "Default value for a map must be a object with (String, String)! Found: (String, Boolean(true))"
+            "Default value for a map must be an object with (String, String)! Found: (String, Boolean(true))"
         );
 
         Ok(())
