@@ -340,6 +340,10 @@ pub struct Reader<'a, R> {
 
 #[bon]
 impl<'a, R: Read> Reader<'a, R> {
+    /// Creates a `Reader` given something implementing the `io::Read` trait to read from.
+    /// No reader `Schema` will be set.
+    ///
+    /// **NOTE** The avro header is going to be read automatically upon creation of the `Reader`.
     pub fn new(reader: R) -> AvroResult<Reader<'a, R>> {
         Reader::builder(reader).build()
     }
@@ -354,13 +358,8 @@ impl<'a, R: Read> Reader<'a, R> {
         schema: Option<&'a Schema>,
         schemata: Option<Vec<&'a Schema>>,
     ) -> AvroResult<Reader<'a, R>> {
-        let schemata = match schemata {
-            Some(schemata) => schemata,
-            None => match schema {
-                Some(schema) => vec![schema],
-                None => vec![],
-            },
-        };
+        let schemata = schemata.unwrap_or_else(|| schema.map(|s| vec![s]).unwrap_or_default());
+
         let block = Block::new(reader, schemata)?;
         let mut reader = Reader {
             block,
