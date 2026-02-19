@@ -92,22 +92,24 @@ impl Drop for BorrowedGuard {
 ///
 /// [`apache_avro::serde::bytes_opt`]: bytes_opt
 pub mod bytes {
+    use std::collections::HashSet;
+
     use serde::{Deserializer, Serializer};
 
     use crate::{
         Schema,
-        schema::{Names, Namespace, RecordField},
+        schema::{Name, Namespace, RecordField},
     };
 
     /// Returns [`Schema::Bytes`]
-    pub fn get_schema_in_ctxt(_: &mut Names, _: &Namespace) -> Schema {
+    pub fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: &Namespace) -> Schema {
         Schema::Bytes
     }
 
     /// Returns `None`
     pub fn get_record_fields_in_ctxt(
         _: usize,
-        _: &mut Names,
+        _: &mut HashSet<Name>,
         _: &Namespace,
     ) -> Option<Vec<RecordField>> {
         None
@@ -154,15 +156,15 @@ pub mod bytes {
 /// [`apache_avro::serde::bytes`]: bytes
 pub mod bytes_opt {
     use serde::{Deserializer, Serializer};
-    use std::borrow::Borrow;
+    use std::{borrow::Borrow, collections::HashSet};
 
     use crate::{
         Schema,
-        schema::{Names, Namespace, RecordField, UnionSchema},
+        schema::{Name, Namespace, RecordField, UnionSchema},
     };
 
     /// Returns `Schema::Union(Schema::Null, Schema::Bytes)`
-    pub fn get_schema_in_ctxt(_: &mut Names, _: &Namespace) -> Schema {
+    pub fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: &Namespace) -> Schema {
         Schema::Union(
             UnionSchema::new(vec![Schema::Null, Schema::Bytes]).expect("This is a valid union"),
         )
@@ -171,7 +173,7 @@ pub mod bytes_opt {
     /// Returns `None`
     pub fn get_record_fields_in_ctxt(
         _: usize,
-        _: &mut Names,
+        _: &mut HashSet<Name>,
         _: &Namespace,
     ) -> Option<Vec<RecordField>> {
         None
@@ -218,28 +220,29 @@ pub mod bytes_opt {
 ///
 /// [`apache_avro::serde::fixed_opt`]: fixed_opt
 pub mod fixed {
+    use std::collections::HashSet;
+
     use super::BytesType;
     use serde::{Deserializer, Serializer};
 
     use crate::{
         Schema,
-        schema::{FixedSchema, Name, Names, Namespace, RecordField},
+        schema::{FixedSchema, Name, Namespace, RecordField},
     };
 
     /// Returns `Schema::Fixed(N)` named `serde_avro_fixed_{N}`
-    #[expect(clippy::map_entry, reason = "We don't use the value from the map")]
     pub fn get_schema_in_ctxt<const N: usize>(
-        named_schemas: &mut Names,
+        named_schemas: &mut HashSet<Name>,
         enclosing_namespace: &Namespace,
     ) -> Schema {
         let name = Name::new(&format!("serde_avro_fixed_{N}"))
             .expect("Name is valid")
             .fully_qualified_name(enclosing_namespace);
-        if named_schemas.contains_key(&name) {
+        if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {
             let schema = Schema::Fixed(FixedSchema::builder().name(name.clone()).size(N).build());
-            named_schemas.insert(name, schema.clone());
+            named_schemas.insert(name);
             schema
         }
     }
@@ -247,7 +250,7 @@ pub mod fixed {
     /// Returns `None`
     pub fn get_record_fields_in_ctxt(
         _: usize,
-        _: &mut Names,
+        _: &mut HashSet<Name>,
         _: &Namespace,
     ) -> Option<Vec<RecordField>> {
         None
@@ -296,16 +299,16 @@ pub mod fixed {
 pub mod fixed_opt {
     use super::BytesType;
     use serde::{Deserializer, Serializer};
-    use std::borrow::Borrow;
+    use std::{borrow::Borrow, collections::HashSet};
 
     use crate::{
         Schema,
-        schema::{Names, Namespace, RecordField, UnionSchema},
+        schema::{Name, Namespace, RecordField, UnionSchema},
     };
 
     /// Returns `Schema::Union(Schema::Null, Schema::Fixed(N))` where the fixed schema is named `serde_avro_fixed_{N}`
     pub fn get_schema_in_ctxt<const N: usize>(
-        named_schemas: &mut Names,
+        named_schemas: &mut HashSet<Name>,
         enclosing_namespace: &Namespace,
     ) -> Schema {
         Schema::Union(
@@ -320,7 +323,7 @@ pub mod fixed_opt {
     /// Returns `None`
     pub fn get_record_fields_in_ctxt(
         _: usize,
-        _: &mut Names,
+        _: &mut HashSet<Name>,
         _: &Namespace,
     ) -> Option<Vec<RecordField>> {
         None
@@ -370,22 +373,24 @@ pub mod fixed_opt {
 /// [`Value::Fixed`]: crate::types::Value::Fixed
 /// [`apache_avro::serde::slice_opt`]: slice_opt
 pub mod slice {
+    use std::collections::HashSet;
+
     use serde::{Deserializer, Serializer};
 
     use crate::{
         Schema,
-        schema::{Names, Namespace, RecordField},
+        schema::{Name, Namespace, RecordField},
     };
 
     /// Returns [`Schema::Bytes`]
-    pub fn get_schema_in_ctxt(_: &mut Names, _: &Namespace) -> Schema {
+    pub fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: &Namespace) -> Schema {
         Schema::Bytes
     }
 
     /// Returns `None`
     pub fn get_record_fields_in_ctxt(
         _: usize,
-        _: &mut Names,
+        _: &mut HashSet<Name>,
         _: &Namespace,
     ) -> Option<Vec<RecordField>> {
         None
@@ -435,15 +440,15 @@ pub mod slice {
 /// [`apache_avro::serde::slice`]: mod@slice
 pub mod slice_opt {
     use serde::{Deserializer, Serializer};
-    use std::borrow::Borrow;
+    use std::{borrow::Borrow, collections::HashSet};
 
     use crate::{
         Schema,
-        schema::{Names, Namespace, RecordField, UnionSchema},
+        schema::{Name, Namespace, RecordField, UnionSchema},
     };
 
     /// Returns `Schema::Union(Schema::Null, Schema::Bytes)`
-    pub fn get_schema_in_ctxt(_: &mut Names, _: &Namespace) -> Schema {
+    pub fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: &Namespace) -> Schema {
         Schema::Union(
             UnionSchema::new(vec![Schema::Null, Schema::Bytes]).expect("This is a valid union"),
         )
@@ -452,7 +457,7 @@ pub mod slice_opt {
     /// Returns `None`
     pub fn get_record_fields_in_ctxt(
         _: usize,
-        _: &mut Names,
+        _: &mut HashSet<Name>,
         _: &Namespace,
     ) -> Option<Vec<RecordField>> {
         None

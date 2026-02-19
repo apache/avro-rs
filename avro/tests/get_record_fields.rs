@@ -19,7 +19,7 @@ use apache_avro::{
     Schema,
     serde::{AvroSchemaComponent, get_record_fields_in_ctxt},
 };
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 use apache_avro_test_helper::TestResult;
 
@@ -31,7 +31,7 @@ fn avro_rs_448_default_get_record_fields_no_recursion() -> TestResult {
         _b: String,
     }
 
-    let mut named_schemas = HashMap::new();
+    let mut named_schemas = HashSet::new();
     let fields =
         get_record_fields_in_ctxt(0, &mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
 
@@ -72,7 +72,7 @@ fn avro_rs_448_default_get_record_fields_recursion() -> TestResult {
         _b: Option<Box<Foo>>,
     }
 
-    let mut named_schemas = HashMap::new();
+    let mut named_schemas = HashSet::new();
     let fields =
         get_record_fields_in_ctxt(0, &mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
 
@@ -110,7 +110,7 @@ fn avro_rs_448_default_get_record_fields_position() -> TestResult {
         _b: String,
     }
 
-    let mut named_schemas = HashMap::new();
+    let mut named_schemas = HashSet::new();
     let fields =
         get_record_fields_in_ctxt(10, &mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
 
