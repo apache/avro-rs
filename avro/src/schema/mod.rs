@@ -398,11 +398,13 @@ impl Schema {
     /// Returns the [Parsing Canonical Form] of `self` that is self contained (not dependent on
     /// any definitions in `schemata`)
     ///
+    /// If you require a self contained schema including `default` and `doc` attributes, see [`denormalize`][Schema::denormalize].
+    ///
     /// [Parsing Canonical Form]:
     /// https://avro.apache.org/docs/++version++/specification/#parsing-canonical-form-for-schemas
     pub fn independent_canonical_form(&self, schemata: &[Schema]) -> Result<String, Error> {
         let mut this = self.clone();
-        this.denormalize(schemata, &mut HashSet::with_capacity(schemata.len()))?;
+        this.denormalize(schemata)?;
         Ok(this.canonical_form())
     }
 
@@ -688,7 +690,18 @@ impl Schema {
         UnionSchema::new(schemas).map(Schema::Union)
     }
 
-    fn denormalize(
+    /// Remove all external references from the schema.
+    ///
+    /// `schemata` must contain all externally referenced schemas.
+    ///
+    /// # Errors
+    /// Will return a [`Details::SchemaResolutionError`] if it fails to find
+    /// a referenced schema. This will put the schema in a partly denormalized state.
+    pub fn denormalize(&mut self, schemata: &[Schema]) -> AvroResult<()> {
+        self.denormalize_inner(schemata, &mut HashSet::new())
+    }
+
+    fn denormalize_inner(
         &mut self,
         schemata: &[Schema],
         defined_names: &mut HashSet<Name>,
@@ -708,7 +721,7 @@ impl Schema {
                     .find(|s| s.name().map(|n| *n == *name).unwrap_or(false));
                 if let Some(schema) = replacement_schema {
                     let mut denorm = schema.clone();
-                    denorm.denormalize(schemata, defined_names)?;
+                    denorm.denormalize_inner(schemata, defined_names)?;
                     *self = denorm;
                 } else {
                     return Err(Details::SchemaResolutionError(name.clone()).into());
@@ -717,18 +730,22 @@ impl Schema {
             Schema::Record(record_schema) => {
                 defined_names.insert(record_schema.name.clone());
                 for field in &mut record_schema.fields {
-                    field.schema.denormalize(schemata, defined_names)?;
+                    field.schema.denormalize_inner(schemata, defined_names)?;
                 }
             }
             Schema::Array(array_schema) => {
-                array_schema.items.denormalize(schemata, defined_names)?;
+                array_schema
+                    .items
+                    .denormalize_inner(schemata, defined_names)?;
             }
             Schema::Map(map_schema) => {
-                map_schema.types.denormalize(schemata, defined_names)?;
+                map_schema
+                    .types
+                    .denormalize_inner(schemata, defined_names)?;
             }
             Schema::Union(union_schema) => {
                 for schema in &mut union_schema.schemas {
-                    schema.denormalize(schemata, defined_names)?;
+                    schema.denormalize_inner(schemata, defined_names)?;
                 }
             }
             schema if schema.is_named() => {
