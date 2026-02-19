@@ -702,6 +702,26 @@ impl Schema {
         })
     }
 
+    /// Returns a `Schema::Fixed` with the given name, size and optional
+    /// aliases, doc and custom attributes.
+    #[builder(finish_fn = build)]
+    pub fn fixed(
+        #[builder(start_fn)] name: Name,
+        #[builder(start_fn)] size: usize,
+        aliases: Option<Vec<Alias>>,
+        doc: Option<String>,
+        attributes: Option<BTreeMap<String, JsonValue>>,
+    ) -> Self {
+        let attributes = attributes.unwrap_or_default();
+        Schema::Fixed(FixedSchema {
+            name,
+            size,
+            aliases,
+            doc,
+            attributes,
+        })
+    }
+
     /// Returns a [`Schema::Union`] with the given variants.
     ///
     /// # Errors
@@ -5551,6 +5571,54 @@ mod tests {
             assert_eq!(enum_schema.attributes, attributes);
         } else {
             panic!("Expected a Schema::Enum, got: {schema}");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_471_fixed_builder_only_mandatory() -> TestResult {
+        let name = Name::new("fixed_builder")?;
+        let size = 123;
+
+        let schema = Schema::fixed(name.clone(), size).build();
+
+        if let Schema::Fixed(fixed_schema) = schema {
+            assert_eq!(fixed_schema.name, name);
+            assert_eq!(fixed_schema.size, size);
+            assert_eq!(fixed_schema.aliases, None);
+            assert_eq!(fixed_schema.doc, None);
+            assert_eq!(fixed_schema.attributes, Default::default());
+        } else {
+            panic!("Expected a Schema::Fixed, got: {schema}");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_471_fixed_builder_with_optionals() -> TestResult {
+        let name = Name::new("enum_builder")?;
+        let size = 234;
+        let aliases = vec![Alias::new("alias")?];
+        let doc = "docu";
+        let attributes =
+            BTreeMap::from_iter([("key".to_string(), JsonValue::String("value".into()))]);
+
+        let schema = Schema::fixed(name.clone(), size)
+            .aliases(aliases.clone())
+            .doc(doc.into())
+            .attributes(attributes.clone())
+            .build();
+
+        if let Schema::Fixed(fixed_schema) = schema {
+            assert_eq!(fixed_schema.name, name);
+            assert_eq!(fixed_schema.size, size);
+            assert_eq!(fixed_schema.aliases, Some(aliases));
+            assert_eq!(fixed_schema.doc, Some(doc.into()));
+            assert_eq!(fixed_schema.attributes, attributes);
+        } else {
+            panic!("Expected a Schema::Fixed, got: {schema}");
         }
 
         Ok(())
