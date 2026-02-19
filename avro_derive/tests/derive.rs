@@ -17,11 +17,15 @@
 
 use apache_avro::{
     AvroSchema, AvroSchemaComponent, Reader, Schema, Writer, from_value,
-    schema::{Alias, EnumSchema, FixedSchema, Name, Names, Namespace, RecordSchema},
+    schema::{Alias, EnumSchema, FixedSchema, Name, Namespace, RecordSchema},
 };
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use std::{borrow::Cow, collections::HashMap, sync::Mutex};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+    sync::Mutex,
+};
 
 use pretty_assertions::assert_eq;
 
@@ -1850,14 +1854,14 @@ fn avro_rs_397_with() {
     )
     .unwrap();
 
-    fn long_schema(_named_schemas: &mut Names, _enclosing_namespace: &Namespace) -> Schema {
+    fn long_schema(_named_schemas: &mut HashSet<Name>, _enclosing_namespace: &Namespace) -> Schema {
         Schema::Long
     }
 
     mod module {
         use super::*;
         pub fn get_schema_in_ctxt(
-            _named_schemas: &mut Names,
+            _named_schemas: &mut HashSet<Name>,
             _enclosing_namespace: &Namespace,
         ) -> Schema {
             Schema::Bytes
@@ -1902,7 +1906,7 @@ fn avro_rs_397_with_generic() {
     .unwrap();
 
     fn generic<const N: usize>(
-        _named_schemas: &mut Names,
+        _named_schemas: &mut HashSet<Name>,
         _enclosing_namespace: &Namespace,
     ) -> Schema {
         Schema::Fixed(FixedSchema {
@@ -1993,7 +1997,7 @@ fn avro_rs_397_derive_with_expr_lambda() {
 
 #[test]
 fn avro_rs_398_transparent_with_skip() {
-    fn long_schema(_named_schemas: &mut Names, _enclosing_namespace: &Namespace) -> Schema {
+    fn long_schema(_named_schemas: &mut HashSet<Name>, _enclosing_namespace: &Namespace) -> Schema {
         Schema::Long
     }
 
@@ -2293,7 +2297,7 @@ fn avro_rs_448_transparent_with() {
         pub _a: i32,
     }
 
-    let mut named_schemas = HashMap::new();
+    let mut named_schemas = HashSet::new();
     assert_eq!(
         TestStruct::get_record_fields_in_ctxt(0, &mut named_schemas, &None),
         None
@@ -2319,7 +2323,7 @@ fn avro_rs_448_transparent_with_2() {
         pub _a: Foo,
     }
 
-    let mut named_schemas = HashMap::new();
+    let mut named_schemas = HashSet::new();
     let fields = TestStruct::get_record_fields_in_ctxt(0, &mut named_schemas, &None).unwrap();
     assert!(
         named_schemas.is_empty(),

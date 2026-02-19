@@ -16,11 +16,11 @@
 // under the License.
 
 use apache_avro::{AvroSchemaComponent, Schema};
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 #[test]
 fn avro_rs_394_avro_schema_component_without_derive_feature() {
-    let schema = i32::get_schema_in_ctxt(&mut HashMap::default(), &None);
+    let schema = i32::get_schema_in_ctxt(&mut HashSet::default(), &None);
     assert!(matches!(schema, Schema::Int));
 }
 
@@ -29,5 +29,5 @@ fn avro_rs_394_avro_schema_component_without_derive_feature() {
 fn avro_rs_394_avro_schema_component_nested_options() {
     type VeryOptional = Option<Option<i32>>;
 
-    let _schema = VeryOptional::get_schema_in_ctxt(&mut HashMap::default(), &None);
+    let _schema = VeryOptional::get_schema_in_ctxt(&mut HashSet::default(), &None);
 }
