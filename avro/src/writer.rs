@@ -524,7 +524,11 @@ impl<'a, W: Write> Writer<'a, W> {
 
         let mut header = Vec::new();
         header.extend_from_slice(AVRO_OBJECT_HEADER);
-        encode(&metadata.into(), &Schema::map(Schema::Bytes), &mut header)?;
+        encode(
+            &metadata.into(),
+            &Schema::map(Schema::Bytes).build(),
+            &mut header,
+        )?;
         header.extend_from_slice(&self.marker);
 
         Ok(header)

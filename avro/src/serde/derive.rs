@@ -572,7 +572,7 @@ where
         named_schemas: &mut HashSet<Name>,
         enclosing_namespace: &Namespace,
     ) -> Schema {
-        Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
+        Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace)).build()
     }
 
     fn get_record_fields_in_ctxt(

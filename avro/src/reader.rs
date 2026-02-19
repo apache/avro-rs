@@ -88,7 +88,7 @@ impl<'r, R: Read> Block<'r, R> {
             return Err(Details::HeaderMagic.into());
         }
 
-        let meta_schema = Schema::map(Schema::Bytes);
+        let meta_schema = Schema::map(Schema::Bytes).build();
         match decode(&meta_schema, &mut self.reader)? {
             Value::Map(metadata) => {
                 self.read_writer_schema(&metadata)?;

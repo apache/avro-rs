@@ -394,7 +394,7 @@ mod tests {
     #[test]
     fn test_decode_map_without_size() -> TestResult {
         let mut input: &[u8] = &[0x02, 0x08, 0x74, 0x65, 0x73, 0x74, 0x02, 0x00];
-        let result = decode(&Schema::map(Schema::Int), &mut input);
+        let result = decode(&Schema::map(Schema::Int).build(), &mut input);
         let mut expected = HashMap::new();
         expected.insert(String::from("test"), Int(1));
         assert_eq!(Map(expected), result?);
@@ -405,7 +405,7 @@ mod tests {
     #[test]
     fn test_decode_map_with_size() -> TestResult {
         let mut input: &[u8] = &[0x01, 0x0C, 0x08, 0x74, 0x65, 0x73, 0x74, 0x02, 0x00];
-        let result = decode(&Schema::map(Schema::Int), &mut input);
+        let result = decode(&Schema::map(Schema::Int).build(), &mut input);
         let mut expected = HashMap::new();
         expected.insert(String::from("test"), Int(1));
         assert_eq!(Map(expected), result?);

@@ -424,14 +424,18 @@ mod tests {
 
     #[test]
     fn test_avro_3939_compare_schemata_not_including_attributes() {
-        let schema_one = Schema::map_with_attributes(
-            Schema::Boolean,
-            BTreeMap::from_iter([("key1".to_string(), Value::Bool(true))]),
-        );
-        let schema_two = Schema::map_with_attributes(
-            Schema::Boolean,
-            BTreeMap::from_iter([("key2".to_string(), Value::Bool(true))]),
-        );
+        let schema_one = Schema::map(Schema::Boolean)
+            .attributes(BTreeMap::from_iter([(
+                "key1".to_string(),
+                Value::Bool(true),
+            )]))
+            .build();
+        let schema_two = Schema::map(Schema::Boolean)
+            .attributes(BTreeMap::from_iter([(
+                "key2".to_string(),
+                Value::Bool(true),
+            )]))
+            .build();
         // STRUCT_FIELD_EQ does not include attributes !
         assert!(STRUCT_FIELD_EQ.compare(&schema_one, &schema_two));
     }
@@ -441,24 +445,28 @@ mod tests {
         let struct_field_eq = StructFieldEq {
             include_attributes: true,
         };
-        let schema_one = Schema::map_with_attributes(
-            Schema::Boolean,
-            BTreeMap::from_iter([("key1".to_string(), Value::Bool(true))]),
-        );
-        let schema_two = Schema::map_with_attributes(
-            Schema::Boolean,
-            BTreeMap::from_iter([("key2".to_string(), Value::Bool(true))]),
-        );
+        let schema_one = Schema::map(Schema::Boolean)
+            .attributes(BTreeMap::from_iter([(
+                "key1".to_string(),
+                Value::Bool(true),
+            )]))
+            .build();
+        let schema_two = Schema::map(Schema::Boolean)
+            .attributes(BTreeMap::from_iter([(
+                "key2".to_string(),
+                Value::Bool(true),
+            )]))
+            .build();
         assert!(!struct_field_eq.compare(&schema_one, &schema_two));
     }
 
     #[test]
     fn test_avro_3939_compare_map_schemata() {
-        let schema_one = Schema::map(Schema::Boolean);
+        let schema_one = Schema::map(Schema::Boolean).build();
         assert!(!SPECIFICATION_EQ.compare(&schema_one, &Schema::Boolean));
         assert!(!STRUCT_FIELD_EQ.compare(&schema_one, &Schema::Boolean));
 
-        let schema_two = Schema::map(Schema::Boolean);
+        let schema_two = Schema::map(Schema::Boolean).build();
 
         let specification_eq_res = SPECIFICATION_EQ.compare(&schema_one, &schema_two);
         let struct_field_eq_res = STRUCT_FIELD_EQ.compare(&schema_one, &schema_two);
