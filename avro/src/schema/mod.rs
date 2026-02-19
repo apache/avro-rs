@@ -651,12 +651,13 @@ impl Schema {
     #[builder(finish_fn = build)]
     pub fn map(
         #[builder(start_fn)] types: Schema,
+        default: Option<HashMap<String, Value>>,
         attributes: Option<BTreeMap<String, JsonValue>>,
     ) -> Self {
         let attributes = attributes.unwrap_or_default();
         Schema::Map(MapSchema {
             types: Box::new(types),
-            default: None,
+            default,
             attributes,
         })
     }
@@ -665,12 +666,13 @@ impl Schema {
     #[builder(finish_fn = build)]
     pub fn array(
         #[builder(start_fn)] items: Schema,
+        default: Option<Vec<Value>>,
         attributes: Option<BTreeMap<String, JsonValue>>,
     ) -> Self {
         let attributes = attributes.unwrap_or_default();
         Schema::Array(ArraySchema {
             items: Box::new(items),
-            default: None,
+            default,
             attributes,
         })
     }
