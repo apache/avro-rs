@@ -544,13 +544,13 @@ impl<'a, W: Write> Writer<'a, W> {
 
 /// A buffer that can be cleared.
 pub trait Clearable {
-    /// Clear the buffer, keeping the capacity.
+    /// Clear the buffer.
     fn clear(&mut self);
 }
 
 impl Clearable for Vec<u8> {
     fn clear(&mut self) {
-        self.clear();
+        Vec::clear(self);
     }
 }
 
@@ -582,11 +582,16 @@ impl<'a, W: Clearable + Write> Writer<'a, W> {
     ///
     /// // Write some values again
     /// for value in values {
-    ///     writer.append(value)?;
+    ///     writer.append_value(value)?;
     /// }
     ///
     /// # Ok::<(), Error>(())
     /// ```
+    ///
+    /// # Warning
+    /// Any data that has been appended but not yet flushed will be silently
+    /// discarded. Call [`flush`](Writer::flush) before `reset()` if you need
+    /// to preserve in-flight records.
     pub fn reset(&mut self) {
         self.buffer.clear();
         self.writer.clear();
