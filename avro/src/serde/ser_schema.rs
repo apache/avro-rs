@@ -3270,7 +3270,9 @@ mod tests {
             e: 5,
         })?;
         let encoded = writer.into_inner()?;
-        let mut reader = Reader::builder(&encoded[..]).schema(&schema).build()?;
+        let mut reader = Reader::builder(&encoded[..])
+            .reader_schema(&schema)
+            .build()?;
         let decoded = from_value::<Foo>(&reader.next().unwrap()?)?;
         assert_eq!(
             decoded,

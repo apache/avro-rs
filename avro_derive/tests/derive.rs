@@ -63,7 +63,7 @@ where
     assert!(!encoded.is_empty());
     let schema = T::get_schema();
     let mut reader = Reader::builder(&encoded[..])
-        .schema(&schema)
+        .reader_schema(&schema)
         .build()
         .unwrap();
     if let Some(res) = reader.next() {

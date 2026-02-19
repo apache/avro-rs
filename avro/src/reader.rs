@@ -347,6 +347,7 @@ impl<'a, R: Read> Reader<'a, R> {
     pub fn new(reader: R) -> AvroResult<Reader<'a, R>> {
         Reader::builder(reader).build()
     }
+
     /// Creates a `Reader` given something implementing the `io::Read` trait to read from.
     /// With an optional reader `Schema` and optional schemata to use for resolving schema
     /// references.
@@ -355,21 +356,22 @@ impl<'a, R: Read> Reader<'a, R> {
     #[builder(finish_fn = build)]
     pub fn builder(
         #[builder(start_fn)] reader: R,
-        schema: Option<&'a Schema>,
+        reader_schema: Option<&'a Schema>,
         schemata: Option<Vec<&'a Schema>>,
     ) -> AvroResult<Reader<'a, R>> {
-        let schemata = schemata.unwrap_or_else(|| schema.map(|s| vec![s]).unwrap_or_default());
+        let schemata =
+            schemata.unwrap_or_else(|| reader_schema.map(|rs| vec![rs]).unwrap_or_default());
 
         let block = Block::new(reader, schemata)?;
         let mut reader = Reader {
             block,
-            reader_schema: schema,
+            reader_schema,
             errored: false,
             should_resolve_schema: false,
         };
         // Check if the reader and writer schemas disagree.
         reader.should_resolve_schema =
-            schema.is_some_and(|reader_schema| reader.writer_schema() != reader_schema);
+            reader_schema.is_some_and(|reader_schema| reader.writer_schema() != reader_schema);
         Ok(reader)
     }
 
@@ -726,7 +728,7 @@ mod tests {
     #[test]
     fn test_reader_iterator() -> TestResult {
         let schema = Schema::parse_str(SCHEMA)?;
-        let reader = Reader::builder(ENCODED).schema(&schema).build()?;
+        let reader = Reader::builder(ENCODED).reader_schema(&schema).build()?;
 
         let mut record1 = Record::new(&schema).unwrap();
         record1.put("a", 27i64);
@@ -751,7 +753,7 @@ mod tests {
         let mut invalid = &ENCODED[1..];
         assert!(
             Reader::builder(&mut invalid)
-                .schema(&schema)
+                .reader_schema(&schema)
                 .build()
                 .is_err()
         );
@@ -763,7 +765,9 @@ mod tests {
     fn test_reader_invalid_block() -> TestResult {
         let schema = Schema::parse_str(SCHEMA)?;
         let mut invalid = &ENCODED[0..ENCODED.len() - 19];
-        let reader = Reader::builder(&mut invalid).schema(&schema).build()?;
+        let reader = Reader::builder(&mut invalid)
+            .reader_schema(&schema)
+            .build()?;
         for value in reader {
             assert!(value.is_err());
         }

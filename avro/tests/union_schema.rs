@@ -77,7 +77,7 @@ where
     drop(writer); //drop the writer so that `encoded` is no more referenced mutably
 
     let mut reader = Reader::builder(encoded.as_slice())
-        .schema(schema)
+        .reader_schema(schema)
         .schemata(schemata.iter().collect())
         .build()?;
     from_value::<T>(&reader.next().expect("")?)

@@ -1058,7 +1058,9 @@ fn test_avro_3847_union_field_with_default_value_of_ref() -> TestResult {
     "#;
     let reader_schema = Schema::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
-    let reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
+    let reader = Reader::builder(&input[..])
+        .reader_schema(&reader_schema)
+        .build()?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
 
     assert_eq!(1, result.len());
@@ -1124,7 +1126,9 @@ fn test_avro_3847_union_field_with_default_value_of_ref() -> TestResult {
     "#;
     let reader_schema = Schema::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
-    let reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
+    let reader = Reader::builder(&input[..])
+        .reader_schema(&reader_schema)
+        .build()?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
 
     assert_eq!(1, result.len());
@@ -1184,7 +1188,9 @@ fn test_avro_3847_union_field_with_default_value_of_ref() -> TestResult {
     "#;
     let reader_schema = Schema::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
-    let reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
+    let reader = Reader::builder(&input[..])
+        .reader_schema(&reader_schema)
+        .build()?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
 
     assert_eq!(1, result.len());
@@ -1263,7 +1269,9 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_namespace() -> Test
     "#;
     let reader_schema = Schema::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
-    let reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
+    let reader = Reader::builder(&input[..])
+        .reader_schema(&reader_schema)
+        .build()?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
 
     assert_eq!(1, result.len());
@@ -1331,7 +1339,9 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_namespace() -> Test
     "#;
     let reader_schema = Schema::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
-    let reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
+    let reader = Reader::builder(&input[..])
+        .reader_schema(&reader_schema)
+        .build()?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
 
     assert_eq!(1, result.len());
@@ -1393,7 +1403,9 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_namespace() -> Test
     "#;
     let reader_schema = Schema::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
-    let reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
+    let reader = Reader::builder(&input[..])
+        .reader_schema(&reader_schema)
+        .build()?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
 
     assert_eq!(1, result.len());
@@ -1472,7 +1484,9 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_enclosing_namespace
     "#;
     let reader_schema = Schema::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
-    let reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
+    let reader = Reader::builder(&input[..])
+        .reader_schema(&reader_schema)
+        .build()?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
 
     assert_eq!(1, result.len());
@@ -1540,7 +1554,9 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_enclosing_namespace
     "#;
     let reader_schema = Schema::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
-    let reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
+    let reader = Reader::builder(&input[..])
+        .reader_schema(&reader_schema)
+        .build()?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
 
     assert_eq!(1, result.len());
@@ -1602,7 +1618,9 @@ fn test_avro_3847_union_field_with_default_value_of_ref_with_enclosing_namespace
     "#;
     let reader_schema = Schema::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
-    let reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
+    let reader = Reader::builder(&input[..])
+        .reader_schema(&reader_schema)
+        .build()?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
 
     assert_eq!(1, result.len());
@@ -1666,7 +1684,9 @@ fn test_avro_3851_read_default_value_for_simple_record_field() -> TestResult {
     "#;
     let reader_schema = Schema::parse_str(reader_schema_str)?;
     let input = write_schema_for_default_value_test()?;
-    let reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
+    let reader = Reader::builder(&input[..])
+        .reader_schema(&reader_schema)
+        .build()?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
 
     assert_eq!(1, result.len());
@@ -1713,7 +1733,9 @@ fn test_avro_3851_read_default_value_for_nested_record_field() -> TestResult {
     "#;
     let reader_schema = Schema::parse_str(reader_schema_str)?;
     let input = write_schema_for_default_value_test()?;
-    let reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
+    let reader = Reader::builder(&input[..])
+        .reader_schema(&reader_schema)
+        .build()?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
 
     assert_eq!(1, result.len());
@@ -1756,7 +1778,9 @@ fn test_avro_3851_read_default_value_for_enum_record_field() -> TestResult {
     "#;
     let reader_schema = Schema::parse_str(reader_schema_str)?;
     let input = write_schema_for_default_value_test()?;
-    let reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
+    let reader = Reader::builder(&input[..])
+        .reader_schema(&reader_schema)
+        .build()?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
 
     assert_eq!(1, result.len());
@@ -1796,7 +1820,9 @@ fn test_avro_3851_read_default_value_for_fixed_record_field() -> TestResult {
     "#;
     let reader_schema = Schema::parse_str(reader_schema_str)?;
     let input = write_schema_for_default_value_test()?;
-    let reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
+    let reader = Reader::builder(&input[..])
+        .reader_schema(&reader_schema)
+        .build()?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
 
     assert_eq!(1, result.len());
@@ -1833,7 +1859,9 @@ fn test_avro_3851_read_default_value_for_array_record_field() -> TestResult {
     "#;
     let reader_schema = Schema::parse_str(reader_schema_str)?;
     let input = write_schema_for_default_value_test()?;
-    let reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
+    let reader = Reader::builder(&input[..])
+        .reader_schema(&reader_schema)
+        .build()?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
 
     assert_eq!(1, result.len());
@@ -1873,7 +1901,9 @@ fn test_avro_3851_read_default_value_for_map_record_field() -> TestResult {
     "#;
     let reader_schema = Schema::parse_str(reader_schema_str)?;
     let input = write_schema_for_default_value_test()?;
-    let reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
+    let reader = Reader::builder(&input[..])
+        .reader_schema(&reader_schema)
+        .build()?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
 
     assert_eq!(1, result.len());
@@ -1951,7 +1981,9 @@ fn test_avro_3851_read_default_value_for_ref_record_field() -> TestResult {
     "#;
     let reader_schema = Schema::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
-    let reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
+    let reader = Reader::builder(&input[..])
+        .reader_schema(&reader_schema)
+        .build()?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
 
     assert_eq!(1, result.len());
@@ -1997,7 +2029,9 @@ fn test_avro_3851_read_default_value_for_enum() -> TestResult {
     "#;
     let reader_schema = Schema::parse_str(reader_schema_str)?;
     let input = writer.into_inner()?;
-    let reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
+    let reader = Reader::builder(&input[..])
+        .reader_schema(&reader_schema)
+        .build()?;
     let result = reader.collect::<Result<Vec<_>, _>>()?;
 
     assert_eq!(1, result.len());

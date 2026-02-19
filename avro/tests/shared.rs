@@ -112,7 +112,7 @@ fn test_folder(folder: &Path) -> Result<(), ErrorsDesc> {
     } else {
         let file: File = File::open(data_path).expect("Can't open data.avro");
         let reader = Reader::builder(BufReader::new(&file))
-            .schema(&schema)
+            .reader_schema(&schema)
             .build()
             .expect("Can't read data.avro");
 
@@ -131,7 +131,7 @@ fn test_folder(folder: &Path) -> Result<(), ErrorsDesc> {
         writer.flush().expect("Error on flush");
         let bytes: Vec<u8> = writer.into_inner().unwrap();
         let reader_bis = Reader::builder(&bytes[..])
-            .schema(&schema)
+            .reader_schema(&schema)
             .build()
             .expect("Can't read flushed vector");
 

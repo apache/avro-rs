@@ -251,7 +251,7 @@ fn write_ser<T: Serialize>(schema: &Schema, records: &[T]) -> AvroResult<Vec<u8>
 }
 
 fn read(schema: &Schema, bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
-    let reader = Reader::builder(bytes).schema(schema).build()?;
+    let reader = Reader::builder(bytes).reader_schema(schema).build()?;
 
     for record in reader {
         let _ = record?;

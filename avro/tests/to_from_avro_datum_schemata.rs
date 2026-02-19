@@ -113,7 +113,7 @@ fn test_avro_3683_multiple_schemata_writer_reader() -> TestResult {
     drop(writer); //drop the writer so that `output` is no more referenced mutably
 
     let reader = Reader::builder(output.as_slice())
-        .schema(schema_b)
+        .reader_schema(schema_b)
         .schemata(schemata)
         .build()?;
     let value = reader.into_iter().next().unwrap()?;
