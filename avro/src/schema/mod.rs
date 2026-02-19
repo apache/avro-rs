@@ -56,6 +56,7 @@ pub use crate::schema::{
     resolve::ResolvedSchema,
     union::UnionSchema,
 };
+use bon::bon;
 
 /// Represents documentation for complex Avro schemas.
 pub type Documentation = Option<String>;
@@ -383,6 +384,7 @@ type DecimalMetadata = usize;
 pub(crate) type Precision = DecimalMetadata;
 pub(crate) type Scale = DecimalMetadata;
 
+#[bon]
 impl Schema {
     /// Converts `self` into its [Parsing Canonical Form].
     ///
@@ -664,16 +666,12 @@ impl Schema {
     }
 
     /// Returns a `Schema::Array` with the given items.
-    pub fn array(items: Schema) -> Self {
-        Schema::Array(ArraySchema {
-            items: Box::new(items),
-            default: None,
-            attributes: Default::default(),
-        })
-    }
-
-    /// Returns a `Schema::Array` with the given items and custom attributes.
-    pub fn array_with_attributes(items: Schema, attributes: BTreeMap<String, JsonValue>) -> Self {
+    #[builder]
+    pub fn array(
+        #[builder(start_fn)] items: Schema,
+        attributes: Option<BTreeMap<String, JsonValue>>,
+    ) -> Self {
+        let attributes = attributes.unwrap_or_default();
         Schema::Array(ArraySchema {
             items: Box::new(items),
             default: None,
@@ -1154,7 +1152,7 @@ mod tests {
     #[test]
     fn test_array_schema() -> TestResult {
         let schema = Schema::parse_str(r#"{"type": "array", "items": "string"}"#)?;
-        assert_eq!(Schema::array(Schema::String), schema);
+        assert_eq!(Schema::array(Schema::String).call(), schema);
         Ok(())
     }
 
@@ -1607,7 +1605,8 @@ mod tests {
                             aliases: None,
                             schema: Schema::array(Schema::Ref {
                                 name: Name::new("Node")?,
-                            }),
+                            })
+                            .call(),
                             order: RecordFieldOrder::Ascending,
                             position: 1,
                             custom_attributes: Default::default(),
@@ -4682,10 +4681,9 @@ mod tests {
 
     #[test]
     fn test_avro_3927_serialize_array_with_custom_attributes() -> TestResult {
-        let expected = Schema::array_with_attributes(
-            Schema::Long,
-            BTreeMap::from([("field-id".to_string(), "1".into())]),
-        );
+        let expected = Schema::array(Schema::Long)
+            .attributes(BTreeMap::from([("field-id".to_string(), "1".into())]))
+            .call();
 
         let value = serde_json::to_value(&expected)?;
         let serialized = serde_json::to_string(&value)?;

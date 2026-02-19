@@ -376,7 +376,7 @@ mod tests {
     #[test]
     fn test_decode_array_without_size() -> TestResult {
         let mut input: &[u8] = &[6, 2, 4, 6, 0];
-        let result = decode(&Schema::array(Schema::Int), &mut input);
+        let result = decode(&Schema::array(Schema::Int).call(), &mut input);
         assert_eq!(Array(vec!(Int(1), Int(2), Int(3))), result?);
 
         Ok(())
@@ -385,7 +385,7 @@ mod tests {
     #[test]
     fn test_decode_array_with_size() -> TestResult {
         let mut input: &[u8] = &[5, 6, 2, 4, 6, 0];
-        let result = decode(&Schema::array(Schema::Int), &mut input);
+        let result = decode(&Schema::array(Schema::Int).call(), &mut input);
         assert_eq!(Array(vec!(Int(1), Int(2), Int(3))), result?);
 
         Ok(())
