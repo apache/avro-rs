@@ -392,12 +392,12 @@ pub(crate) mod tests {
         let empty: Vec<Value> = Vec::new();
         encode(
             &Value::Array(empty.clone()),
-            &Schema::array(Schema::Int).call(),
+            &Schema::array(Schema::Int).build(),
             &mut buf,
         )
         .expect(&success(
             &Value::Array(empty),
-            &Schema::array(Schema::Int).call(),
+            &Schema::array(Schema::Int).build(),
         ));
         assert_eq!(vec![0u8], buf);
     }

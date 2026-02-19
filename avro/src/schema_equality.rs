@@ -475,11 +475,11 @@ mod tests {
 
     #[test]
     fn test_avro_3939_compare_array_schemata() {
-        let schema_one = Schema::array(Schema::Boolean).call();
+        let schema_one = Schema::array(Schema::Boolean).build();
         assert!(!SPECIFICATION_EQ.compare(&schema_one, &Schema::Boolean));
         assert!(!STRUCT_FIELD_EQ.compare(&schema_one, &Schema::Boolean));
 
-        let schema_two = Schema::array(Schema::Boolean).call();
+        let schema_two = Schema::array(Schema::Boolean).build();
 
         let specification_eq_res = SPECIFICATION_EQ.compare(&schema_one, &schema_two);
         let struct_field_eq_res = STRUCT_FIELD_EQ.compare(&schema_one, &schema_two);

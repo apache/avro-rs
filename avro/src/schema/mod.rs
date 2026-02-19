@@ -665,8 +665,8 @@ impl Schema {
         })
     }
 
-    /// Returns a `Schema::Array` with the given items.
-    #[builder]
+    /// Returns a `Schema::Array` with the given items and optional custom attributes.
+    #[builder(finish_fn = build)]
     pub fn array(
         #[builder(start_fn)] items: Schema,
         attributes: Option<BTreeMap<String, JsonValue>>,
@@ -1152,7 +1152,7 @@ mod tests {
     #[test]
     fn test_array_schema() -> TestResult {
         let schema = Schema::parse_str(r#"{"type": "array", "items": "string"}"#)?;
-        assert_eq!(Schema::array(Schema::String).call(), schema);
+        assert_eq!(Schema::array(Schema::String).build(), schema);
         Ok(())
     }
 
@@ -1606,7 +1606,7 @@ mod tests {
                             schema: Schema::array(Schema::Ref {
                                 name: Name::new("Node")?,
                             })
-                            .call(),
+                            .build(),
                             order: RecordFieldOrder::Ascending,
                             position: 1,
                             custom_attributes: Default::default(),
@@ -4683,7 +4683,7 @@ mod tests {
     fn test_avro_3927_serialize_array_with_custom_attributes() -> TestResult {
         let expected = Schema::array(Schema::Long)
             .attributes(BTreeMap::from([("field-id".to_string(), "1".into())]))
-            .call();
+            .build();
 
         let value = serde_json::to_value(&expected)?;
         let serialized = serde_json::to_string(&value)?;
