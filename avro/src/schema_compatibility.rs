@@ -29,8 +29,8 @@
 //!
 //! ```
 //! # use apache_avro::{Schema, schema_compatibility::{Compatibility, SchemaCompatibility}};
-//! let writers_schema = Schema::array(Schema::Int);
-//! let readers_schema = Schema::array(Schema::Long);
+//! let writers_schema = Schema::array(Schema::Int).call();
+//! let readers_schema = Schema::array(Schema::Long).call();
 //! assert_eq!(SchemaCompatibility::can_read(&writers_schema, &readers_schema), Ok(Compatibility::Full));
 //! ```
 //!
@@ -40,8 +40,8 @@
 //!
 //! ```
 //! # use apache_avro::{Schema, schema_compatibility::SchemaCompatibility};
-//! let writers_schema = Schema::array(Schema::Long);
-//! let readers_schema = Schema::array(Schema::Int);
+//! let writers_schema = Schema::array(Schema::Long).call();
+//! let readers_schema = Schema::array(Schema::Int).call();
 //! assert!(SchemaCompatibility::can_read(&writers_schema, &readers_schema).is_err());
 //! ```
 //!
