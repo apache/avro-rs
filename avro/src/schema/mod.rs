@@ -722,6 +722,28 @@ impl Schema {
         })
     }
 
+    /// Returns a `Schema::Record` with the given name, size and optional
+    /// aliases, doc and custom attributes.
+    #[builder(finish_fn = build)]
+    pub fn record(
+        #[builder(start_fn)] name: Name,
+        fields: Option<Vec<RecordField>>,
+        aliases: Option<Vec<Alias>>,
+        doc: Option<String>,
+        attributes: Option<BTreeMap<String, JsonValue>>,
+    ) -> Self {
+        let fields = fields.unwrap_or_default();
+        let attributes = attributes.unwrap_or_default();
+        let record_schema = RecordSchema::builder()
+            .name(name)
+            .fields(fields)
+            .aliases(aliases)
+            .doc(doc)
+            .attributes(attributes)
+            .build();
+        Schema::Record(record_schema)
+    }
+
     /// Returns a [`Schema::Union`] with the given variants.
     ///
     /// # Errors
@@ -5598,7 +5620,7 @@ mod tests {
 
     #[test]
     fn avro_rs_471_fixed_builder_with_optionals() -> TestResult {
-        let name = Name::new("enum_builder")?;
+        let name = Name::new("fixed_builder")?;
         let size = 234;
         let aliases = vec![Alias::new("alias")?];
         let doc = "docu";
@@ -5619,6 +5641,68 @@ mod tests {
             assert_eq!(fixed_schema.attributes, attributes);
         } else {
             panic!("Expected a Schema::Fixed, got: {schema}");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_471_record_builder_only_mandatory() -> TestResult {
+        let name = Name::new("record_builder")?;
+
+        let schema = Schema::record(name.clone()).build();
+
+        if let Schema::Record(record_schema) = schema {
+            assert_eq!(record_schema.name, name);
+            assert_eq!(record_schema.fields, vec![]);
+            assert_eq!(record_schema.aliases, None);
+            assert_eq!(record_schema.doc, None);
+            assert_eq!(record_schema.lookup, Default::default());
+            assert_eq!(record_schema.attributes, Default::default());
+        } else {
+            panic!("Expected a Schema::Record, got: {schema}");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_471_record_builder_with_optionals() -> TestResult {
+        let name = Name::new("record_builder")?;
+        let fields = vec![
+            RecordField::builder()
+                .name("f1")
+                .schema(Schema::Boolean)
+                .build(),
+            RecordField::builder()
+                .name("f2")
+                .schema(Schema::Int)
+                .build(),
+        ];
+        let aliases = vec![Alias::new("alias")?];
+        let doc = "docu";
+        let attributes =
+            BTreeMap::from_iter([("key".to_string(), JsonValue::String("value".into()))]);
+
+        let schema = Schema::record(name.clone())
+            .fields(fields.clone())
+            .aliases(aliases.clone())
+            .doc(doc.into())
+            .attributes(attributes.clone())
+            .build();
+
+        if let Schema::Record(fixed_schema) = schema {
+            assert_eq!(fixed_schema.name, name);
+            assert_eq!(fixed_schema.fields, fields);
+            assert_eq!(fixed_schema.aliases, Some(aliases));
+            assert_eq!(fixed_schema.doc, Some(doc.into()));
+            assert_eq!(
+                fixed_schema.lookup,
+                BTreeMap::from_iter([("f1".into(), 0), ("f2".into(), 1)])
+            );
+            assert_eq!(fixed_schema.attributes, attributes);
+        } else {
+            panic!("Expected a Schema::Record, got: {schema}");
         }
 
         Ok(())
