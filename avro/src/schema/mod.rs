@@ -647,7 +647,8 @@ impl Schema {
         }
     }
 
-    /// Returns a `Schema::Map` with the given types and optional custom attributes.
+    /// Returns a `Schema::Map` with the given types and optional default
+    /// and custom attributes.
     #[builder(finish_fn = build)]
     pub fn map(
         #[builder(start_fn)] types: Schema,
@@ -662,7 +663,8 @@ impl Schema {
         })
     }
 
-    /// Returns a `Schema::Array` with the given items and optional custom attributes.
+    /// Returns a `Schema::Array` with the given items and optional default
+    /// and custom attributes.
     #[builder(finish_fn = build)]
     pub fn array(
         #[builder(start_fn)] items: Schema,
@@ -672,6 +674,29 @@ impl Schema {
         let attributes = attributes.unwrap_or_default();
         Schema::Array(ArraySchema {
             items: Box::new(items),
+            default,
+            attributes,
+        })
+    }
+
+    /// Returns a `Schema::Enum` with the given name, symbols and optional
+    /// aliases, doc, default and custom attributes.
+    #[builder(finish_fn = build)]
+    pub fn r#enum(
+        #[builder(start_fn)] name: Name,
+        #[builder(start_fn)] symbols: Vec<impl Into<String>>,
+        aliases: Option<Vec<Alias>>,
+        doc: Option<String>,
+        default: Option<String>,
+        attributes: Option<BTreeMap<String, JsonValue>>,
+    ) -> Self {
+        let attributes = attributes.unwrap_or_default();
+        let symbols = symbols.into_iter().map(Into::into).collect();
+        Schema::Enum(EnumSchema {
+            name,
+            symbols,
+            aliases,
+            doc,
             default,
             attributes,
         })
@@ -5475,6 +5500,58 @@ mod tests {
         hashmap.insert("foo".to_string(), Value::String("A".into()));
         assert_eq!(map.attributes, BTreeMap::new());
         assert_eq!(map.default, Some(hashmap));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_471_enum_builder_only_mandatory() -> TestResult {
+        let name = Name::new("enum_builder")?;
+        let symbols = vec!["A", "B", "C", "D", "E"];
+
+        let schema = Schema::r#enum(name.clone(), symbols.clone()).build();
+
+        if let Schema::Enum(enum_schema) = schema {
+            assert_eq!(enum_schema.name, name);
+            assert_eq!(enum_schema.symbols, symbols);
+            assert_eq!(enum_schema.aliases, None);
+            assert_eq!(enum_schema.doc, None);
+            assert_eq!(enum_schema.default, None);
+            assert_eq!(enum_schema.attributes, Default::default());
+        } else {
+            panic!("Expected a Schema::Enum, got: {schema}");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_471_enum_builder_with_optionals() -> TestResult {
+        let name = Name::new("enum_builder")?;
+        let symbols = vec!["A", "B", "C", "D", "E"];
+        let aliases = vec![Alias::new("alias")?];
+        let doc = "docu";
+        let default = "default value";
+        let attributes =
+            BTreeMap::from_iter([("key".to_string(), JsonValue::String("value".into()))]);
+
+        let schema = Schema::r#enum(name.clone(), symbols.clone())
+            .aliases(aliases.clone())
+            .doc(doc.into())
+            .default(default.into())
+            .attributes(attributes.clone())
+            .build();
+
+        if let Schema::Enum(enum_schema) = schema {
+            assert_eq!(enum_schema.name, name);
+            assert_eq!(enum_schema.symbols, symbols);
+            assert_eq!(enum_schema.aliases, Some(aliases));
+            assert_eq!(enum_schema.doc, Some(doc.into()));
+            assert_eq!(enum_schema.default, Some(default.into()));
+            assert_eq!(enum_schema.attributes, attributes);
+        } else {
+            panic!("Expected a Schema::Enum, got: {schema}");
+        }
 
         Ok(())
     }
