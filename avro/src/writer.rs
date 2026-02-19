@@ -557,8 +557,8 @@ impl Clearable for Vec<u8> {
 impl<'a, W: Clearable + Write> Writer<'a, W> {
     /// Reset the writer.
     ///
-    /// This will clear the underlying writer and the internal buffer.
-    /// It will also clear any user metadata added.
+    /// This will clear the underlying writer, the internal buffer, and the user metadata.
+    /// It will also generate a new sync marker.
     ///
     /// # Example
     /// ```
@@ -598,6 +598,7 @@ impl<'a, W: Clearable + Write> Writer<'a, W> {
         self.has_header = false;
         self.num_values = 0;
         self.user_metadata.clear();
+        self.marker = generate_sync_marker();
     }
 }
 
@@ -868,12 +869,7 @@ pub fn to_avro_datum_schemata<T: Into<Value>>(
 
 #[cfg(not(target_arch = "wasm32"))]
 fn generate_sync_marker() -> [u8; 16] {
-    let mut marker = [0_u8; 16];
-    std::iter::repeat_with(rand::random)
-        .take(16)
-        .enumerate()
-        .for_each(|(i, n)| marker[i] = n);
-    marker
+    rand::random()
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -1940,7 +1936,35 @@ mod tests {
 
         writer.flush()?;
         let second_buffer = writer.get_ref().clone();
-        assert_eq!(first_buffer, second_buffer);
+        assert_eq!(first_buffer.len(), second_buffer.len());
+        // File structure:
+        // Header: ? bytes
+        // Sync marker: 16 bytes
+        // Data: 6 bytes
+        // Sync marker: 16 bytes
+        let len = first_buffer.len();
+        let header = len - 16 - 6 - 16;
+        let data = header + 16;
+        assert_eq!(
+            first_buffer[..header],
+            second_buffer[..header],
+            "Written header must be the same, excluding sync marker"
+        );
+        assert_ne!(
+            first_buffer[header..data],
+            second_buffer[header..data],
+            "Sync markers should be different"
+        );
+        assert_eq!(
+            first_buffer[data..data + 6],
+            second_buffer[data..data + 6],
+            "Written data must be the same"
+        );
+        assert_ne!(
+            first_buffer[len - 16..],
+            second_buffer[len - 16..],
+            "Sync markers should be different"
+        );
 
         Ok(())
     }
