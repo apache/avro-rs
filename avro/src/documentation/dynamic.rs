@@ -208,7 +208,7 @@
 //! let reader_schema = Schema::parse_str(reader_raw_schema).unwrap();
 //!
 //! // reader creation can fail in case the input to read from is not Avro-compatible or malformed
-//! let reader = Reader::with_schema(&reader_schema, &input[..]).unwrap();
+//! let reader = Reader::builder(&input[..]).schema(&reader_schema).build().unwrap();
 //!
 //! // value is a Result of an Avro Value in case the read operation fails
 //! for value in reader {
@@ -268,7 +268,7 @@
 //!     writer.append_ser(test)?;
 //!
 //!     let input = writer.into_inner()?;
-//!     let reader = Reader::with_schema(&schema, &input[..])?;
+//!     let reader = Reader::builder(&input[..]).schema(&schema).build()?;
 //!
 //!     for record in reader {
 //!         println!("{:?}", from_value::<Test>(&record?));

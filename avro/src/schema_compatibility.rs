@@ -1333,7 +1333,7 @@ mod tests {
         record.put("c", "clubs");
         writer.append_value(record).unwrap();
         let input = writer.into_inner()?;
-        let mut reader = Reader::with_schema(&reader_schema, &input[..])?;
+        let mut reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
         assert_eq!(
             reader.next().unwrap().unwrap(),
             Value::Record(vec![
@@ -1397,7 +1397,7 @@ mod tests {
         record.put("c", "hearts");
         writer.append_value(record).unwrap();
         let input = writer.into_inner()?;
-        let mut reader = Reader::with_schema(&reader_schema, &input[..])?;
+        let mut reader = Reader::builder(&input[..]).schema(&reader_schema).build()?;
         assert_eq!(
             reader.next().unwrap().unwrap(),
             Value::Record(vec![

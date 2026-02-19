@@ -30,6 +30,7 @@ use crate::{
     types::Value,
     util,
 };
+use bon::bon;
 use log::warn;
 use serde::de::DeserializeOwned;
 use serde_json::from_slice;
@@ -337,57 +338,39 @@ pub struct Reader<'a, R> {
     should_resolve_schema: bool,
 }
 
+#[bon]
 impl<'a, R: Read> Reader<'a, R> {
-    /// Creates a `Reader` given something implementing the `io::Read` trait to read from.
-    /// No reader `Schema` will be set.
-    ///
-    /// **NOTE** The avro header is going to be read automatically upon creation of the `Reader`.
     pub fn new(reader: R) -> AvroResult<Reader<'a, R>> {
-        let block = Block::new(reader, vec![])?;
-        let reader = Reader {
-            block,
-            reader_schema: None,
-            errored: false,
-            should_resolve_schema: false,
-        };
-        Ok(reader)
+        Reader::builder(reader).build()
     }
-
-    /// Creates a `Reader` given a reader `Schema` and something implementing the `io::Read` trait
-    /// to read from.
+    /// Creates a `Reader` given something implementing the `io::Read` trait to read from.
+    /// With an optional reader `Schema` and optional schemata to use for resolving schema
+    /// references.
     ///
     /// **NOTE** The avro header is going to be read automatically upon creation of the `Reader`.
-    pub fn with_schema(schema: &'a Schema, reader: R) -> AvroResult<Reader<'a, R>> {
-        let block = Block::new(reader, vec![schema])?;
-        let mut reader = Reader {
-            block,
-            reader_schema: Some(schema),
-            errored: false,
-            should_resolve_schema: false,
-        };
-        // Check if the reader and writer schemas disagree.
-        reader.should_resolve_schema = reader.writer_schema() != schema;
-        Ok(reader)
-    }
-
-    /// Creates a `Reader` given a reader `Schema` and something implementing the `io::Read` trait
-    /// to read from.
-    ///
-    /// **NOTE** The avro header is going to be read automatically upon creation of the `Reader`.
-    pub fn with_schemata(
-        schema: &'a Schema,
-        schemata: Vec<&'a Schema>,
-        reader: R,
+    #[builder(finish_fn = build)]
+    pub fn builder(
+        #[builder(start_fn)] reader: R,
+        schema: Option<&'a Schema>,
+        schemata: Option<Vec<&'a Schema>>,
     ) -> AvroResult<Reader<'a, R>> {
+        let schemata = match schemata {
+            Some(schemata) => schemata,
+            None => match schema {
+                Some(schema) => vec![schema],
+                None => vec![],
+            },
+        };
         let block = Block::new(reader, schemata)?;
         let mut reader = Reader {
             block,
-            reader_schema: Some(schema),
+            reader_schema: schema,
             errored: false,
             should_resolve_schema: false,
         };
         // Check if the reader and writer schemas disagree.
-        reader.should_resolve_schema = reader.writer_schema() != schema;
+        reader.should_resolve_schema =
+            schema.is_some_and(|reader_schema| reader.writer_schema() != reader_schema);
         Ok(reader)
     }
 
@@ -744,7 +727,7 @@ mod tests {
     #[test]
     fn test_reader_iterator() -> TestResult {
         let schema = Schema::parse_str(SCHEMA)?;
-        let reader = Reader::with_schema(&schema, ENCODED)?;
+        let reader = Reader::builder(ENCODED).schema(&schema).build()?;
 
         let mut record1 = Record::new(&schema).unwrap();
         record1.put("a", 27i64);
@@ -767,7 +750,12 @@ mod tests {
     fn test_reader_invalid_header() -> TestResult {
         let schema = Schema::parse_str(SCHEMA)?;
         let mut invalid = &ENCODED[1..];
-        assert!(Reader::with_schema(&schema, &mut invalid).is_err());
+        assert!(
+            Reader::builder(&mut invalid)
+                .schema(&schema)
+                .build()
+                .is_err()
+        );
 
         Ok(())
     }
@@ -776,7 +764,7 @@ mod tests {
     fn test_reader_invalid_block() -> TestResult {
         let schema = Schema::parse_str(SCHEMA)?;
         let mut invalid = &ENCODED[0..ENCODED.len() - 19];
-        let reader = Reader::with_schema(&schema, &mut invalid)?;
+        let reader = Reader::builder(&mut invalid).schema(&schema).build()?;
         for value in reader {
             assert!(value.is_err());
         }

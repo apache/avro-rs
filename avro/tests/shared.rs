@@ -111,8 +111,10 @@ fn test_folder(folder: &Path) -> Result<(), ErrorsDesc> {
         ));
     } else {
         let file: File = File::open(data_path).expect("Can't open data.avro");
-        let reader =
-            Reader::with_schema(&schema, BufReader::new(&file)).expect("Can't read data.avro");
+        let reader = Reader::builder(BufReader::new(&file))
+            .schema(&schema)
+            .build()
+            .expect("Can't read data.avro");
 
         let mut writer = Writer::with_codec(&schema, Vec::new(), Codec::Null).unwrap();
 
@@ -128,8 +130,10 @@ fn test_folder(folder: &Path) -> Result<(), ErrorsDesc> {
 
         writer.flush().expect("Error on flush");
         let bytes: Vec<u8> = writer.into_inner().unwrap();
-        let reader_bis =
-            Reader::with_schema(&schema, &bytes[..]).expect("Can't read flushed vector");
+        let reader_bis = Reader::builder(&bytes[..])
+            .schema(&schema)
+            .build()
+            .expect("Can't read flushed vector");
 
         let mut records_iter: Iter<Value> = records.iter();
         for r2 in reader_bis {

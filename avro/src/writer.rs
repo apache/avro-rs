@@ -1477,7 +1477,7 @@ mod tests {
         writer.add_user_metadata("a".to_string(), "b")?;
         let result = writer.into_inner()?;
 
-        let reader = Reader::with_schema(&schema, &result[..])?;
+        let reader = Reader::builder(&result[..]).schema(&schema).build()?;
         let mut expected = HashMap::new();
         expected.insert("a".to_string(), vec![b'b']);
         assert_eq!(reader.user_metadata(), &expected);

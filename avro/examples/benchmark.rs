@@ -78,7 +78,9 @@ fn benchmark(
 
     for _ in 0..runs {
         let start = Instant::now();
-        let reader = Reader::with_schema(schema, BufReader::new(&bytes[..]))?;
+        let reader = Reader::builder(BufReader::new(&bytes[..]))
+            .schema(schema)
+            .build()?;
 
         let mut read_records = Vec::with_capacity(count);
         for record in reader {

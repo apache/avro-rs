@@ -112,7 +112,10 @@ fn test_avro_3683_multiple_schemata_writer_reader() -> TestResult {
     writer.flush()?;
     drop(writer); //drop the writer so that `output` is no more referenced mutably
 
-    let reader = Reader::with_schemata(schema_b, schemata, output.as_slice())?;
+    let reader = Reader::builder(output.as_slice())
+        .schema(schema_b)
+        .schemata(schemata)
+        .build()?;
     let value = reader.into_iter().next().unwrap()?;
     assert_eq!(value, record);
 

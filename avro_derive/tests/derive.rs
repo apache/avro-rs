@@ -62,7 +62,10 @@ where
 {
     assert!(!encoded.is_empty());
     let schema = T::get_schema();
-    let mut reader = Reader::with_schema(&schema, &encoded[..]).unwrap();
+    let mut reader = Reader::builder(&encoded[..])
+        .schema(&schema)
+        .build()
+        .unwrap();
     if let Some(res) = reader.next() {
         match res {
             Ok(value) => {
