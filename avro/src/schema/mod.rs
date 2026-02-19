@@ -398,7 +398,7 @@ impl Schema {
     /// Returns the [Parsing Canonical Form] of `self` that is self contained (not dependent on
     /// any definitions in `schemata`)
     ///
-    /// If your require a self contained schema including `default` and `doc` attributes, see [`denormalize`][Schema::denormalize].
+    /// If you require a self contained schema including `default` and `doc` attributes, see [`denormalize`][Schema::denormalize].
     ///
     /// [Parsing Canonical Form]:
     /// https://avro.apache.org/docs/++version++/specification/#parsing-canonical-form-for-schemas
