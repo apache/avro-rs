@@ -121,14 +121,22 @@ const FIXED_16_DEFAULT: &str = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
 ///
 ///    Set the `doc` attribute of the field. Defaults to the documentation of the field.
 ///
-///  - `#[avro(default = "null")]` or `#[avro(default = false)]`
+///  - `#[avro(default = ..)]`
 ///
 ///    Control the `default` attribute of the field. When not used, it will use [`AvroSchemaComponent::field_default`]
-///    to get the default value for a type. This default value can be overridden by providing a JSON string.
-///    To remove the `default` attribute for a field, set `default` to `false`.
+///    to get the default value for a type. To remove the `default` attribute for a field, set `default` to `false`: `#[avro(default = false)]`.
 ///
-///    _Note:_ This is a JSON value not a Rust value, as this is put in the schema itself. To encode a JSON string
-///    you need to use double quotes: `#[avro(default = r#""Some string value""#)]`.
+///    To override or set a default value, provide a JSON string:
+///
+///      - Null: `#[avro(default = "null")]`
+///      - Boolean: `#[avro(default = "true")]`.
+///      - Number: `#[avro(default = "42")]` or `#[avro(default = "42.5")]`
+///      - String: `#[avro(default = r#""String needs extra quotes""#)]`.
+///      - Array: `#[avro(default = r#"["One", "Two", "Three"]"#)]`.
+///      - Object: `#[avro(default = r#"{"One": 1}"#)]`.
+///
+///    See [the specification](https://avro.apache.org/docs/++version++/specification/#schema-record)
+///    for details on how to map a type to a JSON value.
 ///
 ///  - `#[serde(alias = "name")]`
 ///
