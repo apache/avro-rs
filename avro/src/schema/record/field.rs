@@ -21,6 +21,7 @@ use crate::schema::{Documentation, Name, Names, Parser, Schema, SchemaKind};
 use crate::types;
 use crate::util::MapHelper;
 use crate::validator::validate_record_field_name;
+use log::warn;
 use serde::ser::SerializeMap;
 use serde::{Serialize, Serializer};
 use serde_json::{Map, Value};
@@ -81,6 +82,12 @@ impl RecordField {
 
         let ty = field.get("type").ok_or(Details::GetRecordFieldTypeField)?;
         let schema = parser.parse(ty, &enclosing_record.namespace)?;
+
+        if let Some(logical_type) = field.get("logicalType") {
+            warn!(
+                "Ignored the {enclosing_record}.logicalType property (`{logical_type}`). It should probably be nested instide the `type` for the field"
+            );
+        }
 
         let default = field.get("default").cloned();
         Self::resolve_default_value(
