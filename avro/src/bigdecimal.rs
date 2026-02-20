@@ -137,8 +137,10 @@ mod tests {
           "fields": [
             {
               "name": "field_name",
-              "type": "bytes",
-              "logicalType": "big-decimal"
+              "type": {
+                "type": "bytes",
+                "logicalType": "big-decimal"
+              }
             }
           ]
         }
@@ -196,8 +198,10 @@ mod tests {
           "fields": [
             {
               "name": "big_decimal",
-              "type": "bytes",
-              "logicalType": "big-decimal"
+              "type": {
+                "type": "bytes",
+                "logicalType": "big-decimal"
+              }
             }
           ]
         }

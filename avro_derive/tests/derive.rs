@@ -2088,13 +2088,17 @@ fn avro_rs_401_supported_type_variants() {
             },
             {
                 "name":"six",
-                "type":"array",
-                "items":"int"
+                "type":{
+                    "type":"array",
+                    "items":"int"
+                }
             },
             {
                 "name":"seven",
-                "type":"array",
-                "items":"int"
+                "type": {
+                    "type":"array",
+                    "items":"int"
+                }
             }
         ]
     }

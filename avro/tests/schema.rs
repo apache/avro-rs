@@ -1850,8 +1850,10 @@ fn test_avro_3851_read_default_value_for_array_record_field() -> TestResult {
                 "type": "int"
             },  {
                 "name": "f2",
-                "type": "array",
-                "items": "int",
+                "type": {
+                    "type": "array",
+                    "items": "int"
+                },
                 "default": [1, 2, 3]
             }
         ]
@@ -1892,8 +1894,10 @@ fn test_avro_3851_read_default_value_for_map_record_field() -> TestResult {
                 "type": "int"
             },  {
                 "name": "f2",
-                "type": "map",
-                "values": "string",
+                "type": {
+                    "type": "map",
+                    "values": "string"
+                },
                 "default": { "a": "A", "b": "B", "c": "C" }
             }
         ]

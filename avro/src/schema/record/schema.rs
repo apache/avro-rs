@@ -66,16 +66,6 @@ fn calculate_lookup_table(fields: &[RecordField]) -> BTreeMap<String, usize> {
         .collect()
 }
 
-#[derive(Debug, Default)]
-pub(crate) enum RecordSchemaParseLocation {
-    /// When the parse is happening at root level
-    #[default]
-    Root,
-
-    /// When the parse is happening inside a record field
-    FromField,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

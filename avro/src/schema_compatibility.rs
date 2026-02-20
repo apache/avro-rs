@@ -542,7 +542,7 @@ mod tests {
     }
 
     fn int_list_record_schema() -> Schema {
-        Schema::parse_str(r#"{"type":"record", "name":"List", "fields": [{"name": "head", "type": "int"},{"name": "tail", "type": "array", "items": "int"}]}"#).unwrap()
+        Schema::parse_str(r#"{"type":"record", "name":"List", "fields": [{"name": "head", "type": "int"},{"name": "tail", "type": {"type": "array", "items": "int"}}]}"#).unwrap()
     }
 
     fn long_list_record_schema() -> Schema {
@@ -551,7 +551,7 @@ mod tests {
       {
         "type":"record", "name":"List", "fields": [
           {"name": "head", "type": "long"},
-          {"name": "tail", "type": "array", "items": "long"}
+          {"name": "tail", "type": {"type": "array", "items": "long"}}
       ]}
 "#,
         )
