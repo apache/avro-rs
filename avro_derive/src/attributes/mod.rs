@@ -125,7 +125,7 @@ impl NamedTypeOptions {
                     serde_json::from_str(&default_value[..]).map_err(|e| {
                         vec![syn::Error::new(
                             ident.span(),
-                            format!("Invalid avro default json: \n{e}"),
+                            format!("Invalid Avro `default` JSON: \n{e}"),
                         )]
                     })?;
                 quote! {

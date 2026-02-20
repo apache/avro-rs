@@ -124,7 +124,7 @@ const FIXED_16_DEFAULT: &str = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
 ///  - `#[avro(default = "null")]` or `#[avro(default = false)]`
 ///
 ///    Control the `default` attribute of the field. When not used, it will use [`AvroSchemaComponent::field_default`]
-///    to get the default value for a type. This default value can be overriden by providing a JSON string.
+///    to get the default value for a type. This default value can be overridden by providing a JSON string.
 ///    To remove the `default` attribute for a field, set `default` to `false`.
 ///
 ///    _Note:_ This is a JSON value not a Rust value, as this is put in the schema itself. To encode a JSON string
@@ -615,11 +615,9 @@ where
         None
     }
 
-    /// If `T` has a field default, this will return an array of with that default. Otherwise there is no default.
+    /// If `T` has a field default, this will return an array of elements with that default. Otherwise there is no default.
     fn field_default() -> Option<serde_json::Value> {
-        T::field_default().map(|default| {
-            serde_json::Value::Array(std::array::from_fn::<_, N, _>(|_| default.clone()).to_vec())
-        })
+        T::field_default().map(|default| serde_json::Value::Array(vec![default; N]))
     }
 }
 
