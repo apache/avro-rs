@@ -91,8 +91,9 @@ pub use decimal::Decimal;
 pub use duration::{Days, Duration, Millis, Months};
 pub use error::Error;
 pub use reader::{
-    GenericSingleObjectReader, Reader, SpecificSingleObjectReader, from_avro_datum,
-    from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
+    Reader, from_avro_datum, from_avro_datum_reader_schemata, from_avro_datum_schemata,
+    read_marker,
+    single_object::{GenericSingleObjectReader, SpecificSingleObjectReader},
 };
 pub use schema::Schema;
 pub use serde::{AvroSchema, AvroSchemaComponent, from_value, to_value};
