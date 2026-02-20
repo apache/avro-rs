@@ -22,6 +22,7 @@ struct T {
     x: Option<i8>,
     y: Option<String>,
     #[serde(skip_serializing)]
+    #[avro(default = false)]
     z: Option<i8>,
 }
 

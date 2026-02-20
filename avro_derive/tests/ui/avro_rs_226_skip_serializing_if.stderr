@@ -1,6 +1,7 @@
-error: `#[serde(skip_serializing)]` and `#[serde(skip_serializing_if)]` require `#[avro(default = "..")]`
+error: `#[serde(skip_serializing)]` and `#[serde(skip_serializing_if)]` are incompatible with `#[avro(default = false)]`
   --> tests/ui/avro_rs_226_skip_serializing_if.rs:23:5
    |
 23 | /     #[serde(skip_serializing_if = "Option::is_none")]
-24 | |     y: Option<String>,
+24 | |     #[avro(default = false)]
+25 | |     y: Option<String>,
    | |_____________________^

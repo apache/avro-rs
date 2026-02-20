@@ -21,6 +21,7 @@
 //! Although a user will mostly use the Serde attributes, there are some Avro specific attributes
 //! a user can use. These add extra metadata to the generated schema.
 
+use crate::attributes::FieldDefault;
 use crate::case::RenameRule;
 use darling::FromMeta;
 use proc_macro2::Span;
@@ -53,6 +54,9 @@ pub struct ContainerAttributes {
     /// [`serde::ContainerAttributes::rename_all`]: crate::attributes::serde::ContainerAttributes::rename_all
     #[darling(default)]
     pub rename_all: RenameRule,
+    /// Set the default value if this schema is used as a field
+    #[darling(default)]
+    pub default: Option<String>,
 }
 
 impl ContainerAttributes {
@@ -125,7 +129,7 @@ pub struct FieldAttributes {
     ///
     /// This is also used as the default when `skip_serializing{_if}` is used.
     #[darling(default)]
-    pub default: Option<String>,
+    pub default: FieldDefault,
     /// Deprecated. Use [`serde::FieldAttributes::alias`] instead.
     ///
     /// Adds the `aliases` field to the schema.
