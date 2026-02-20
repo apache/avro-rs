@@ -130,7 +130,7 @@ mod tests {
     use apache_avro_test_helper::TestResult;
 
     #[test]
-    fn avro_rs_471_enum_builder_only_mandatory() -> TestResult {
+    fn avro_rs_472_enum_builder_only_mandatory() -> TestResult {
         let name = Name::new("enum_builder")?;
         let symbols = vec!["A", "B", "C", "D", "E"];
 
@@ -151,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_471_enum_builder_with_optionals() -> TestResult {
+    fn avro_rs_472_enum_builder_with_optionals() -> TestResult {
         let name = Name::new("enum_builder")?;
         let symbols = vec!["A", "B", "C", "D", "E"];
         let aliases = vec![Alias::new("alias")?];
@@ -182,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_471_fixed_builder_only_mandatory() -> TestResult {
+    fn avro_rs_472_fixed_builder_only_mandatory() -> TestResult {
         let name = Name::new("fixed_builder")?;
         let size = 123;
 
@@ -202,7 +202,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_471_fixed_builder_with_optionals() -> TestResult {
+    fn avro_rs_472_fixed_builder_with_optionals() -> TestResult {
         let name = Name::new("fixed_builder")?;
         let size = 234;
         let aliases = vec![Alias::new("alias")?];
@@ -230,7 +230,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_471_record_builder_only_mandatory() -> TestResult {
+    fn avro_rs_472_record_builder_only_mandatory() -> TestResult {
         let name = Name::new("record_builder")?;
 
         let schema = Schema::record(name.clone()).build();
@@ -250,7 +250,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_471_record_builder_with_optionals() -> TestResult {
+    fn avro_rs_472_record_builder_with_optionals() -> TestResult {
         let name = Name::new("record_builder")?;
         let fields = vec![
             RecordField::builder()
