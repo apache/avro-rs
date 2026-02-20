@@ -17,6 +17,7 @@
 
 //! Logic for parsing and interacting with schemas in Avro format.
 
+mod builders;
 mod name;
 mod parser;
 mod record;
@@ -645,51 +646,6 @@ impl Schema {
         }
     }
 
-    /// Returns a `Schema::Map` with the given types.
-    pub fn map(types: Schema) -> Self {
-        Schema::Map(MapSchema {
-            types: Box::new(types),
-            default: None,
-            attributes: Default::default(),
-        })
-    }
-
-    /// Returns a `Schema::Map` with the given types and custom attributes.
-    pub fn map_with_attributes(types: Schema, attributes: BTreeMap<String, JsonValue>) -> Self {
-        Schema::Map(MapSchema {
-            types: Box::new(types),
-            default: None,
-            attributes,
-        })
-    }
-
-    /// Returns a `Schema::Array` with the given items.
-    pub fn array(items: Schema) -> Self {
-        Schema::Array(ArraySchema {
-            items: Box::new(items),
-            default: None,
-            attributes: Default::default(),
-        })
-    }
-
-    /// Returns a `Schema::Array` with the given items and custom attributes.
-    pub fn array_with_attributes(items: Schema, attributes: BTreeMap<String, JsonValue>) -> Self {
-        Schema::Array(ArraySchema {
-            items: Box::new(items),
-            default: None,
-            attributes,
-        })
-    }
-
-    /// Returns a [`Schema::Union`] with the given variants.
-    ///
-    /// # Errors
-    /// Will return an error if `schemas` has duplicate unnamed schemas or if `schemas`
-    /// contains a union.
-    pub fn union(schemas: Vec<Schema>) -> AvroResult<Schema> {
-        UnionSchema::new(schemas).map(Schema::Union)
-    }
-
     /// Remove all external references from the schema.
     ///
     /// `schemata` must contain all externally referenced schemas.
@@ -1154,14 +1110,14 @@ mod tests {
     #[test]
     fn test_array_schema() -> TestResult {
         let schema = Schema::parse_str(r#"{"type": "array", "items": "string"}"#)?;
-        assert_eq!(Schema::array(Schema::String), schema);
+        assert_eq!(Schema::array(Schema::String).build(), schema);
         Ok(())
     }
 
     #[test]
     fn test_map_schema() -> TestResult {
         let schema = Schema::parse_str(r#"{"type": "map", "values": "double"}"#)?;
-        assert_eq!(Schema::map(Schema::Double), schema);
+        assert_eq!(Schema::map(Schema::Double).build(), schema);
         Ok(())
     }
 
@@ -1607,7 +1563,8 @@ mod tests {
                             aliases: None,
                             schema: Schema::array(Schema::Ref {
                                 name: Name::new("Node")?,
-                            }),
+                            })
+                            .build(),
                             order: RecordFieldOrder::Ascending,
                             position: 1,
                             custom_attributes: Default::default(),
@@ -4682,10 +4639,9 @@ mod tests {
 
     #[test]
     fn test_avro_3927_serialize_array_with_custom_attributes() -> TestResult {
-        let expected = Schema::array_with_attributes(
-            Schema::Long,
-            BTreeMap::from([("field-id".to_string(), "1".into())]),
-        );
+        let expected = Schema::array(Schema::Long)
+            .attributes(BTreeMap::from([("field-id".to_string(), "1".into())]))
+            .build();
 
         let value = serde_json::to_value(&expected)?;
         let serialized = serde_json::to_string(&value)?;
@@ -4705,10 +4661,9 @@ mod tests {
 
     #[test]
     fn test_avro_3927_serialize_map_with_custom_attributes() -> TestResult {
-        let expected = Schema::map_with_attributes(
-            Schema::Long,
-            BTreeMap::from([("field-id".to_string(), "1".into())]),
-        );
+        let expected = Schema::map(Schema::Long)
+            .attributes(BTreeMap::from([("field-id".to_string(), "1".into())]))
+            .build();
 
         let value = serde_json::to_value(&expected)?;
         let serialized = serde_json::to_string(&value)?;

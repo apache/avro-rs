@@ -29,8 +29,8 @@
 //!
 //! ```
 //! # use apache_avro::{Schema, schema_compatibility::{Compatibility, SchemaCompatibility}};
-//! let writers_schema = Schema::array(Schema::Int);
-//! let readers_schema = Schema::array(Schema::Long);
+//! let writers_schema = Schema::array(Schema::Int).build();
+//! let readers_schema = Schema::array(Schema::Long).build();
 //! assert_eq!(SchemaCompatibility::can_read(&writers_schema, &readers_schema), Ok(Compatibility::Full));
 //! ```
 //!
@@ -40,8 +40,8 @@
 //!
 //! ```
 //! # use apache_avro::{Schema, schema_compatibility::SchemaCompatibility};
-//! let writers_schema = Schema::array(Schema::Long);
-//! let readers_schema = Schema::array(Schema::Int);
+//! let writers_schema = Schema::array(Schema::Long).build();
+//! let readers_schema = Schema::array(Schema::Int).build();
 //! assert!(SchemaCompatibility::can_read(&writers_schema, &readers_schema).is_err());
 //! ```
 //!
@@ -1333,7 +1333,9 @@ mod tests {
         record.put("c", "clubs");
         writer.append_value(record).unwrap();
         let input = writer.into_inner()?;
-        let mut reader = Reader::with_schema(&reader_schema, &input[..])?;
+        let mut reader = Reader::builder(&input[..])
+            .reader_schema(&reader_schema)
+            .build()?;
         assert_eq!(
             reader.next().unwrap().unwrap(),
             Value::Record(vec![
@@ -1397,7 +1399,9 @@ mod tests {
         record.put("c", "hearts");
         writer.append_value(record).unwrap();
         let input = writer.into_inner()?;
-        let mut reader = Reader::with_schema(&reader_schema, &input[..])?;
+        let mut reader = Reader::builder(&input[..])
+            .reader_schema(&reader_schema)
+            .build()?;
         assert_eq!(
             reader.next().unwrap().unwrap(),
             Value::Record(vec![
