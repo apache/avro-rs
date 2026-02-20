@@ -271,7 +271,7 @@ impl Parser {
             }
         }
 
-        // This crate support some logical types natively, and this function tries to convert
+        // This crate supports some logical types natively, and this function tries to convert
         // a native complex type with a logical type attribute to these logical types.
         // This function:
         // 1. Checks whether the native complex type is in the supported kinds.
