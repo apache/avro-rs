@@ -15,11 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::Schema;
 use crate::schema::{
     Alias, ArraySchema, EnumSchema, FixedSchema, MapSchema, Name, RecordField, RecordSchema,
+    UnionSchema,
 };
 use crate::types::Value;
+use crate::{AvroResult, Schema};
 use bon::bon;
 use serde_json::Value as JsonValue;
 use std::collections::{BTreeMap, HashMap};
@@ -121,6 +122,15 @@ impl Schema {
             .attributes(attributes)
             .build();
         Schema::Record(record_schema)
+    }
+
+    /// Returns a [`Schema::Union`] with the given variants.
+    ///
+    /// # Errors
+    /// Will return an error if `schemas` has duplicate unnamed schemas or if `schemas`
+    /// contains a union.
+    pub fn union(schemas: Vec<Schema>) -> AvroResult<Schema> {
+        UnionSchema::new(schemas).map(Schema::Union)
     }
 }
 
@@ -286,6 +296,21 @@ mod tests {
             assert_eq!(fixed_schema.attributes, attributes);
         } else {
             panic!("Expected a Schema::Record, got: {schema}");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_472_union_builder() -> TestResult {
+        let variants = vec![Schema::Null, Schema::Boolean, Schema::Int];
+
+        let schema = Schema::union(variants.clone())?;
+
+        if let Schema::Union(union_schema) = schema {
+            assert_eq!(union_schema.variants(), variants);
+        } else {
+            panic!("Expected a Schema::Union, got: {schema}");
         }
 
         Ok(())

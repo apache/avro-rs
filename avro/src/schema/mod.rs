@@ -646,15 +646,6 @@ impl Schema {
         }
     }
 
-    /// Returns a [`Schema::Union`] with the given variants.
-    ///
-    /// # Errors
-    /// Will return an error if `schemas` has duplicate unnamed schemas or if `schemas`
-    /// contains a union.
-    pub fn union(schemas: Vec<Schema>) -> AvroResult<Schema> {
-        UnionSchema::new(schemas).map(Schema::Union)
-    }
-
     /// Remove all external references from the schema.
     ///
     /// `schemata` must contain all externally referenced schemas.
