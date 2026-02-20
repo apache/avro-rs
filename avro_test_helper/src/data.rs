@@ -362,8 +362,8 @@ pub const OTHER_ATTRIBUTES_EXAMPLES: &[(&str, bool)] = &[
                 "cp_int": 1,
                 "cp_array": [ 1, 2, 3, 4],
                 "fields": [
-                    {"name": "f1", "type": "fixed", "size": 16, "cp_object": {"a":1,"b":2}},
-                    {"name": "f2", "type": "fixed", "size": 8, "cp_null": null}
+                    {"name": "f1", "type": {"name": "f1", "type": "fixed", "size": 16}, "cp_object": {"a":1,"b":2}},
+                    {"name": "f2", "type": {"name": "f2", "type": "fixed", "size": 8}, "cp_null": null}
                 ]
             }"#,
         true,

@@ -3014,7 +3014,7 @@ mod tests {
                 {"name": "stringField", "type": "string"},
                 {"name": "intField", "type": "int"},
                 {"name": "bigDecimalField", "type": {"type": "bytes", "logicalType": "big-decimal"}},
-                {"name": "uuidField", "type": "fixed", "size": 16, "logicalType": "uuid"},
+                {"name": "uuidField", "type": {"name": "uuid", "type": "fixed", "size": 16, "logicalType": "uuid"}},
                 {"name": "innerRecord", "type": ["null", "TestRecord"]}
             ]
         }"#,

@@ -17,9 +17,7 @@
 
 use crate::AvroResult;
 use crate::error::Details;
-use crate::schema::{
-    Documentation, Name, Names, Parser, RecordSchemaParseLocation, Schema, SchemaKind,
-};
+use crate::schema::{Documentation, Name, Names, Parser, Schema, SchemaKind};
 use crate::types;
 use crate::util::MapHelper;
 use crate::validator::validate_record_field_name;
@@ -81,12 +79,8 @@ impl RecordField {
 
         validate_record_field_name(&name)?;
 
-        // TODO: "type" = "<record name>"
-        let schema = parser.parse_complex(
-            field,
-            &enclosing_record.namespace,
-            RecordSchemaParseLocation::FromField,
-        )?;
+        let ty = field.get("type").ok_or(Details::GetRecordFieldTypeField)?;
+        let schema = parser.parse(ty, &enclosing_record.namespace)?;
 
         let default = field.get("default").cloned();
         Self::resolve_default_value(
@@ -162,10 +156,14 @@ impl RecordField {
                         .is_ok();
 
                     if !resolved {
+                        let schemata = names.values().cloned().collect::<Vec<_>>();
                         return Err(Details::GetDefaultRecordField(
                             field_name.to_string(),
                             record_name.to_string(),
-                            field_schema.canonical_form(),
+                            field_schema
+                                .independent_canonical_form(&schemata)
+                                .unwrap_or("Unknown".to_string()),
+                            value.clone(),
                         )
                         .into());
                     }
