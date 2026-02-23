@@ -64,8 +64,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 snap = { default-features = false, version = "1.1.0", optional = true }
-strum = { default-features = false, version = "0.27.2" }
-strum_macros = { default-features = false, version = "0.27.2" }
+strum = { default-features = false, version = "0.28.0", features = ["derive"] }
 thiserror = { default-features = false, version = "2.0.18" }
 uuid = { workspace = true }
 liblzma = { default-features = false, version = "0.4.6", optional = true }

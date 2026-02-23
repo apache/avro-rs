@@ -24,6 +24,17 @@ mod record;
 mod resolve;
 mod union;
 
+pub(crate) use crate::schema::resolve::{
+    ResolvedOwnedSchema, resolve_names, resolve_names_with_schemata,
+};
+pub use crate::schema::{
+    name::{Alias, Aliases, Name, Names, NamesRef, Namespace},
+    record::{
+        RecordField, RecordFieldBuilder, RecordFieldOrder, RecordSchema, RecordSchemaBuilder,
+    },
+    resolve::ResolvedSchema,
+    union::UnionSchema,
+};
 use crate::{
     AvroResult,
     error::{Details, Error},
@@ -44,19 +55,7 @@ use std::{
     hash::Hash,
     io::Read,
 };
-use strum_macros::{Display, EnumDiscriminants};
-
-pub(crate) use crate::schema::resolve::{
-    ResolvedOwnedSchema, resolve_names, resolve_names_with_schemata,
-};
-pub use crate::schema::{
-    name::{Alias, Aliases, Name, Names, NamesRef, Namespace},
-    record::{
-        RecordField, RecordFieldBuilder, RecordFieldOrder, RecordSchema, RecordSchemaBuilder,
-    },
-    resolve::ResolvedSchema,
-    union::UnionSchema,
-};
+use strum::{Display, EnumDiscriminants};
 
 /// Represents documentation for complex Avro schemas.
 pub type Documentation = Option<String>;
