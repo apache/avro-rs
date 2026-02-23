@@ -22,10 +22,6 @@ use crate::schema::{
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
-const FIXED_8_DEFAULT: &str = "\0\0\0\0\0\0\0\0";
-const FIXED_12_DEFAULT: &str = "\0\0\0\0\0\0\0\0\0\0\0\0";
-const FIXED_16_DEFAULT: &str = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
-
 /// Trait for types that serve as an Avro data model.
 ///
 /// **Do not implement directly!** Either derive it or implement [`AvroSchemaComponent`] to get this trait
@@ -371,8 +367,8 @@ pub trait AvroSchemaComponent {
     ///
     /// `None` means no default value, which is also the default implementation.
     ///
-    /// Implementations of this trait provided by this crate use the [`Default::default`] value of
-    /// the type.
+    /// Implementations of this trait provided by this crate return `None` except for `Option<T>`
+    /// which returns `Some(serde_json::Value::Null)`.
     fn field_default() -> Option<serde_json::Value> {
         None
     }
@@ -523,10 +519,6 @@ where
 
 macro_rules! impl_schema (
     ($type:ty, $variant_constructor:expr) => (
-        impl_schema!($type, $variant_constructor, <$type as Default>::default());
-    );
-
-    ($type:ty, $variant_constructor:expr, $default_constructor:expr) => (
         impl AvroSchemaComponent for $type {
             fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: &Namespace) -> Schema {
                 $variant_constructor
@@ -537,7 +529,7 @@ macro_rules! impl_schema (
             }
 
             fn field_default() -> Option<serde_json::Value> {
-                Some(serde_json::Value::from($default_constructor))
+                None
             }
         }
     );
@@ -554,8 +546,8 @@ impl_schema!(u32, Schema::Long);
 impl_schema!(f32, Schema::Float);
 impl_schema!(f64, Schema::Double);
 impl_schema!(String, Schema::String);
-impl_schema!(str, Schema::String, String::default());
-impl_schema!(char, Schema::String, String::from(char::default()));
+impl_schema!(str, Schema::String);
+impl_schema!(char, Schema::String);
 
 macro_rules! impl_passthrough_schema (
     ($type:ty where T: AvroSchemaComponent + ?Sized $(+ $bound:tt)*) => (
@@ -593,7 +585,7 @@ macro_rules! impl_array_schema (
             }
 
             fn field_default() -> Option<serde_json::Value> {
-                Some(serde_json::Value::Array(Vec::new()))
+                None
             }
         }
     );
@@ -625,7 +617,7 @@ where
 
     /// If `T` has a field default, this will return an array of elements with that default. Otherwise there is no default.
     fn field_default() -> Option<serde_json::Value> {
-        T::field_default().map(|default| serde_json::Value::Array(vec![default; N]))
+        None
     }
 }
 
@@ -649,7 +641,7 @@ where
     }
 
     fn field_default() -> Option<serde_json::Value> {
-        Some(serde_json::Value::Object(serde_json::Map::new()))
+        None
     }
 }
 
@@ -719,7 +711,7 @@ impl AvroSchemaComponent for core::time::Duration {
     }
 
     fn field_default() -> Option<serde_json::Value> {
-        Some(serde_json::Value::String(FIXED_12_DEFAULT.to_string()))
+        None
     }
 }
 
@@ -758,7 +750,7 @@ impl AvroSchemaComponent for uuid::Uuid {
     }
 
     fn field_default() -> Option<serde_json::Value> {
-        Some(serde_json::Value::String(FIXED_16_DEFAULT.to_string()))
+        None
     }
 }
 
@@ -795,7 +787,7 @@ impl AvroSchemaComponent for u64 {
     }
 
     fn field_default() -> Option<serde_json::Value> {
-        Some(serde_json::Value::String(FIXED_8_DEFAULT.to_string()))
+        None
     }
 }
 
@@ -832,7 +824,7 @@ impl AvroSchemaComponent for u128 {
     }
 
     fn field_default() -> Option<serde_json::Value> {
-        Some(serde_json::Value::String(FIXED_16_DEFAULT.to_string()))
+        None
     }
 }
 
@@ -869,7 +861,7 @@ impl AvroSchemaComponent for i128 {
     }
 
     fn field_default() -> Option<serde_json::Value> {
-        Some(serde_json::Value::String(FIXED_16_DEFAULT.to_string()))
+        None
     }
 }
 
