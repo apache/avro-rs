@@ -50,7 +50,7 @@ fn max_prec_for_len(len: usize) -> Result<usize, Error> {
 ///
 /// More information about Avro values can be found in the [Avro
 /// Specification](https://avro.apache.org/docs/++version++/specification/#schema-declaration)
-#[derive(Clone, Debug, PartialEq, strum_macros::EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, strum::EnumDiscriminants)]
 #[strum_discriminants(name(ValueKind))]
 pub enum Value {
     /// A `null` Avro value.

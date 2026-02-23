@@ -28,7 +28,7 @@ use serde::{Serialize, Serializer};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::str::FromStr;
-use strum_macros::EnumString;
+use strum::EnumString;
 
 /// Represents a `field` in a `record` Avro schema.
 #[derive(bon::Builder, Clone, Debug, PartialEq)]
