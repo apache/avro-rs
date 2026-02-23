@@ -85,7 +85,7 @@ impl RecordField {
 
         if let Some(logical_type) = field.get("logicalType") {
             warn!(
-                "Ignored the {enclosing_record}.logicalType property (`{logical_type}`). It should probably be nested instide the `type` for the field"
+                "Ignored the {enclosing_record}.logicalType property (`{logical_type}`). It should probably be nested inside the `type` for the field"
             );
         }
 
@@ -121,7 +121,7 @@ impl RecordField {
             aliases,
             order,
             position,
-            custom_attributes: RecordField::get_field_custom_attributes(field, &schema),
+            custom_attributes: RecordField::get_field_custom_attributes(field),
             schema,
         })
     }
@@ -169,7 +169,7 @@ impl RecordField {
                             record_name.to_string(),
                             field_schema
                                 .independent_canonical_form(&schemata)
-                                .unwrap_or("Unknown".to_string()),
+                                .unwrap_or_else(|_| field_schema.canonical_form()),
                             value.clone(),
                         )
                         .into());
@@ -181,19 +181,11 @@ impl RecordField {
         Ok(())
     }
 
-    fn get_field_custom_attributes(
-        field: &Map<String, Value>,
-        schema: &Schema,
-    ) -> BTreeMap<String, Value> {
+    fn get_field_custom_attributes(field: &Map<String, Value>) -> BTreeMap<String, Value> {
         let mut custom_attributes: BTreeMap<String, Value> = BTreeMap::new();
         for (key, value) in field {
             match key.as_str() {
-                "type" | "name" | "doc" | "default" | "order" | "position" | "aliases"
-                | "logicalType" => continue,
-                key if key == "symbols" && matches!(schema, Schema::Enum(_)) => continue,
-                key if key == "size" && matches!(schema, Schema::Fixed(_)) => continue,
-                key if key == "items" && matches!(schema, Schema::Array(_)) => continue,
-                key if key == "values" && matches!(schema, Schema::Map(_)) => continue,
+                "type" | "name" | "doc" | "default" | "order" | "aliases" => continue,
                 _ => custom_attributes.insert(key.clone(), value.clone()),
             };
         }

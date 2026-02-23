@@ -1389,7 +1389,7 @@ mod tests {
                     attributes: BTreeMap::new(),
                 }),
                 false,
-                "Invalid value: Fixed(11, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) for schema: Duration(FixedSchema { name: Name { name: \"TestName\", namespace: None }, aliases: None, doc: None, size: 12, attributes: {} }). Reason: The value's size ('11') must be exactly 12 to be a Duration",
+                r#"Invalid value: Fixed(11, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) for schema: Duration(FixedSchema { name: Name { name: "TestName", namespace: None }, aliases: None, doc: None, size: 12, attributes: {} }). Reason: The value's size ('11') must be exactly 12 to be a Duration"#,
             ),
             (
                 Value::Record(vec![("unknown_field_name".to_string(), Value::Null)]),

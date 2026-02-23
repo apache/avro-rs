@@ -1055,7 +1055,7 @@ fn pcf_array(arr: &[JsonValue], defined_names: &mut HashSet<String>) -> String {
 }
 
 fn pcf_string(s: &str) -> String {
-    format!("\"{s}\"")
+    format!(r#""{s}""#)
 }
 
 const RESERVED_FIELDS: &[&str] = &[
@@ -1101,9 +1101,9 @@ mod tests {
 
     #[test]
     fn test_primitive_schema() -> TestResult {
-        assert_eq!(Schema::Null, Schema::parse_str("\"null\"")?);
-        assert_eq!(Schema::Int, Schema::parse_str("\"int\"")?);
-        assert_eq!(Schema::Double, Schema::parse_str("\"double\"")?);
+        assert_eq!(Schema::Null, Schema::parse_str(r#""null""#)?);
+        assert_eq!(Schema::Int, Schema::parse_str(r#""int""#)?);
+        assert_eq!(Schema::Double, Schema::parse_str(r#""double""#)?);
         Ok(())
     }
 
@@ -1326,7 +1326,7 @@ mod tests {
             Ok(_) => unreachable!("Expected an error that the name is already defined"),
             Err(e) => assert_eq!(
                 e.to_string(),
-                "Two schemas with the same fullname were given: \"A\""
+                r#"Two schemas with the same fullname were given: "A""#
             ),
         }
 
@@ -3768,7 +3768,7 @@ mod tests {
         "#;
         assert_eq!(
             Schema::parse_str(schema_str).unwrap_err().to_string(),
-            "`default`'s value type of field `f1` in `ns.record1` must be a `\"int\"`. Got: String(\"invalid\")"
+            r#"`default`'s value type of field `f1` in `ns.record1` must be a `"int"`. Got: String("invalid")"#
         );
 
         Ok(())
@@ -3801,7 +3801,7 @@ mod tests {
         "#;
         assert_eq!(
             Schema::parse_str(schema_str).unwrap_err().to_string(),
-            "`default`'s value type of field `f1` in `ns.record1` must be a `{\"name\":\"ns.record2\",\"type\":\"record\",\"fields\":[{\"name\":\"f1_1\",\"type\":\"int\"}]}`. Got: String(\"invalid\")"
+            r#"`default`'s value type of field `f1` in `ns.record1` must be a `{"name":"ns.record2","type":"record","fields":[{"name":"f1_1","type":"int"}]}`. Got: String("invalid")"#
         );
 
         Ok(())
@@ -3829,7 +3829,7 @@ mod tests {
         "#;
         assert_eq!(
             Schema::parse_str(schema_str).unwrap_err().to_string(),
-            "`default`'s value type of field `f1` in `ns.record1` must be a `{\"name\":\"ns.enum1\",\"type\":\"enum\",\"symbols\":[\"a\",\"b\",\"c\"]}`. Got: String(\"invalid\")"
+            r#"`default`'s value type of field `f1` in `ns.record1` must be a `{"name":"ns.enum1","type":"enum","symbols":["a","b","c"]}`. Got: String("invalid")"#
         );
 
         Ok(())
@@ -3857,7 +3857,7 @@ mod tests {
         "#;
         assert_eq!(
             Schema::parse_str(schema_str).unwrap_err().to_string(),
-            "`default`'s value type of field `f1` in `ns.record1` must be a `{\"name\":\"ns.fixed1\",\"type\":\"fixed\",\"size\":3}`. Got: Number(100)"
+            r#"`default`'s value type of field `f1` in `ns.record1` must be a `{"name":"ns.fixed1","type":"fixed","size":3}`. Got: Number(100)"#
         );
 
         Ok(())
@@ -3961,7 +3961,7 @@ mod tests {
         "#;
         assert_eq!(
             Schema::parse_str(schema_str).unwrap_err().to_string(),
-            "`default`'s value type of field `f2` in `ns.record1` must be a `{\"name\":\"ns.record2\",\"type\":\"record\",\"fields\":[{\"name\":\"f1_1\",\"type\":\"int\"}]}`. Got: Object {\"f1_1\": Bool(true)}"
+            r#"`default`'s value type of field `f2` in `ns.record1` must be a `{"name":"ns.record2","type":"record","fields":[{"name":"f1_1","type":"int"}]}`. Got: Object {"f1_1": Bool(true)}"#
         );
 
         Ok(())
@@ -4765,7 +4765,7 @@ mod tests {
         assert!(schema.is_err());
         assert_eq!(
             schema.unwrap_err().to_string(),
-            "Invalid schema: There is no type called 'record', if you meant to define a non-primitive schema, it should be defined inside `type` attribute. Please review the specification"
+            "Invalid schema: There is no type called 'record', if you meant to define a non-primitive schema, it should be defined inside `type` attribute."
         );
 
         let valid_schema = r#"
@@ -5419,7 +5419,7 @@ mod tests {
         let result = Schema::parse_str(schema_str).unwrap_err();
         assert_eq!(
             result.to_string(),
-            "Invalid schema: There is no type called 'enum', if you meant to define a non-primitive schema, it should be defined inside `type` attribute. Please review the specification"
+            "Invalid schema: There is no type called 'enum', if you meant to define a non-primitive schema, it should be defined inside `type` attribute."
         );
         Ok(())
     }

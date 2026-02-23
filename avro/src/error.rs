@@ -405,7 +405,7 @@ pub enum Details {
     #[error("No `type` in complex type")]
     GetComplexTypeField,
 
-    #[error("No `type` in in record field")]
+    #[error("No `type` in record field")]
     GetRecordFieldTypeField,
 
     #[error("No `fields` in record")]
@@ -433,7 +433,7 @@ pub enum Details {
     InvalidNamespace(String, &'static str),
 
     #[error(
-        "Invalid schema: There is no type called '{0}', if you meant to define a non-primitive schema, it should be defined inside `type` attribute. Please review the specification"
+        "Invalid schema: There is no type called '{0}', if you meant to define a non-primitive schema, it should be defined inside `type` attribute."
     )]
     InvalidSchemaRecord(String),
 

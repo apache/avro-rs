@@ -816,7 +816,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     }
                 }
                 Err(create_error(format!(
-                    "Cannot find a Fixed(size = 16, name = \"i128\") schema in {:?}",
+                    r#"Cannot find a Fixed(size = 16, name = "i128") schema in {:?}"#,
                     union_schema.schemas
                 )))
             }
@@ -984,7 +984,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     }
                 }
                 Err(create_error(format!(
-                    "Cannot find a matching Int-like, Long-like or Fixed(size = 8, name \"u64\") schema in {:?}",
+                    r#"Cannot find a matching Int-like, Long-like or Fixed(size = 8, name "u64") schema in {:?}"#,
                     union_schema.schemas
                 )))
             }
@@ -1019,7 +1019,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     }
                 }
                 Err(create_error(format!(
-                    "Cannot find a Fixed(size = 16, name = \"u128\") schema in {:?}",
+                    r#"Cannot find a Fixed(size = 16, name = "u128") schema in {:?}"#,
                     union_schema.schemas
                 )))
             }
@@ -1133,7 +1133,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     }
                 }
                 Err(create_error(format!(
-                    "Cannot find a matching String, Bytes or Fixed(size = 4, name = \"char\") schema in {union_schema:?}"
+                    r#"Cannot find a matching String, Bytes or Fixed(size = 4, name = "char") schema in {union_schema:?}"#
                 )))
             }
             expected => Err(create_error(format!("Expected {expected}. Got: char"))),
