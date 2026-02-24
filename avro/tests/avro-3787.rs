@@ -204,15 +204,17 @@ fn avro_3787_deserialize_union_with_unknown_symbol_no_ref() -> TestResult {
                             "name": "BarParent",
                             "fields": [
                                 {
-                                    "type": "enum",
                                     "name": "Bar",
-                                    "symbols":
-                                    [
-                                        "bar0",
-                                        "bar1",
-                                        "bar2"
-                                    ],
-                                    "default": "bar0"
+                                    "type": {
+                                        "type": "enum",
+                                        "name": "Bar",
+                                        "symbols": [
+                                            "bar0",
+                                            "bar1",
+                                            "bar2"
+                                        ],
+                                        "default": "bar0"
+                                    }
                                 }
                             ]
                         }
@@ -235,14 +237,16 @@ fn avro_3787_deserialize_union_with_unknown_symbol_no_ref() -> TestResult {
                             "name": "BarParent",
                             "fields": [
                                 {
-                                    "type": "enum",
                                     "name": "Bar",
-                                    "symbols":
-                                    [
-                                        "bar0",
-                                        "bar1"
-                                    ],
-                                    "default": "bar0"
+                                    "type": {
+                                        "name": "Bar",
+                                        "type": "enum",
+                                        "symbols": [
+                                            "bar0",
+                                            "bar1"
+                                        ],
+                                        "default": "bar0"
+                                    }
                                 }
                             ]
                         }

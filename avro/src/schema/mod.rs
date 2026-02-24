@@ -38,7 +38,7 @@ pub use crate::schema::{
 use crate::{
     AvroResult,
     error::{Details, Error},
-    schema::{parser::Parser, record::RecordSchemaParseLocation},
+    schema::parser::Parser,
     schema_equality,
     types::{self, Value},
 };
@@ -1054,7 +1054,7 @@ fn pcf_array(arr: &[JsonValue], defined_names: &mut HashSet<String>) -> String {
 }
 
 fn pcf_string(s: &str) -> String {
-    format!("\"{s}\"")
+    format!(r#""{s}""#)
 }
 
 const RESERVED_FIELDS: &[&str] = &[
@@ -1100,9 +1100,9 @@ mod tests {
 
     #[test]
     fn test_primitive_schema() -> TestResult {
-        assert_eq!(Schema::Null, Schema::parse_str("\"null\"")?);
-        assert_eq!(Schema::Int, Schema::parse_str("\"int\"")?);
-        assert_eq!(Schema::Double, Schema::parse_str("\"double\"")?);
+        assert_eq!(Schema::Null, Schema::parse_str(r#""null""#)?);
+        assert_eq!(Schema::Int, Schema::parse_str(r#""int""#)?);
+        assert_eq!(Schema::Double, Schema::parse_str(r#""double""#)?);
         Ok(())
     }
 
@@ -1325,7 +1325,7 @@ mod tests {
             Ok(_) => unreachable!("Expected an error that the name is already defined"),
             Err(e) => assert_eq!(
                 e.to_string(),
-                "Two schemas with the same fullname were given: \"A\""
+                r#"Two schemas with the same fullname were given: "A""#
             ),
         }
 
@@ -1835,9 +1835,12 @@ mod tests {
               "name" : "record",
               "fields" : [
                  {
-                    "type" : "enum",
                     "name" : "enum",
-                    "symbols": ["one", "two", "three"]
+                    "type": {
+                        "name" : "enum",
+                        "type" : "enum",
+                        "symbols": ["one", "two", "three"]
+                    }
                  },
                  { "name" : "next", "type" : "enum" }
              ]
@@ -1881,17 +1884,9 @@ mod tests {
                     doc: None,
                     default: None,
                     aliases: None,
-                    schema: Schema::Enum(EnumSchema {
-                        name: Name {
-                            name: "enum".to_owned(),
-                            namespace: None,
-                        },
-                        aliases: None,
-                        doc: None,
-                        symbols: vec!["one".to_string(), "two".to_string(), "three".to_string()],
-                        default: None,
-                        attributes: Default::default(),
-                    }),
+                    schema: Schema::Ref {
+                        name: Name::new("enum")?,
+                    },
                     order: RecordFieldOrder::Ascending,
                     position: 1,
                     custom_attributes: Default::default(),
@@ -1918,9 +1913,12 @@ mod tests {
               "name" : "record",
               "fields" : [
                  {
-                    "type" : "fixed",
-                    "name" : "fixed",
-                    "size": 456
+                    "name": "fixed",
+                    "type": {
+                        "type" : "fixed",
+                        "name" : "fixed",
+                        "size": 456
+                    }
                  },
                  { "name" : "next", "type" : "fixed" }
              ]
@@ -1964,16 +1962,9 @@ mod tests {
                     doc: None,
                     default: None,
                     aliases: None,
-                    schema: Schema::Fixed(FixedSchema {
-                        name: Name {
-                            name: "fixed".to_owned(),
-                            namespace: None,
-                        },
-                        aliases: None,
-                        doc: None,
-                        size: 456,
-                        attributes: Default::default(),
-                    }),
+                    schema: Schema::Ref {
+                        name: Name::new("fixed")?,
+                    },
                     order: RecordFieldOrder::Ascending,
                     position: 1,
                     custom_attributes: Default::default(),
@@ -2138,7 +2129,7 @@ mod tests {
         "fields": [
             {"name": "a", "type": "long", "default": 42},
             {"name": "b", "type": "string"},
-            {"name": "c", "type": "long", "logicalType": "timestamp-micros"}
+            {"name": "c", "type": {"type": "long", "logicalType": "timestamp-micros"}}
         ]
     }
 "#;
@@ -3068,11 +3059,13 @@ mod tests {
           "fields": [
             {
                 "name": "decimal",
-                "type": "fixed",
-                "name": "nestedFixed",
-                "size": 8,
-                "logicalType": "decimal",
-                "precision": 4
+                "type": {
+                    "type": "fixed",
+                    "name": "nestedFixed",
+                    "size": 8,
+                    "logicalType": "decimal",
+                    "precision": 4
+                }
             }
           ]
         });
@@ -3772,19 +3765,10 @@ mod tests {
             ]
         }
         "#;
-        let expected = Details::GetDefaultRecordField(
-            "f1".to_string(),
-            "ns.record1".to_string(),
-            r#""int""#.to_string(),
-        )
-        .to_string();
-        let result = Schema::parse_str(schema_str);
-        assert!(result.is_err());
-        let err = result
-            .map_err(|e| e.to_string())
-            .err()
-            .unwrap_or_else(|| "unexpected".to_string());
-        assert_eq!(expected, err);
+        assert_eq!(
+            Schema::parse_str(schema_str).unwrap_err().to_string(),
+            r#"`default`'s value type of field `f1` in `ns.record1` must be a `"int"`. Got: String("invalid")"#
+        );
 
         Ok(())
     }
@@ -3814,20 +3798,10 @@ mod tests {
             ]
         }
         "#;
-        let expected = Details::GetDefaultRecordField(
-            "f1".to_string(),
-            "ns.record1".to_string(),
-            r#"{"name":"ns.record2","type":"record","fields":[{"name":"f1_1","type":"int"}]}"#
-                .to_string(),
-        )
-        .to_string();
-        let result = Schema::parse_str(schema_str);
-        assert!(result.is_err());
-        let err = result
-            .map_err(|e| e.to_string())
-            .err()
-            .unwrap_or_else(|| "unexpected".to_string());
-        assert_eq!(expected, err);
+        assert_eq!(
+            Schema::parse_str(schema_str).unwrap_err().to_string(),
+            r#"`default`'s value type of field `f1` in `ns.record1` must be a `{"name":"ns.record2","type":"record","fields":[{"name":"f1_1","type":"int"}]}`. Got: String("invalid")"#
+        );
 
         Ok(())
     }
@@ -3852,19 +3826,10 @@ mod tests {
             ]
         }
         "#;
-        let expected = Details::GetDefaultRecordField(
-            "f1".to_string(),
-            "ns.record1".to_string(),
-            r#"{"name":"ns.enum1","type":"enum","symbols":["a","b","c"]}"#.to_string(),
-        )
-        .to_string();
-        let result = Schema::parse_str(schema_str);
-        assert!(result.is_err());
-        let err = result
-            .map_err(|e| e.to_string())
-            .err()
-            .unwrap_or_else(|| "unexpected".to_string());
-        assert_eq!(expected, err);
+        assert_eq!(
+            Schema::parse_str(schema_str).unwrap_err().to_string(),
+            r#"`default`'s value type of field `f1` in `ns.record1` must be a `{"name":"ns.enum1","type":"enum","symbols":["a","b","c"]}`. Got: String("invalid")"#
+        );
 
         Ok(())
     }
@@ -3889,19 +3854,10 @@ mod tests {
             ]
         }
         "#;
-        let expected = Details::GetDefaultRecordField(
-            "f1".to_string(),
-            "ns.record1".to_string(),
-            r#"{"name":"ns.fixed1","type":"fixed","size":3}"#.to_string(),
-        )
-        .to_string();
-        let result = Schema::parse_str(schema_str);
-        assert!(result.is_err());
-        let err = result
-            .map_err(|e| e.to_string())
-            .err()
-            .unwrap_or_else(|| "unexpected".to_string());
-        assert_eq!(expected, err);
+        assert_eq!(
+            Schema::parse_str(schema_str).unwrap_err().to_string(),
+            r#"`default`'s value type of field `f1` in `ns.record1` must be a `{"name":"ns.fixed1","type":"fixed","size":3}`. Got: Number(100)"#
+        );
 
         Ok(())
     }
@@ -3916,8 +3872,10 @@ mod tests {
             "fields": [
                 {
                     "name": "f1",
-                    "type": "array",
-                    "items": "int",
+                    "type": {
+                        "type": "array",
+                        "items": "int"
+                    },
                     "default": "invalid"
                 }
             ]
@@ -3931,7 +3889,7 @@ mod tests {
             .err()
             .unwrap_or_else(|| "unexpected".to_string());
         assert_eq!(
-            r#"Default value for an array must be an array! Got: "invalid""#,
+            r#"`default`'s value type of field `f1` in `ns.record1` must be a `{"type":"array","items":"int"}`. Got: String("invalid")"#,
             err
         );
 
@@ -3948,8 +3906,10 @@ mod tests {
             "fields": [
                 {
                     "name": "f1",
-                    "type": "map",
-                    "values": "string",
+                    "type": {
+                        "type": "map",
+                        "values": "string"
+                    },
                     "default": "invalid"
                 }
             ]
@@ -3963,7 +3923,7 @@ mod tests {
             .err()
             .unwrap_or_else(|| "unexpected".to_string());
         assert_eq!(
-            r#"Default value for a map must be an object! Got: "invalid""#,
+            r#"`default`'s value type of field `f1` in `ns.record1` must be a `{"type":"map","values":"string"}`. Got: String("invalid")"#,
             err
         );
 
@@ -3998,19 +3958,10 @@ mod tests {
             ]
         }
         "#;
-        let expected = Details::GetDefaultRecordField(
-            "f2".to_string(),
-            "ns.record1".to_string(),
-            r#""ns.record2""#.to_string(),
-        )
-        .to_string();
-        let result = Schema::parse_str(schema_str);
-        assert!(result.is_err());
-        let err = result
-            .map_err(|e| e.to_string())
-            .err()
-            .unwrap_or_else(|| "unexpected".to_string());
-        assert_eq!(expected, err);
+        assert_eq!(
+            Schema::parse_str(schema_str).unwrap_err().to_string(),
+            r#"`default`'s value type of field `f2` in `ns.record1` must be a `{"name":"ns.record2","type":"record","fields":[{"name":"f1_1","type":"int"}]}`. Got: Object {"f1_1": Bool(true)}"#
+        );
 
         Ok(())
     }
@@ -4771,7 +4722,7 @@ mod tests {
         "fields": [
             {"name": "a", "type": "long", "default": 42, "doc": "The field a"},
             {"name": "b", "type": "string", "namespace": "test.a"},
-            {"name": "c", "type": "long", "logicalType": "timestamp-micros"}
+            {"name": "c", "type": {"type": "long", "logicalType": "timestamp-micros"}}
         ]
     }"#;
 
@@ -4813,7 +4764,7 @@ mod tests {
         assert!(schema.is_err());
         assert_eq!(
             schema.unwrap_err().to_string(),
-            "Invalid schema: There is no type called 'record', if you meant to define a non-primitive schema, it should be defined inside `type` attribute. Please review the specification"
+            "Invalid schema: There is no type called 'record', if you meant to define a non-primitive schema, it should be defined inside `type` attribute."
         );
 
         let valid_schema = r#"
@@ -4854,16 +4805,18 @@ mod tests {
                         "fields": [
                             {
                                 "name": "bar",
-                                "type": "array",
-                                "items": {
-                                    "type": "record",
-                                    "name": "baz",
-                                    "fields": [
-                                        {
-                                            "name": "quux",
-                                            "type": "int"
-                                        }
-                                    ]
+                                "type": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "record",
+                                        "name": "baz",
+                                        "fields": [
+                                            {
+                                                "name": "quux",
+                                                "type": "int"
+                                            }
+                                        ]
+                                    }
                                 }
                             }
                         ]
@@ -4927,16 +4880,18 @@ mod tests {
                         "fields": [
                             {
                                 "name": "bar",
-                                "type": "map",
-                                "values": {
-                                    "type": "record",
-                                    "name": "baz",
-                                    "fields": [
-                                        {
-                                            "name": "quux",
-                                            "type": "int"
-                                        }
-                                    ]
+                                "type": {
+                                    "type": "map",
+                                    "values": {
+                                        "type": "record",
+                                        "name": "baz",
+                                        "fields": [
+                                            {
+                                                "name": "quux",
+                                                "type": "int"
+                                            }
+                                        ]
+                                    }
                                 }
                             }
                         ]
@@ -5280,15 +5235,19 @@ mod tests {
             "fields": [
                 {
                     "name": "one",
-                    "type": "enum",
-                    "name": "ABC",
-                    "symbols": ["A", "B", "C"]
+                    "type": {
+                        "type": "enum",
+                        "name": "ABC",
+                        "symbols": ["A", "B", "C"]
+                    }
                 },
                 {
                     "name": "two",
-                    "type": "array",
-                    "items": "ABC",
-                    "default": ["A", "B", "C"]
+                    "type": {
+                        "type": "array",
+                        "items": "ABC",
+                        "default": ["A", "B", "C"]
+                    }
                 }
             ]
         }"#,
@@ -5409,15 +5368,19 @@ mod tests {
             "fields": [
                 {
                     "name": "one",
-                    "type": "enum",
-                    "name": "ABC",
-                    "symbols": ["A", "B", "C"]
+                    "type": {
+                        "type": "enum",
+                        "name": "ABC",
+                        "symbols": ["A", "B", "C"]
+                    }
                 },
                 {
                     "name": "two",
-                    "type": "map",
-                    "values": "ABC",
-                    "default": {"foo": "A"}
+                    "type": {
+                        "type": "map",
+                        "values": "ABC",
+                        "default": {"foo": "A"}
+                    }
                 }
             ]
         }"#,
@@ -5435,6 +5398,28 @@ mod tests {
         assert_eq!(map.attributes, BTreeMap::new());
         assert_eq!(map.default, Some(hashmap));
 
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_476_enum_cannot_be_directly_in_field() -> TestResult {
+        let schema_str = r#"{
+            "type": "record",
+            "name": "ExampleEnum",
+            "namespace": "com.schema",
+            "fields": [
+                {
+                "name": "wrong_enum",
+                "type": "enum",
+                "symbols": ["INSERT", "UPDATE"]
+                }
+            ]
+        }"#;
+        let result = Schema::parse_str(schema_str).unwrap_err();
+        assert_eq!(
+            result.to_string(),
+            "Invalid schema: There is no type called 'enum', if you meant to define a non-primitive schema, it should be defined inside `type` attribute."
+        );
         Ok(())
     }
 }
