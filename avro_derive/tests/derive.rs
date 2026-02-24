@@ -64,7 +64,10 @@ where
 {
     assert!(!encoded.is_empty());
     let schema = T::get_schema();
-    let mut reader = Reader::with_schema(&schema, &encoded[..]).unwrap();
+    let mut reader = Reader::builder(&encoded[..])
+        .reader_schema(&schema)
+        .build()
+        .unwrap();
     if let Some(res) = reader.next() {
         match res {
             Ok(value) => {
@@ -2089,13 +2092,17 @@ fn avro_rs_401_supported_type_variants() {
             },
             {
                 "name":"six",
-                "type":"array",
-                "items":"int"
+                "type":{
+                    "type":"array",
+                    "items":"int"
+                }
             },
             {
                 "name":"seven",
-                "type":"array",
-                "items":"int"
+                "type": {
+                    "type":"array",
+                    "items":"int"
+                }
             }
         ]
     }

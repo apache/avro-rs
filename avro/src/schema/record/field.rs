@@ -17,18 +17,17 @@
 
 use crate::AvroResult;
 use crate::error::Details;
-use crate::schema::{
-    Documentation, Name, Names, Parser, RecordSchemaParseLocation, Schema, SchemaKind,
-};
+use crate::schema::{Documentation, Name, Names, Parser, Schema, SchemaKind};
 use crate::types;
 use crate::util::MapHelper;
 use crate::validator::validate_record_field_name;
+use log::warn;
 use serde::ser::SerializeMap;
 use serde::{Serialize, Serializer};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::str::FromStr;
-use strum_macros::EnumString;
+use strum::EnumString;
 
 /// Represents a `field` in a `record` Avro schema.
 #[derive(bon::Builder, Clone, Debug, PartialEq)]
@@ -81,12 +80,14 @@ impl RecordField {
 
         validate_record_field_name(&name)?;
 
-        // TODO: "type" = "<record name>"
-        let schema = parser.parse_complex(
-            field,
-            &enclosing_record.namespace,
-            RecordSchemaParseLocation::FromField,
-        )?;
+        let ty = field.get("type").ok_or(Details::GetRecordFieldTypeField)?;
+        let schema = parser.parse(ty, &enclosing_record.namespace)?;
+
+        if let Some(logical_type) = field.get("logicalType") {
+            warn!(
+                "Ignored the {enclosing_record}.logicalType property (`{logical_type}`). It should probably be nested inside the `type` for the field"
+            );
+        }
 
         let default = field.get("default").cloned();
         Self::resolve_default_value(
@@ -120,7 +121,7 @@ impl RecordField {
             aliases,
             order,
             position,
-            custom_attributes: RecordField::get_field_custom_attributes(field, &schema),
+            custom_attributes: RecordField::get_field_custom_attributes(field),
             schema,
         })
     }
@@ -162,10 +163,14 @@ impl RecordField {
                         .is_ok();
 
                     if !resolved {
+                        let schemata = names.values().cloned().collect::<Vec<_>>();
                         return Err(Details::GetDefaultRecordField(
                             field_name.to_string(),
                             record_name.to_string(),
-                            field_schema.canonical_form(),
+                            field_schema
+                                .independent_canonical_form(&schemata)
+                                .unwrap_or_else(|_| field_schema.canonical_form()),
+                            value.clone(),
                         )
                         .into());
                     }
@@ -176,19 +181,11 @@ impl RecordField {
         Ok(())
     }
 
-    fn get_field_custom_attributes(
-        field: &Map<String, Value>,
-        schema: &Schema,
-    ) -> BTreeMap<String, Value> {
+    fn get_field_custom_attributes(field: &Map<String, Value>) -> BTreeMap<String, Value> {
         let mut custom_attributes: BTreeMap<String, Value> = BTreeMap::new();
         for (key, value) in field {
             match key.as_str() {
-                "type" | "name" | "doc" | "default" | "order" | "position" | "aliases"
-                | "logicalType" => continue,
-                key if key == "symbols" && matches!(schema, Schema::Enum(_)) => continue,
-                key if key == "size" && matches!(schema, Schema::Fixed(_)) => continue,
-                key if key == "items" && matches!(schema, Schema::Array(_)) => continue,
-                key if key == "values" && matches!(schema, Schema::Map(_)) => continue,
+                "type" | "name" | "doc" | "default" | "order" | "aliases" => continue,
                 _ => custom_attributes.insert(key.clone(), value.clone()),
             };
         }

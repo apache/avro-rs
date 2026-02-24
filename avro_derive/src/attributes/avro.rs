@@ -64,15 +64,15 @@ impl ContainerAttributes {
         if self.name.is_some() {
             super::warn(
                 span,
-                "`#[avro(name = \"...\")]` is deprecated.",
-                "Use `#[serde(rename = \"...\")]` instead.",
+                r#"`#[avro(name = "...")]` is deprecated."#,
+                r#"Use `#[serde(rename = "...")]` instead."#,
             )
         }
         if self.rename_all != RenameRule::None {
             super::warn(
                 span,
-                "`#[avro(rename_all = \"..\")]` is deprecated",
-                "Use `#[serde(rename_all = \"..\")]` instead",
+                r#"`#[avro(rename_all = "..")]` is deprecated"#,
+                r#"Use `#[serde(rename_all = "..")]` instead"#,
             )
         }
     }
@@ -96,8 +96,8 @@ impl VariantAttributes {
         if self.rename.is_some() {
             super::warn(
                 span,
-                "`#[avro(rename = \"..\")]` is deprecated",
-                "Use `#[serde(rename = \"..\")]` instead",
+                r#"`#[avro(rename = "..")]` is deprecated"#,
+                r#"Use `#[serde(rename = "..")]` instead"#,
             )
         }
     }
@@ -175,15 +175,15 @@ impl FieldAttributes {
         if !self.alias.is_empty() {
             super::warn(
                 span,
-                "`#[avro(alias = \"..\")]` is deprecated",
-                "Use `#[serde(alias = \"..\")]` instead",
+                r#"`#[avro(alias = "..")]` is deprecated"#,
+                r#"Use `#[serde(alias = "..")]` instead"#,
             )
         }
         if self.rename.is_some() {
             super::warn(
                 span,
-                "`#[avro(rename = \"..\")]` is deprecated",
-                "Use `#[serde(rename = \"..\")]` instead",
+                r#"`#[avro(rename = "..")]` is deprecated"#,
+                r#"Use `#[serde(rename = "..")]` instead"#,
             )
         }
         if self.skip {

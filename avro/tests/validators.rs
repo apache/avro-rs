@@ -72,9 +72,12 @@ fn avro_3900_custom_validator_with_spec_invalid_names() -> TestResult {
                 "type": "int"
             },
             {
-                "type": "enum",
-                "name": "Test",
-                "symbols": ["A-B", "B-A"]
+                "name": "field-name",
+                "type": {
+                    "type": "enum",
+                    "name": "Test",
+                    "symbols": ["A-B", "B-A"]
+                }
             }
         ]
     }"#;

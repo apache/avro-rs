@@ -91,8 +91,9 @@ pub use decimal::Decimal;
 pub use duration::{Days, Duration, Millis, Months};
 pub use error::Error;
 pub use reader::{
-    GenericSingleObjectReader, Reader, SpecificSingleObjectReader, from_avro_datum,
-    from_avro_datum_reader_schemata, from_avro_datum_schemata, read_marker,
+    Reader, from_avro_datum, from_avro_datum_reader_schemata, from_avro_datum_schemata,
+    read_marker,
+    single_object::{GenericSingleObjectReader, SpecificSingleObjectReader},
 };
 pub use schema::Schema;
 pub use serde::{AvroSchema, AvroSchemaComponent, from_value, to_value};
@@ -193,7 +194,10 @@ mod tests {
         record.put("b", "foo");
         writer.append_value(record).unwrap();
         let input = writer.into_inner().unwrap();
-        let mut reader = Reader::with_schema(&reader_schema, &input[..]).unwrap();
+        let mut reader = Reader::builder(&input[..])
+            .reader_schema(&reader_schema)
+            .build()
+            .unwrap();
         assert_eq!(
             reader.next().unwrap().unwrap(),
             Value::Record(vec![
@@ -235,7 +239,10 @@ mod tests {
         record.put("c", "clubs");
         writer.append_value(record).unwrap();
         let input = writer.into_inner().unwrap();
-        let mut reader = Reader::with_schema(&schema, &input[..]).unwrap();
+        let mut reader = Reader::builder(&input[..])
+            .reader_schema(&schema)
+            .build()
+            .unwrap();
         assert_eq!(
             reader.next().unwrap().unwrap(),
             Value::Record(vec![

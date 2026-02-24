@@ -524,7 +524,11 @@ impl<'a, W: Write> Writer<'a, W> {
 
         let mut header = Vec::new();
         header.extend_from_slice(AVRO_OBJECT_HEADER);
-        encode(&metadata.into(), &Schema::map(Schema::Bytes), &mut header)?;
+        encode(
+            &metadata.into(),
+            &Schema::map(Schema::Bytes).build(),
+            &mut header,
+        )?;
         header.extend_from_slice(&self.marker);
 
         Ok(header)
@@ -1473,7 +1477,9 @@ mod tests {
         writer.add_user_metadata("a".to_string(), "b")?;
         let result = writer.into_inner()?;
 
-        let reader = Reader::with_schema(&schema, &result[..])?;
+        let reader = Reader::builder(&result[..])
+            .reader_schema(&schema)
+            .build()?;
         let mut expected = HashMap::new();
         expected.insert("a".to_string(), vec![b'b']);
         assert_eq!(reader.user_metadata(), &expected);

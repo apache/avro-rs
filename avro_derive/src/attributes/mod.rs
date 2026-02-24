@@ -72,7 +72,7 @@ impl NamedTypeOptions {
         if serde.rename_all.deserialize != serde.rename_all.serialize {
             errors.push(syn::Error::new(
                 span,
-                "AvroSchema derive does not support different rename rules for serializing and deserializing (`rename_all(serialize = \"..\", deserialize = \"..\")`)"
+                r#"AvroSchema derive does not support different rename rules for serializing and deserializing (`rename_all(serialize = "..", deserialize = "..")`)"#
             ));
         }
 
@@ -80,13 +80,13 @@ impl NamedTypeOptions {
         if avro.name.is_some() && avro.name != serde.rename {
             errors.push(syn::Error::new(
                 span,
-                "#[avro(name = \"..\")] must match #[serde(rename = \"..\")], it's also deprecated. Please use only `#[serde(rename = \"..\")]`",
+                r#"#[avro(name = "..")] must match #[serde(rename = "..")], it's also deprecated. Please use only `#[serde(rename = "..")]`"#,
             ));
         }
         if avro.rename_all != RenameRule::None && serde.rename_all.serialize != avro.rename_all {
             errors.push(syn::Error::new(
                 span,
-                "#[avro(rename_all = \"..\")] must match #[serde(rename_all = \"..\")], it's also deprecated. Please use only `#[serde(rename_all = \"..\")]`",
+                r#"#[avro(rename_all = "..")] must match #[serde(rename_all = "..")], it's also deprecated. Please use only `#[serde(rename_all = "..")]`"#,
             ));
         }
         if serde.transparent
@@ -173,7 +173,7 @@ impl VariantOptions {
         if avro.rename.is_some() && serde.rename != avro.rename {
             errors.push(syn::Error::new(
                 span,
-                "`#[avro(rename = \"..\")]` must match `#[serde(rename = \"..\")]`, it's also deprecated. Please use only `#[serde(rename = \"..\")]`"
+                r#"`#[avro(rename = "..")]` must match `#[serde(rename = "..")]`, it's also deprecated. Please use only `#[serde(rename = "..")]`"#
             ));
         }
 
@@ -213,7 +213,7 @@ impl With {
                         syn::Error::new(
                             span,
                             format!(
-                                "AvroSchema: Expected a path for `#[serde(with = \"..\")]`: {err:?}"
+                                r#"AvroSchema: Expected a path for `#[serde(with = "..")]`: {err:?}"#
                             ),
                         )
                     })?;
@@ -221,7 +221,7 @@ impl With {
                 } else {
                     Err(syn::Error::new(
                         span,
-                        "`#[avro(with)]` requires `#[serde(with = \"some_module\")]` or provide a function to call `#[avro(with = some_fn)]`",
+                        r#"`#[avro(with)]` requires `#[serde(with = "some_module")]` or provide a function to call `#[avro(with = some_fn)]`"#,
                     ))
                 }
             }
@@ -309,13 +309,13 @@ impl FieldOptions {
         if avro.rename.is_some() && serde.rename != avro.rename {
             errors.push(syn::Error::new(
                 span,
-                "`#[avro(rename = \"..\")]` must match `#[serde(rename = \"..\")]`, it's also deprecated. Please use only `#[serde(rename = \"..\")]`"
+                r#"`#[avro(rename = "..")]` must match `#[serde(rename = "..")]`, it's also deprecated. Please use only `#[serde(rename = "..")]`"#
             ));
         }
         if !avro.alias.is_empty() && serde.alias != avro.alias {
             errors.push(syn::Error::new(
                 span,
-                "`#[avro(alias = \"..\")]` must match `#[serde(alias = \"..\")]`, it's also deprecated. Please use only `#[serde(alias = \"..\")]`"
+                r#"`#[avro(alias = "..")]` must match `#[serde(alias = "..")]`, it's also deprecated. Please use only `#[serde(alias = "..")]`"#
             ));
         }
         if ((serde.skip_serializing && !serde.skip_deserializing)

@@ -16,7 +16,6 @@
 // under the License.
 
 use crate::error::Details;
-use crate::schema::record::RecordSchemaParseLocation;
 use crate::schema::{
     Alias, Aliases, ArraySchema, DecimalMetadata, DecimalSchema, EnumSchema, FixedSchema,
     MapSchema, Name, Names, Namespace, Precision, RecordField, RecordSchema, Scale, Schema,
@@ -110,9 +109,7 @@ impl Parser {
     ) -> AvroResult<Schema> {
         match *value {
             Value::String(ref t) => self.parse_known_schema(t.as_str(), enclosing_namespace),
-            Value::Object(ref data) => {
-                self.parse_complex(data, enclosing_namespace, RecordSchemaParseLocation::Root)
-            }
+            Value::Object(ref data) => self.parse_complex(data, enclosing_namespace),
             Value::Array(ref data) => self.parse_union(data, enclosing_namespace),
             _ => Err(Details::ParseSchemaFromValidJson.into()),
         }
@@ -252,7 +249,6 @@ impl Parser {
         &mut self,
         complex: &Map<String, Value>,
         enclosing_namespace: &Namespace,
-        parse_location: RecordSchemaParseLocation,
     ) -> AvroResult<Schema> {
         // Try to parse this as a native complex type.
         fn parse_as_native_complex(
@@ -271,7 +267,7 @@ impl Parser {
             }
         }
 
-        // This crate support some logical types natively, and this function tries to convert
+        // This crate supports some logical types natively, and this function tries to convert
         // a native complex type with a logical type attribute to these logical types.
         // This function:
         // 1. Checks whether the native complex type is in the supported kinds.
@@ -461,23 +457,14 @@ impl Parser {
         }
         match complex.get("type") {
             Some(Value::String(t)) => match t.as_str() {
-                "record" => match parse_location {
-                    RecordSchemaParseLocation::Root => {
-                        self.parse_record(complex, enclosing_namespace)
-                    }
-                    RecordSchemaParseLocation::FromField => {
-                        self.fetch_schema_ref(t, enclosing_namespace)
-                    }
-                },
+                "record" => self.parse_record(complex, enclosing_namespace),
                 "enum" => self.parse_enum(complex, enclosing_namespace),
                 "array" => self.parse_array(complex, enclosing_namespace),
                 "map" => self.parse_map(complex, enclosing_namespace),
                 "fixed" => self.parse_fixed(complex, enclosing_namespace),
                 other => self.parse_known_schema(other, enclosing_namespace),
             },
-            Some(Value::Object(data)) => {
-                self.parse_complex(data, enclosing_namespace, RecordSchemaParseLocation::Root)
-            }
+            Some(Value::Object(data)) => self.parse_complex(data, enclosing_namespace),
             Some(Value::Array(variants)) => self.parse_union(variants, enclosing_namespace),
             Some(unknown) => Err(Details::GetComplexType(unknown.clone()).into()),
             None => Err(Details::GetComplexTypeField.into()),

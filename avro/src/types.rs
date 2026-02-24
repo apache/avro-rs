@@ -50,7 +50,7 @@ fn max_prec_for_len(len: usize) -> Result<usize, Error> {
 ///
 /// More information about Avro values can be found in the [Avro
 /// Specification](https://avro.apache.org/docs/++version++/specification/#schema-declaration)
-#[derive(Clone, Debug, PartialEq, strum_macros::EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, strum::EnumDiscriminants)]
 #[strum_discriminants(name(ValueKind))]
 pub enum Value {
     /// A `null` Avro value.
@@ -1358,13 +1358,13 @@ mod tests {
             ),
             (
                 Value::Array(vec![Value::Long(42i64)]),
-                Schema::array(Schema::Long),
+                Schema::array(Schema::Long).build(),
                 true,
                 "",
             ),
             (
                 Value::Array(vec![Value::Boolean(true)]),
-                Schema::array(Schema::Long),
+                Schema::array(Schema::Long).build(),
                 false,
                 "Invalid value: Array([Boolean(true)]) for schema: Array(ArraySchema { items: Long, default: None, attributes: {} }). Reason: Unsupported value-schema combination! Value: Boolean(true), schema: Long",
             ),
@@ -1396,7 +1396,7 @@ mod tests {
                     attributes: BTreeMap::new(),
                 }),
                 false,
-                "Invalid value: Fixed(11, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) for schema: Duration(FixedSchema { name: Name { name: \"TestName\", namespace: None }, aliases: None, doc: None, size: 12, attributes: {} }). Reason: The value's size ('11') must be exactly 12 to be a Duration",
+                r#"Invalid value: Fixed(11, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) for schema: Duration(FixedSchema { name: Name { name: "TestName", namespace: None }, aliases: None, doc: None, size: 12, attributes: {} }). Reason: The value's size ('11') must be exactly 12 to be a Duration"#,
             ),
             (
                 Value::Record(vec![("unknown_field_name".to_string(), Value::Null)]),

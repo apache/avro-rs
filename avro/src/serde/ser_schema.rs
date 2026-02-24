@@ -816,7 +816,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     }
                 }
                 Err(create_error(format!(
-                    "Cannot find a Fixed(size = 16, name = \"i128\") schema in {:?}",
+                    r#"Cannot find a Fixed(size = 16, name = "i128") schema in {:?}"#,
                     union_schema.schemas
                 )))
             }
@@ -984,7 +984,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     }
                 }
                 Err(create_error(format!(
-                    "Cannot find a matching Int-like, Long-like or Fixed(size = 8, name \"u64\") schema in {:?}",
+                    r#"Cannot find a matching Int-like, Long-like or Fixed(size = 8, name "u64") schema in {:?}"#,
                     union_schema.schemas
                 )))
             }
@@ -1019,7 +1019,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     }
                 }
                 Err(create_error(format!(
-                    "Cannot find a Fixed(size = 16, name = \"u128\") schema in {:?}",
+                    r#"Cannot find a Fixed(size = 16, name = "u128") schema in {:?}"#,
                     union_schema.schemas
                 )))
             }
@@ -1133,7 +1133,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     }
                 }
                 Err(create_error(format!(
-                    "Cannot find a matching String, Bytes or Fixed(size = 4, name = \"char\") schema in {union_schema:?}"
+                    r#"Cannot find a matching String, Bytes or Fixed(size = 4, name = "char") schema in {union_schema:?}"#
                 )))
             }
             expected => Err(create_error(format!("Expected {expected}. Got: char"))),
@@ -3014,7 +3014,7 @@ mod tests {
                 {"name": "stringField", "type": "string"},
                 {"name": "intField", "type": "int"},
                 {"name": "bigDecimalField", "type": {"type": "bytes", "logicalType": "big-decimal"}},
-                {"name": "uuidField", "type": "fixed", "size": 16, "logicalType": "uuid"},
+                {"name": "uuidField", "type": {"name": "uuid", "type": "fixed", "size": 16, "logicalType": "uuid"}},
                 {"name": "innerRecord", "type": ["null", "TestRecord"]}
             ]
         }"#,
@@ -3270,7 +3270,9 @@ mod tests {
             e: 5,
         })?;
         let encoded = writer.into_inner()?;
-        let mut reader = Reader::with_schema(&schema, &encoded[..])?;
+        let mut reader = Reader::builder(&encoded[..])
+            .reader_schema(&schema)
+            .build()?;
         let decoded = from_value::<Foo>(&reader.next().unwrap()?)?;
         assert_eq!(
             decoded,

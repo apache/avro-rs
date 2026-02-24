@@ -309,8 +309,8 @@ pub enum Details {
     #[error("One union type {0:?} must match the `default`'s value type {1:?}")]
     GetDefaultUnion(SchemaKind, ValueKind),
 
-    #[error("`default`'s value type of field {0:?} in {1:?} must be {2:?}")]
-    GetDefaultRecordField(String, String, String),
+    #[error("`default`'s value type of field `{0}` in `{1}` must be a `{2:#}`. Got: {3:?}")]
+    GetDefaultRecordField(String, String, String, serde_json::Value),
 
     #[error("JSON number {0} could not be converted into an Avro value as it's too large")]
     JsonNumberTooLarge(serde_json::Number),
@@ -405,6 +405,9 @@ pub enum Details {
     #[error("No `type` in complex type")]
     GetComplexTypeField,
 
+    #[error("No `type` in record field")]
+    GetRecordFieldTypeField,
+
     #[error("No `fields` in record")]
     GetRecordFieldsJson,
 
@@ -430,7 +433,7 @@ pub enum Details {
     InvalidNamespace(String, &'static str),
 
     #[error(
-        "Invalid schema: There is no type called '{0}', if you meant to define a non-primitive schema, it should be defined inside `type` attribute. Please review the specification"
+        "Invalid schema: There is no type called '{0}', if you meant to define a non-primitive schema, it should be defined inside `type` attribute."
     )]
     InvalidSchemaRecord(String),
 

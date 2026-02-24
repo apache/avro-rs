@@ -17,7 +17,7 @@
 
 //! Logic for all supported compression codecs in Avro.
 use crate::{AvroResult, Error, error::Details, types::Value};
-use strum_macros::{EnumIter, EnumString, IntoStaticStr};
+use strum::{EnumIter, EnumString, IntoStaticStr};
 
 /// Settings for the `Deflate` codec.
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]

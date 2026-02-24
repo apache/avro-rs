@@ -577,7 +577,7 @@ macro_rules! impl_array_schema (
     ($type:ty where T: AvroSchemaComponent) => (
         impl<T: AvroSchemaComponent> AvroSchemaComponent for $type {
             fn get_schema_in_ctxt(named_schemas: &mut HashSet<Name>, enclosing_namespace: &Namespace) -> Schema {
-                Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
+                Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace)).build()
             }
 
             fn get_record_fields_in_ctxt(_: usize, _: &mut HashSet<Name>, _: &Namespace) -> Option<Vec<RecordField>> {
@@ -604,7 +604,7 @@ where
         named_schemas: &mut HashSet<Name>,
         enclosing_namespace: &Namespace,
     ) -> Schema {
-        Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
+        Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace)).build()
     }
 
     fn get_record_fields_in_ctxt(
@@ -629,7 +629,7 @@ where
         named_schemas: &mut HashSet<Name>,
         enclosing_namespace: &Namespace,
     ) -> Schema {
-        Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace))
+        Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace)).build()
     }
 
     fn get_record_fields_in_ctxt(
@@ -895,7 +895,7 @@ mod tests {
     #[test]
     fn avro_rs_401_slice() -> TestResult {
         let schema = <[u8]>::get_schema();
-        assert_eq!(schema, Schema::array(Schema::Int));
+        assert_eq!(schema, Schema::array(Schema::Int).build());
 
         Ok(())
     }
@@ -903,7 +903,7 @@ mod tests {
     #[test]
     fn avro_rs_401_array() -> TestResult {
         let schema = <[u8; 55]>::get_schema();
-        assert_eq!(schema, Schema::array(Schema::Int));
+        assert_eq!(schema, Schema::array(Schema::Int).build());
 
         Ok(())
     }
@@ -915,7 +915,7 @@ mod tests {
             schema,
             Schema::union(vec![
                 Schema::Null,
-                Schema::array(Schema::array(Schema::Int))
+                Schema::array(Schema::array(Schema::Int).build()).build()
             ])?
         );
 
