@@ -946,7 +946,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_unit() -> TestResult {
+    fn avro_rs_486_unit() -> TestResult {
         let schema = <()>::get_schema();
         assert_eq!(schema, Schema::Null);
 
