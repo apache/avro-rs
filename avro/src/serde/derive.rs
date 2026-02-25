@@ -527,10 +527,6 @@ macro_rules! impl_schema (
             fn get_record_fields_in_ctxt(_: usize, _: &mut HashSet<Name>, _: &Namespace) -> Option<Vec<RecordField>> {
                 None
             }
-
-            fn field_default() -> Option<serde_json::Value> {
-                None
-            }
         }
     );
 );
@@ -583,10 +579,6 @@ macro_rules! impl_array_schema (
             fn get_record_fields_in_ctxt(_: usize, _: &mut HashSet<Name>, _: &Namespace) -> Option<Vec<RecordField>> {
                 None
             }
-
-            fn field_default() -> Option<serde_json::Value> {
-                None
-            }
         }
     );
 );
@@ -614,11 +606,6 @@ where
     ) -> Option<Vec<RecordField>> {
         None
     }
-
-    /// If `T` has a field default, this will return an array of elements with that default. Otherwise there is no default.
-    fn field_default() -> Option<serde_json::Value> {
-        None
-    }
 }
 
 impl<T> AvroSchemaComponent for HashMap<String, T>
@@ -637,10 +624,6 @@ where
         _: &mut HashSet<Name>,
         _: &Namespace,
     ) -> Option<Vec<RecordField>> {
-        None
-    }
-
-    fn field_default() -> Option<serde_json::Value> {
         None
     }
 }
@@ -709,10 +692,6 @@ impl AvroSchemaComponent for core::time::Duration {
     ) -> Option<Vec<RecordField>> {
         None
     }
-
-    fn field_default() -> Option<serde_json::Value> {
-        None
-    }
 }
 
 impl AvroSchemaComponent for uuid::Uuid {
@@ -748,10 +727,6 @@ impl AvroSchemaComponent for uuid::Uuid {
     ) -> Option<Vec<RecordField>> {
         None
     }
-
-    fn field_default() -> Option<serde_json::Value> {
-        None
-    }
 }
 
 impl AvroSchemaComponent for u64 {
@@ -783,10 +758,6 @@ impl AvroSchemaComponent for u64 {
         _: &mut HashSet<Name>,
         _: &Namespace,
     ) -> Option<Vec<RecordField>> {
-        None
-    }
-
-    fn field_default() -> Option<serde_json::Value> {
         None
     }
 }
@@ -822,10 +793,6 @@ impl AvroSchemaComponent for u128 {
     ) -> Option<Vec<RecordField>> {
         None
     }
-
-    fn field_default() -> Option<serde_json::Value> {
-        None
-    }
 }
 
 impl AvroSchemaComponent for i128 {
@@ -857,10 +824,6 @@ impl AvroSchemaComponent for i128 {
         _: &mut HashSet<Name>,
         _: &Namespace,
     ) -> Option<Vec<RecordField>> {
-        None
-    }
-
-    fn field_default() -> Option<serde_json::Value> {
         None
     }
 }
