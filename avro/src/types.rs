@@ -3140,15 +3140,10 @@ Field with name '"b"' is not a member of the map items"#,
         let main_schema = schemata.last().unwrap();
         let other_schemata: Vec<&Schema> = schemata.iter().take(2).collect();
 
-        let resolve_result = avro_value.resolve_schemata(main_schema, other_schemata);
+        let resolve_result = avro_value.resolve_schemata(main_schema, other_schemata)?;
 
         assert!(
-            resolve_result.is_ok(),
-            "result of resolving with schemata should be ok, got: {resolve_result:?}"
-        );
-
-        assert!(
-            resolve_result?.validate_schemata(schemata.iter().collect()),
+            resolve_result.validate_schemata(schemata.iter().collect()),
             "result of validation with schemata should be true"
         );
 

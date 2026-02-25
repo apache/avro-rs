@@ -38,7 +38,7 @@ use crate::{
 ///
 /// More information about schema names can be found in the
 /// [Avro specification](https://avro.apache.org/docs/++version++/specification/#names)
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Name {
     pub name: String,
     pub namespace: Namespace,

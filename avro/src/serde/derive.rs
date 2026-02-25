@@ -637,14 +637,17 @@ where
         named_schemas: &mut HashSet<Name>,
         enclosing_namespace: &Namespace,
     ) -> Schema {
-        let variants = vec![
-            Schema::Null,
-            T::get_schema_in_ctxt(named_schemas, enclosing_namespace),
-        ];
+        let schema = T::get_schema_in_ctxt(named_schemas, enclosing_namespace);
+        if let Schema::Null = schema {
+            Schema::Union(UnionSchema::new(vec![Schema::Null]).expect("This is a valid schema"))
+        } else {
+            let variants = vec![Schema::Null, schema];
 
-        Schema::Union(
-            UnionSchema::new(variants).expect("Option<T> must produce a valid (non-nested) union"),
-        )
+            Schema::Union(
+                UnionSchema::new(variants)
+                    .expect("Option<T> must produce a valid (non-nested) union"),
+            )
+        }
     }
 
     fn get_record_fields_in_ctxt(
