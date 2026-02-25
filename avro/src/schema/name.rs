@@ -202,12 +202,12 @@ impl Alias {
         Name::new(name).map(Self)
     }
 
-    pub fn name(&self) -> String {
-        self.0.name.clone()
+    pub fn name(&self) -> &str {
+        &self.0.name
     }
 
-    pub fn namespace(&self) -> Namespace {
-        self.0.namespace.clone()
+    pub fn namespace(&self) -> &Namespace {
+        &self.0.namespace
     }
 
     pub fn fullname(&self, default_namespace: Namespace) -> String {
