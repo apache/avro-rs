@@ -2571,7 +2571,7 @@ fn avro_rs_476_skip_serializing_fielddefault_trait_none() {
         Err(e) => match e.into_details() {
             apache_avro::error::Details::MissingDefaultForSkippedField { field_name, .. }
                 if field_name == "_y" => {}
-            d => panic!("Unexpected error: {:?}", d),
+            d => panic!("Unexpected error: {d:?}"),
         },
     }
 }
