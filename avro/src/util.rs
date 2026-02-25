@@ -127,8 +127,9 @@ fn encode_variable<W: Write>(mut zigzagged: u64, mut writer: W) -> AvroResult<us
         }
     }
     writer
-        .write(&buffer[..i])
-        .map_err(|e| Details::WriteBytes(e).into())
+        .write_all(&buffer[..i])
+        .map_err(Details::WriteBytes)?;
+    Ok(i)
 }
 
 /// Read a varint from the reader.
