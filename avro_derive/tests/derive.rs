@@ -2543,3 +2543,36 @@ fn avro_rs_476_field_default_provided() {
         r#"{"type":"record","name":"Foo","fields":[{"name":"_a","type":"boolean","default":true},{"name":"_b","type":"int","default":42},{"name":"_c","type":"int","default":42},{"name":"_d","type":"int","default":42},{"name":"_e","type":"long","default":42},{"name":"_f","type":"int","default":42},{"name":"_g","type":"int","default":42},{"name":"_h","type":"long","default":42},{"name":"_i","type":"float","default":42.0},{"name":"_j","type":"double","default":42.0},{"name":"_k","type":"string","default":"String"},{"name":"_l","type":"string","default":"str"},{"name":"_m","type":"string","default":"Z"},{"name":"_n","type":{"type":"record","name":"Spam","fields":[{"name":"_field","type":"boolean"}]},"default":{"_field":false}},{"name":"_o","type":{"type":"array","items":"boolean"},"default":[true,false,true]},{"name":"_p","type":{"type":"array","items":"int"},"default":[1,2,3,4,5]},{"name":"_p_alt","type":{"type":"array","items":"Spam"},"default":[{"_field":true},{"_field":false},{"_field":true},{"_field":false},{"_field":true}]},{"name":"_q","type":{"type":"map","values":"string"},"default":{"A":"B"}},{"name":"_r","type":["null","double"],"default":42.0},{"name":"_s","type":{"type":"fixed","name":"duration","size":12,"logicalType":"duration"},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_t","type":{"type":"fixed","name":"uuid","size":16,"logicalType":"uuid"},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_u","type":{"type":"fixed","name":"u64","size":8},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_v","type":{"type":"fixed","name":"u128","size":16},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_w","type":{"type":"fixed","name":"i128","size":16},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_x","type":"Spam","default":{"_field":false}}]}"#
     );
 }
+
+#[test]
+fn avro_rs_476_skip_serializing_fielddefault_trait_none() {
+    #[derive(AvroSchema, Debug, Deserialize, Serialize)]
+    struct T {
+        x: Option<i8>,
+        #[serde(skip_serializing)]
+        // no usage of #[avro(default = ...)], so FieldDefault::Trait will be used
+        // with AvroSchemaComponent::field_default == None
+        _y: i8,
+    }
+
+    let schema = T::get_schema();
+    assert_eq!(
+        serde_json::to_string(&schema).unwrap(),
+        r#"{"type":"record","name":"T","fields":[{"name":"x","type":["null","int"],"default":null},{"name":"_y","type":"int"}]}"#
+    );
+
+    let t = T {
+        x: Some(1),
+        _y: 2,
+    };
+
+    let mut writer = Writer::new(&schema, Vec::new()).unwrap();
+    match writer.append_ser(t) {
+        Ok(_) => panic!("The serialization should have failed due to the missing `default` value for the `_y` field"),
+        Err(e) => match e.into_details() {
+            apache_avro::error::Details::MissingDefaultForSkippedField {field_name, .. } if field_name == "_y" => {},
+            d => panic!("Unexpected error: {:?}", d),
+        }
+    }
+    ()
+}
