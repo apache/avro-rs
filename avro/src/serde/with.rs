@@ -22,7 +22,7 @@ thread_local! {
     /// [`Value::Bytes`] or [`Value::Fixed`].
     ///
     /// Relies on the fact that serde's serialization process is single-threaded.
-    pub(crate) static SER_BYTES_TYPE: Cell<BytesType> = const { Cell::new(BytesType::Bytes) };
+    pub(crate) static SER_BYTES_TYPE: Cell<BytesType> = const { Cell::new(BytesType::Unset) };
 
     /// A thread local that is used to decide if a [`Value::Bytes`] needs to be deserialized to
     /// a [`Vec`] or slice.
@@ -33,6 +33,7 @@ thread_local! {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum BytesType {
+    Unset,
     Bytes,
     Fixed,
 }
@@ -92,6 +93,7 @@ impl Drop for BorrowedGuard {
 ///
 /// [`apache_avro::serde::bytes_opt`]: bytes_opt
 pub mod bytes {
+    use super::BytesType;
     use std::collections::HashSet;
 
     use serde::{Deserializer, Serializer};
@@ -119,6 +121,7 @@ pub mod bytes {
     where
         S: Serializer,
     {
+        let _guard = super::BytesTypeGuard::set(BytesType::Bytes);
         serde_bytes::serialize(bytes, serializer)
     }
 
@@ -126,6 +129,7 @@ pub mod bytes {
     where
         D: Deserializer<'de>,
     {
+        let _guard = super::BytesTypeGuard::set(BytesType::Bytes);
         serde_bytes::deserialize(deserializer)
     }
 }
@@ -155,6 +159,7 @@ pub mod bytes {
 ///
 /// [`apache_avro::serde::bytes`]: bytes
 pub mod bytes_opt {
+    use super::BytesType;
     use serde::{Deserializer, Serializer};
     use std::{borrow::Borrow, collections::HashSet};
 
@@ -184,6 +189,7 @@ pub mod bytes_opt {
         S: Serializer,
         B: Borrow<[u8]> + serde_bytes::Serialize,
     {
+        let _guard = super::BytesTypeGuard::set(BytesType::Bytes);
         serde_bytes::serialize(bytes, serializer)
     }
 
@@ -191,6 +197,7 @@ pub mod bytes_opt {
     where
         D: Deserializer<'de>,
     {
+        let _guard = super::BytesTypeGuard::set(BytesType::Bytes);
         serde_bytes::deserialize(deserializer)
     }
 }
@@ -268,6 +275,7 @@ pub mod fixed {
     where
         D: Deserializer<'de>,
     {
+        let _guard = super::BytesTypeGuard::set(BytesType::Fixed);
         serde_bytes::deserialize(deserializer)
     }
 }
@@ -342,6 +350,7 @@ pub mod fixed_opt {
     where
         D: Deserializer<'de>,
     {
+        let _guard = super::BytesTypeGuard::set(BytesType::Fixed);
         serde_bytes::deserialize(deserializer)
     }
 }
@@ -373,6 +382,7 @@ pub mod fixed_opt {
 /// [`Value::Fixed`]: crate::types::Value::Fixed
 /// [`apache_avro::serde::slice_opt`]: slice_opt
 pub mod slice {
+    use super::BytesType;
     use std::collections::HashSet;
 
     use serde::{Deserializer, Serializer};
@@ -400,6 +410,7 @@ pub mod slice {
     where
         S: Serializer,
     {
+        let _guard = super::BytesTypeGuard::set(BytesType::Bytes);
         serde_bytes::serialize(bytes, serializer)
     }
 
@@ -407,6 +418,7 @@ pub mod slice {
     where
         D: Deserializer<'de>,
     {
+        let _bytes_guard = super::BytesTypeGuard::set(BytesType::Bytes);
         let _guard = super::BorrowedGuard::set(true);
         serde_bytes::deserialize(deserializer)
     }
@@ -439,6 +451,7 @@ pub mod slice {
 /// [`Value::Fixed`]: crate::types::Value::Fixed
 /// [`apache_avro::serde::slice`]: mod@slice
 pub mod slice_opt {
+    use super::BytesType;
     use serde::{Deserializer, Serializer};
     use std::{borrow::Borrow, collections::HashSet};
 
@@ -468,6 +481,7 @@ pub mod slice_opt {
         S: Serializer,
         B: Borrow<[u8]> + serde_bytes::Serialize,
     {
+        let _guard = super::BytesTypeGuard::set(BytesType::Bytes);
         serde_bytes::serialize(&bytes, serializer)
     }
 
@@ -475,6 +489,7 @@ pub mod slice_opt {
     where
         D: Deserializer<'de>,
     {
+        let _bytes_guard = super::BytesTypeGuard::set(BytesType::Bytes);
         let _guard = super::BorrowedGuard::set(true);
         serde_bytes::deserialize(deserializer)
     }

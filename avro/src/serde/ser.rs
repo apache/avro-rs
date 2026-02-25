@@ -182,7 +182,7 @@ impl ser::Serializer for Serializer {
 
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
         match SER_BYTES_TYPE.get() {
-            BytesType::Bytes => Ok(Value::Bytes(v.to_owned())),
+            BytesType::Unset | BytesType::Bytes => Ok(Value::Bytes(v.to_owned())),
             BytesType::Fixed => Ok(Value::Fixed(v.len(), v.to_owned())),
         }
     }
