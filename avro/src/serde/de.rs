@@ -33,6 +33,7 @@ use std::{
 
 pub struct Deserializer<'de> {
     input: &'de Value,
+    deserializing_some: bool,
 }
 
 struct SeqDeserializer<'de> {
@@ -75,7 +76,17 @@ struct UnionDeserializer<'de> {
 
 impl<'de> Deserializer<'de> {
     pub fn new(input: &'de Value) -> Self {
-        Deserializer { input }
+        Deserializer {
+            input,
+            deserializing_some: false,
+        }
+    }
+
+    fn new_deserializing_some(input: &'de Value) -> Self {
+        Deserializer {
+            input,
+            deserializing_some: true,
+        }
     }
 }
 
@@ -616,6 +627,21 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
                 let d_bytes: [u8; 12] = d.into();
                 visitor.visit_bytes(&d_bytes[..])
             }
+            Value::Union(i, x) => {
+                if matches!(x.deref(), Value::Union(_, _)) {
+                    Err(de::Error::custom(format!(
+                        "Directly nested union types are not supported. Got Value::Union({i}, {x:?})"
+                    )))
+                } else {
+                    Self::new(x.deref())
+                        .deserialize_bytes(visitor)
+                        .map_err(|e| {
+                            de::Error::custom(format!(
+                                "Attempted to deserialize Value::Union({i}, {x:?}) as bytes: {e:?}"
+                            ))
+                        })
+                }
+            }
             _ => Err(de::Error::custom(format!(
                 "Expected a String|Bytes|Fixed|Uuid|Decimal|Duration, but got {:?}",
                 self.input
@@ -638,6 +664,21 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
                 let d_bytes: [u8; 12] = d.into();
                 visitor.visit_byte_buf(Vec::from(d_bytes))
             }
+            Value::Union(i, x) => {
+                if matches!(x.deref(), Value::Union(_, _)) {
+                    Err(de::Error::custom(format!(
+                        "Directly nested union types are not supported. Got Value::Union({i}, {x:?})"
+                    )))
+                } else {
+                    Self::new(x.deref())
+                        .deserialize_byte_buf(visitor)
+                        .map_err(|e| {
+                            de::Error::custom(format!(
+                                "Attempted to deserialize Value::Union({i}, {x:?}) as byte_buf: {e:?}"
+                            ))
+                        })
+                }
+            }
             _ => Err(de::Error::custom(format!(
                 "Expected a String|Bytes|Fixed|Uuid|Decimal|Duration, but got {:?}",
                 self.input
@@ -651,7 +692,9 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
     {
         match self.input {
             Value::Union(_i, inner) if inner.as_ref() == &Value::Null => visitor.visit_none(),
-            Value::Union(_i, inner) => visitor.visit_some(Deserializer::new(inner)),
+            Value::Union(_i, _inner) => {
+                visitor.visit_some(Deserializer::new_deserializing_some(self.input))
+            }
             _ => Err(de::Error::custom(format!(
                 "Expected a Union, but got {:?}",
                 self.input
@@ -753,6 +796,14 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
         match self.input {
             Value::Map(items) => visitor.visit_map(MapDeserializer::new(items)),
             Value::Record(fields) => visitor.visit_map(RecordDeserializer::new(fields)),
+            Value::Union(_i, inner) => match inner.deref() {
+                Value::Map(items) => visitor.visit_map(MapDeserializer::new(items)),
+                Value::Record(fields) => visitor.visit_map(RecordDeserializer::new(fields)),
+                Value::Null => visitor.visit_map(RecordDeserializer::new(&[])),
+                _ => Err(de::Error::custom(format!(
+                    "Expected a Map, Record or Null, but got: {inner:?}"
+                ))),
+            },
             _ => Err(de::Error::custom(format_args!(
                 "Expected a record or a map. Got: {:?}",
                 &self.input
@@ -799,14 +850,26 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
             Value::Record(fields) => visitor.visit_enum(EnumDeserializer::new(fields)),
             Value::String(field) => visitor.visit_enum(EnumUnitDeserializer::new(field)),
             Value::Union(idx, inner) => {
-                if (*idx as usize) < variants.len() {
+                // if we came here from a some, we need to check if we are deserializing a
+                // non-newtype enum
+                if self.deserializing_some
+                    && let Value::Enum(_index, field) = inner.deref()
+                    && variants.contains(&&**field)
+                {
+                    return visitor.visit_enum(EnumUnitDeserializer::new(field));
+                }
+                // Assume `null` is the first branch if deserializing some so decrement the variant index
+                let variant_idx = (*idx as usize)
+                    .checked_sub(usize::from(self.deserializing_some))
+                    .ok_or_else(|| Details::GetNull(inner.deref().clone()))?;
+                if (variant_idx) < variants.len() {
                     visitor.visit_enum(UnionDeserializer::new(
-                        variants[*idx as usize],
+                        variants[variant_idx],
                         inner.as_ref(),
                     ))
                 } else {
                     Err(Details::GetUnionVariant {
-                        index: *idx as i64,
+                        index: variant_idx as i64,
                         num_variants: variants.len(),
                     }
                     .into())
@@ -1901,6 +1964,39 @@ mod tests {
             result,
             "Failed to deserialize Avro value into value: Expected a String|Bytes|Fixed(4) for char, but got Fixed(3, [97, 0, 0])"
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn deserialize_union_using_some_with_null_not_as_first_fails() -> TestResult {
+        #[derive(Debug, Deserialize)]
+        enum MyEnum {
+            A,
+            B,
+        }
+
+        #[derive(Debug, Deserialize)]
+        #[allow(dead_code)]
+        struct MyRecord {
+            a: i32,
+        }
+
+        #[derive(Debug, Deserialize)]
+        #[allow(dead_code)]
+        enum MyUnion {
+            Int(i32),
+            MyEnum(MyEnum),
+            MyRecord(MyRecord),
+        }
+
+        let int_variant_avro = Value::Union(0, Box::new(Value::Int(1)));
+        match from_value::<Option<MyUnion>>(&int_variant_avro) {
+            Ok(value) => panic!("Expected an error, but got {value:?}"),
+            Err(e) => {
+                assert_eq!(e.to_string(), r#"Expected Value::Null, got: Int(1)"#,);
+            }
+        }
 
         Ok(())
     }

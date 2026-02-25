@@ -606,6 +606,7 @@ pub struct SchemaAwareWriteSerializer<'s, W: Write> {
     root_schema: &'s Schema,
     names: &'s NamesRef<'s>,
     enclosing_namespace: Namespace,
+    serializing_some: bool,
 }
 
 impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
@@ -629,6 +630,22 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
             root_schema: schema,
             names,
             enclosing_namespace,
+            serializing_some: false,
+        }
+    }
+
+    fn new_serializing_some(
+        writer: &'s mut W,
+        schema: &'s Schema,
+        names: &'s NamesRef<'s>,
+        enclosing_namespace: Namespace,
+    ) -> SchemaAwareWriteSerializer<'s, W> {
+        SchemaAwareWriteSerializer {
+            writer,
+            root_schema: schema,
+            names,
+            enclosing_namespace,
+            serializing_some: true,
         }
     }
 
@@ -1374,7 +1391,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     where
         T: ?Sized + ser::Serialize,
     {
-        let mut inner_ser = SchemaAwareWriteSerializer::new(
+        let mut inner_ser = SchemaAwareWriteSerializer::new_serializing_some(
             &mut *self.writer,
             schema,
             self.names,
@@ -1460,19 +1477,60 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 encode_int(variant_index as i32, &mut self.writer)
             }
             Schema::Union(union_schema) => {
-                if variant_index as usize >= union_schema.schemas.len() {
+                if self.serializing_some
+                    && !matches!(union_schema.schemas.first(), Some(Schema::Null))
+                {
+                    return Err(create_error(format!(
+                        "Serializing Union schema using Some<{name}> with `null` not as the first branch is not supported."
+                    )));
+                }
+                // If we came here from a some, we need to check if we are serializing a
+                // non-newtype enum
+                if self.serializing_some {
+                    for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
+                        match variant_schema {
+                            Schema::Enum(enum_schema) if enum_schema.name.name == name => {
+                                if variant_index as usize >= enum_schema.symbols.len() {
+                                    return Err(create_error(format!(
+                                        "Variant index out of bounds: {}. The Enum schema has '{}' symbols",
+                                        variant_index,
+                                        enum_schema.symbols.len()
+                                    )));
+                                }
+                                encode_int(i as i32, &mut self.writer)?;
+                                return encode_int(variant_index as i32, &mut self.writer);
+                            }
+                            Schema::Ref { name: ref_name } => {
+                                let ref_schema = self.get_ref_schema(ref_name)?;
+                                if let Schema::Enum(enum_schema) = ref_schema
+                                    && enum_schema.name.name == name
+                                {
+                                    if variant_index as usize >= enum_schema.symbols.len() {
+                                        return Err(create_error(format!(
+                                            "Variant index out of bounds: {}. The Enum schema has '{}' symbols",
+                                            variant_index,
+                                            enum_schema.symbols.len()
+                                        )));
+                                    }
+                                    encode_int(i as i32, &mut self.writer)?;
+                                    return encode_int(variant_index as i32, &mut self.writer);
+                                }
+                            }
+                            _ => { /* skip */ }
+                        }
+                    }
+                }
+                let branch_index = variant_index as usize + usize::from(self.serializing_some);
+                if branch_index >= union_schema.schemas.len() {
                     return Err(create_error(format!(
                         "Variant index out of bounds: {}. The union schema has '{}' schemas",
-                        variant_index,
+                        branch_index,
                         union_schema.schemas.len()
                     )));
                 }
 
-                encode_int(variant_index as i32, &mut self.writer)?;
-                self.serialize_unit_struct_with_schema(
-                    name,
-                    &union_schema.schemas[variant_index as usize],
-                )
+                encode_int(branch_index as i32, &mut self.writer)?;
+                self.serialize_unit_struct_with_schema(name, &union_schema.schemas[branch_index])
             }
             Schema::Ref { name: ref_name } => {
                 let ref_schema = self.get_ref_schema(ref_name)?;
@@ -1524,17 +1582,28 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
         match schema {
             Schema::Union(union_schema) => {
-                let variant_schema = union_schema
-                    .schemas
-                    .get(variant_index as usize)
-                    .ok_or_else(|| {
-                        create_error(format!(
-                            "No variant schema at position {variant_index} for {union_schema:?}"
-                        ))
-                    })?;
+                if self.serializing_some
+                    && !matches!(union_schema.schemas.first(), Some(Schema::Null))
+                {
+                    return Err(create_error(format!(
+                        "Serializing Union schema using Some<{name}> with `null` not as the first branch is not supported."
+                    )));
+                }
+                let branch_index = variant_index as usize + usize::from(self.serializing_some);
+                if branch_index >= union_schema.schemas.len() {
+                    return Err(create_error(format!(
+                        "Variant index out of bounds: {}. The union schema has '{}' schemas",
+                        branch_index,
+                        union_schema.schemas.len()
+                    )));
+                }
 
-                encode_int(variant_index as i32, &mut self.writer)?;
-                self.serialize_newtype_struct_with_schema(variant, value, variant_schema)
+                encode_int(branch_index as i32, &mut self.writer)?;
+                self.serialize_newtype_struct_with_schema(
+                    name,
+                    value,
+                    &union_schema.schemas[branch_index],
+                )
             }
             _ => Err(create_error(format!(
                 "Expected Union schema. Got: {schema}"
@@ -1703,17 +1772,28 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
         match schema {
             Schema::Union(union_schema) => {
-                let variant_schema = union_schema
-                    .schemas
-                    .get(variant_index as usize)
-                    .ok_or_else(|| {
-                        create_error(format!(
-                            "Cannot find a variant at position {variant_index} in {union_schema:?}"
-                        ))
-                    })?;
+                if self.serializing_some
+                    && !matches!(union_schema.schemas.first(), Some(Schema::Null))
+                {
+                    return Err(create_error(format!(
+                        "Serializing Union schema using Some<{name}> with `null` not as the first branch is not supported."
+                    )));
+                }
+                let branch_index = variant_index as usize + usize::from(self.serializing_some);
+                if branch_index >= union_schema.schemas.len() {
+                    return Err(create_error(format!(
+                        "Variant index out of bounds: {}. The union schema has '{}' schemas",
+                        branch_index,
+                        union_schema.schemas.len()
+                    )));
+                }
 
-                encode_int(variant_index as i32, &mut self.writer)?;
-                self.serialize_tuple_struct_with_schema(variant, len, variant_schema)
+                encode_int(branch_index as i32, &mut self.writer)?;
+                self.serialize_tuple_struct_with_schema(
+                    name,
+                    len,
+                    &union_schema.schemas[branch_index],
+                )
             }
             _ => Err(create_error(format!(
                 "Expected Union schema. Got: {schema}"
@@ -1835,17 +1915,24 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
         match schema {
             Schema::Union(union_schema) => {
-                let variant_schema = union_schema
-                    .schemas
-                    .get(variant_index as usize)
-                    .ok_or_else(|| {
-                        create_error(format!(
-                            "Cannot find variant at position {variant_index} in {union_schema:?}"
-                        ))
-                    })?;
+                if self.serializing_some
+                    && !matches!(union_schema.schemas.first(), Some(Schema::Null))
+                {
+                    return Err(create_error(format!(
+                        "Serializing Union schema using Some<{name}> with `null` not as the first branch is not supported."
+                    )));
+                }
+                let branch_index = variant_index as usize + usize::from(self.serializing_some);
+                if branch_index >= union_schema.schemas.len() {
+                    return Err(create_error(format!(
+                        "Variant index out of bounds: {}. The union schema has '{}' schemas",
+                        branch_index,
+                        union_schema.schemas.len()
+                    )));
+                }
 
-                encode_int(variant_index as i32, &mut self.writer)?;
-                self.serialize_struct_with_schema(variant, len, variant_schema)
+                encode_int(branch_index as i32, &mut self.writer)?;
+                self.serialize_struct_with_schema(name, len, &union_schema.schemas[branch_index])
             }
             _ => Err(create_error(format!(
                 "Expected Union schema. Got: {schema}"
@@ -2058,7 +2145,7 @@ mod tests {
     use crate::schema::FixedSchema;
     use crate::{
         Days, Duration, Millis, Months, Reader, Writer, decimal::Decimal, error::Details,
-        from_value, schema::ResolvedSchema,
+        from_value, schema::ResolvedSchema, types::Value,
     };
     use apache_avro_test_helper::TestResult;
     use bigdecimal::BigDecimal;
@@ -3600,6 +3687,136 @@ mod tests {
 
         assert_eq!(buffer, &[0, 0, 1, 2, 3, 2, 4, 5, 6, 7, 8, 9, 10, 11][..]);
 
+        Ok(())
+    }
+
+    #[test]
+    fn serialize_union_using_some_with_null_not_as_first_fails() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"[
+            "int",
+            {
+                "type": "enum",
+                "name": "MyEnum",
+                "symbols": ["A", "B"]
+            },
+            {
+                "type": "record",
+                "name": "MyRecord",
+                "fields": [
+                    {"name": "a", "type": "int"}
+                ]
+            },
+            "null"
+        ]"#,
+        )
+        .unwrap();
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        enum MyEnum {
+            A,
+            B,
+        }
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        struct MyRecord {
+            a: i32,
+        }
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        enum MyUnion {
+            Int(i32),
+            MyEnum(MyEnum),
+            MyRecord(MyRecord),
+        }
+
+        let mut buffer: Vec<u8> = Vec::new();
+        let names = HashMap::new();
+        let mut serializer = SchemaAwareWriteSerializer::new(&mut buffer, &schema, &names, None);
+        let int_variant = Some(MyUnion::Int(1));
+        match int_variant.serialize(&mut serializer) {
+            Ok(bytes) => panic!("Expected an error, but got {bytes} bytes written"),
+            Err(e) => {
+                assert!(
+                    e.to_string().ends_with("Serializing Union schema using Some<MyUnion> with `null` not as the first branch is not supported."),
+                );
+            }
+        }
+        let enum_variant = Some(MyUnion::MyEnum(MyEnum::A));
+        match enum_variant.serialize(&mut serializer) {
+            Ok(bytes) => panic!("Expected an error, but got {bytes} bytes written"),
+            Err(e) => {
+                assert!(
+                    e.to_string().ends_with("Serializing Union schema using Some<MyUnion> with `null` not as the first branch is not supported."),
+                )
+            }
+        }
+        let record_variant = Some(MyUnion::MyRecord(MyRecord { a: 1 }));
+        match record_variant.serialize(&mut serializer) {
+            Ok(bytes) => panic!("Expected an error, but got {bytes} bytes written"),
+            Err(e) => {
+                assert!(
+                    e.to_string().ends_with("Serializing Union schema using Some<MyUnion> with `null` not as the first branch is not supported."),
+                )
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn serialize_option_enum_using_ref() -> TestResult {
+        let enum_schema = r#"
+        {
+            "type": "enum",
+            "name": "MyEnum",
+            "symbols": ["A", "B"]
+        }
+        "#;
+
+        let outer_schema = r#"
+        {
+            "type": "record",
+            "name": "MyRecord",
+            "fields": [
+                {"name": "a", "type": ["null", "MyEnum"]}
+            ]
+        }
+        "#;
+
+        let schemas = Schema::parse_list([enum_schema, outer_schema])?;
+
+        #[derive(Debug, Serialize)]
+        #[allow(dead_code)]
+        enum MyEnum {
+            A,
+            B,
+        }
+
+        #[derive(Debug, Serialize)]
+        struct MyRecord {
+            a: Option<MyEnum>,
+        }
+
+        let input = MyRecord { a: Some(MyEnum::A) };
+        let expected = Value::Record(vec![(
+            "a".to_string(),
+            Value::Union(1, Box::new(Value::Enum(0, "A".to_string()))),
+        )]);
+
+        let mut writer = Writer::with_schemata(
+            &schemas[1],
+            schemas.iter().collect(),
+            Vec::new(),
+            crate::Codec::Null,
+        )?;
+        writer.append_ser(&input)?;
+        let bytes = writer.into_inner()?;
+        let mut reader = Reader::with_schemata(&schemas[1], schemas.iter().collect(), &bytes[..])?;
+        let read_avro_value = reader.next().unwrap()?;
+        assert_eq!(
+            &read_avro_value, &expected,
+            "serialization is not correct: expected: {expected:?}, got: {read_avro_value:?}, input: {input:?}",
+        );
         Ok(())
     }
 }
