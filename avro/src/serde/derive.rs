@@ -544,6 +544,7 @@ impl_schema!(f64, Schema::Double);
 impl_schema!(String, Schema::String);
 impl_schema!(str, Schema::String);
 impl_schema!(char, Schema::String);
+impl_schema!((), Schema::Null);
 
 macro_rules! impl_passthrough_schema (
     ($type:ty where T: AvroSchemaComponent + ?Sized $(+ $bound:tt)*) => (
@@ -940,6 +941,14 @@ mod tests {
                 attributes: Default::default(),
             })
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_unit() -> TestResult {
+        let schema = <()>::get_schema();
+        assert_eq!(schema, Schema::Null);
 
         Ok(())
     }
