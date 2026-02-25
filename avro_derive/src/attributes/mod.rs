@@ -17,7 +17,8 @@
 
 use crate::case::RenameRule;
 use darling::{FromAttributes, FromMeta};
-use proc_macro2::Span;
+use proc_macro2::{Span, TokenStream};
+use quote::quote;
 use syn::{AttrStyle, Attribute, Expr, Ident, Path, spanned::Spanned};
 
 mod avro;
@@ -30,6 +31,7 @@ pub struct NamedTypeOptions {
     pub aliases: Vec<String>,
     pub rename_all: RenameRule,
     pub transparent: bool,
+    pub default: TokenStream,
 }
 
 impl NamedTypeOptions {
@@ -116,12 +118,29 @@ impl NamedTypeOptions {
 
         let doc = avro.doc.or_else(|| extract_rustdoc(attributes));
 
+        let default = match avro.default {
+            None => quote! { None },
+            Some(default_value) => {
+                let _: serde_json::Value =
+                    serde_json::from_str(&default_value[..]).map_err(|e| {
+                        vec![syn::Error::new(
+                            ident.span(),
+                            format!("Invalid Avro `default` JSON: \n{e}"),
+                        )]
+                    })?;
+                quote! {
+                    Some(::serde_json::from_str(#default_value).expect(format!("Invalid JSON: {:?}", #default_value).as_str()))
+                }
+            }
+        };
+
         Ok(Self {
             name: full_schema_name,
             doc,
             aliases: avro.alias,
             rename_all: serde.rename_all.serialize,
             transparent: serde.transparent,
+            default,
         })
     }
 }
@@ -210,11 +229,38 @@ impl With {
         }
     }
 }
+/// How to get the default value for a value.
+#[derive(Debug, PartialEq, Default)]
+pub enum FieldDefault {
+    /// Use `<T as AvroSchemaComponent>::field_default`.
+    #[default]
+    Trait,
+    /// Don't set a default.
+    Disabled,
+    /// Use this JSON value.
+    Value(String),
+}
+
+impl FromMeta for FieldDefault {
+    fn from_string(value: &str) -> darling::Result<Self> {
+        Ok(Self::Value(value.to_string()))
+    }
+
+    fn from_bool(value: bool) -> darling::Result<Self> {
+        if value {
+            Err(darling::Error::custom(
+                "Expected `false` or a JSON string, got `true`",
+            ))
+        } else {
+            Ok(Self::Disabled)
+        }
+    }
+}
 
 #[derive(Default)]
 pub struct FieldOptions {
     pub doc: Option<String>,
-    pub default: Option<String>,
+    pub default: FieldDefault,
     pub alias: Vec<String>,
     pub rename: Option<String>,
     pub skip: bool,
@@ -274,11 +320,11 @@ impl FieldOptions {
         }
         if ((serde.skip_serializing && !serde.skip_deserializing)
             || serde.skip_serializing_if.is_some())
-            && avro.default.is_none()
+            && avro.default == FieldDefault::Disabled
         {
             errors.push(syn::Error::new(
                 span,
-                r#"`#[serde(skip_serializing)]` and `#[serde(skip_serializing_if)]` require `#[avro(default = "..")]`"#
+                "`#[serde(skip_serializing)]` and `#[serde(skip_serializing_if)]` are incompatible with `#[avro(default = false)]`"
             ));
         }
         let with = match With::from_avro_and_serde(&avro.with, &serde.with, span) {

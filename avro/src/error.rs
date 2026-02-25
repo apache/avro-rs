@@ -21,7 +21,7 @@ use crate::{
 };
 use std::{error::Error as _, fmt};
 
-/// Errors encounterd by Avro.
+/// Errors encountered by Avro.
 ///
 /// To inspect the details of the error use [`details`](Self::details) or [`into_details`](Self::into_details)
 /// to get a [`Details`] which contains more precise error information.

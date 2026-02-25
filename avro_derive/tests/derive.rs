@@ -25,7 +25,9 @@ use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
     sync::Mutex,
+    time::Duration,
 };
+use uuid::Uuid;
 
 use pretty_assertions::assert_eq;
 
@@ -1372,6 +1374,7 @@ fn test_basic_struct_with_defaults() {
         #[avro(default = "true")]
         condition: bool,
         // no default value for 'c'
+        #[avro(default = false)]
         c: f64,
         #[avro(default = r#"{"a": 1, "b": 2}"#)]
         map: HashMap<String, i32>,
@@ -1945,6 +1948,7 @@ fn avro_rs_397_uuid() {
                     "type":"fixed",
                     "logicalType":"uuid",
                     "name":"uuid",
+                    "default":"\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
                     "size":16
                 }
             }
@@ -2380,4 +2384,194 @@ fn avro_rs_448_flatten_field_positions() {
         .map(|f| f.position)
         .collect::<Vec<_>>();
     assert_eq!(positions.as_slice(), &[0, 1, 2, 3][..]);
+}
+
+#[test]
+fn avro_rs_476_field_default() {
+    #[derive(AvroSchema)]
+    struct Bar {
+        _field: Box<Bar>,
+    }
+
+    #[derive(AvroSchema)]
+    #[avro(default = r#"{"_field": true}"#)]
+    struct Spam {
+        _field: bool,
+    }
+
+    #[derive(AvroSchema)]
+    struct Foo {
+        _a: bool,
+        _b: i8,
+        _c: i16,
+        _d: i32,
+        _e: i64,
+        _f: u8,
+        _g: u16,
+        _h: u32,
+        _i: f32,
+        _j: f64,
+        _k: String,
+        _l: Box<str>,
+        _m: char,
+        _n: Box<Spam>,
+        _o: Vec<bool>,
+        _p: [u8; 5],
+        _p_alt: [Bar; 5],
+        _q: HashMap<String, String>,
+        _r: Option<f64>,
+        _s: Duration,
+        _t: Uuid,
+        _u: u64,
+        _v: u128,
+        _w: i128,
+        _x: Bar,
+        _z: Spam,
+    }
+
+    let schema = Foo::get_schema();
+    assert_eq!(
+        serde_json::to_string(&schema).unwrap(),
+        r#"{"type":"record","name":"Foo","fields":[{"name":"_a","type":"boolean"},{"name":"_b","type":"int"},{"name":"_c","type":"int"},{"name":"_d","type":"int"},{"name":"_e","type":"long"},{"name":"_f","type":"int"},{"name":"_g","type":"int"},{"name":"_h","type":"long"},{"name":"_i","type":"float"},{"name":"_j","type":"double"},{"name":"_k","type":"string"},{"name":"_l","type":"string"},{"name":"_m","type":"string"},{"name":"_n","type":{"type":"record","name":"Spam","fields":[{"name":"_field","type":"boolean"}]},"default":{"_field":true}},{"name":"_o","type":{"type":"array","items":"boolean"}},{"name":"_p","type":{"type":"array","items":"int"}},{"name":"_p_alt","type":{"type":"array","items":{"type":"record","name":"Bar","fields":[{"name":"_field","type":"Bar"}]}}},{"name":"_q","type":{"type":"map","values":"string"}},{"name":"_r","type":["null","double"],"default":null},{"name":"_s","type":{"type":"fixed","name":"duration","size":12,"logicalType":"duration"}},{"name":"_t","type":{"type":"fixed","name":"uuid","size":16,"logicalType":"uuid"}},{"name":"_u","type":{"type":"fixed","name":"u64","size":8}},{"name":"_v","type":{"type":"fixed","name":"u128","size":16}},{"name":"_w","type":{"type":"fixed","name":"i128","size":16}},{"name":"_x","type":"Bar"},{"name":"_z","type":"Spam","default":{"_field":true}}]}"#
+    );
+}
+
+#[test]
+fn avro_rs_476_field_default_false() {
+    #[derive(AvroSchema)]
+    #[avro(default = r#"{"_field": true}"#)]
+    struct Spam {
+        _field: bool,
+    }
+
+    #[derive(AvroSchema)]
+    struct Foo {
+        #[avro(default = false)]
+        _a: bool,
+        #[avro(default = false)]
+        _b: Spam,
+        #[avro(default = false)]
+        _c: Box<Spam>,
+        #[avro(default = false)]
+        _d: HashMap<String, String>,
+        #[avro(default = false)]
+        _e: Option<f64>,
+    }
+
+    let schema = Foo::get_schema();
+    assert_eq!(
+        serde_json::to_string(&schema).unwrap(),
+        r#"{"type":"record","name":"Foo","fields":[{"name":"_a","type":"boolean"},{"name":"_b","type":{"type":"record","name":"Spam","fields":[{"name":"_field","type":"boolean"}]}},{"name":"_c","type":"Spam"},{"name":"_d","type":{"type":"map","values":"string"}},{"name":"_e","type":["null","double"]}]}"#
+    );
+}
+
+#[test]
+fn avro_rs_476_field_default_provided() {
+    #[derive(AvroSchema)]
+    #[avro(default = r#"{"_field": true}"#)]
+    struct Spam {
+        _field: bool,
+    }
+
+    #[derive(AvroSchema)]
+    struct Foo {
+        #[avro(default = "true")]
+        _a: bool,
+        #[avro(default = "42")]
+        _b: i8,
+        #[avro(default = "42")]
+        _c: i16,
+        #[avro(default = "42")]
+        _d: i32,
+        #[avro(default = "42")]
+        _e: i64,
+        #[avro(default = "42")]
+        _f: u8,
+        #[avro(default = "42")]
+        _g: u16,
+        #[avro(default = "42")]
+        _h: u32,
+        #[avro(default = "42.0")]
+        _i: f32,
+        #[avro(default = "42.0")]
+        _j: f64,
+        #[avro(default = r#""String""#)]
+        _k: String,
+        #[avro(default = r#""str""#)]
+        _l: Box<str>,
+        #[avro(default = r#""Z""#)]
+        _m: char,
+        #[avro(default = r#"{"_field": false}"#)]
+        _n: Box<Spam>,
+        #[avro(default = "[true, false, true]")]
+        _o: Vec<bool>,
+        #[avro(default = "[1,2,3,4,5]")]
+        _p: [u8; 5],
+        #[avro(
+            default = r#"[{"_field": true},{"_field": false},{"_field": true},{"_field": false},{"_field": true}]"#
+        )]
+        _p_alt: [Spam; 5],
+        #[avro(default = r#"{"A": "B"}"#)]
+        _q: HashMap<String, String>,
+        #[avro(default = "42.0")]
+        _r: Option<f64>,
+        #[avro(
+            default = r#""\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001""#
+        )]
+        _s: Duration,
+        #[avro(
+            default = r#""\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001""#
+        )]
+        _t: Uuid,
+        #[avro(default = r#""\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001""#)]
+        _u: u64,
+        #[avro(
+            default = r#""\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001""#
+        )]
+        _v: u128,
+        #[avro(
+            default = r#""\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001""#
+        )]
+        _w: i128,
+        #[avro(default = r#"{"_field": false}"#)]
+        _x: Spam,
+    }
+
+    let schema = Foo::get_schema();
+    assert_eq!(
+        serde_json::to_string(&schema).unwrap(),
+        r#"{"type":"record","name":"Foo","fields":[{"name":"_a","type":"boolean","default":true},{"name":"_b","type":"int","default":42},{"name":"_c","type":"int","default":42},{"name":"_d","type":"int","default":42},{"name":"_e","type":"long","default":42},{"name":"_f","type":"int","default":42},{"name":"_g","type":"int","default":42},{"name":"_h","type":"long","default":42},{"name":"_i","type":"float","default":42.0},{"name":"_j","type":"double","default":42.0},{"name":"_k","type":"string","default":"String"},{"name":"_l","type":"string","default":"str"},{"name":"_m","type":"string","default":"Z"},{"name":"_n","type":{"type":"record","name":"Spam","fields":[{"name":"_field","type":"boolean"}]},"default":{"_field":false}},{"name":"_o","type":{"type":"array","items":"boolean"},"default":[true,false,true]},{"name":"_p","type":{"type":"array","items":"int"},"default":[1,2,3,4,5]},{"name":"_p_alt","type":{"type":"array","items":"Spam"},"default":[{"_field":true},{"_field":false},{"_field":true},{"_field":false},{"_field":true}]},{"name":"_q","type":{"type":"map","values":"string"},"default":{"A":"B"}},{"name":"_r","type":["null","double"],"default":42.0},{"name":"_s","type":{"type":"fixed","name":"duration","size":12,"logicalType":"duration"},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_t","type":{"type":"fixed","name":"uuid","size":16,"logicalType":"uuid"},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_u","type":{"type":"fixed","name":"u64","size":8},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_v","type":{"type":"fixed","name":"u128","size":16},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_w","type":{"type":"fixed","name":"i128","size":16},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_x","type":"Spam","default":{"_field":false}}]}"#
+    );
+}
+
+#[test]
+fn avro_rs_476_skip_serializing_fielddefault_trait_none() {
+    #[derive(AvroSchema, Debug, Deserialize, Serialize)]
+    struct T {
+        x: Option<i8>,
+        #[serde(skip_serializing)]
+        // no usage of #[avro(default = ...)], so FieldDefault::Trait will be used
+        // with AvroSchemaComponent::field_default == None
+        _y: i8,
+    }
+
+    let schema = T::get_schema();
+    assert_eq!(
+        serde_json::to_string(&schema).unwrap(),
+        r#"{"type":"record","name":"T","fields":[{"name":"x","type":["null","int"],"default":null},{"name":"_y","type":"int"}]}"#
+    );
+
+    let t = T { x: Some(1), _y: 2 };
+
+    let mut writer = Writer::new(&schema, Vec::new()).unwrap();
+    match writer.append_ser(t) {
+        Ok(_) => panic!(
+            "The serialization should have failed due to the missing `default` value for the `_y` field"
+        ),
+        Err(e) => match e.into_details() {
+            apache_avro::error::Details::MissingDefaultForSkippedField { field_name, .. }
+                if field_name == "_y" => {}
+            d => panic!("Unexpected error: {d:?}"),
+        },
+    }
 }
