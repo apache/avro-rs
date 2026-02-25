@@ -2561,18 +2561,17 @@ fn avro_rs_476_skip_serializing_fielddefault_trait_none() {
         r#"{"type":"record","name":"T","fields":[{"name":"x","type":["null","int"],"default":null},{"name":"_y","type":"int"}]}"#
     );
 
-    let t = T {
-        x: Some(1),
-        _y: 2,
-    };
+    let t = T { x: Some(1), _y: 2 };
 
     let mut writer = Writer::new(&schema, Vec::new()).unwrap();
     match writer.append_ser(t) {
-        Ok(_) => panic!("The serialization should have failed due to the missing `default` value for the `_y` field"),
+        Ok(_) => panic!(
+            "The serialization should have failed due to the missing `default` value for the `_y` field"
+        ),
         Err(e) => match e.into_details() {
-            apache_avro::error::Details::MissingDefaultForSkippedField {field_name, .. } if field_name == "_y" => {},
+            apache_avro::error::Details::MissingDefaultForSkippedField { field_name, .. }
+                if field_name == "_y" => {}
             d => panic!("Unexpected error: {:?}", d),
-        }
+        },
     }
-    ()
 }
