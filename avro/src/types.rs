@@ -781,7 +781,7 @@ impl Value {
     fn resolve_bigdecimal(self) -> Result<Self, Error> {
         Ok(match self {
             bg @ Value::BigDecimal(_) => bg,
-            Value::Bytes(b) => Value::BigDecimal(deserialize_big_decimal(&b).unwrap()),
+            Value::Bytes(b) => Value::BigDecimal(deserialize_big_decimal(&b)?),
             other => return Err(Details::GetBigDecimal(other).into()),
         })
     }
@@ -1328,7 +1328,7 @@ mod tests {
                 Value::Union(0, Box::new(Value::Null)),
                 Schema::Union(UnionSchema::new(vec![Schema::Double, Schema::Int])?),
                 false,
-                "Invalid value: Union(0, Null) for schema: Union(UnionSchema { schemas: [Double, Int], variant_index: {Int: 1, Double: 0} }). Reason: Unsupported value-schema combination! Value: Null, schema: Double",
+                "Invalid value: Union(0, Null) for schema: Union(UnionSchema { schemas: [Double, Int] }). Reason: Unsupported value-schema combination! Value: Null, schema: Double",
             ),
             (
                 Value::Union(3, Box::new(Value::Int(42))),
@@ -1354,7 +1354,7 @@ mod tests {
                 Value::Union(2, Box::new(Value::Long(1_i64))),
                 Schema::Union(UnionSchema::new(vec![Schema::Null, Schema::Int])?),
                 false,
-                "Invalid value: Union(2, Long(1)) for schema: Union(UnionSchema { schemas: [Null, Int], variant_index: {Null: 0, Int: 1} }). Reason: No schema in the union at position '2'",
+                "Invalid value: Union(2, Long(1)) for schema: Union(UnionSchema { schemas: [Null, Int] }). Reason: No schema in the union at position '2'",
             ),
             (
                 Value::Array(vec![Value::Long(42i64)]),
@@ -1366,7 +1366,7 @@ mod tests {
                 Value::Array(vec![Value::Boolean(true)]),
                 Schema::array(Schema::Long).build(),
                 false,
-                "Invalid value: Array([Boolean(true)]) for schema: Array(ArraySchema { items: Long, default: None, attributes: {} }). Reason: Unsupported value-schema combination! Value: Boolean(true), schema: Long",
+                "Invalid value: Array([Boolean(true)]) for schema: Array(ArraySchema { items: Long, .. }). Reason: Unsupported value-schema combination! Value: Boolean(true), schema: Long",
             ),
             (
                 Value::Record(vec![]),
@@ -1396,12 +1396,12 @@ mod tests {
                     attributes: BTreeMap::new(),
                 }),
                 false,
-                r#"Invalid value: Fixed(11, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) for schema: Duration(FixedSchema { name: Name { name: "TestName", namespace: None }, aliases: None, doc: None, size: 12, attributes: {} }). Reason: The value's size ('11') must be exactly 12 to be a Duration"#,
+                r#"Invalid value: Fixed(11, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) for schema: Duration(FixedSchema { name: Name { name: "TestName", namespace: None }, size: 12, .. }). Reason: The value's size ('11') must be exactly 12 to be a Duration"#,
             ),
             (
                 Value::Record(vec![("unknown_field_name".to_string(), Value::Null)]),
                 Schema::Record(RecordSchema {
-                    name: Name::new("record_name").unwrap(),
+                    name: Name::new("record_name")?,
                     aliases: None,
                     doc: None,
                     fields: vec![RecordField {
@@ -1418,12 +1418,12 @@ mod tests {
                     attributes: Default::default(),
                 }),
                 false,
-                r#"Invalid value: Record([("unknown_field_name", Null)]) for schema: Record(RecordSchema { name: Name { name: "record_name", namespace: None }, aliases: None, doc: None, fields: [RecordField { name: "field_name", doc: None, aliases: None, default: None, schema: Int, order: Ignore, position: 0, custom_attributes: {} }], lookup: {}, attributes: {} }). Reason: There is no schema field for field 'unknown_field_name'"#,
+                r#"Invalid value: Record([("unknown_field_name", Null)]) for schema: Record(RecordSchema { name: Name { name: "record_name", namespace: None }, fields: [RecordField { name: "field_name", schema: Int, position: 0, .. }], .. }). Reason: There is no schema field for field 'unknown_field_name'"#,
             ),
             (
                 Value::Record(vec![("field_name".to_string(), Value::Null)]),
                 Schema::Record(RecordSchema {
-                    name: Name::new("record_name").unwrap(),
+                    name: Name::new("record_name")?,
                     aliases: None,
                     doc: None,
                     fields: vec![RecordField {
@@ -1432,7 +1432,7 @@ mod tests {
                         default: None,
                         aliases: None,
                         schema: Schema::Ref {
-                            name: Name::new("missing").unwrap(),
+                            name: Name::new("missing")?,
                         },
                         order: RecordFieldOrder::Ignore,
                         position: 0,
@@ -1442,7 +1442,7 @@ mod tests {
                     attributes: Default::default(),
                 }),
                 false,
-                r#"Invalid value: Record([("field_name", Null)]) for schema: Record(RecordSchema { name: Name { name: "record_name", namespace: None }, aliases: None, doc: None, fields: [RecordField { name: "field_name", doc: None, aliases: None, default: None, schema: Ref { name: Name { name: "missing", namespace: None } }, order: Ignore, position: 0, custom_attributes: {} }], lookup: {"field_name": 0}, attributes: {} }). Reason: Unresolved schema reference: 'Name { name: "missing", namespace: None }'. Parsed names: []"#,
+                r#"Invalid value: Record([("field_name", Null)]) for schema: Record(RecordSchema { name: Name { name: "record_name", namespace: None }, fields: [RecordField { name: "field_name", schema: Ref { name: Name { name: "missing", namespace: None } }, position: 0, .. }], .. }). Reason: Unresolved schema reference: 'Name { name: "missing", namespace: None }'. Parsed names: []"#,
             ),
         ];
 
@@ -1468,7 +1468,7 @@ mod tests {
     fn validate_fixed() -> TestResult {
         let schema = Schema::Fixed(FixedSchema {
             size: 4,
-            name: Name::new("some_fixed").unwrap(),
+            name: Name::new("some_fixed")?,
             aliases: None,
             doc: None,
             attributes: Default::default(),
@@ -1502,7 +1502,7 @@ mod tests {
     #[test]
     fn validate_enum() -> TestResult {
         let schema = Schema::Enum(EnumSchema {
-            name: Name::new("some_enum").unwrap(),
+            name: Name::new("some_enum")?,
             aliases: None,
             doc: None,
             symbols: vec![
@@ -1549,7 +1549,7 @@ mod tests {
         );
 
         let other_schema = Schema::Enum(EnumSchema {
-            name: Name::new("some_other_enum").unwrap(),
+            name: Name::new("some_other_enum")?,
             aliases: None,
             doc: None,
             symbols: vec![
@@ -1590,7 +1590,7 @@ mod tests {
         //    ]
         // }
         let schema = Schema::Record(RecordSchema {
-            name: Name::new("some_record").unwrap(),
+            name: Name::new("some_record")?,
             aliases: None,
             doc: None,
             fields: vec![
@@ -1656,7 +1656,7 @@ mod tests {
         ]);
         assert!(!value.validate(&schema));
         assert_logged(
-            r#"Invalid value: Record([("a", Boolean(false)), ("b", String("foo"))]) for schema: Record(RecordSchema { name: Name { name: "some_record", namespace: None }, aliases: None, doc: None, fields: [RecordField { name: "a", doc: None, aliases: None, default: None, schema: Long, order: Ascending, position: 0, custom_attributes: {} }, RecordField { name: "b", doc: None, aliases: None, default: None, schema: String, order: Ascending, position: 1, custom_attributes: {} }, RecordField { name: "c", doc: None, aliases: None, default: Some(Null), schema: Union(UnionSchema { schemas: [Null, Int], variant_index: {Null: 0, Int: 1} }), order: Ascending, position: 2, custom_attributes: {} }], lookup: {"a": 0, "b": 1, "c": 2}, attributes: {} }). Reason: Unsupported value-schema combination! Value: Boolean(false), schema: Long"#,
+            r#"Invalid value: Record([("a", Boolean(false)), ("b", String("foo"))]) for schema: Record(RecordSchema { name: Name { name: "some_record", namespace: None }, fields: [RecordField { name: "a", schema: Long, position: 0, .. }, RecordField { name: "b", schema: String, position: 1, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), position: 2, .. }], .. }). Reason: Unsupported value-schema combination! Value: Boolean(false), schema: Long"#,
         );
 
         let value = Value::Record(vec![
@@ -1665,7 +1665,7 @@ mod tests {
         ]);
         assert!(!value.validate(&schema));
         assert_logged(
-            r#"Invalid value: Record([("a", Long(42)), ("c", String("foo"))]) for schema: Record(RecordSchema { name: Name { name: "some_record", namespace: None }, aliases: None, doc: None, fields: [RecordField { name: "a", doc: None, aliases: None, default: None, schema: Long, order: Ascending, position: 0, custom_attributes: {} }, RecordField { name: "b", doc: None, aliases: None, default: None, schema: String, order: Ascending, position: 1, custom_attributes: {} }, RecordField { name: "c", doc: None, aliases: None, default: Some(Null), schema: Union(UnionSchema { schemas: [Null, Int], variant_index: {Null: 0, Int: 1} }), order: Ascending, position: 2, custom_attributes: {} }], lookup: {"a": 0, "b": 1, "c": 2}, attributes: {} }). Reason: Could not find matching type in union"#,
+            r#"Invalid value: Record([("a", Long(42)), ("c", String("foo"))]) for schema: Record(RecordSchema { name: Name { name: "some_record", namespace: None }, fields: [RecordField { name: "a", schema: Long, position: 0, .. }, RecordField { name: "b", schema: String, position: 1, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), position: 2, .. }], .. }). Reason: Could not find matching type in union"#,
         );
         assert_not_logged(
             r#"Invalid value: String("foo") for schema: Int. Reason: Unsupported value-schema combination"#,
@@ -1677,7 +1677,7 @@ mod tests {
         ]);
         assert!(!value.validate(&schema));
         assert_logged(
-            r#"Invalid value: Record([("a", Long(42)), ("d", String("foo"))]) for schema: Record(RecordSchema { name: Name { name: "some_record", namespace: None }, aliases: None, doc: None, fields: [RecordField { name: "a", doc: None, aliases: None, default: None, schema: Long, order: Ascending, position: 0, custom_attributes: {} }, RecordField { name: "b", doc: None, aliases: None, default: None, schema: String, order: Ascending, position: 1, custom_attributes: {} }, RecordField { name: "c", doc: None, aliases: None, default: Some(Null), schema: Union(UnionSchema { schemas: [Null, Int], variant_index: {Null: 0, Int: 1} }), order: Ascending, position: 2, custom_attributes: {} }], lookup: {"a": 0, "b": 1, "c": 2}, attributes: {} }). Reason: There is no schema field for field 'd'"#,
+            r#"Invalid value: Record([("a", Long(42)), ("d", String("foo"))]) for schema: Record(RecordSchema { name: Name { name: "some_record", namespace: None }, fields: [RecordField { name: "a", schema: Long, position: 0, .. }, RecordField { name: "b", schema: String, position: 1, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), position: 2, .. }], .. }). Reason: There is no schema field for field 'd'"#,
         );
 
         let value = Value::Record(vec![
@@ -1688,7 +1688,7 @@ mod tests {
         ]);
         assert!(!value.validate(&schema));
         assert_logged(
-            r#"Invalid value: Record([("a", Long(42)), ("b", String("foo")), ("c", Null), ("d", Null)]) for schema: Record(RecordSchema { name: Name { name: "some_record", namespace: None }, aliases: None, doc: None, fields: [RecordField { name: "a", doc: None, aliases: None, default: None, schema: Long, order: Ascending, position: 0, custom_attributes: {} }, RecordField { name: "b", doc: None, aliases: None, default: None, schema: String, order: Ascending, position: 1, custom_attributes: {} }, RecordField { name: "c", doc: None, aliases: None, default: Some(Null), schema: Union(UnionSchema { schemas: [Null, Int], variant_index: {Null: 0, Int: 1} }), order: Ascending, position: 2, custom_attributes: {} }], lookup: {"a": 0, "b": 1, "c": 2}, attributes: {} }). Reason: The value's records length (4) is greater than the schema's (3 fields)"#,
+            r#"Invalid value: Record([("a", Long(42)), ("b", String("foo")), ("c", Null), ("d", Null)]) for schema: Record(RecordSchema { name: Name { name: "some_record", namespace: None }, fields: [RecordField { name: "a", schema: Long, position: 0, .. }, RecordField { name: "b", schema: String, position: 1, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), position: 2, .. }], .. }). Reason: The value's records length (4) is greater than the schema's (3 fields)"#,
         );
 
         assert!(
@@ -1712,7 +1712,7 @@ mod tests {
             .validate(&schema)
         );
         assert_logged(
-            r#"Invalid value: Map({"d": Long(123)}) for schema: Record(RecordSchema { name: Name { name: "some_record", namespace: None }, aliases: None, doc: None, fields: [RecordField { name: "a", doc: None, aliases: None, default: None, schema: Long, order: Ascending, position: 0, custom_attributes: {} }, RecordField { name: "b", doc: None, aliases: None, default: None, schema: String, order: Ascending, position: 1, custom_attributes: {} }, RecordField { name: "c", doc: None, aliases: None, default: Some(Null), schema: Union(UnionSchema { schemas: [Null, Int], variant_index: {Null: 0, Int: 1} }), order: Ascending, position: 2, custom_attributes: {} }], lookup: {"a": 0, "b": 1, "c": 2}, attributes: {} }). Reason: Field with name '"a"' is not a member of the map items
+            r#"Invalid value: Map({"d": Long(123)}) for schema: Record(RecordSchema { name: Name { name: "some_record", namespace: None }, fields: [RecordField { name: "a", schema: Long, position: 0, .. }, RecordField { name: "b", schema: String, position: 1, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), position: 2, .. }], .. }). Reason: Field with name '"a"' is not a member of the map items
 Field with name '"b"' is not a member of the map items"#,
         );
 
