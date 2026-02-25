@@ -129,7 +129,7 @@ impl NamedTypeOptions {
                         )]
                     })?;
                 quote! {
-                    Some(serde_json::from_str(#default_value).expect(format!("Invalid JSON: {:?}", #default_value).as_str()))
+                    Some(::serde_json::from_str(#default_value).expect(format!("Invalid JSON: {:?}", #default_value).as_str()))
                 }
             }
         };
