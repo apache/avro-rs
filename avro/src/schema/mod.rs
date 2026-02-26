@@ -48,6 +48,7 @@ use serde::{
     ser::{Error as _, SerializeMap, SerializeSeq},
 };
 use serde_json::{Map, Value as JsonValue};
+use std::fmt::Formatter;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fmt,
@@ -164,18 +165,54 @@ pub enum Schema {
     Ref { name: Name },
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct MapSchema {
     pub types: Box<Schema>,
     pub default: Option<HashMap<String, Value>>,
     pub attributes: BTreeMap<String, JsonValue>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+impl Debug for MapSchema {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("MapSchema");
+        debug.field("types", &self.types);
+        if let Some(default) = &self.default {
+            debug.field("default", default);
+        }
+        if !self.attributes.is_empty() {
+            debug.field("attributes", &self.attributes);
+        }
+        if self.default.is_none() || self.attributes.is_empty() {
+            debug.finish_non_exhaustive()
+        } else {
+            debug.finish()
+        }
+    }
+}
+
+#[derive(Clone, PartialEq)]
 pub struct ArraySchema {
     pub items: Box<Schema>,
     pub default: Option<Vec<Value>>,
     pub attributes: BTreeMap<String, JsonValue>,
+}
+
+impl Debug for ArraySchema {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("ArraySchema");
+        debug.field("items", &self.items);
+        if let Some(default) = &self.default {
+            debug.field("default", default);
+        }
+        if !self.attributes.is_empty() {
+            debug.field("attributes", &self.attributes);
+        }
+        if self.default.is_none() || self.attributes.is_empty() {
+            debug.finish_non_exhaustive()
+        } else {
+            debug.finish()
+        }
+    }
 }
 
 impl PartialEq for Schema {
@@ -252,7 +289,7 @@ impl From<&types::Value> for SchemaKind {
 }
 
 /// A description of an Enum schema.
-#[derive(bon::Builder, Debug, Clone)]
+#[derive(bon::Builder, Clone)]
 pub struct EnumSchema {
     /// The name of the schema
     pub name: Name,
@@ -271,8 +308,37 @@ pub struct EnumSchema {
     pub attributes: BTreeMap<String, JsonValue>,
 }
 
+impl Debug for EnumSchema {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("EnumSchema");
+        debug.field("name", &self.name);
+        if let Some(aliases) = &self.aliases {
+            debug.field("aliases", aliases);
+        }
+        if let Some(doc) = &self.doc {
+            debug.field("doc", doc);
+        }
+        debug.field("symbols", &self.symbols);
+        if let Some(default) = &self.default {
+            debug.field("default", default);
+        }
+        if !self.attributes.is_empty() {
+            debug.field("attributes", &self.attributes);
+        }
+        if self.aliases.is_none()
+            || self.doc.is_none()
+            || self.default.is_none()
+            || self.attributes.is_empty()
+        {
+            debug.finish_non_exhaustive()
+        } else {
+            debug.finish()
+        }
+    }
+}
+
 /// A description of a Fixed schema.
-#[derive(bon::Builder, Debug, Clone)]
+#[derive(bon::Builder, Clone)]
 pub struct FixedSchema {
     /// The name of the schema
     pub name: Name,
@@ -287,6 +353,28 @@ pub struct FixedSchema {
     /// The custom attributes of the schema
     #[builder(default = BTreeMap::new())]
     pub attributes: BTreeMap<String, JsonValue>,
+}
+
+impl Debug for FixedSchema {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("FixedSchema");
+        debug.field("name", &self.name);
+        if let Some(aliases) = &self.aliases {
+            debug.field("aliases", aliases);
+        }
+        if let Some(doc) = &self.doc {
+            debug.field("doc", doc);
+        }
+        debug.field("size", &self.size);
+        if !self.attributes.is_empty() {
+            debug.field("attributes", &self.attributes);
+        }
+        if self.aliases.is_none() || self.doc.is_none() || !self.attributes.is_empty() {
+            debug.finish_non_exhaustive()
+        } else {
+            debug.finish()
+        }
+    }
 }
 
 impl FixedSchema {
@@ -4401,7 +4489,7 @@ mod tests {
             })
         );
         assert_logged(
-            r#"Ignoring uuid logical type for a Fixed schema because its size (6) is not 16! Schema: Fixed(FixedSchema { name: Name { name: "FixedUUID", namespace: None }, aliases: None, doc: None, size: 6, attributes: {} })"#,
+            r#"Ignoring uuid logical type for a Fixed schema because its size (6) is not 16! Schema: Fixed(FixedSchema { name: Name { name: "FixedUUID", namespace: None }, size: 6, .. })"#,
         );
 
         Ok(())

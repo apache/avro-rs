@@ -26,11 +26,12 @@ use serde::ser::SerializeMap;
 use serde::{Serialize, Serializer};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
+use std::fmt::{Debug, Formatter};
 use std::str::FromStr;
 use strum::EnumString;
 
 /// Represents a `field` in a `record` Avro schema.
-#[derive(bon::Builder, Clone, Debug, PartialEq)]
+#[derive(bon::Builder, Clone, PartialEq)]
 pub struct RecordField {
     /// Name of the field.
     #[builder(into)]
@@ -57,6 +58,31 @@ pub struct RecordField {
     /// A collection of all unknown fields in the record field.
     #[builder(default = BTreeMap::new())]
     pub custom_attributes: BTreeMap<String, Value>,
+}
+
+impl Debug for RecordField {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut debug = f.debug_struct("RecordField");
+        debug.field("name", &self.name);
+        if let Some(doc) = &self.doc {
+            debug.field("doc", &doc);
+        }
+        if let Some(aliases) = &self.aliases {
+            debug.field("aliases", &aliases);
+        }
+        if let Some(default) = &self.default {
+            debug.field("default", &default);
+        }
+        debug.field("schema", &self.schema);
+        // This field is ignored as it currently has no effect
+        // debug.field("order", &self.order);
+        debug.field("position", &self.position);
+        if !self.custom_attributes.is_empty() {
+            debug.field("custom_attributes", &self.custom_attributes);
+        }
+        // As we are always skipping self.order, always show the ..
+        debug.finish_non_exhaustive()
+    }
 }
 
 /// Represents any valid order for a `field` in a `record` Avro schema.

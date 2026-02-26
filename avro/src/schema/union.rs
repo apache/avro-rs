@@ -21,10 +21,10 @@ use crate::schema::{Name, Namespace, ResolvedSchema, Schema, SchemaKind};
 use crate::types;
 use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 
 /// A description of a Union schema
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct UnionSchema {
     /// The schemas that make up this union
     pub(crate) schemas: Vec<Schema>,
@@ -33,6 +33,15 @@ pub struct UnionSchema {
     // **NOTE** that this approach does not work for named types, and will have to be modified
     // to support that. A simple solution is to also keep a mapping of the names used.
     variant_index: BTreeMap<SchemaKind, usize>,
+}
+
+impl Debug for UnionSchema {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // Doesn't include `variant_index` as it's a derivative of `schemas`
+        f.debug_struct("UnionSchema")
+            .field("schemas", &self.schemas)
+            .finish()
+    }
 }
 
 impl UnionSchema {

@@ -18,9 +18,10 @@
 use crate::schema::{Aliases, Documentation, Name, RecordField};
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::fmt::{Debug, Formatter};
 
 /// A description of a Record schema.
-#[derive(bon::Builder, Debug, Clone)]
+#[derive(bon::Builder, Clone)]
 pub struct RecordSchema {
     /// The name of the schema
     pub name: Name,
@@ -40,6 +41,28 @@ pub struct RecordSchema {
     /// The custom attributes of the schema
     #[builder(default)]
     pub attributes: BTreeMap<String, Value>,
+}
+
+impl Debug for RecordSchema {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut debug = f.debug_struct("RecordSchema");
+        debug.field("name", &self.name);
+        if let Some(aliases) = &self.aliases {
+            debug.field("default", aliases);
+        }
+        if let Some(doc) = &self.doc {
+            debug.field("doc", doc);
+        }
+        debug.field("fields", &self.fields);
+        if !self.attributes.is_empty() {
+            debug.field("attributes", &self.attributes);
+        }
+        if self.aliases.is_none() || self.doc.is_none() || self.attributes.is_empty() {
+            debug.finish_non_exhaustive()
+        } else {
+            debug.finish()
+        }
+    }
 }
 
 impl<S: record_schema_builder::State> RecordSchemaBuilder<S> {
