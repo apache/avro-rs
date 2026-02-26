@@ -42,7 +42,7 @@ pub(crate) fn decode_long<R: Read>(reader: &mut R) -> AvroResult<Value> {
 }
 
 #[inline]
-fn decode_int<R: Read>(reader: &mut R) -> AvroResult<Value> {
+pub(crate) fn decode_int<R: Read>(reader: &mut R) -> AvroResult<Value> {
     zag_i32(reader).map(Value::Int)
 }
 

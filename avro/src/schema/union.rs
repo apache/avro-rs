@@ -82,6 +82,10 @@ impl UnionSchema {
         self.schemas.iter().any(|x| matches!(x, Schema::Null))
     }
 
+    pub fn index(&self) -> &BTreeMap<SchemaKind, usize> {
+        &self.variant_index
+    }
+
     /// Optionally returns a reference to the schema matched by this value, as well as its position
     /// within this union.
     ///

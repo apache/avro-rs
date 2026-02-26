@@ -109,6 +109,7 @@
 
 mod de;
 mod derive;
+pub mod deser_schema;
 mod ser;
 pub(crate) mod ser_schema;
 mod util;
