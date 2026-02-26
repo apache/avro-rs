@@ -31,16 +31,18 @@
 
 mod attributes;
 mod case;
+mod enums;
 
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{
-    Attribute, DataEnum, DataStruct, DeriveInput, Expr, Field, Fields, Generics, Ident, Meta, Type,
-    parse_macro_input, spanned::Spanned,
+    DataStruct, DeriveInput, Expr, Field, Fields, Generics, Ident, Type, parse_macro_input,
+    spanned::Spanned,
 };
 
+use crate::enums::get_data_enum_schema_def;
 use crate::{
-    attributes::{FieldDefault, FieldOptions, NamedTypeOptions, VariantOptions, With},
+    attributes::{FieldDefault, FieldOptions, NamedTypeOptions, With},
     case::RenameRule,
 };
 
@@ -383,48 +385,6 @@ fn get_field_get_record_fields_expr(
     }
 }
 
-/// Generate a schema definition for a enum.
-fn get_data_enum_schema_def(
-    container_attrs: &NamedTypeOptions,
-    data_enum: DataEnum,
-    ident_span: Span,
-) -> Result<TokenStream, Vec<syn::Error>> {
-    let doc = preserve_optional(container_attrs.doc.as_ref());
-    let enum_aliases = aliases(&container_attrs.aliases);
-    if data_enum.variants.iter().all(|v| Fields::Unit == v.fields) {
-        let default_value = default_enum_variant(&data_enum, ident_span)?;
-        let default = preserve_optional(default_value);
-        let mut symbols = Vec::new();
-        for variant in &data_enum.variants {
-            let field_attrs = VariantOptions::new(&variant.attrs, variant.span())?;
-            let name = match (field_attrs.rename, container_attrs.rename_all) {
-                (Some(rename), _) => rename,
-                (None, rename_all) if !matches!(rename_all, RenameRule::None) => {
-                    rename_all.apply_to_variant(&variant.ident.to_string())
-                }
-                _ => variant.ident.to_string(),
-            };
-            symbols.push(name);
-        }
-        let full_schema_name = &container_attrs.name;
-        Ok(quote! {
-            ::apache_avro::schema::Schema::Enum(apache_avro::schema::EnumSchema {
-                name: ::apache_avro::schema::Name::new(#full_schema_name).expect(&format!("Unable to parse enum name for schema {}", #full_schema_name)[..]),
-                aliases: #enum_aliases,
-                doc: #doc,
-                symbols: vec![#(#symbols.to_owned()),*],
-                default: #default,
-                attributes: Default::default(),
-            })
-        })
-    } else {
-        Err(vec![syn::Error::new(
-            ident_span,
-            "AvroSchema: derive does not work for enums with non unit structs",
-        )])
-    }
-}
-
 /// Takes in the Tokens of a type and returns the tokens of an expression with return type `Schema`
 fn type_to_schema_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>> {
     match ty {
@@ -490,35 +450,6 @@ fn type_to_field_default_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>>
             ),
         )]),
     }
-}
-
-fn default_enum_variant(
-    data_enum: &syn::DataEnum,
-    error_span: Span,
-) -> Result<Option<String>, Vec<syn::Error>> {
-    match data_enum
-        .variants
-        .iter()
-        .filter(|v| v.attrs.iter().any(is_default_attr))
-        .collect::<Vec<_>>()
-    {
-        variants if variants.is_empty() => Ok(None),
-        single if single.len() == 1 => Ok(Some(single[0].ident.to_string())),
-        multiple => Err(vec![syn::Error::new(
-            error_span,
-            format!(
-                "Multiple defaults defined: {:?}",
-                multiple
-                    .iter()
-                    .map(|v| v.ident.to_string())
-                    .collect::<Vec<String>>()
-            ),
-        )]),
-    }
-}
-
-fn is_default_attr(attr: &Attribute) -> bool {
-    matches!(attr, Attribute { meta: Meta::Path(path), .. } if path.get_ident().map(Ident::to_string).as_deref() == Some("default"))
 }
 
 /// Stolen from serde
