@@ -637,17 +637,14 @@ where
         named_schemas: &mut HashSet<Name>,
         enclosing_namespace: &Namespace,
     ) -> Schema {
-        let schema = T::get_schema_in_ctxt(named_schemas, enclosing_namespace);
-        if let Schema::Null = schema {
-            Schema::Union(UnionSchema::new(vec![Schema::Null]).expect("This is a valid schema"))
-        } else {
-            let variants = vec![Schema::Null, schema];
+        let variants = vec![
+            Schema::Null,
+            T::get_schema_in_ctxt(named_schemas, enclosing_namespace),
+        ];
 
-            Schema::Union(
-                UnionSchema::new(variants)
-                    .expect("Option<T> must produce a valid (non-nested) union"),
-            )
-        }
+        Schema::Union(
+            UnionSchema::new(variants).expect("Option<T> must produce a valid (non-nested) union"),
+        )
     }
 
     fn get_record_fields_in_ctxt(
@@ -836,7 +833,7 @@ impl AvroSchemaComponent for i128 {
 mod tests {
     use crate::{
         AvroSchema, Schema,
-        schema::{FixedSchema, Name, UnionSchema},
+        schema::{FixedSchema, Name},
     };
     use apache_avro_test_helper::TestResult;
 
@@ -957,10 +954,18 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_489_some_unit() -> TestResult {
-        let schema = <Option<()>>::get_schema();
-        assert_eq!(schema, Schema::Union(UnionSchema::new(vec![Schema::Null])?));
+    #[should_panic(
+        expected = "Option<T> must produce a valid (non-nested) union: Error { details: Unions cannot contain duplicate types, found at least two Null }"
+    )]
+    fn avro_rs_489_some_unit() {
+        <Option<()>>::get_schema();
+    }
 
-        Ok(())
+    #[test]
+    #[should_panic(
+        expected = "Option<T> must produce a valid (non-nested) union: Error { details: Unions may not directly contain a union }"
+    )]
+    fn avro_rs_489_option_option() {
+        <Option<Option<i32>>>::get_schema();
     }
 }
