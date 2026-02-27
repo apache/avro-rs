@@ -836,7 +836,7 @@ impl AvroSchemaComponent for i128 {
 mod tests {
     use crate::{
         AvroSchema, Schema,
-        schema::{FixedSchema, Name},
+        schema::{FixedSchema, Name, UnionSchema},
     };
     use apache_avro_test_helper::TestResult;
 
@@ -952,6 +952,14 @@ mod tests {
     fn avro_rs_486_unit() -> TestResult {
         let schema = <()>::get_schema();
         assert_eq!(schema, Schema::Null);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_489_some_unit() -> TestResult {
+        let schema = <Option<()>>::get_schema();
+        assert_eq!(schema, Schema::Union(UnionSchema::new(vec![Schema::Null])?));
 
         Ok(())
     }

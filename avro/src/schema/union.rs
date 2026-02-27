@@ -34,12 +34,10 @@ pub struct UnionSchema {
     /// The indexes of unnamed types.
     ///
     /// Logical types have been reduced to their inner type.
-    /// Used to provide constant time finding of the
-    /// schema index given an unnamed type. Must only contain unnamed types.
     variant_index: BTreeMap<SchemaKind, usize>,
     /// The indexes of named types.
     ///
-    /// The names self aren't saved as they aren't used.
+    /// The names themselves aren't saved as they aren't used.
     named_index: Vec<usize>,
 }
 
@@ -92,6 +90,8 @@ impl UnionSchema {
         known_schemata: Option<&HashMap<Name, S>>,
         enclosing_namespace: &Namespace,
     ) -> Option<(usize, &Schema)> {
+        let known_schemata_if_none = HashMap::new();
+        let known_schemata = known_schemata.unwrap_or(&known_schemata_if_none);
         let ValueSchemaKind { unnamed, named } = Self::value_to_base_schemakind(value);
         // Unnamed schema types can be looked up directly using the variant_index
         let unnamed = unnamed
@@ -101,8 +101,6 @@ impl UnionSchema {
                 let kind = schema.discriminant();
                 // Maps and arrays need to be checked if they actually match the value
                 if kind == SchemaKind::Map || kind == SchemaKind::Array {
-                    let known_schemata_if_none = HashMap::new();
-                    let known_schemata = known_schemata.unwrap_or(&known_schemata_if_none);
                     let namespace = if schema.namespace().is_some() {
                         &schema.namespace()
                     } else {
@@ -122,14 +120,14 @@ impl UnionSchema {
         let named = named.and_then(|kind| {
             // Every named type needs to be checked against a value until one matches
 
-            let known_schemata_if_none = HashMap::new();
-            let known_schemata = known_schemata.unwrap_or(&known_schemata_if_none);
-
             self.named_index
                 .iter()
                 .copied()
                 .map(|i| (i, &self.schemas[i]))
-                .filter(|(_i, s)| s.discriminant() == kind || s.discriminant() == SchemaKind::Ref)
+                .filter(|(_i, s)| {
+                    let s_kind = schema_to_base_schemakind(s);
+                    s_kind == kind || s_kind == SchemaKind::Ref
+                })
                 .find(|(_i, schema)| {
                     let namespace = if schema.namespace().is_some() {
                         &schema.namespace()
@@ -150,7 +148,22 @@ impl UnionSchema {
             (Some(_), Some(_)) => named,
             (Some(_), None) => unnamed,
             (None, Some(_)) => named,
-            (None, None) => None,
+            (None, None) => {
+                // Slow path, check if value can be promoted to any of the types in the union
+                self.schemas.iter().enumerate().find(|(_i, schema)| {
+                    let namespace = if schema.namespace().is_some() {
+                        &schema.namespace()
+                    } else {
+                        enclosing_namespace
+                    };
+
+                    // TODO: Do this without the clone
+                    value
+                        .clone()
+                        .resolve_internal(schema, known_schemata, namespace, &None)
+                        .is_ok()
+                })
+            }
         }
     }
 
@@ -257,7 +270,7 @@ impl UnionSchemaBuilder {
             if let Some(index) = self.variant_index.get(&SchemaKind::Map).copied() {
                 if self.schemas[index] != schema {
                     return Err(
-                        Details::GetUnionDuplicateMap(self.schemas.remove(index), schema).into(),
+                        Details::GetUnionDuplicateMap(self.schemas[index].clone(), schema).into(),
                     );
                 }
             } else {
@@ -268,9 +281,11 @@ impl UnionSchemaBuilder {
         } else if let Schema::Array(_) = &schema {
             if let Some(index) = self.variant_index.get(&SchemaKind::Array).copied() {
                 if self.schemas[index] != schema {
-                    return Err(
-                        Details::GetUnionDuplicateMap(self.schemas.remove(index), schema).into(),
-                    );
+                    return Err(Details::GetUnionDuplicateArray(
+                        self.schemas[index].clone(),
+                        schema,
+                    )
+                    .into());
                 }
             } else {
                 self.variant_index
@@ -278,7 +293,7 @@ impl UnionSchemaBuilder {
                 self.schemas.push(schema);
             }
         } else {
-            let discriminant = Self::schema_to_base_schemakind(&schema);
+            let discriminant = schema_to_base_schemakind(&schema);
             if discriminant == SchemaKind::Union {
                 return Err(Details::GetNestedUnion.into());
             }
@@ -304,7 +319,7 @@ impl UnionSchemaBuilder {
                 self.schemas.push(schema);
             }
         } else {
-            let discriminant = Self::schema_to_base_schemakind(&schema);
+            let discriminant = schema_to_base_schemakind(&schema);
             if discriminant == SchemaKind::Union {
                 return Err(Details::GetNestedUnion.into());
             }
@@ -327,7 +342,7 @@ impl UnionSchemaBuilder {
                 false
             }
         } else {
-            let discriminant = Self::schema_to_base_schemakind(schema);
+            let discriminant = schema_to_base_schemakind(schema);
             if let Some(index) = self.variant_index.get(&discriminant).copied() {
                 &self.schemas[index] == schema
             } else {
@@ -339,45 +354,47 @@ impl UnionSchemaBuilder {
     /// Create the `UnionSchema`.
     pub fn build(mut self) -> UnionSchema {
         self.schemas.shrink_to_fit();
+        let mut named_index: Vec<_> = self.names.into_values().collect();
+        named_index.sort();
         UnionSchema {
             variant_index: self.variant_index,
-            named_index: self.names.into_values().collect(),
+            named_index,
             schemas: self.schemas,
         }
     }
+}
 
-    /// Get the [`SchemaKind`] of a [`Schema`] converting logical types to their base type.
-    fn schema_to_base_schemakind(schema: &Schema) -> SchemaKind {
-        let kind = schema.discriminant();
-        match kind {
-            SchemaKind::Date | SchemaKind::TimeMillis => SchemaKind::Int,
-            SchemaKind::TimeMicros
-            | SchemaKind::TimestampMillis
-            | SchemaKind::TimestampMicros
-            | SchemaKind::TimestampNanos
-            | SchemaKind::LocalTimestampMillis
-            | SchemaKind::LocalTimestampMicros
-            | SchemaKind::LocalTimestampNanos => SchemaKind::Long,
-            SchemaKind::Uuid => match schema {
-                Schema::Uuid(UuidSchema::Bytes) => SchemaKind::Bytes,
-                Schema::Uuid(UuidSchema::String) => SchemaKind::String,
-                Schema::Uuid(UuidSchema::Fixed(_)) => SchemaKind::Fixed,
-                _ => unreachable!(),
-            },
-            SchemaKind::Decimal => match schema {
-                Schema::Decimal(DecimalSchema {
-                    inner: InnerDecimalSchema::Bytes,
-                    ..
-                }) => SchemaKind::Bytes,
-                Schema::Decimal(DecimalSchema {
-                    inner: InnerDecimalSchema::Fixed(_),
-                    ..
-                }) => SchemaKind::Fixed,
-                _ => unreachable!(),
-            },
-            SchemaKind::Duration => SchemaKind::Fixed,
-            _ => kind,
-        }
+/// Get the [`SchemaKind`] of a [`Schema`] converting logical types to their base type.
+fn schema_to_base_schemakind(schema: &Schema) -> SchemaKind {
+    let kind = schema.discriminant();
+    match kind {
+        SchemaKind::Date | SchemaKind::TimeMillis => SchemaKind::Int,
+        SchemaKind::TimeMicros
+        | SchemaKind::TimestampMillis
+        | SchemaKind::TimestampMicros
+        | SchemaKind::TimestampNanos
+        | SchemaKind::LocalTimestampMillis
+        | SchemaKind::LocalTimestampMicros
+        | SchemaKind::LocalTimestampNanos => SchemaKind::Long,
+        SchemaKind::Uuid => match schema {
+            Schema::Uuid(UuidSchema::Bytes) => SchemaKind::Bytes,
+            Schema::Uuid(UuidSchema::String) => SchemaKind::String,
+            Schema::Uuid(UuidSchema::Fixed(_)) => SchemaKind::Fixed,
+            _ => unreachable!(),
+        },
+        SchemaKind::Decimal => match schema {
+            Schema::Decimal(DecimalSchema {
+                inner: InnerDecimalSchema::Bytes,
+                ..
+            }) => SchemaKind::Bytes,
+            Schema::Decimal(DecimalSchema {
+                inner: InnerDecimalSchema::Fixed(_),
+                ..
+            }) => SchemaKind::Fixed,
+            _ => unreachable!(),
+        },
+        SchemaKind::Duration => SchemaKind::Fixed,
+        _ => kind,
     }
 }
 
@@ -560,6 +577,40 @@ mod tests {
             union
                 .find_schema_with_known_schemata(&value, None::<&HashMap<Name, Schema>>, &None)
                 .is_none()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_489_find_schema_with_known_schemata_type_promotion() -> TestResult {
+        let union = UnionSchema::new(vec![Schema::Long, Schema::Null])?;
+        let value = Value::Int(42);
+
+        assert_eq!(
+            union.find_schema_with_known_schemata(&value, None::<&HashMap<Name, Schema>>, &None),
+            Some((0, &Schema::Long))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_489_find_schema_with_known_schemata_uuid_vs_fixed() -> TestResult {
+        let uuid = Schema::parse_str(
+            r#"{
+            "type": "fixed",
+            "logicalType": "uuid",
+            "name": "Uuid",
+            "size": 16
+        }"#,
+        )?;
+        let union = UnionSchema::new(vec![uuid.clone(), Schema::Null])?;
+        let value = Value::Fixed(16, vec![0; 16]);
+
+        assert_eq!(
+            union.find_schema_with_known_schemata(&value, None::<&HashMap<Name, Schema>>, &None),
+            Some((0, &uuid))
         );
 
         Ok(())
