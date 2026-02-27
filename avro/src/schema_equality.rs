@@ -263,7 +263,7 @@ pub(crate) fn compare_schemata(schema_one: &Schema, schema_two: &Schema) -> bool
 #[allow(non_snake_case)]
 mod tests {
     use super::*;
-    use crate::schema::{InnerDecimalSchema, Name, RecordFieldOrder};
+    use crate::schema::{InnerDecimalSchema, Name};
     use apache_avro_test_helper::TestResult;
     use serde_json::Value;
     use std::collections::BTreeMap;
@@ -629,16 +629,12 @@ mod tests {
         let schema_one = Schema::Record(RecordSchema {
             name: Name::try_from("record").expect("Name is valid"),
             doc: None,
-            fields: vec![RecordField {
-                name: "field".to_string(),
-                doc: None,
-                default: None,
-                schema: Schema::Boolean,
-                order: RecordFieldOrder::Ignore,
-                aliases: None,
-                custom_attributes: BTreeMap::new(),
-                position: 0,
-            }],
+            fields: vec![
+                RecordField::builder()
+                    .name("field".to_string())
+                    .schema(Schema::Boolean)
+                    .build(),
+            ],
             aliases: None,
             attributes: BTreeMap::new(),
             lookup: Default::default(),
@@ -649,16 +645,12 @@ mod tests {
         let schema_two = Schema::Record(RecordSchema {
             name: Name::try_from("record").expect("Name is valid"),
             doc: None,
-            fields: vec![RecordField {
-                name: "field".to_string(),
-                doc: None,
-                default: None,
-                schema: Schema::Boolean,
-                order: RecordFieldOrder::Ignore,
-                aliases: None,
-                custom_attributes: BTreeMap::new(),
-                position: 0,
-            }],
+            fields: vec![
+                RecordField::builder()
+                    .name("field".to_string())
+                    .schema(Schema::Boolean)
+                    .build(),
+            ],
             aliases: None,
             attributes: BTreeMap::new(),
             lookup: Default::default(),

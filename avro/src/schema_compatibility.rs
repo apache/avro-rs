@@ -404,7 +404,7 @@ impl Checker {
                     // are not allowed to match on writer aliases.
                     // Search using field name and *after* that aliases.
                     if let Some(w_field) = once(&r_field.name)
-                        .chain(r_field.aliases.as_deref().unwrap_or(&[]).iter())
+                        .chain(r_field.aliases.iter())
                         .find_map(|ra| w_fields.iter().find(|wf| &wf.name == ra))
                     {
                         // Check that the schemas are compatible

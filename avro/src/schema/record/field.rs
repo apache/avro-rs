@@ -27,8 +27,6 @@ use serde::{Serialize, Serializer};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
-use std::str::FromStr;
-use strum::EnumString;
 
 /// Represents a `field` in a `record` Avro schema.
 #[derive(bon::Builder, Clone, PartialEq)]
@@ -40,21 +38,14 @@ pub struct RecordField {
     #[builder(default)]
     pub doc: Documentation,
     /// Aliases of the field's name. They have no namespace.
-    pub aliases: Option<Vec<String>>,
+    #[builder(default)]
+    pub aliases: Vec<String>,
     /// Default value of the field.
     /// This value will be used when reading Avro datum if schema resolution
     /// is enabled.
     pub default: Option<Value>,
     /// Schema of the field.
     pub schema: Schema,
-    /// Order of the field.
-    ///
-    /// **NOTE** This currently has no effect.
-    #[builder(default = RecordFieldOrder::Ignore)]
-    pub order: RecordFieldOrder,
-    /// Position of the field in the list of `field` of its parent `Schema`
-    #[builder(default)]
-    pub position: usize,
     /// A collection of all unknown fields in the record field.
     #[builder(default = BTreeMap::new())]
     pub custom_attributes: BTreeMap<String, Value>,
@@ -67,38 +58,32 @@ impl Debug for RecordField {
         if let Some(doc) = &self.doc {
             debug.field("doc", &doc);
         }
-        if let Some(aliases) = &self.aliases {
-            debug.field("aliases", &aliases);
+        if !self.aliases.is_empty() {
+            debug.field("aliases", &self.aliases);
         }
         if let Some(default) = &self.default {
             debug.field("default", &default);
         }
         debug.field("schema", &self.schema);
-        // This field is ignored as it currently has no effect
-        // debug.field("order", &self.order);
-        debug.field("position", &self.position);
         if !self.custom_attributes.is_empty() {
             debug.field("custom_attributes", &self.custom_attributes);
         }
-        // As we are always skipping self.order, always show the ..
-        debug.finish_non_exhaustive()
+        if self.doc.is_none()
+            || !self.aliases.is_empty()
+            || self.default.is_none()
+            || self.custom_attributes.is_empty()
+        {
+            debug.finish_non_exhaustive()
+        } else {
+            debug.finish()
+        }
     }
-}
-
-/// Represents any valid order for a `field` in a `record` Avro schema.
-#[derive(Clone, Debug, Eq, PartialEq, EnumString)]
-#[strum(serialize_all = "kebab_case")]
-pub enum RecordFieldOrder {
-    Ascending,
-    Descending,
-    Ignore,
 }
 
 impl RecordField {
     /// Parse a `serde_json::Value` into a `RecordField`.
     pub(crate) fn parse(
         field: &Map<String, Value>,
-        position: usize,
         parser: &mut Parser,
         enclosing_record: &Name,
     ) -> AvroResult<Self> {
@@ -124,29 +109,24 @@ impl RecordField {
             &default,
         )?;
 
-        let aliases = field.get("aliases").and_then(|aliases| {
-            aliases.as_array().map(|aliases| {
-                aliases
-                    .iter()
-                    .flat_map(|alias| alias.as_str())
-                    .map(|alias| alias.to_string())
-                    .collect::<Vec<String>>()
+        let aliases = field
+            .get("aliases")
+            .and_then(|aliases| {
+                aliases.as_array().map(|aliases| {
+                    aliases
+                        .iter()
+                        .flat_map(|alias| alias.as_str())
+                        .map(|alias| alias.to_string())
+                        .collect::<Vec<String>>()
+                })
             })
-        });
-
-        let order = field
-            .get("order")
-            .and_then(|order| order.as_str())
-            .and_then(|order| RecordFieldOrder::from_str(order).ok())
-            .unwrap_or(RecordFieldOrder::Ascending);
+            .unwrap_or_default();
 
         Ok(RecordField {
             name,
             doc: field.doc(),
             default,
             aliases,
-            order,
-            position,
             custom_attributes: RecordField::get_field_custom_attributes(field),
             schema,
         })
@@ -211,7 +191,7 @@ impl RecordField {
         let mut custom_attributes: BTreeMap<String, Value> = BTreeMap::new();
         for (key, value) in field {
             match key.as_str() {
-                "type" | "name" | "doc" | "default" | "order" | "aliases" => continue,
+                "type" | "name" | "doc" | "default" | "aliases" => continue,
                 _ => custom_attributes.insert(key.clone(), value.clone()),
             };
         }
@@ -236,12 +216,16 @@ impl Serialize for RecordField {
         map.serialize_entry("name", &self.name)?;
         map.serialize_entry("type", &self.schema)?;
 
-        if let Some(ref default) = self.default {
+        if let Some(default) = &self.default {
             map.serialize_entry("default", default)?;
         }
 
-        if let Some(ref aliases) = self.aliases {
-            map.serialize_entry("aliases", aliases)?;
+        if let Some(doc) = &self.doc {
+            map.serialize_entry("doc", doc)?;
+        }
+
+        if !self.aliases.is_empty() {
+            map.serialize_entry("aliases", &self.aliases)?;
         }
 
         for attr in &self.custom_attributes {
@@ -272,8 +256,6 @@ mod tests {
                     },
                 },
             ])?))
-            .order(RecordFieldOrder::Ascending)
-            .position(1)
             .build();
 
         assert!(nullable_record_field.is_nullable());
@@ -282,8 +264,6 @@ mod tests {
             .name("next".to_string())
             .default(json!(2))
             .schema(Schema::Long)
-            .order(RecordFieldOrder::Ascending)
-            .position(1)
             .build();
 
         assert!(!non_nullable_record_field.is_nullable());
