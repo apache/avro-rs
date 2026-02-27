@@ -57,6 +57,23 @@ pub struct ContainerAttributes {
     /// Set the default value if this schema is used as a field
     #[darling(default)]
     pub default: Option<String>,
+    #[darling(default)]
+    pub repr: Option<EnumRepr>,
+}
+
+/// What kind of schema to use for an enum.
+#[derive(Debug, FromMeta, PartialEq, Clone, Copy)]
+pub enum EnumRepr {
+    /// Create a `Schema::Enum`, only works for plain enums.
+    Enum,
+    /// Untagged
+    BareUnion,
+    /// Externally tagged
+    UnionOfRecords,
+    /// Adjacently tagged (`#[serde(tag = "type", content = "value")]`)
+    RecordTagContent,
+    /// Internally tagged (`#[serde(tag = "type")]`)
+    RecordInternallyTagged,
 }
 
 impl ContainerAttributes {

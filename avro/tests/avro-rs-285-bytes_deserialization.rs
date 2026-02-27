@@ -36,7 +36,7 @@ fn avro_rs_285_bytes_deserialization_round_trip() -> TestResult {
     let raw_schema = r#"
     {
         "type": "record",
-        "name": "SimpleRecord",
+        "name": "ExampleByteArray",
         "fields": [
             {"name": "data_bytes", "type": ["null", "bytes"], "default": null},
             {"name": "description", "type": ["null", "string"], "default": null}
@@ -84,7 +84,7 @@ fn avro_rs_285_bytes_deserialization_filtered_round_trip() -> TestResult {
     let raw_schema = r#"
     {
         "type": "record",
-        "name": "SimpleRecord",
+        "name": "ExampleByteArray",
         "fields": [
             {"name": "data_bytes", "type": ["null", "bytes"], "default": null},
             {"name": "description", "type": ["null", "string"], "default": null}

@@ -109,6 +109,7 @@
 
 mod de;
 mod derive;
+pub mod deser_schema;
 mod ser;
 pub(crate) mod ser_schema;
 mod util;
@@ -117,7 +118,10 @@ mod with;
 pub use de::from_value;
 pub use derive::{AvroSchema, AvroSchemaComponent};
 pub use ser::to_value;
-pub use with::{bytes, bytes_opt, fixed, fixed_opt, slice, slice_opt};
+pub use with::{
+    array, array_opt, bigdecimal, bigdecimal_opt, bytes, bytes_opt, fixed, fixed_opt, slice,
+    slice_opt,
+};
 
 #[doc(hidden)]
 pub use derive::get_record_fields_in_ctxt;

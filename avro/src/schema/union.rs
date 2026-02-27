@@ -79,6 +79,10 @@ impl UnionSchema {
         self.variant_index.contains_key(&SchemaKind::Null)
     }
 
+    pub fn index(&self) -> &BTreeMap<SchemaKind, usize> {
+        &self.variant_index
+    }
+
     /// Optionally returns a reference to the schema matched by this value, as well as its position
     /// within this union.
     ///

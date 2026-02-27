@@ -22,9 +22,13 @@ use crate::{
     error::Details,
     headers::{HeaderBuilder, RabinFingerprintHeader},
     schema::{NamesRef, ResolvedOwnedSchema, ResolvedSchema, Schema},
-    serde::{AvroSchema, ser_schema::SchemaAwareWriteSerializer},
+    serde::{
+        AvroSchema,
+        ser_schema::{Config, SchemaAwareSerializer},
+    },
     types::Value,
 };
+use bon::Builder;
 use serde::Serialize;
 use std::{
     collections::HashMap, io::Write, marker::PhantomData, mem::ManuallyDrop, ops::RangeInclusive,
@@ -49,6 +53,8 @@ pub struct Writer<'a, W: Write> {
     marker: [u8; 16],
     has_header: bool,
     user_metadata: HashMap<String, Value>,
+    human_readable: bool,
+    map_array_target_block_size: Option<usize>,
 }
 
 #[bon::bon]
@@ -67,6 +73,8 @@ impl<'a, W: Write> Writer<'a, W> {
         #[builder(default = false)]
         has_header: bool,
         #[builder(default)] user_metadata: HashMap<String, Value>,
+        #[builder(default = false)] human_readable: bool,
+        map_array_target_block_size: Option<usize>,
     ) -> AvroResult<Self> {
         let resolved_schema = if let Some(schemata) = schemata {
             ResolvedSchema::try_from(schemata)?
@@ -84,6 +92,8 @@ impl<'a, W: Write> Writer<'a, W> {
             marker,
             has_header,
             user_metadata,
+            human_readable,
+            map_array_target_block_size,
         })
     }
 }
@@ -271,13 +281,16 @@ impl<'a, W: Write> Writer<'a, W> {
     pub fn append_ser<S: Serialize>(&mut self, value: S) -> AvroResult<usize> {
         let n = self.maybe_write_header()?;
 
-        let mut serializer = SchemaAwareWriteSerializer::new(
+        let serializer = SchemaAwareSerializer::new(
             &mut self.buffer,
             self.schema,
-            self.resolved_schema.get_names(),
-            None,
-        );
-        value.serialize(&mut serializer)?;
+            Config {
+                names: self.resolved_schema.get_names(),
+                target_block_size: self.map_array_target_block_size,
+                human_readable: self.human_readable,
+            },
+        )?;
+        value.serialize(serializer)?;
         self.num_values += 1;
 
         if self.buffer.len() >= self.block_size {
@@ -704,12 +717,29 @@ impl GenericSingleObjectWriter {
 }
 
 /// Writer that encodes messages according to the single object encoding v1 spec
+#[derive(Builder)]
 pub struct SpecificSingleObjectWriter<T>
 where
     T: AvroSchema,
 {
+    // TODO: Make default fallibe
+    #[builder(
+        with = |schema: Schema| -> Result<_, Error> { ResolvedOwnedSchema::new(schema) },
+        default = ResolvedOwnedSchema::new(T::get_schema()).expect("Invalid schema")
+    )]
     resolved: ResolvedOwnedSchema,
+    #[builder(
+        default = RabinFingerprintHeader::from_schema(resolved.get_root_schema()).build_header(),
+        with = |header_builder: impl HeaderBuilder| header_builder.build_header(),
+    )]
     header: Vec<u8>,
+    /// Should data be encoded as human-readable where possible.
+    human_readable: bool,
+    /// How many bytes should blocks of array and map values be.
+    ///
+    /// Every block except the last will have at least this size.
+    map_array_target_block_size: Option<usize>,
+    #[builder(skip)]
     _model: PhantomData<T>,
 }
 
@@ -725,6 +755,8 @@ where
         Ok(Self {
             resolved,
             header,
+            human_readable: false,
+            map_array_target_block_size: None,
             _model: PhantomData,
         })
     }
@@ -736,6 +768,8 @@ where
             resolved,
             header,
             _model: PhantomData,
+            human_readable: false,
+            map_array_target_block_size: None,
         })
     }
 
@@ -786,6 +820,8 @@ where
             self.resolved.get_names(),
             data,
             writer,
+            self.human_readable,
+            self.map_array_target_block_size,
         )?;
 
         Ok(bytes + self.header.len())
@@ -852,9 +888,19 @@ pub fn write_avro_datum_ref<T: Serialize, W: Write>(
     names: &NamesRef,
     data: &T,
     writer: &mut W,
+    human_readable: bool,
+    map_array_target_block_size: Option<usize>,
 ) -> AvroResult<usize> {
-    let mut serializer = SchemaAwareWriteSerializer::new(writer, schema, names, None);
-    data.serialize(&mut serializer)
+    let serializer = SchemaAwareSerializer::new(
+        writer,
+        schema,
+        Config {
+            names,
+            target_block_size: map_array_target_block_size,
+            human_readable,
+        },
+    )?;
+    data.serialize(serializer)
 }
 
 /// Encode a value into raw Avro data, also performs schema validation.
@@ -952,6 +998,7 @@ mod tests {
     #[test]
     fn avro_rs_193_write_avro_datum_ref() -> TestResult {
         #[derive(Serialize)]
+        #[serde(rename = "test")]
         struct TestStruct {
             a: i64,
             b: String,
@@ -969,7 +1016,8 @@ mod tests {
         zig_i64(3, &mut expected)?;
         expected.extend([b'f', b'o', b'o']);
 
-        let bytes = write_avro_datum_ref(&schema, &HashMap::new(), &data, &mut writer)?;
+        let bytes =
+            write_avro_datum_ref(&schema, &HashMap::new(), &data, &mut writer, false, None)?;
 
         assert_eq!(bytes, expected.len());
         assert_eq!(writer, expected);
@@ -1245,6 +1293,7 @@ mod tests {
     }
 
     #[derive(Debug, Clone, Deserialize, Serialize)]
+    #[serde(rename = "test")]
     struct TestSerdeSerialize {
         a: i64,
         b: String,
@@ -1576,7 +1625,7 @@ mod tests {
             let schema = r#"
             {
                 "type":"record",
-                "name":"TestSingleObjectWrtierSerialize",
+                "name":"TestSingleObjectWriter",
                 "fields":[
                     {
                         "name":"a",
@@ -1785,7 +1834,7 @@ mod tests {
             Err(e) => {
                 assert_eq!(
                     e.to_string(),
-                    r#"Failed to serialize field 'time' for record Record(RecordSchema { name: Name { name: "Conference", .. }, fields: [RecordField { name: "name", schema: String, .. }, RecordField { name: "date", aliases: ["time2", "time"], schema: Union(UnionSchema { schemas: [Null, Long] }), .. }], .. }): Failed to serialize value of type f64 using schema Union(UnionSchema { schemas: [Null, Long] }): 12345678.9. Cause: Cannot find a Double schema in [Null, Long]"#
+                    r#"Failed to serialize field 'time' for record Record(RecordSchema { name: Name { name: "Conference", .. }, fields: [RecordField { name: "name", schema: String, .. }, RecordField { name: "date", aliases: ["time2", "time"], schema: Union(UnionSchema { schemas: [Null, Long] }), .. }], .. }): Failed to serialize value of type f64 using schema Long: Expected Schema::Double"#
                 );
             }
         }

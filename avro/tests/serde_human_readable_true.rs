@@ -55,7 +55,10 @@ fn avro_rs_53_uuid_with_string_true() -> TestResult {
 
     // serialize the Uuid as String
     assert!(apache_avro::util::set_serde_human_readable(true));
-    let bytes = SpecificSingleObjectWriter::<Comment>::new()?.write_ref(&payload, &mut buffer)?;
+    let bytes = SpecificSingleObjectWriter::<Comment>::builder()
+        .human_readable(true)
+        .build()
+        .write_ref(&payload, &mut buffer)?;
     assert_eq!(bytes, 47);
 
     Ok(())
@@ -75,7 +78,9 @@ fn avro_rs_440_uuid_string() -> TestResult {
     let mut buffer = Vec::new();
 
     assert!(apache_avro::util::set_serde_human_readable(true));
-    let writer = SpecificSingleObjectWriter::new()?;
+    let writer = SpecificSingleObjectWriter::builder()
+        .human_readable(true)
+        .build();
     writer.write(uuid, &mut buffer)?;
 
     assert_eq!(
@@ -100,10 +105,12 @@ fn avro_rs_440_uuid_bytes() -> TestResult {
     let mut buffer = Vec::new();
 
     assert!(apache_avro::util::set_serde_human_readable(true));
-    let writer = SpecificSingleObjectWriter::new()?;
+    let writer = SpecificSingleObjectWriter::builder()
+        .human_readable(true)
+        .build();
     assert_eq!(
         writer.write(uuid, &mut buffer).unwrap_err().to_string(),
-        r#"Failed to serialize value of type string using schema Uuid(Bytes): 550e8400-e29b-41d4-a716-446655440000. Cause: Expected bytes but got a string. Did you mean to use `Schema::Uuid(UuidSchema::String)` or `utils::serde_set_human_readable(false)`?"#
+        r#"Failed to serialize value of type str using schema Uuid(Bytes): Expected Schema::String | Schema::Uuid(String)"#
     );
 
     Ok(())
@@ -126,10 +133,12 @@ fn avro_rs_440_uuid_fixed() -> TestResult {
     let mut buffer = Vec::new();
 
     assert!(apache_avro::util::set_serde_human_readable(true));
-    let writer = SpecificSingleObjectWriter::new()?;
+    let writer = SpecificSingleObjectWriter::builder()
+        .human_readable(true)
+        .build();
     assert_eq!(
         writer.write(uuid, &mut buffer).unwrap_err().to_string(),
-        r#"Failed to serialize value of type string using schema Uuid(Fixed(FixedSchema { name: Name { name: "uuid", .. }, size: 16, .. })): 550e8400-e29b-41d4-a716-446655440000. Cause: Expected bytes but got a string. Did you mean to use `Schema::Uuid(UuidSchema::String)` or `utils::serde_set_human_readable(false)`?"#
+        r#"Failed to serialize value of type str using schema Uuid(Fixed(FixedSchema { name: Name { name: "uuid", .. }, size: 16, .. })): Expected Schema::String | Schema::Uuid(String)"#
     );
 
     Ok(())

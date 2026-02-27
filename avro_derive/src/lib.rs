@@ -40,7 +40,6 @@ use syn::{
     spanned::Spanned,
 };
 
-use crate::enums::get_data_enum_schema_def;
 use crate::{
     attributes::{FieldDefault, FieldOptions, NamedTypeOptions, With},
     case::RenameRule,
@@ -62,6 +61,12 @@ fn derive_avro_schema(input: DeriveInput) -> Result<TokenStream, Vec<syn::Error>
     match input.data {
         syn::Data::Struct(data_struct) => {
             let named_type_options = NamedTypeOptions::new(&input.ident, &input.attrs, input_span)?;
+            if named_type_options.repr.is_some() {
+                return Err(vec![syn::Error::new(
+                    input_span,
+                    r#"AvroSchema: `#[avro(repr = "..")]`, `#[serde(tag = "..")]`, `#[serde(content = "..")]`, and `#[serde(untagged)]` are only supported on enums"#,
+                )]);
+            }
             let (get_schema_impl, get_record_fields_impl) = if named_type_options.transparent {
                 get_transparent_struct_schema_def(data_struct.fields, input_span)?
             } else {
@@ -88,8 +93,11 @@ fn derive_avro_schema(input: DeriveInput) -> Result<TokenStream, Vec<syn::Error>
                     "AvroSchema: `#[serde(transparent)]` is only supported on structs",
                 )]);
             }
-            let schema_def =
-                get_data_enum_schema_def(&named_type_options, data_enum, input.ident.span())?;
+            let schema_def = enums::get_data_enum_schema_def(
+                &named_type_options,
+                data_enum,
+                input.ident.span(),
+            )?;
             let inner = handle_named_schemas(named_type_options.name, schema_def);
             Ok(create_trait_definition(
                 input.ident,
@@ -101,7 +109,7 @@ fn derive_avro_schema(input: DeriveInput) -> Result<TokenStream, Vec<syn::Error>
         }
         syn::Data::Union(_) => Err(vec![syn::Error::new(
             input_span,
-            "AvroSchema: derive only works for structs and simple enums",
+            "AvroSchema: derive only works for structs and enums",
         )]),
     }
 }
@@ -686,7 +694,7 @@ mod tests {
         };
         match syn::parse2::<DeriveInput>(non_basic_enum) {
             Ok(input) => {
-                assert!(derive_avro_schema(input).is_err())
+                derive_avro_schema(input).unwrap();
             }
             Err(error) => panic!(
                 "Failed to parse as derive input when it should be able to. Error: {error:?}"

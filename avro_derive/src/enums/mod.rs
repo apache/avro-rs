@@ -15,9 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
+mod bare_union;
 mod plain;
+mod record_internally_tagged;
+mod record_tag_content;
+mod union_of_records;
 
-use crate::attributes::NamedTypeOptions;
+use crate::attributes::{EnumRepr, NamedTypeOptions};
 use proc_macro2::{Ident, Span, TokenStream};
 use syn::{Attribute, DataEnum, Fields, Meta};
 
@@ -27,13 +31,27 @@ pub fn get_data_enum_schema_def(
     data_enum: DataEnum,
     ident_span: Span,
 ) -> Result<TokenStream, Vec<syn::Error>> {
-    if data_enum.variants.iter().all(|v| Fields::Unit == v.fields) {
-        plain::schema_def(container_attrs, data_enum, ident_span)
-    } else {
-        Err(vec![syn::Error::new(
-            ident_span,
-            "AvroSchema: derive does not work for enums with non unit structs",
-        )])
+    match &container_attrs.repr {
+        None => {
+            if data_enum.variants.iter().all(|v| Fields::Unit == v.fields) {
+                plain::schema_def(container_attrs, data_enum, ident_span)
+            } else {
+                union_of_records::get_data_enum_schema_def(container_attrs, data_enum, ident_span)
+            }
+        }
+        Some(EnumRepr::Enum) => plain::schema_def(container_attrs, data_enum, ident_span),
+        Some(EnumRepr::BareUnion) => {
+            bare_union::get_data_enum_schema_def(container_attrs, data_enum, ident_span)
+        }
+        Some(EnumRepr::UnionOfRecords) => {
+            union_of_records::get_data_enum_schema_def(container_attrs, data_enum, ident_span)
+        }
+        Some(EnumRepr::RecordTagContent { tag, content }) => {
+            record_tag_content::get_data_enum_schema_def(container_attrs, data_enum, tag, content)
+        }
+        Some(EnumRepr::RecordInternallyTagged { tag }) => {
+            record_internally_tagged::get_data_enum_schema_def(container_attrs, data_enum, tag)
+        }
     }
 }
 

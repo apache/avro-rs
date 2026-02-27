@@ -156,7 +156,6 @@ pub enum Details {
     #[error("Union index {index} out of bounds: {num_variants}")]
     GetUnionVariant { index: i64, num_variants: usize },
 
-    #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
     #[error("Enum symbol index out of bounds: {num_variants}")]
     EnumSymbolIndex { index: usize, num_variants: usize },
 
@@ -578,6 +577,16 @@ pub enum Details {
 
     #[error("Failed to deserialize Avro value into value: {0}")]
     DeserializeValue(String),
+
+    #[error("Failed to deserialize value of type {value_type} using schema {schema:?}: {value}")]
+    DeserializeValueWithSchema {
+        value_type: &'static str,
+        value: String,
+        schema: Schema,
+    },
+
+    #[error("Only expected `deserialize_identifier` to be called but `{0}` was called")]
+    DeserializeKey(String),
 
     #[error("Failed to write buffer bytes during flush: {0}")]
     WriteBytes(#[source] std::io::Error),

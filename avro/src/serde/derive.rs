@@ -629,6 +629,7 @@ where
     }
 }
 
+// TODO: This does not match the Serde implementation and therefore does not work
 impl AvroSchemaComponent for core::time::Duration {
     /// The schema is [`Schema::Duration`] with the name `duration`.
     ///

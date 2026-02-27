@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::serde::deser_schema::{Config, SchemaAwareDeserializer};
 use crate::{
     AvroResult, Codec, Error,
     decode::{decode, decode_internal},
@@ -24,6 +25,7 @@ use crate::{
     util,
 };
 use log::warn;
+use serde::de::DeserializeOwned;
 use serde_json::from_slice;
 use std::{
     collections::HashMap,
@@ -195,6 +197,36 @@ impl<'r, R: Read> Block<'r, R> {
             Some(schema) => item.resolve(schema)?,
             None => item,
         };
+
+        if b_original != 0 && b_original == block_bytes.len() {
+            // from_avro_datum did not consume any bytes, so return an error to avoid an infinite loop
+            return Err(Details::ReadBlock.into());
+        }
+        self.buf_idx += b_original - block_bytes.len();
+        self.message_count -= 1;
+        Ok(Some(item))
+    }
+
+    pub(super) fn read_next_deser<T: DeserializeOwned>(&mut self) -> AvroResult<Option<T>> {
+        if self.is_empty() {
+            self.read_block_next()?;
+            if self.is_empty() {
+                return Ok(None);
+            }
+        }
+
+        let mut block_bytes = &self.buf[self.buf_idx..];
+        let b_original = block_bytes.len();
+
+        let deserializer = SchemaAwareDeserializer::new(
+            &mut block_bytes,
+            &self.writer_schema,
+            Config {
+                names: &self.names_refs,
+                human_readable: false,
+            },
+        )?;
+        let item = T::deserialize(deserializer)?;
 
         if b_original != 0 && b_original == block_bytes.len() {
             // from_avro_datum did not consume any bytes, so return an error to avoid an infinite loop

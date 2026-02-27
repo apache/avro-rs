@@ -46,10 +46,9 @@ pub fn schema_def(
             };
             symbols.push(name);
         }
-        let full_schema_name = &container_attrs.name;
         Ok(quote! {
             ::apache_avro::schema::Schema::Enum(apache_avro::schema::EnumSchema {
-                name: ::apache_avro::schema::Name::new(#full_schema_name).expect(&format!("Unable to parse enum name for schema {}", #full_schema_name)[..]),
+                name,
                 aliases: #enum_aliases,
                 doc: #doc,
                 symbols: vec![#(#symbols.to_owned()),*],
@@ -60,7 +59,7 @@ pub fn schema_def(
     } else {
         Err(vec![syn::Error::new(
             ident_span,
-            "AvroSchema: derive does not work for enums with non unit structs",
+            r#"AvroSchema: `#[avro(repr = "enum")]` does not work for enums with non-unit variants"#,
         )])
     }
 }

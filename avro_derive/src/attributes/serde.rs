@@ -92,8 +92,8 @@ pub struct ContainerAttributes {
     #[darling(default)]
     pub rename_all: RenameAll,
     /// Rename all the fields of the struct variants in this enum.
-    #[darling(default, rename = "rename_all_fields")]
-    pub _rename_all_fields: RenameAll,
+    #[darling(default)]
+    pub rename_all_fields: RenameAll,
     /// Error when encountering unknown fields when deserialising.
     #[darling(default, rename = "deny_unknown_fields")]
     pub _deny_unknown_fields: bool,
@@ -155,8 +155,9 @@ pub struct VariantAttributes {
     /// Aliases for this variant, only used during deserialisation.
     #[darling(multiple, rename = "alias")]
     pub _alias: Vec<String>,
-    #[darling(default, rename = "rename_all")]
-    pub _rename_all: RenameAll,
+    /// Rename struct fields of this variant
+    #[darling(default)]
+    pub rename_all: RenameAll,
     /// Do not serialize or deserialize this variant.
     #[darling(default, rename = "skip")]
     pub _skip: bool,

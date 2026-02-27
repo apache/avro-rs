@@ -107,13 +107,11 @@ impl Schema {
     #[builder(finish_fn = build)]
     pub fn record(
         #[builder(start_fn)] name: Name,
-        fields: Option<Vec<RecordField>>,
+        #[builder(default)] fields: Vec<RecordField>,
         aliases: Option<Vec<Alias>>,
         doc: Option<String>,
-        attributes: Option<BTreeMap<String, JsonValue>>,
+        #[builder(default)] attributes: BTreeMap<String, JsonValue>,
     ) -> Self {
-        let fields = fields.unwrap_or_default();
-        let attributes = attributes.unwrap_or_default();
         let record_schema = RecordSchema::builder()
             .name(name)
             .fields(fields)

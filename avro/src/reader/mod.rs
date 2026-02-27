@@ -28,6 +28,7 @@ use crate::{
 };
 use block::Block;
 use bon::bon;
+use serde::de::DeserializeOwned;
 use std::{collections::HashMap, io::Read};
 
 /// Main interface for reading Avro formatted values.
@@ -116,6 +117,10 @@ impl<'a, R: Read> Reader<'a, R> {
         };
 
         self.block.read_next(read_schema)
+    }
+
+    pub fn next_deser<T: DeserializeOwned>(&mut self) -> AvroResult<Option<T>> {
+        self.block.read_next_deser()
     }
 }
 
