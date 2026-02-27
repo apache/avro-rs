@@ -375,8 +375,6 @@ fn test_parse_reused_record_schema_by_fullname() -> TestResult {
                 default: _,
                 aliases: _,
                 schema,
-                order: _,
-                position: _,
                 custom_attributes: _,
             } = fields.get(2).unwrap();
 

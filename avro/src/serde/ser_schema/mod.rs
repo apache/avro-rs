@@ -273,11 +273,16 @@ impl<'a, 's, W: Write> SchemaAwareWriteSerializeStruct<'a, 's, W> {
         }
     }
 
-    fn serialize_next_field<T>(&mut self, field: &RecordField, value: &T) -> Result<(), Error>
+    fn serialize_next_field<T>(
+        &mut self,
+        field: &RecordField,
+        position: usize,
+        value: &T,
+    ) -> Result<(), Error>
     where
         T: ?Sized + ser::Serialize,
     {
-        match self.field_position.cmp(&field.position) {
+        match self.field_position.cmp(&position) {
             Ordering::Equal => {
                 // If we receive fields in order, write them directly to the main writer
                 let mut value_ser = SchemaAwareWriteSerializer::new(
@@ -310,7 +315,7 @@ impl<'a, 's, W: Write> SchemaAwareWriteSerializeStruct<'a, 's, W> {
                     self.ser.enclosing_namespace.clone(),
                 );
                 value.serialize(&mut value_ser)?;
-                if self.field_cache.insert(field.position, bytes).is_some() {
+                if self.field_cache.insert(position, bytes).is_some() {
                     Err(Details::FieldNameDuplicate(field.name.clone()).into())
                 } else {
                     Ok(())
@@ -336,7 +341,7 @@ impl<'a, 's, W: Write> SchemaAwareWriteSerializeStruct<'a, 's, W> {
                 self.bytes_written += bytes.len();
                 self.field_position += 1;
             } else if let Some(default) = &field_info.default {
-                self.serialize_next_field(field_info, default)
+                self.serialize_next_field(field_info, self.field_position, default)
                     .map_err(|e| Details::SerializeRecordFieldWithSchema {
                         field_name: field_info.name.clone(),
                         record_schema: Schema::Record(self.record_schema.clone()),
@@ -373,52 +378,45 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
     where
         T: ?Sized + ser::Serialize,
     {
-        let record_field = self
-            .record_schema
-            .lookup
-            .get(key)
-            .and_then(|idx| self.record_schema.fields.get(*idx));
-
-        match record_field {
-            Some(field) => self.serialize_next_field(field, value).map_err(|e| {
-                Details::SerializeRecordFieldWithSchema {
-                    field_name: key.to_string(),
-                    record_schema: Schema::Record(self.record_schema.clone()),
-                    error: Box::new(e),
-                }
-                .into()
-            }),
-            None => Err(Details::FieldName(String::from(key)).into()),
+        if let Some(position) = self.record_schema.lookup.get(key).copied() {
+            let field = &self.record_schema.fields[position];
+            self.serialize_next_field(field, position, value)
+                .map_err(|e| {
+                    Details::SerializeRecordFieldWithSchema {
+                        field_name: key.to_string(),
+                        record_schema: Schema::Record(self.record_schema.clone()),
+                        error: Box::new(e),
+                    }
+                    .into()
+                })
+        } else {
+            Err(Details::FieldName(String::from(key)).into())
         }
     }
 
     fn skip_field(&mut self, key: &'static str) -> Result<(), Self::Error> {
-        let skipped_field = self
-            .record_schema
-            .lookup
-            .get(key)
-            .and_then(|idx| self.record_schema.fields.get(*idx));
-
-        if let Some(skipped_field) = skipped_field {
-            if let Some(default) = &skipped_field.default {
-                self.serialize_next_field(skipped_field, default)
-                    .map_err(|e| Details::SerializeRecordFieldWithSchema {
-                        field_name: key.to_string(),
-                        record_schema: Schema::Record(self.record_schema.clone()),
-                        error: Box::new(e),
-                    })?;
+        if let Some(position) = self.record_schema.lookup.get(key).copied() {
+            let field = &self.record_schema.fields[position];
+            if let Some(default) = &field.default {
+                self.serialize_next_field(field, position, default)
+                    .map_err(|e| {
+                        Details::SerializeRecordFieldWithSchema {
+                            field_name: key.to_string(),
+                            record_schema: Schema::Record(self.record_schema.clone()),
+                            error: Box::new(e),
+                        }
+                        .into()
+                    })
             } else {
-                return Err(Details::MissingDefaultForSkippedField {
+                Err(Details::MissingDefaultForSkippedField {
                     field_name: key.to_string(),
                     schema: Schema::Record(self.record_schema.clone()),
                 }
-                .into());
+                .into())
             }
         } else {
-            return Err(Details::GetField(key.to_string()).into());
+            Err(Details::GetField(key.to_string()).into())
         }
-
-        Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
@@ -453,21 +451,19 @@ impl<W: Write> ser::SerializeMap for SchemaAwareWriteSerializeStruct<'_, '_, W> 
         T: ?Sized + Serialize,
     {
         let key = self.map_field_name.take().ok_or(Details::MapNoKey)?;
-        let record_field = self
-            .record_schema
-            .lookup
-            .get(&key)
-            .and_then(|idx| self.record_schema.fields.get(*idx));
-        match record_field {
-            Some(field) => self.serialize_next_field(field, value).map_err(|e| {
-                Details::SerializeRecordFieldWithSchema {
-                    field_name: key.to_string(),
-                    record_schema: Schema::Record(self.record_schema.clone()),
-                    error: Box::new(e),
-                }
-                .into()
-            }),
-            None => Err(Details::FieldName(key).into()),
+        if let Some(position) = self.record_schema.lookup.get(&key).copied() {
+            let field = &self.record_schema.fields[position];
+            self.serialize_next_field(field, position, value)
+                .map_err(|e| {
+                    Details::SerializeRecordFieldWithSchema {
+                        field_name: key.to_string(),
+                        record_schema: Schema::Record(self.record_schema.clone()),
+                        error: Box::new(e),
+                    }
+                    .into()
+                })
+        } else {
+            Err(Details::FieldName(key).into())
         }
     }
 
