@@ -952,4 +952,20 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    #[should_panic(
+        expected = "Option<T> must produce a valid (non-nested) union: Error { details: Unions cannot contain duplicate types, found at least two Null }"
+    )]
+    fn avro_rs_489_some_unit() {
+        <Option<()>>::get_schema();
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Option<T> must produce a valid (non-nested) union: Error { details: Unions may not directly contain a union }"
+    )]
+    fn avro_rs_489_option_option() {
+        <Option<Option<i32>>>::get_schema();
+    }
 }

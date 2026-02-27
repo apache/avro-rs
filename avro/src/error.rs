@@ -300,8 +300,18 @@ pub enum Details {
     #[error("Unions may not directly contain a union")]
     GetNestedUnion,
 
-    #[error("Unions cannot contain duplicate types")]
-    GetUnionDuplicate,
+    #[error(
+        "Found two different maps while building Union: Schema::Map({0:?}), Schema::Map({1:?})"
+    )]
+    GetUnionDuplicateMap(Schema, Schema),
+
+    #[error(
+        "Found two different arrays while building Union: Schema::Array({0:?}), Schema::Array({1:?})"
+    )]
+    GetUnionDuplicateArray(Schema, Schema),
+
+    #[error("Unions cannot contain duplicate types, found at least two {0:?}")]
+    GetUnionDuplicate(SchemaKind),
 
     #[error("Unions cannot contain more than one named schema with the same name: {0}")]
     GetUnionDuplicateNamedSchemas(String),

@@ -33,7 +33,7 @@ pub use crate::schema::{
         RecordField, RecordFieldBuilder, RecordFieldOrder, RecordSchema, RecordSchemaBuilder,
     },
     resolve::ResolvedSchema,
-    union::UnionSchema,
+    union::{UnionSchema, UnionSchemaBuilder},
 };
 use crate::{
     AvroResult,
