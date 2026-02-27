@@ -236,7 +236,7 @@ impl PartialEq for UnionSchema {
 #[derive(Default, Debug)]
 pub struct UnionSchemaBuilder {
     schemas: Vec<Schema>,
-    names: BTreeMap<Name, usize>,
+    names: HashMap<Name, usize>,
     variant_index: BTreeMap<SchemaKind, usize>,
 }
 
