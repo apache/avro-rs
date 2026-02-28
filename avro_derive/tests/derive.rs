@@ -17,7 +17,7 @@
 
 use apache_avro::{
     AvroSchema, AvroSchemaComponent, Reader, Schema, Writer, from_value,
-    schema::{Alias, EnumSchema, FixedSchema, Name, Namespace, RecordSchema},
+    schema::{Alias, EnumSchema, FixedSchema, Name, RecordSchema},
 };
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -29,6 +29,7 @@ use std::{
 };
 use uuid::Uuid;
 
+use apache_avro::schema::NamespaceRef;
 use pretty_assertions::assert_eq;
 
 /// Takes in a type that implements the right combination of traits and runs it through a Serde Cycle and asserts the result is the same
@@ -141,7 +142,7 @@ fn test_basic_namespace() {
     let schema = Schema::parse_str(schema).unwrap();
     assert_eq!(schema, TestBasicNamespace::get_schema());
     if let Schema::Record(RecordSchema { name, .. }) = TestBasicNamespace::get_schema() {
-        assert_eq!("com.testing.namespace".to_owned(), name.namespace.unwrap())
+        assert_eq!(Some("com.testing.namespace"), name.namespace())
     } else {
         panic!("TestBasicNamespace schema must be a record schema")
     }
@@ -188,20 +189,14 @@ fn test_complex_namespace() {
     let schema = Schema::parse_str(schema).unwrap();
     assert_eq!(schema, TestComplexNamespace::get_schema());
     if let Schema::Record(RecordSchema { name, fields, .. }) = TestComplexNamespace::get_schema() {
-        assert_eq!(
-            "com.testing.complex.namespace".to_owned(),
-            name.namespace.unwrap()
-        );
+        assert_eq!(Some("com.testing.complex.namespace"), name.namespace());
         let inner_schema = fields
             .iter()
             .filter(|field| field.name == "a")
             .map(|field| &field.schema)
             .next();
         if let Some(Schema::Record(RecordSchema { name, .. })) = inner_schema {
-            assert_eq!(
-                "com.testing.namespace".to_owned(),
-                name.namespace.clone().unwrap()
-            )
+            assert_eq!(Some("com.testing.namespace"), name.namespace())
         } else {
             panic!("Field 'a' must have a record schema")
         }
@@ -239,8 +234,8 @@ fn avro_rs_239_test_named_record() {
     let schema = Schema::parse_str(schema).unwrap();
     assert_eq!(schema, TestNamedRecord::get_schema());
     if let Schema::Record(RecordSchema { name, .. }) = TestNamedRecord::get_schema() {
-        assert_eq!("Other", name.name.as_str());
-        assert_eq!(Some("com.testing.namespace"), name.namespace.as_deref())
+        assert_eq!("Other", name.name());
+        assert_eq!(Some("com.testing.namespace"), name.namespace())
     } else {
         panic!("TestNamedRecord schema must be a record schema")
     }
@@ -1024,7 +1019,7 @@ fn test_basic_with_attributes() {
     "#;
     let schema = Schema::parse_str(schema).unwrap();
     if let Schema::Record(RecordSchema { name, doc, .. }) = TestBasicWithAttributes::get_schema() {
-        assert_eq!("com.testing.namespace".to_owned(), name.namespace.unwrap());
+        assert_eq!(Some("com.testing.namespace"), name.namespace());
         assert_eq!("A Documented Record", doc.unwrap())
     } else {
         panic!("TestBasicWithAttributes schema must be a record schema")
@@ -1067,7 +1062,7 @@ fn test_basic_with_out_doc_attributes() {
     let derived_schema = TestBasicWithOuterDocAttributes::get_schema();
     assert_eq!(&schema, &derived_schema);
     if let Schema::Record(RecordSchema { name, doc, .. }) = derived_schema {
-        assert_eq!("com.testing.namespace".to_owned(), name.namespace.unwrap());
+        assert_eq!(Some("com.testing.namespace"), name.namespace());
         assert_eq!("A Documented Record", doc.unwrap())
     } else {
         panic!("TestBasicWithOuterDocAttributes schema must be a record schema")
@@ -1109,7 +1104,7 @@ fn test_basic_with_large_doc() {
     "#;
     let schema = Schema::parse_str(schema).unwrap();
     if let Schema::Record(RecordSchema { name, doc, .. }) = TestBasicWithLargeDoc::get_schema() {
-        assert_eq!("com.testing.namespace".to_owned(), name.namespace.unwrap());
+        assert_eq!(Some("com.testing.namespace"), name.namespace());
         assert_eq!(
             "A Documented Record\nthat spans\nmultiple lines",
             doc.unwrap()
@@ -1860,15 +1855,19 @@ fn avro_rs_397_with() {
     )
     .unwrap();
 
-    fn long_schema(_named_schemas: &mut HashSet<Name>, _enclosing_namespace: &Namespace) -> Schema {
+    fn long_schema(
+        _named_schemas: &mut HashSet<Name>,
+        _enclosing_namespace: NamespaceRef,
+    ) -> Schema {
         Schema::Long
     }
 
     mod module {
         use super::*;
+        use apache_avro::schema::NamespaceRef;
         pub fn get_schema_in_ctxt(
             _named_schemas: &mut HashSet<Name>,
-            _enclosing_namespace: &Namespace,
+            _enclosing_namespace: NamespaceRef,
         ) -> Schema {
             Schema::Bytes
         }
@@ -1913,10 +1912,10 @@ fn avro_rs_397_with_generic() {
 
     fn generic<const N: usize>(
         _named_schemas: &mut HashSet<Name>,
-        _enclosing_namespace: &Namespace,
+        _enclosing_namespace: NamespaceRef,
     ) -> Schema {
         Schema::Fixed(FixedSchema {
-            name: Name::new(&format!("fixed_{N}")).unwrap(),
+            name: Name::new(format!("fixed_{N}")).unwrap(),
             aliases: None,
             doc: None,
             size: N,
@@ -2004,7 +2003,10 @@ fn avro_rs_397_derive_with_expr_lambda() {
 
 #[test]
 fn avro_rs_398_transparent_with_skip() {
-    fn long_schema(_named_schemas: &mut HashSet<Name>, _enclosing_namespace: &Namespace) -> Schema {
+    fn long_schema(
+        _named_schemas: &mut HashSet<Name>,
+        _enclosing_namespace: NamespaceRef,
+    ) -> Schema {
         Schema::Long
     }
 
@@ -2310,7 +2312,7 @@ fn avro_rs_448_transparent_with() {
 
     let mut named_schemas = HashSet::new();
     assert_eq!(
-        TestStruct::get_record_fields_in_ctxt(&mut named_schemas, &None),
+        TestStruct::get_record_fields_in_ctxt(&mut named_schemas, None),
         None
     );
     assert!(
@@ -2335,21 +2337,21 @@ fn avro_rs_448_transparent_with_2() {
     }
 
     let mut named_schemas = HashSet::new();
-    let fields = TestStruct::get_record_fields_in_ctxt(&mut named_schemas, &None).unwrap();
+    let fields = TestStruct::get_record_fields_in_ctxt(&mut named_schemas, None).unwrap();
     assert!(
         named_schemas.is_empty(),
         "No name should've been added: {named_schemas:?}"
     );
     assert_eq!(fields.len(), 2);
 
-    TestStruct::get_schema_in_ctxt(&mut named_schemas, &None);
+    TestStruct::get_schema_in_ctxt(&mut named_schemas, None);
     assert_eq!(
         named_schemas.len(),
         1,
         "One name should've been added: {named_schemas:?}"
     );
 
-    let fields = TestStruct::get_record_fields_in_ctxt(&mut named_schemas, &None).unwrap();
+    let fields = TestStruct::get_record_fields_in_ctxt(&mut named_schemas, None).unwrap();
     assert_eq!(
         named_schemas.len(),
         1,

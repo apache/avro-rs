@@ -188,7 +188,7 @@ impl<'r, R: Read> Block<'r, R> {
         let item = decode_internal(
             &self.writer_schema,
             &self.names_refs,
-            &None,
+            None,
             &mut block_bytes,
         )?;
         let item = match read_schema {
@@ -221,7 +221,7 @@ impl<'r, R: Read> Block<'r, R> {
             resolve_names_with_schemata(
                 self.schemata.iter().copied(),
                 &mut names,
-                &None,
+                None,
                 &HashMap::new(),
             )?;
             self.names_refs = names.into_iter().map(|(n, s)| (n, s.clone())).collect();
@@ -229,7 +229,7 @@ impl<'r, R: Read> Block<'r, R> {
         } else {
             self.writer_schema = Schema::parse(&json)?;
             let mut names = HashMap::new();
-            resolve_names(&self.writer_schema, &mut names, &None, &HashMap::new())?;
+            resolve_names(&self.writer_schema, &mut names, None, &HashMap::new())?;
             self.names_refs = names.into_iter().map(|(n, s)| (n, s.clone())).collect();
         }
         Ok(())

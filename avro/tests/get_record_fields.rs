@@ -33,7 +33,7 @@ fn avro_rs_448_default_get_record_fields_no_recursion() -> TestResult {
 
     let mut named_schemas = HashSet::new();
     let fields =
-        get_record_fields_in_ctxt(&mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
+        get_record_fields_in_ctxt(&mut named_schemas, None, Foo::get_schema_in_ctxt).unwrap();
 
     assert_eq!(fields.len(), 2);
     assert!(
@@ -42,7 +42,7 @@ fn avro_rs_448_default_get_record_fields_no_recursion() -> TestResult {
     );
 
     // Insert Foo into named_schemas
-    match Foo::get_schema_in_ctxt(&mut named_schemas, &None) {
+    match Foo::get_schema_in_ctxt(&mut named_schemas, None) {
         Schema::Record(_) => {}
         schema => panic!("Expected a record got {schema:?}"),
     }
@@ -53,7 +53,7 @@ fn avro_rs_448_default_get_record_fields_no_recursion() -> TestResult {
     );
 
     let fields =
-        get_record_fields_in_ctxt(&mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
+        get_record_fields_in_ctxt(&mut named_schemas, None, Foo::get_schema_in_ctxt).unwrap();
     assert_eq!(fields.len(), 2);
     assert_eq!(
         named_schemas.len(),
@@ -74,7 +74,7 @@ fn avro_rs_448_default_get_record_fields_recursion() -> TestResult {
 
     let mut named_schemas = HashSet::new();
     let fields =
-        get_record_fields_in_ctxt(&mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
+        get_record_fields_in_ctxt(&mut named_schemas, None, Foo::get_schema_in_ctxt).unwrap();
 
     assert_eq!(fields.len(), 2);
     assert_eq!(
@@ -84,14 +84,14 @@ fn avro_rs_448_default_get_record_fields_recursion() -> TestResult {
     );
 
     // Insert Foo into named_schemas
-    match Foo::get_schema_in_ctxt(&mut named_schemas, &None) {
+    match Foo::get_schema_in_ctxt(&mut named_schemas, None) {
         Schema::Ref { name: _ } => {}
         schema => panic!("Expected a ref got {schema:?}"),
     }
     assert_eq!(named_schemas.len(), 1);
 
     let fields =
-        get_record_fields_in_ctxt(&mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
+        get_record_fields_in_ctxt(&mut named_schemas, None, Foo::get_schema_in_ctxt).unwrap();
     assert_eq!(fields.len(), 2);
     assert_eq!(
         named_schemas.len(),

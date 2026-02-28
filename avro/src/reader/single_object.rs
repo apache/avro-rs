@@ -55,7 +55,7 @@ impl GenericSingleObjectReader {
                     decode_internal(
                         self.write_schema.get_root_schema(),
                         self.write_schema.get_names(),
-                        &None,
+                        None,
                         reader,
                     )
                 } else {

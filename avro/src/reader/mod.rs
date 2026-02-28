@@ -192,7 +192,7 @@ pub fn from_avro_datum_reader_schemata<R: Read>(
     reader_schemata: Vec<&Schema>,
 ) -> AvroResult<Value> {
     let rs = ResolvedSchema::try_from(writer_schemata)?;
-    let value = decode_internal(writer_schema, rs.get_names(), &None, reader)?;
+    let value = decode_internal(writer_schema, rs.get_names(), None, reader)?;
     match reader_schema {
         Some(schema) => {
             if reader_schemata.is_empty() {

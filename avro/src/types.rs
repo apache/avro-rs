@@ -16,7 +16,7 @@
 // under the License.
 
 //! Logic handling the intermediate representation of Avro values.
-use crate::schema::{InnerDecimalSchema, UuidSchema};
+use crate::schema::{InnerDecimalSchema, NamespaceRef, UuidSchema};
 use crate::{
     AvroResult, Error,
     bigdecimal::{deserialize_big_decimal, serialize_big_decimal},
@@ -24,8 +24,8 @@ use crate::{
     duration::Duration,
     error::Details,
     schema::{
-        DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, Precision, RecordField,
-        RecordSchema, ResolvedSchema, Scale, Schema, SchemaKind, UnionSchema,
+        DecimalSchema, EnumSchema, FixedSchema, Name, Precision, RecordField, RecordSchema,
+        ResolvedSchema, Scale, Schema, SchemaKind, UnionSchema,
     },
 };
 use bigdecimal::BigDecimal;
@@ -383,7 +383,7 @@ impl Value {
         schemata.iter().any(|schema| {
             let enclosing_namespace = schema.namespace();
 
-            match self.validate_internal(schema, rs.get_names(), &enclosing_namespace) {
+            match self.validate_internal(schema, rs.get_names(), enclosing_namespace) {
                 Some(reason) => {
                     let log_message =
                         format!("Invalid value: {self:?} for schema: {schema:?}. Reason: {reason}");
@@ -409,11 +409,11 @@ impl Value {
     }
 
     /// Validates the value against the provided schema.
-    pub(crate) fn validate_internal<S: std::borrow::Borrow<Schema> + Debug>(
+    pub(crate) fn validate_internal<S: Borrow<Schema> + Debug>(
         &self,
         schema: &Schema,
         names: &HashMap<Name, S>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> Option<String> {
         match (self, schema) {
             (_, Schema::Ref { name }) => {
@@ -426,7 +426,7 @@ impl Value {
                             names.keys()
                         ))
                     },
-                    |s| self.validate_internal(s.borrow(), names, &name.namespace),
+                    |s| self.validate_internal(s.borrow(), names, name.namespace()),
                 )
             }
             (&Value::Null, &Schema::Null) => None,
@@ -607,11 +607,7 @@ impl Value {
                 record_fields
                     .iter()
                     .fold(None, |acc, (field_name, record_field)| {
-                        let record_namespace = if name.namespace.is_none() {
-                            enclosing_namespace
-                        } else {
-                            &name.namespace
-                        };
+                        let record_namespace = name.namespace().or(enclosing_namespace);
                         match lookup.get(field_name) {
                             Some(idx) => {
                                 let field = &fields[*idx];
@@ -678,14 +674,14 @@ impl Value {
         } else {
             ResolvedSchema::try_from(schemata)?
         };
-        self.resolve_internal(schema, rs.get_names(), &enclosing_namespace, &None)
+        self.resolve_internal(schema, rs.get_names(), enclosing_namespace, &None)
     }
 
     pub(crate) fn resolve_internal<S: Borrow<Schema> + Debug>(
         mut self,
         schema: &Schema,
         names: &HashMap<Name, S>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
         field_default: &Option<JsonValue>,
     ) -> AvroResult<Self> {
         // Check if this schema is a union, and if the reader schema is not.
@@ -705,10 +701,10 @@ impl Value {
 
                 if let Some(resolved) = names.get(&name) {
                     debug!("Resolved {name:?}");
-                    self.resolve_internal(resolved.borrow(), names, &name.namespace, field_default)
+                    self.resolve_internal(resolved.borrow(), names, name.namespace(), field_default)
                 } else {
                     error!("Failed to resolve schema {name:?}");
-                    Err(Details::SchemaResolutionError(name.clone()).into())
+                    Err(Details::SchemaResolutionError(name.into_owned()).into())
                 }
             }
             Schema::Null => self.resolve_null(),
@@ -1082,7 +1078,7 @@ impl Value {
         self,
         schema: &UnionSchema,
         names: &HashMap<Name, S>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
         field_default: &Option<JsonValue>,
     ) -> Result<Self, Error> {
         let v = match self {
@@ -1108,7 +1104,7 @@ impl Value {
         self,
         schema: &Schema,
         names: &HashMap<Name, S>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> Result<Self, Error> {
         match self {
             Value::Array(items) => Ok(Value::Array(
@@ -1129,7 +1125,7 @@ impl Value {
         self,
         schema: &Schema,
         names: &HashMap<Name, S>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> Result<Self, Error> {
         match self {
             Value::Map(items) => Ok(Value::Map(
@@ -1154,7 +1150,7 @@ impl Value {
         self,
         fields: &[RecordField],
         names: &HashMap<Name, S>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> Result<Self, Error> {
         let mut items = match self {
             Value::Map(items) => Ok(items),
@@ -1395,7 +1391,7 @@ mod tests {
                     attributes: BTreeMap::new(),
                 }),
                 false,
-                r#"Invalid value: Fixed(11, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) for schema: Duration(FixedSchema { name: Name { name: "TestName", namespace: None }, size: 12, .. }). Reason: The value's size ('11') must be exactly 12 to be a Duration"#,
+                r#"Invalid value: Fixed(11, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) for schema: Duration(FixedSchema { name: Name { name: "TestName", .. }, size: 12, .. }). Reason: The value's size ('11') must be exactly 12 to be a Duration"#,
             ),
             (
                 Value::Record(vec![("unknown_field_name".to_string(), Value::Null)]),
@@ -1413,7 +1409,7 @@ mod tests {
                     attributes: Default::default(),
                 }),
                 false,
-                r#"Invalid value: Record([("unknown_field_name", Null)]) for schema: Record(RecordSchema { name: Name { name: "record_name", namespace: None }, fields: [RecordField { name: "field_name", schema: Int, .. }], .. }). Reason: There is no schema field for field 'unknown_field_name'"#,
+                r#"Invalid value: Record([("unknown_field_name", Null)]) for schema: Record(RecordSchema { name: Name { name: "record_name", .. }, fields: [RecordField { name: "field_name", schema: Int, .. }], .. }). Reason: There is no schema field for field 'unknown_field_name'"#,
             ),
             (
                 Value::Record(vec![("field_name".to_string(), Value::Null)]),
@@ -1433,13 +1429,12 @@ mod tests {
                     attributes: Default::default(),
                 }),
                 false,
-                r#"Invalid value: Record([("field_name", Null)]) for schema: Record(RecordSchema { name: Name { name: "record_name", namespace: None }, fields: [RecordField { name: "field_name", schema: Ref { name: Name { name: "missing", namespace: None } }, .. }], .. }). Reason: Unresolved schema reference: 'Name { name: "missing", namespace: None }'. Parsed names: []"#,
+                r#"Invalid value: Record([("field_name", Null)]) for schema: Record(RecordSchema { name: Name { name: "record_name", .. }, fields: [RecordField { name: "field_name", schema: Ref { name: Name { name: "missing", .. } }, .. }], .. }). Reason: Unresolved schema reference: 'Name { name: "missing", .. }'. Parsed names: []"#,
             ),
         ];
 
         for (value, schema, valid, expected_err_message) in value_schema_valid.into_iter() {
-            let err_message =
-                value.validate_internal::<Schema>(&schema, &HashMap::default(), &None);
+            let err_message = value.validate_internal::<Schema>(&schema, &HashMap::default(), None);
             assert_eq!(valid, err_message.is_none());
             if !valid {
                 let full_err_message = format!(
@@ -1633,7 +1628,7 @@ mod tests {
         ]);
         assert!(!value.validate(&schema));
         assert_logged(
-            r#"Invalid value: Record([("a", Boolean(false)), ("b", String("foo"))]) for schema: Record(RecordSchema { name: Name { name: "some_record", namespace: None }, fields: [RecordField { name: "a", schema: Long, .. }, RecordField { name: "b", schema: String, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), .. }], .. }). Reason: Unsupported value-schema combination! Value: Boolean(false), schema: Long"#,
+            r#"Invalid value: Record([("a", Boolean(false)), ("b", String("foo"))]) for schema: Record(RecordSchema { name: Name { name: "some_record", .. }, fields: [RecordField { name: "a", schema: Long, .. }, RecordField { name: "b", schema: String, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), .. }], .. }). Reason: Unsupported value-schema combination! Value: Boolean(false), schema: Long"#,
         );
 
         let value = Value::Record(vec![
@@ -1642,7 +1637,7 @@ mod tests {
         ]);
         assert!(!value.validate(&schema));
         assert_logged(
-            r#"Invalid value: Record([("a", Long(42)), ("c", String("foo"))]) for schema: Record(RecordSchema { name: Name { name: "some_record", namespace: None }, fields: [RecordField { name: "a", schema: Long, .. }, RecordField { name: "b", schema: String, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), .. }], .. }). Reason: Could not find matching type in union"#,
+            r#"Invalid value: Record([("a", Long(42)), ("c", String("foo"))]) for schema: Record(RecordSchema { name: Name { name: "some_record", .. }, fields: [RecordField { name: "a", schema: Long, .. }, RecordField { name: "b", schema: String, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), .. }], .. }). Reason: Could not find matching type in union"#,
         );
         assert_not_logged(
             r#"Invalid value: String("foo") for schema: Int. Reason: Unsupported value-schema combination"#,
@@ -1654,7 +1649,7 @@ mod tests {
         ]);
         assert!(!value.validate(&schema));
         assert_logged(
-            r#"Invalid value: Record([("a", Long(42)), ("d", String("foo"))]) for schema: Record(RecordSchema { name: Name { name: "some_record", namespace: None }, fields: [RecordField { name: "a", schema: Long, .. }, RecordField { name: "b", schema: String, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), .. }], .. }). Reason: There is no schema field for field 'd'"#,
+            r#"Invalid value: Record([("a", Long(42)), ("d", String("foo"))]) for schema: Record(RecordSchema { name: Name { name: "some_record", .. }, fields: [RecordField { name: "a", schema: Long, .. }, RecordField { name: "b", schema: String, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), .. }], .. }). Reason: There is no schema field for field 'd'"#,
         );
 
         let value = Value::Record(vec![
@@ -1665,7 +1660,7 @@ mod tests {
         ]);
         assert!(!value.validate(&schema));
         assert_logged(
-            r#"Invalid value: Record([("a", Long(42)), ("b", String("foo")), ("c", Null), ("d", Null)]) for schema: Record(RecordSchema { name: Name { name: "some_record", namespace: None }, fields: [RecordField { name: "a", schema: Long, .. }, RecordField { name: "b", schema: String, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), .. }], .. }). Reason: The value's records length (4) is greater than the schema's (3 fields)"#,
+            r#"Invalid value: Record([("a", Long(42)), ("b", String("foo")), ("c", Null), ("d", Null)]) for schema: Record(RecordSchema { name: Name { name: "some_record", .. }, fields: [RecordField { name: "a", schema: Long, .. }, RecordField { name: "b", schema: String, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), .. }], .. }). Reason: The value's records length (4) is greater than the schema's (3 fields)"#,
         );
 
         assert!(
@@ -1689,7 +1684,7 @@ mod tests {
             .validate(&schema)
         );
         assert_logged(
-            r#"Invalid value: Map({"d": Long(123)}) for schema: Record(RecordSchema { name: Name { name: "some_record", namespace: None }, fields: [RecordField { name: "a", schema: Long, .. }, RecordField { name: "b", schema: String, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), .. }], .. }). Reason: Field with name '"a"' is not a member of the map items
+            r#"Invalid value: Map({"d": Long(123)}) for schema: Record(RecordSchema { name: Name { name: "some_record", .. }, fields: [RecordField { name: "a", schema: Long, .. }, RecordField { name: "b", schema: String, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), .. }], .. }). Reason: Field with name '"a"' is not a member of the map items
 Field with name '"b"' is not a member of the map items"#,
         );
 
@@ -1959,10 +1954,7 @@ Field with name '"b"' is not a member of the map items"#,
             value
                 .clone()
                 .resolve(&Schema::Uuid(UuidSchema::Fixed(FixedSchema {
-                    name: Name {
-                        name: "some_name".to_string(),
-                        namespace: None
-                    },
+                    name: Name::new("some_name")?,
                     aliases: None,
                     doc: None,
                     size: 16,
