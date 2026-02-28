@@ -41,24 +41,22 @@ pub const DEFAULT_SERDE_HUMAN_READABLE: bool = false;
 pub(crate) static SERDE_HUMAN_READABLE: OnceLock<bool> = OnceLock::new();
 
 pub(crate) trait MapHelper {
-    fn string(&self, key: &str) -> Option<String>;
+    fn string(&self, key: &str) -> Option<&str>;
 
-    fn name(&self) -> Option<String> {
+    fn name(&self) -> Option<&str> {
         self.string("name")
     }
 
     fn doc(&self) -> Documentation {
-        self.string("doc")
+        self.string("doc").map(Into::into)
     }
 
     fn aliases(&self) -> Option<Vec<String>>;
 }
 
 impl MapHelper for Map<String, Value> {
-    fn string(&self, key: &str) -> Option<String> {
-        self.get(key)
-            .and_then(|v| v.as_str())
-            .map(|v| v.to_string())
+    fn string(&self, key: &str) -> Option<&str> {
+        self.get(key).and_then(|v| v.as_str())
     }
 
     fn aliases(&self) -> Option<Vec<String>> {

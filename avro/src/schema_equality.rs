@@ -696,10 +696,7 @@ mod tests {
         let string = Schema::Uuid(UuidSchema::String);
         let bytes = Schema::Uuid(UuidSchema::Bytes);
         let mut fixed_schema = FixedSchema {
-            name: Name {
-                name: "some_name".to_string(),
-                namespace: None,
-            },
+            name: Name::new("some_name")?,
             aliases: None,
             doc: None,
             size: 16,

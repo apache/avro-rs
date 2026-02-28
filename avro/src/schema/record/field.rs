@@ -89,10 +89,10 @@ impl RecordField {
     ) -> AvroResult<Self> {
         let name = field.name().ok_or(Details::GetNameFieldFromRecord)?;
 
-        validate_record_field_name(&name)?;
+        validate_record_field_name(name)?;
 
         let ty = field.get("type").ok_or(Details::GetRecordFieldTypeField)?;
-        let schema = parser.parse(ty, &enclosing_record.namespace)?;
+        let schema = parser.parse(ty, enclosing_record.namespace())?;
 
         if let Some(logical_type) = field.get("logicalType") {
             warn!(
@@ -103,7 +103,7 @@ impl RecordField {
         let default = field.get("default").cloned();
         Self::resolve_default_value(
             &schema,
-            &name,
+            name,
             &enclosing_record.fullname(None),
             parser.get_parsed_schemas(),
             &default,
@@ -123,7 +123,7 @@ impl RecordField {
             .unwrap_or_default();
 
         Ok(RecordField {
-            name,
+            name: name.into(),
             doc: field.doc(),
             default,
             aliases,
@@ -147,7 +147,7 @@ impl RecordField {
                     let resolved = schemas.iter().any(|schema| {
                         avro_value
                             .to_owned()
-                            .resolve_internal(schema, names, &schema.namespace(), &None)
+                            .resolve_internal(schema, names, schema.namespace(), &None)
                             .is_ok()
                     });
 
@@ -165,7 +165,7 @@ impl RecordField {
                 }
                 _ => {
                     let resolved = avro_value
-                        .resolve_internal(field_schema, names, &field_schema.namespace(), &None)
+                        .resolve_internal(field_schema, names, field_schema.namespace(), &None)
                         .is_ok();
 
                     if !resolved {
@@ -250,10 +250,7 @@ mod tests {
             .schema(Schema::Union(UnionSchema::new(vec![
                 Schema::Null,
                 Schema::Ref {
-                    name: Name {
-                        name: "LongList".to_owned(),
-                        namespace: None,
-                    },
+                    name: Name::new("LongList")?,
                 },
             ])?))
             .build();

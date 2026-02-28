@@ -201,7 +201,7 @@ impl<'a, W: Write> Writer<'a, W> {
         if let Some(reason) = value.validate_internal(
             self.schema,
             self.resolved_schema.get_names(),
-            &self.schema.namespace(),
+            self.schema.namespace(),
         ) {
             return Err(Details::ValidationWithReason {
                 value: value.clone(),
@@ -246,7 +246,7 @@ impl<'a, W: Write> Writer<'a, W> {
             value,
             self.schema,
             self.resolved_schema.get_names(),
-            &self.schema.namespace(),
+            self.schema.namespace(),
             &mut self.buffer,
         )?;
 
@@ -641,10 +641,10 @@ fn write_avro_datum_schemata<T: Into<Value>>(
     let rs = ResolvedSchema::try_from(schemata)?;
     let names = rs.get_names();
     let enclosing_namespace = schema.namespace();
-    if let Some(_err) = avro.validate_internal(schema, names, &enclosing_namespace) {
+    if let Some(_err) = avro.validate_internal(schema, names, enclosing_namespace) {
         return Err(Details::Validation.into());
     }
-    encode_internal(&avro, schema, names, &enclosing_namespace, buffer)
+    encode_internal(&avro, schema, names, enclosing_namespace, buffer)
 }
 
 /// Writer that encodes messages according to the single object encoding v1 spec
@@ -811,7 +811,7 @@ fn write_value_ref_owned_resolved<W: Write>(
     if let Some(reason) = value.validate_internal(
         root_schema,
         resolved_schema.get_names(),
-        &root_schema.namespace(),
+        root_schema.namespace(),
     ) {
         return Err(Details::ValidationWithReason {
             value: value.clone(),
@@ -824,7 +824,7 @@ fn write_value_ref_owned_resolved<W: Write>(
         value,
         root_schema,
         resolved_schema.get_names(),
-        &root_schema.namespace(),
+        root_schema.namespace(),
         writer,
     )
 }
@@ -1785,7 +1785,7 @@ mod tests {
             Err(e) => {
                 assert_eq!(
                     e.to_string(),
-                    r#"Failed to serialize field 'time' for record Record(RecordSchema { name: Name { name: "Conference", namespace: None }, fields: [RecordField { name: "name", schema: String, .. }, RecordField { name: "date", aliases: ["time2", "time"], schema: Union(UnionSchema { schemas: [Null, Long] }), .. }], .. }): Failed to serialize value of type f64 using schema Union(UnionSchema { schemas: [Null, Long] }): 12345678.9. Cause: Cannot find a Double schema in [Null, Long]"#
+                    r#"Failed to serialize field 'time' for record Record(RecordSchema { name: Name { name: "Conference", .. }, fields: [RecordField { name: "name", schema: String, .. }, RecordField { name: "date", aliases: ["time2", "time"], schema: Union(UnionSchema { schemas: [Null, Long] }), .. }], .. }): Failed to serialize value of type f64 using schema Union(UnionSchema { schemas: [Null, Long] }): 12345678.9. Cause: Cannot find a Double schema in [Null, Long]"#
                 );
             }
         }
