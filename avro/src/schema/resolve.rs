@@ -17,8 +17,8 @@
 
 use crate::error::Details;
 use crate::schema::{
-    DecimalSchema, EnumSchema, FixedSchema, InnerDecimalSchema, NamesRef, Namespace, RecordSchema,
-    UnionSchema, UuidSchema,
+    DecimalSchema, EnumSchema, FixedSchema, InnerDecimalSchema, NamesRef, NamespaceRef,
+    RecordSchema, UnionSchema, UuidSchema,
 };
 use crate::{AvroResult, Error, Schema};
 use std::collections::HashMap;
@@ -51,7 +51,7 @@ impl<'s> ResolvedSchema<'s> {
     /// These schemas will be resolved in order, so references to schemas later in the
     /// list is not supported.
     pub fn new_with_schemata(schemata: Vec<&'s Schema>) -> AvroResult<Self> {
-        Self::new_with_known_schemata(schemata, &None, &HashMap::new())
+        Self::new_with_known_schemata(schemata, None, &HashMap::new())
     }
 
     /// Creates `ResolvedSchema` with some already known schemas.
@@ -59,7 +59,7 @@ impl<'s> ResolvedSchema<'s> {
     /// Those schemata would be used to resolve references if needed.
     pub fn new_with_known_schemata<'n>(
         schemata_to_resolve: Vec<&'s Schema>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
         known_schemata: &'n NamesRef<'n>,
     ) -> AvroResult<Self> {
         let mut names = HashMap::new();
@@ -116,7 +116,7 @@ impl ResolvedOwnedSchema {
                 root_schema,
                 names_builder: |schema: &Schema| {
                     let mut names = HashMap::new();
-                    resolve_names(schema, &mut names, &None, &HashMap::new())?;
+                    resolve_names(schema, &mut names, None, &HashMap::new())?;
                     Ok::<_, Error>(names)
                 },
             }
@@ -146,7 +146,7 @@ impl TryFrom<Schema> for ResolvedOwnedSchema {
 pub fn resolve_names<'s, 'n>(
     schema: &'s Schema,
     names: &mut NamesRef<'s>,
-    enclosing_namespace: &Namespace,
+    enclosing_namespace: NamespaceRef,
     known_schemata: &NamesRef<'n>,
 ) -> AvroResult<()> {
     match schema {
@@ -170,7 +170,7 @@ pub fn resolve_names<'s, 'n>(
             ..
         })
         | Schema::Duration(FixedSchema { name, .. }) => {
-            let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
+            let fully_qualified_name = name.fully_qualified_name(enclosing_namespace).into_owned();
             if names.contains_key(&fully_qualified_name)
                 || known_schemata.contains_key(&fully_qualified_name)
             {
@@ -181,16 +181,21 @@ pub fn resolve_names<'s, 'n>(
             }
         }
         Schema::Record(RecordSchema { name, fields, .. }) => {
-            let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
+            let fully_qualified_name = name.fully_qualified_name(enclosing_namespace).into_owned();
             if names.contains_key(&fully_qualified_name)
                 || known_schemata.contains_key(&fully_qualified_name)
             {
                 Err(Details::AmbiguousSchemaDefinition(fully_qualified_name).into())
             } else {
-                let record_namespace = fully_qualified_name.namespace.clone();
+                let record_namespace = fully_qualified_name.namespace().map(ToString::to_string);
                 names.insert(fully_qualified_name, schema);
                 for field in fields {
-                    resolve_names(&field.schema, names, &record_namespace, known_schemata)?
+                    resolve_names(
+                        &field.schema,
+                        names,
+                        record_namespace.as_deref(),
+                        known_schemata,
+                    )?
                 }
                 Ok(())
             }
@@ -202,7 +207,7 @@ pub fn resolve_names<'s, 'n>(
             {
                 Ok(())
             } else {
-                Err(Details::SchemaResolutionError(fully_qualified_name).into())
+                Err(Details::SchemaResolutionError(fully_qualified_name.into_owned()).into())
             }
         }
         _ => Ok(()),
@@ -212,7 +217,7 @@ pub fn resolve_names<'s, 'n>(
 pub fn resolve_names_with_schemata<'s, 'n>(
     schemata: impl IntoIterator<Item = &'s Schema>,
     names: &mut NamesRef<'s>,
-    enclosing_namespace: &Namespace,
+    enclosing_namespace: NamespaceRef,
     known_schemata: &NamesRef<'n>,
 ) -> AvroResult<()> {
     for schema in schemata {
@@ -265,7 +270,7 @@ mod tests {
         let schema = Schema::parse_str(schema)?;
         let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
-        for s in &["space.record_name", "space.inner_record_name"] {
+        for s in ["space.record_name", "space.inner_record_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
         }
 
@@ -306,7 +311,7 @@ mod tests {
         let schema = Schema::parse_str(schema)?;
         let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
-        for s in &["space.record_name", "space.inner_record_name"] {
+        for s in ["space.record_name", "space.inner_record_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
         }
 
@@ -342,7 +347,7 @@ mod tests {
         let schema = Schema::parse_str(schema)?;
         let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
-        for s in &["space.record_name", "space.inner_enum_name"] {
+        for s in ["space.record_name", "space.inner_enum_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
         }
 
@@ -378,7 +383,7 @@ mod tests {
         let schema = Schema::parse_str(schema)?;
         let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
-        for s in &["space.record_name", "space.inner_enum_name"] {
+        for s in ["space.record_name", "space.inner_enum_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
         }
 
@@ -414,7 +419,7 @@ mod tests {
         let schema = Schema::parse_str(schema)?;
         let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
-        for s in &["space.record_name", "space.inner_fixed_name"] {
+        for s in ["space.record_name", "space.inner_fixed_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
         }
 
@@ -450,7 +455,7 @@ mod tests {
         let schema = Schema::parse_str(schema)?;
         let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
-        for s in &["space.record_name", "space.inner_fixed_name"] {
+        for s in ["space.record_name", "space.inner_fixed_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
         }
 
@@ -492,7 +497,7 @@ mod tests {
         let schema = Schema::parse_str(schema)?;
         let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
-        for s in &["space.record_name", "inner_space.inner_record_name"] {
+        for s in ["space.record_name", "inner_space.inner_record_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
         }
 
@@ -529,7 +534,7 @@ mod tests {
         let schema = Schema::parse_str(schema)?;
         let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
-        for s in &["space.record_name", "inner_space.inner_enum_name"] {
+        for s in ["space.record_name", "inner_space.inner_enum_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
         }
 
@@ -566,7 +571,7 @@ mod tests {
         let schema = Schema::parse_str(schema)?;
         let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
-        for s in &["space.record_name", "inner_space.inner_fixed_name"] {
+        for s in ["space.record_name", "inner_space.inner_fixed_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
         }
 
@@ -619,7 +624,7 @@ mod tests {
         let schema = Schema::parse_str(schema)?;
         let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 3);
-        for s in &[
+        for s in [
             "space.record_name",
             "space.middle_record_name",
             "space.inner_record_name",
@@ -677,7 +682,7 @@ mod tests {
         let schema = Schema::parse_str(schema)?;
         let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 3);
-        for s in &[
+        for s in [
             "space.record_name",
             "middle_namespace.middle_record_name",
             "middle_namespace.inner_record_name",
@@ -736,7 +741,7 @@ mod tests {
         let schema = Schema::parse_str(schema)?;
         let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 3);
-        for s in &[
+        for s in [
             "space.record_name",
             "middle_namespace.middle_record_name",
             "inner_namespace.inner_record_name",
@@ -781,7 +786,7 @@ mod tests {
         let schema = Schema::parse_str(schema)?;
         let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
-        for s in &["space.record_name", "space.in_array_record"] {
+        for s in ["space.record_name", "space.in_array_record"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
         }
 
@@ -822,7 +827,7 @@ mod tests {
         let schema = Schema::parse_str(schema)?;
         let rs = ResolvedSchema::new(&schema)?;
         assert_eq!(rs.get_names().len(), 2);
-        for s in &["space.record_name", "space.in_map_record"] {
+        for s in ["space.record_name", "space.in_map_record"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
         }
 
@@ -861,7 +866,7 @@ mod tests {
 
         // confirm we have expected 2 full-names
         assert_eq!(rs.get_names().len(), 2);
-        for s in &["space.record_name", "inner_space.inner_enum_name"] {
+        for s in ["space.record_name", "inner_space.inner_enum_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
         }
 
@@ -905,7 +910,7 @@ mod tests {
 
         // confirm we have expected 2 full-names
         assert_eq!(rs.get_names().len(), 2);
-        for s in &["space.record_name", "inner_space.inner_fixed_name"] {
+        for s in ["space.record_name", "inner_space.inner_fixed_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
         }
 
@@ -1015,7 +1020,7 @@ mod tests {
         let mut known_schemata: NamesRef = HashMap::default();
         known_schemata.insert("duplicated_name".try_into()?, &Schema::Boolean);
 
-        let result = ResolvedSchema::new_with_known_schemata(vec![&schema], &None, &known_schemata)
+        let result = ResolvedSchema::new_with_known_schemata(vec![&schema], None, &known_schemata)
             .unwrap_err();
 
         assert_eq!(

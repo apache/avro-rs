@@ -129,7 +129,7 @@ fn avro_rs_440_uuid_fixed() -> TestResult {
     let writer = SpecificSingleObjectWriter::new()?;
     assert_eq!(
         writer.write(uuid, &mut buffer).unwrap_err().to_string(),
-        r#"Failed to serialize value of type string using schema Uuid(Fixed(FixedSchema { name: Name { name: "uuid", namespace: None }, size: 16, .. })): 550e8400-e29b-41d4-a716-446655440000. Cause: Expected bytes but got a string. Did you mean to use `Schema::Uuid(UuidSchema::String)` or `utils::serde_set_human_readable(false)`?"#
+        r#"Failed to serialize value of type string using schema Uuid(Fixed(FixedSchema { name: Name { name: "uuid", .. }, size: 16, .. })): 550e8400-e29b-41d4-a716-446655440000. Cause: Expected bytes but got a string. Did you mean to use `Schema::Uuid(UuidSchema::String)` or `utils::serde_set_human_readable(false)`?"#
     );
 
     Ok(())

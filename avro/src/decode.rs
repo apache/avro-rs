@@ -15,17 +15,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::schema::{InnerDecimalSchema, UuidSchema};
+use crate::schema::{InnerDecimalSchema, NamespaceRef, UuidSchema};
 use crate::{
     AvroResult, Error,
     bigdecimal::deserialize_big_decimal,
     decimal::Decimal,
     duration::Duration,
     error::Details,
-    schema::{
-        DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, RecordSchema, ResolvedSchema,
-        Schema,
-    },
+    schema::{DecimalSchema, EnumSchema, FixedSchema, Name, RecordSchema, ResolvedSchema, Schema},
     types::Value,
     util::{safe_len, zag_i32, zag_i64},
 };
@@ -74,13 +71,13 @@ fn decode_seq_len<R: Read>(reader: &mut R) -> AvroResult<usize> {
 /// Decode a `Value` from avro format given its `Schema`.
 pub fn decode<R: Read>(schema: &Schema, reader: &mut R) -> AvroResult<Value> {
     let rs = ResolvedSchema::try_from(schema)?;
-    decode_internal(schema, rs.get_names(), &None, reader)
+    decode_internal(schema, rs.get_names(), None, reader)
 }
 
 pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
     schema: &Schema,
     names: &HashMap<Name, S>,
-    enclosing_namespace: &Namespace,
+    enclosing_namespace: NamespaceRef,
     reader: &mut R,
 ) -> AvroResult<Value> {
     match schema {
@@ -313,7 +310,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                     decode_internal(
                         &field.schema,
                         names,
-                        &fully_qualified_name.namespace,
+                        fully_qualified_name.namespace(),
                         reader,
                     )?,
                 ));
@@ -344,11 +341,11 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                 decode_internal(
                     resolved.borrow(),
                     names,
-                    &fully_qualified_name.namespace,
+                    fully_qualified_name.namespace(),
                     reader,
                 )
             } else {
-                Err(Details::SchemaResolutionError(fully_qualified_name).into())
+                Err(Details::SchemaResolutionError(fully_qualified_name.into_owned()).into())
             }
         }
     }
