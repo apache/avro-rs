@@ -47,8 +47,8 @@ impl Debug for RecordSchema {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let mut debug = f.debug_struct("RecordSchema");
         debug.field("name", &self.name);
-        if let Some(aliases) = &self.aliases {
-            debug.field("default", aliases);
+        if !self.aliases.is_empty() {
+            debug.field("default", &self.aliases);
         }
         if let Some(doc) = &self.doc {
             debug.field("doc", doc);
@@ -57,7 +57,7 @@ impl Debug for RecordSchema {
         if !self.attributes.is_empty() {
             debug.field("attributes", &self.attributes);
         }
-        if self.aliases.is_none() || self.doc.is_none() || self.attributes.is_empty() {
+        if self.aliases.is_empty() || self.doc.is_none() || self.attributes.is_empty() {
             debug.finish_non_exhaustive()
         } else {
             debug.finish()
@@ -103,7 +103,7 @@ mod tests {
         let record_schema = RecordSchema::builder().name(name.clone()).build();
 
         assert_eq!(record_schema.name, name);
-        assert_eq!(record_schema.aliases, None);
+        assert_eq!(record_schema.aliases, Vec::new());
         assert_eq!(record_schema.doc, None);
         assert_eq!(record_schema.fields.len(), 0);
         assert_eq!(record_schema.lookup.len(), 0);
@@ -118,11 +118,11 @@ mod tests {
 
         let record_schema = RecordSchema::builder()
             .name(name.clone())
-            .aliases(Some(vec!["alias_1".try_into()?]))
+            .aliases(vec!["alias_1".try_into()?])
             .build();
 
         assert_eq!(record_schema.name, name);
-        assert_eq!(record_schema.aliases, Some(vec!["alias_1".try_into()?]));
+        assert_eq!(record_schema.aliases, vec!["alias_1".try_into()?]);
         assert_eq!(record_schema.doc, None);
         assert_eq!(record_schema.fields.len(), 0);
         assert_eq!(record_schema.lookup.len(), 0);
@@ -141,7 +141,7 @@ mod tests {
             .build();
 
         assert_eq!(record_schema.name, name);
-        assert_eq!(record_schema.aliases, None);
+        assert_eq!(record_schema.aliases, Vec::new());
         assert_eq!(record_schema.doc, Some("some_doc".into()));
         assert_eq!(record_schema.fields.len(), 0);
         assert_eq!(record_schema.lookup.len(), 0);
@@ -166,7 +166,7 @@ mod tests {
             .build();
 
         assert_eq!(record_schema.name, name);
-        assert_eq!(record_schema.aliases, None);
+        assert_eq!(record_schema.aliases, Vec::new());
         assert_eq!(record_schema.doc, None);
         assert_eq!(record_schema.fields.len(), 0);
         assert_eq!(record_schema.lookup.len(), 0);
@@ -201,7 +201,7 @@ mod tests {
                 .collect();
 
         assert_eq!(record_schema.name, name);
-        assert_eq!(record_schema.aliases, None);
+        assert_eq!(record_schema.aliases, Vec::new());
         assert_eq!(record_schema.doc, None);
         assert_eq!(record_schema.fields, fields);
         assert_eq!(record_schema.lookup, expected_lookup);

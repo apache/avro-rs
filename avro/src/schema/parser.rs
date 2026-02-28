@@ -478,13 +478,11 @@ impl Parser {
 
         let namespace = &name.namespace;
 
-        if let Some(aliases) = aliases {
-            aliases.iter().for_each(|alias| {
-                let alias_fullname = alias.fully_qualified_name(namespace);
-                self.resolving_schemas
-                    .insert(alias_fullname, resolving_schema.clone());
-            });
-        }
+        aliases.iter().for_each(|alias| {
+            let alias_fullname = alias.fully_qualified_name(namespace);
+            self.resolving_schemas
+                .insert(alias_fullname, resolving_schema.clone());
+        })
     }
 
     fn register_parsed_schema(
@@ -501,13 +499,11 @@ impl Parser {
 
         let namespace = &fully_qualified_name.namespace;
 
-        if let Some(aliases) = aliases {
-            aliases.iter().for_each(|alias| {
-                let alias_fullname = alias.fully_qualified_name(namespace);
-                self.resolving_schemas.remove(&alias_fullname);
-                self.parsed_schemas.insert(alias_fullname, schema.clone());
-            });
-        }
+        aliases.iter().for_each(|alias| {
+            let alias_fullname = alias.fully_qualified_name(namespace);
+            self.resolving_schemas.remove(&alias_fullname);
+            self.parsed_schemas.insert(alias_fullname, schema.clone());
+        });
     }
 
     /// Returns already parsed schema or a schema that is currently being resolved.
@@ -544,8 +540,10 @@ impl Parser {
         }
 
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
-        let aliases =
-            self.fix_aliases_namespace(complex.aliases(), &fully_qualified_name.namespace);
+        let aliases = complex
+            .aliases()
+            .map(|a| self.fix_aliases_namespace(a, &fully_qualified_name.namespace))
+            .unwrap_or_default();
 
         let mut lookup = BTreeMap::new();
 
@@ -618,8 +616,10 @@ impl Parser {
         }
 
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
-        let aliases =
-            self.fix_aliases_namespace(complex.aliases(), &fully_qualified_name.namespace);
+        let aliases = complex
+            .aliases()
+            .map(|a| self.fix_aliases_namespace(a, &fully_qualified_name.namespace))
+            .unwrap_or_default();
 
         let symbols: Vec<String> = symbols_opt
             .and_then(|v| v.as_array())
@@ -809,8 +809,10 @@ impl Parser {
         }?;
 
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
-        let aliases =
-            self.fix_aliases_namespace(complex.aliases(), &fully_qualified_name.namespace);
+        let aliases = complex
+            .aliases()
+            .map(|a| self.fix_aliases_namespace(a, &fully_qualified_name.namespace))
+            .unwrap_or_default();
 
         let schema = Schema::Fixed(FixedSchema {
             name: fully_qualified_name.clone(),
@@ -830,27 +832,21 @@ impl Parser {
     // has aliases of "c" and "x.y", then the fully qualified names of its aliases are "a.c"
     // and "x.y".
     // https://avro.apache.org/docs/++version++/specification/#aliases
-    fn fix_aliases_namespace(
-        &self,
-        aliases: Option<Vec<String>>,
-        namespace: &Namespace,
-    ) -> Aliases {
-        aliases.map(|aliases| {
-            aliases
-                .iter()
-                .map(|alias| {
-                    if alias.find('.').is_none() {
-                        match namespace {
-                            Some(ns) => format!("{ns}.{alias}"),
-                            None => alias.clone(),
-                        }
-                    } else {
-                        alias.clone()
+    fn fix_aliases_namespace(&self, aliases: Vec<String>, namespace: &Namespace) -> Aliases {
+        aliases
+            .iter()
+            .map(|alias| {
+                if alias.find('.').is_none() {
+                    match namespace {
+                        Some(ns) => format!("{ns}.{alias}"),
+                        None => alias.clone(),
                     }
-                })
-                .map(|alias| Alias::new(alias.as_str()).unwrap())
-                .collect()
-        })
+                } else {
+                    alias.clone()
+                }
+            })
+            .map(|alias| Alias::new(alias.as_str()).unwrap())
+            .collect()
     }
 
     fn get_schema_type_name(&self, name: Name, value: Value) -> Name {

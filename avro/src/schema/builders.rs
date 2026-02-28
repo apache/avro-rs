@@ -20,7 +20,7 @@ use crate::schema::{
     UnionSchema,
 };
 use crate::types::Value;
-use crate::{AvroResult, Schema};
+use crate::{AvroResult, Error, Schema};
 use bon::bon;
 use serde_json::Value as JsonValue;
 use std::collections::{BTreeMap, HashMap};
@@ -33,9 +33,8 @@ impl Schema {
     pub fn map(
         #[builder(start_fn)] types: Schema,
         default: Option<HashMap<String, Value>>,
-        attributes: Option<BTreeMap<String, JsonValue>>,
+        #[builder(default)] attributes: BTreeMap<String, JsonValue>,
     ) -> Self {
-        let attributes = attributes.unwrap_or_default();
         Schema::Map(MapSchema {
             types: Box::new(types),
             default,
@@ -49,9 +48,8 @@ impl Schema {
     pub fn array(
         #[builder(start_fn)] items: Schema,
         default: Option<Vec<Value>>,
-        attributes: Option<BTreeMap<String, JsonValue>>,
+        #[builder(default)] attributes: BTreeMap<String, JsonValue>,
     ) -> Self {
-        let attributes = attributes.unwrap_or_default();
         Schema::Array(ArraySchema {
             items: Box::new(items),
             default,
@@ -65,12 +63,11 @@ impl Schema {
     pub fn r#enum(
         #[builder(start_fn)] name: Name,
         #[builder(start_fn)] symbols: Vec<impl Into<String>>,
-        aliases: Option<Vec<Alias>>,
+        #[builder(default)] aliases: Vec<Alias>,
         doc: Option<String>,
         default: Option<String>,
-        attributes: Option<BTreeMap<String, JsonValue>>,
+        #[builder(default)] attributes: BTreeMap<String, JsonValue>,
     ) -> Self {
-        let attributes = attributes.unwrap_or_default();
         let symbols = symbols.into_iter().map(Into::into).collect();
         Schema::Enum(EnumSchema {
             name,
@@ -88,11 +85,10 @@ impl Schema {
     pub fn fixed(
         #[builder(start_fn)] name: Name,
         #[builder(start_fn)] size: usize,
-        aliases: Option<Vec<Alias>>,
+        #[builder(default)] aliases: Vec<Alias>,
         doc: Option<String>,
-        attributes: Option<BTreeMap<String, JsonValue>>,
+        #[builder(default)] attributes: BTreeMap<String, JsonValue>,
     ) -> Self {
-        let attributes = attributes.unwrap_or_default();
         Schema::Fixed(FixedSchema {
             name,
             size,
@@ -105,23 +101,25 @@ impl Schema {
     /// Returns a `Schema::Record` with the given name, size and optional
     /// aliases, doc and custom attributes.
     #[builder(finish_fn = build)]
-    pub fn record(
-        #[builder(start_fn)] name: Name,
-        fields: Option<Vec<RecordField>>,
-        aliases: Option<Vec<Alias>>,
+    pub fn record<N>(
+        #[builder(start_fn)] name: N,
+        #[builder(default)] fields: Vec<RecordField>,
+        #[builder(default)] aliases: Vec<Alias>,
         doc: Option<String>,
-        attributes: Option<BTreeMap<String, JsonValue>>,
-    ) -> Self {
-        let fields = fields.unwrap_or_default();
-        let attributes = attributes.unwrap_or_default();
+        #[builder(default)] attributes: BTreeMap<String, JsonValue>,
+    ) -> Result<Self, Error>
+    where
+        N: TryInto<Name>,
+        Error: From<<N as TryInto<Name>>::Error>,
+    {
         let record_schema = RecordSchema::builder()
-            .name(name)
+            .name(name.try_into()?)
             .fields(fields)
             .aliases(aliases)
             .doc(doc)
             .attributes(attributes)
             .build();
-        Schema::Record(record_schema)
+        Ok(Schema::Record(record_schema))
     }
 
     /// Returns a [`Schema::Union`] with the given variants.
@@ -149,7 +147,7 @@ mod tests {
         if let Schema::Enum(enum_schema) = schema {
             assert_eq!(enum_schema.name, name);
             assert_eq!(enum_schema.symbols, symbols);
-            assert_eq!(enum_schema.aliases, None);
+            assert_eq!(enum_schema.aliases, Vec::new());
             assert_eq!(enum_schema.doc, None);
             assert_eq!(enum_schema.default, None);
             assert_eq!(enum_schema.attributes, Default::default());
@@ -180,7 +178,7 @@ mod tests {
         if let Schema::Enum(enum_schema) = schema {
             assert_eq!(enum_schema.name, name);
             assert_eq!(enum_schema.symbols, symbols);
-            assert_eq!(enum_schema.aliases, Some(aliases));
+            assert_eq!(enum_schema.aliases, aliases);
             assert_eq!(enum_schema.doc, Some(doc.into()));
             assert_eq!(enum_schema.default, Some(default.into()));
             assert_eq!(enum_schema.attributes, attributes);
@@ -201,7 +199,7 @@ mod tests {
         if let Schema::Fixed(fixed_schema) = schema {
             assert_eq!(fixed_schema.name, name);
             assert_eq!(fixed_schema.size, size);
-            assert_eq!(fixed_schema.aliases, None);
+            assert_eq!(fixed_schema.aliases, Vec::new());
             assert_eq!(fixed_schema.doc, None);
             assert_eq!(fixed_schema.attributes, Default::default());
         } else {
@@ -229,7 +227,7 @@ mod tests {
         if let Schema::Fixed(fixed_schema) = schema {
             assert_eq!(fixed_schema.name, name);
             assert_eq!(fixed_schema.size, size);
-            assert_eq!(fixed_schema.aliases, Some(aliases));
+            assert_eq!(fixed_schema.aliases, aliases);
             assert_eq!(fixed_schema.doc, Some(doc.into()));
             assert_eq!(fixed_schema.attributes, attributes);
         } else {
@@ -243,12 +241,12 @@ mod tests {
     fn avro_rs_472_record_builder_only_mandatory() -> TestResult {
         let name = Name::new("record_builder")?;
 
-        let schema = Schema::record(name.clone()).build();
+        let schema = Schema::record(name.clone()).build()?;
 
         if let Schema::Record(record_schema) = schema {
             assert_eq!(record_schema.name, name);
             assert_eq!(record_schema.fields, vec![]);
-            assert_eq!(record_schema.aliases, None);
+            assert_eq!(record_schema.aliases, Vec::new());
             assert_eq!(record_schema.doc, None);
             assert_eq!(record_schema.lookup, Default::default());
             assert_eq!(record_schema.attributes, Default::default());
@@ -282,12 +280,12 @@ mod tests {
             .aliases(aliases.clone())
             .doc(doc.into())
             .attributes(attributes.clone())
-            .build();
+            .build()?;
 
         if let Schema::Record(fixed_schema) = schema {
             assert_eq!(fixed_schema.name, name);
             assert_eq!(fixed_schema.fields, fields);
-            assert_eq!(fixed_schema.aliases, Some(aliases));
+            assert_eq!(fixed_schema.aliases, aliases);
             assert_eq!(fixed_schema.doc, Some(doc.into()));
             assert_eq!(
                 fixed_schema.lookup,

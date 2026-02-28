@@ -19,6 +19,7 @@ use crate::{
     schema::{Name, Schema, SchemaKind, UnionSchema},
     types::{Value, ValueKind},
 };
+use std::convert::Infallible;
 use std::{error::Error as _, fmt};
 
 /// Errors encountered by Avro.
@@ -53,6 +54,12 @@ impl Error {
 impl From<Details> for Error {
     fn from(details: Details) -> Self {
         Self::new(details)
+    }
+}
+
+impl From<Infallible> for Error {
+    fn from(_value: Infallible) -> Self {
+        unreachable!()
     }
 }
 

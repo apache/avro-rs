@@ -45,13 +45,15 @@ pub struct Name {
 }
 
 /// Represents the aliases for Named Schema
-pub type Aliases = Option<Vec<Alias>>;
+pub type Aliases = Vec<Alias>;
+pub type AliasesRef<'a> = &'a [Alias];
 /// Represents Schema lookup within a schema env
 pub type Names = HashMap<Name, Schema>;
 /// Represents Schema lookup within a schema
 pub type NamesRef<'a> = HashMap<Name, &'a Schema>;
 /// Represents the namespace for Named Schema
 pub type Namespace = Option<String>;
+pub type NamespaceRef<'a> = Option<&'a str>;
 
 impl Name {
     /// Create a new `Name`.

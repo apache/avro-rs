@@ -310,8 +310,8 @@ impl Debug for EnumSchema {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut debug = f.debug_struct("EnumSchema");
         debug.field("name", &self.name);
-        if let Some(aliases) = &self.aliases {
-            debug.field("aliases", aliases);
+        if !self.aliases.is_empty() {
+            debug.field("aliases", &self.aliases);
         }
         if let Some(doc) = &self.doc {
             debug.field("doc", doc);
@@ -323,7 +323,7 @@ impl Debug for EnumSchema {
         if !self.attributes.is_empty() {
             debug.field("attributes", &self.attributes);
         }
-        if self.aliases.is_none()
+        if self.aliases.is_empty()
             || self.doc.is_none()
             || self.default.is_none()
             || self.attributes.is_empty()
@@ -357,8 +357,8 @@ impl Debug for FixedSchema {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut debug = f.debug_struct("FixedSchema");
         debug.field("name", &self.name);
-        if let Some(aliases) = &self.aliases {
-            debug.field("aliases", aliases);
+        if !self.aliases.is_empty() {
+            debug.field("aliases", &self.aliases);
         }
         if let Some(doc) = &self.doc {
             debug.field("doc", doc);
@@ -367,7 +367,7 @@ impl Debug for FixedSchema {
         if !self.attributes.is_empty() {
             debug.field("attributes", &self.attributes);
         }
-        if self.aliases.is_none() || self.doc.is_none() || !self.attributes.is_empty() {
+        if self.aliases.is_empty() || self.doc.is_none() || !self.attributes.is_empty() {
             debug.finish_non_exhaustive()
         } else {
             debug.finish()
@@ -390,8 +390,8 @@ impl FixedSchema {
         }
         map.serialize_entry("size", &self.size)?;
 
-        if let Some(aliases) = self.aliases.as_ref() {
-            map.serialize_entry("aliases", aliases)?;
+        if !self.aliases.is_empty() {
+            map.serialize_entry("aliases", &self.aliases)?;
         }
 
         for attr in &self.attributes {
@@ -410,7 +410,7 @@ impl FixedSchema {
                 name: String::new(),
                 namespace: None,
             },
-            aliases: None,
+            aliases: Vec::new(),
             doc: None,
             size: self.size,
             attributes: Default::default(),
@@ -700,7 +700,10 @@ impl Schema {
     }
 
     /// Returns the aliases of the schema if it has ones.
-    pub fn aliases(&self) -> Option<&Vec<Alias>> {
+    ///
+    /// # Returns
+    /// `None` if the schema type can't have aliases or if the aliases are empty.
+    pub fn aliases(&self) -> Option<&[Alias]> {
         match self {
             Schema::Record(RecordSchema { aliases, .. })
             | Schema::Enum(EnumSchema { aliases, .. })
@@ -709,8 +712,15 @@ impl Schema {
                 inner: InnerDecimalSchema::Fixed(FixedSchema { aliases, .. }),
                 ..
             })
-            | Schema::Uuid(UuidSchema::Fixed(FixedSchema { aliases, .. })) => aliases.as_ref(),
-            Schema::Duration(FixedSchema { aliases, .. }) => aliases.as_ref(),
+            | Schema::Uuid(UuidSchema::Fixed(FixedSchema { aliases, .. }))
+            | Schema::Duration(FixedSchema { aliases, .. }) => {
+                // TODO: Should we return an empty slice?
+                if aliases.is_empty() {
+                    None
+                } else {
+                    Some(aliases.as_slice())
+                }
+            }
             _ => None,
         }
     }
@@ -878,7 +888,7 @@ impl Serialize for Schema {
                 if let Some(docstr) = doc {
                     map.serialize_entry("doc", docstr)?;
                 }
-                if let Some(aliases) = aliases {
+                if !aliases.is_empty() {
                     map.serialize_entry("aliases", aliases)?;
                 }
                 map.serialize_entry("fields", fields)?;
@@ -903,7 +913,7 @@ impl Serialize for Schema {
                 map.serialize_entry("name", &name.name)?;
                 map.serialize_entry("symbols", symbols)?;
 
-                if let Some(aliases) = aliases {
+                if !aliases.is_empty() {
                     map.serialize_entry("aliases", aliases)?;
                 }
                 if let Some(default) = default {
@@ -1209,10 +1219,7 @@ mod tests {
     #[test]
     fn test_union_schema() -> TestResult {
         let schema = Schema::parse_str(r#"["null", "int"]"#)?;
-        assert_eq!(
-            Schema::Union(UnionSchema::new(vec![Schema::Null, Schema::Int])?),
-            schema
-        );
+        assert_eq!(Schema::union(vec![Schema::Null, Schema::Int])?, schema);
         Ok(())
     }
 
@@ -1287,24 +1294,21 @@ mod tests {
             .unwrap()
             .clone();
 
-        let schema_c_expected = Schema::Record(
-            RecordSchema::builder()
-                .try_name("C")?
-                .fields(vec![
-                    RecordField::builder()
-                        .name("field_one".to_string())
-                        .schema(Schema::Union(UnionSchema::new(vec![
-                            Schema::Ref {
-                                name: Name::new("A")?,
-                            },
-                            Schema::Ref {
-                                name: Name::new("B")?,
-                            },
-                        ])?))
-                        .build(),
-                ])
-                .build(),
-        );
+        let schema_c_expected = Schema::record("C")
+            .fields(vec![
+                RecordField::builder()
+                    .name("field_one".to_string())
+                    .schema(Schema::Union(UnionSchema::new(vec![
+                        Schema::Ref {
+                            name: Name::new("A")?,
+                        },
+                        Schema::Ref {
+                            name: Name::new("B")?,
+                        },
+                    ])?))
+                    .build(),
+            ])
+            .build()?;
 
         assert_eq!(schema_c, schema_c_expected);
         Ok(())
@@ -1334,33 +1338,29 @@ mod tests {
         let (schema_c, schemata) =
             Schema::parse_str_with_list(schema_str_c, [schema_str_a, schema_str_b])?;
 
-        let schema_a_expected = Schema::Record(RecordSchema {
-            name: Name::new("A")?,
-            aliases: None,
-            doc: None,
-            fields: vec![
-                RecordField::builder()
-                    .name("field_one".to_string())
-                    .schema(Schema::Float)
-                    .build(),
-            ],
-            lookup: BTreeMap::from_iter(vec![("field_one".to_string(), 0)]),
-            attributes: Default::default(),
-        });
+        let schema_a_expected = Schema::Record(
+            RecordSchema::builder()
+                .name(Name::new("A")?)
+                .fields(vec![
+                    RecordField::builder()
+                        .name("field_one".to_string())
+                        .schema(Schema::Float)
+                        .build(),
+                ])
+                .build(),
+        );
 
-        let schema_b_expected = Schema::Record(RecordSchema {
-            name: Name::new("B")?,
-            aliases: None,
-            doc: None,
-            fields: vec![
-                RecordField::builder()
-                    .name("field_one".to_string())
-                    .schema(Schema::Float)
-                    .build(),
-            ],
-            lookup: BTreeMap::from_iter(vec![("field_one".to_string(), 0)]),
-            attributes: Default::default(),
-        });
+        let schema_b_expected = Schema::Record(
+            RecordSchema::builder()
+                .name(Name::new("B")?)
+                .fields(vec![
+                    RecordField::builder()
+                        .name("field_one".to_string())
+                        .schema(Schema::Float)
+                        .build(),
+                ])
+                .build(),
+        );
 
         let schema_c_expected = Schema::Union(UnionSchema::new(vec![
             Schema::Ref {
@@ -1498,25 +1498,23 @@ mod tests {
             .unwrap()
             .clone();
 
-        let schema_option_a_expected = Schema::Record(RecordSchema {
-            name: Name::new("OptionA")?,
-            aliases: None,
-            doc: None,
-            fields: vec![
-                RecordField::builder()
-                    .name("field_one".to_string())
-                    .default(JsonValue::Null)
-                    .schema(Schema::Union(UnionSchema::new(vec![
-                        Schema::Null,
-                        Schema::Ref {
-                            name: Name::new("A")?,
-                        },
-                    ])?))
-                    .build(),
-            ],
-            lookup: BTreeMap::from_iter(vec![("field_one".to_string(), 0)]),
-            attributes: Default::default(),
-        });
+        let schema_option_a_expected = Schema::Record(
+            RecordSchema::builder()
+                .name(Name::new("OptionA")?)
+                .fields(vec![
+                    RecordField::builder()
+                        .name("field_one".to_string())
+                        .default(JsonValue::Null)
+                        .schema(Schema::Union(UnionSchema::new(vec![
+                            Schema::Null,
+                            Schema::Ref {
+                                name: Name::new("A")?,
+                            },
+                        ])?))
+                        .build(),
+                ])
+                .build(),
+        );
 
         assert_eq!(schema_option_a, schema_option_a_expected);
 
@@ -1538,28 +1536,22 @@ mod tests {
         "#,
         )?;
 
-        let mut lookup = BTreeMap::new();
-        lookup.insert("a".to_owned(), 0);
-        lookup.insert("b".to_owned(), 1);
-
-        let expected = Schema::Record(RecordSchema {
-            name: Name::new("test")?,
-            aliases: None,
-            doc: None,
-            fields: vec![
-                RecordField::builder()
-                    .name("a".to_string())
-                    .default(JsonValue::Number(42i64.into()))
-                    .schema(Schema::Long)
-                    .build(),
-                RecordField::builder()
-                    .name("b".to_string())
-                    .schema(Schema::String)
-                    .build(),
-            ],
-            lookup,
-            attributes: Default::default(),
-        });
+        let expected = Schema::Record(
+            RecordSchema::builder()
+                .name(Name::new("test")?)
+                .fields(vec![
+                    RecordField::builder()
+                        .name("a".to_string())
+                        .default(JsonValue::Number(42i64.into()))
+                        .schema(Schema::Long)
+                        .build(),
+                    RecordField::builder()
+                        .name("b".to_string())
+                        .schema(Schema::String)
+                        .build(),
+                ])
+                .build(),
+        );
 
         assert_eq!(parsed, expected);
 
