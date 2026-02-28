@@ -17,7 +17,7 @@
 
 use crate::Schema;
 use crate::schema::{
-    FixedSchema, Name, Namespace, RecordField, RecordSchema, UnionSchema, UuidSchema,
+    FixedSchema, Name, NamespaceRef, RecordField, RecordSchema, UnionSchema, UuidSchema,
 };
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -190,15 +190,15 @@ use std::collections::{HashMap, HashSet};
 ///
 /// 1. In combination with `#[serde(with = "path::to::module)]`
 ///
-///    To get the schema, it will call the functions `fn get_schema_in_ctxt(&mut HashSet<Name>, &Namespace) -> Schema`
-///    and `fn get_record_fields_in_ctxt(usize, &mut HashSet<Name>, &Namespace) -> Option<Vec<RecordField>>` in the module provided
+///    To get the schema, it will call the functions `fn get_schema_in_ctxt(&mut HashSet<Name>, NamespaceRef) -> Schema`
+///    and `fn get_record_fields_in_ctxt(usize, &mut HashSet<Name>, NamespaceRef) -> Option<Vec<RecordField>>` in the module provided
 ///    to the Serde attribute. See [`AvroSchemaComponent`] for details on how to implement those
 ///    functions.
 ///
 /// 2. By providing a function directly, `#[avro(with = some_fn)]`.
 ///
 ///    To get the schema, it will call the function provided. It must have the signature
-///    `fn(&mut HashSet<Name>, &Namespace) -> Schema`. When this is used for a `transparent` struct, the
+///    `fn(&mut HashSet<Name>, NamespaceRef) -> Schema`. When this is used for a `transparent` struct, the
 ///    default implementation of [`AvroSchemaComponent::get_record_fields_in_ctxt`] will be used.
 ///    This is only recommended for primitive types, as the default implementation cannot be efficiently
 ///    implemented for complex types.
@@ -223,16 +223,16 @@ pub trait AvroSchema {
 ///
 /// For example, you have a custom integer type:
 /// ```
-/// # use apache_avro::{Schema, serde::{AvroSchemaComponent}, schema::{Name, Namespace, RecordField}};
+/// # use apache_avro::{Schema, serde::{AvroSchemaComponent}, schema::{Name, NamespaceRef, RecordField}};
 /// # use std::collections::HashSet;
 /// // Make sure to implement `Serialize` and `Deserialize` to use the right serialization methods
 /// pub struct U24([u8; 3]);
 /// impl AvroSchemaComponent for U24 {
-///     fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: &Namespace) -> Schema {
+///     fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Schema {
 ///         Schema::Int
 ///     }
 ///
-///     fn get_record_fields_in_ctxt(_: usize, _: &mut HashSet<Name>, _: &Namespace) -> Option<Vec<RecordField>> {
+///     fn get_record_fields_in_ctxt(_: usize, _: &mut HashSet<Name>, _: NamespaceRef) -> Option<Vec<RecordField>> {
 ///         None // A Schema::Int is not a Schema::Record so there are no fields to return
 ///     }
 ///
@@ -248,18 +248,18 @@ pub trait AvroSchema {
 /// To construct a schema for a type is "transparent", such as for smart pointers, simply
 /// pass through the arguments to the inner type:
 /// ```
-/// # use apache_avro::{Schema, serde::{AvroSchemaComponent}, schema::{Name, Namespace, RecordField}};
+/// # use apache_avro::{Schema, serde::{AvroSchemaComponent}, schema::{Name, NamespaceRef, RecordField}};
 /// # use serde::{Serialize, Deserialize};
 /// # use std::collections::HashSet;
 /// #[derive(Serialize, Deserialize)]
 /// #[serde(transparent)] // This attribute is important for all passthrough implementations!
 /// pub struct Transparent<T>(T);
 /// impl<T: AvroSchemaComponent> AvroSchemaComponent for Transparent<T> {
-///     fn get_schema_in_ctxt(named_schemas: &mut HashSet<Name>, enclosing_namespace: &Namespace) -> Schema {
+///     fn get_schema_in_ctxt(named_schemas: &mut HashSet<Name>, enclosing_namespace: NamespaceRef) -> Schema {
 ///         T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
 ///     }
 ///
-///     fn get_record_fields_in_ctxt(first_field_position: usize, named_schemas: &mut HashSet<Name>, enclosing_namespace: &Namespace) -> Option<Vec<RecordField>> {
+///     fn get_record_fields_in_ctxt(first_field_position: usize, named_schemas: &mut HashSet<Name>, enclosing_namespace: NamespaceRef) -> Option<Vec<RecordField>> {
 ///         T::get_record_fields_in_ctxt(first_field_position, named_schemas, enclosing_namespace)
 ///     }
 ///
@@ -283,7 +283,7 @@ pub trait AvroSchema {
 ///  - Implement `field_default()` if you want to use `#[serde(skip_serializing{,_if})]`.
 ///
 /// ```
-/// # use apache_avro::{Schema, serde::{AvroSchemaComponent}, schema::{Name, Namespace, RecordField, RecordSchema}};
+/// # use apache_avro::{Schema, serde::{AvroSchemaComponent}, schema::{Name, NamespaceRef, RecordField, RecordSchema}};
 /// # use serde::{Serialize, Deserialize};
 /// # use std::{time::Duration, collections::HashSet};
 /// pub struct Foo {
@@ -293,13 +293,13 @@ pub trait AvroSchema {
 /// }
 ///
 /// impl AvroSchemaComponent for Foo {
-///     fn get_schema_in_ctxt(named_schemas: &mut HashSet<Name>, enclosing_namespace: &Namespace) -> Schema {
+///     fn get_schema_in_ctxt(named_schemas: &mut HashSet<Name>, enclosing_namespace: NamespaceRef) -> Schema {
 ///         // Create the fully qualified name for your type given the enclosing namespace
-///         let name = Name::new("Foo").unwrap().fully_qualified_name(enclosing_namespace);
+///         let name = Name::new_with_enclosing_namespace("Foo", enclosing_namespace).expect("Name is valid");
 ///         if named_schemas.contains(&name) {
 ///             Schema::Ref { name }
 ///         } else {
-///             let enclosing_namespace = &name.namespace;
+///             let enclosing_namespace = name.namespace();
 ///             // Do this before you start creating the schema, as otherwise recursive types will cause infinite recursion.
 ///             named_schemas.insert(name.clone());
 ///             let schema = Schema::Record(RecordSchema::builder()
@@ -311,7 +311,7 @@ pub trait AvroSchema {
 ///         }
 ///     }
 ///
-///     fn get_record_fields_in_ctxt(first_field_position: usize, named_schemas: &mut HashSet<Name>, enclosing_namespace: &Namespace) -> Option<Vec<RecordField>> {
+///     fn get_record_fields_in_ctxt(first_field_position: usize, named_schemas: &mut HashSet<Name>, enclosing_namespace: NamespaceRef) -> Option<Vec<RecordField>> {
 ///         Some(vec![
 ///             RecordField::builder()
 ///                 .name("one")
@@ -341,7 +341,7 @@ pub trait AvroSchemaComponent {
     /// Get the schema for this component
     fn get_schema_in_ctxt(
         named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> Schema;
 
     /// Get the fields of this schema if it is a record.
@@ -353,7 +353,7 @@ pub trait AvroSchemaComponent {
     fn get_record_fields_in_ctxt(
         first_field_position: usize,
         named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
         get_record_fields_in_ctxt(
             first_field_position,
@@ -380,8 +380,8 @@ pub trait AvroSchemaComponent {
 pub fn get_record_fields_in_ctxt(
     first_field_position: usize,
     named_schemas: &mut HashSet<Name>,
-    enclosing_namespace: &Namespace,
-    schema_fn: fn(named_schemas: &mut HashSet<Name>, enclosing_namespace: &Namespace) -> Schema,
+    enclosing_namespace: NamespaceRef,
+    schema_fn: fn(named_schemas: &mut HashSet<Name>, enclosing_namespace: NamespaceRef) -> Schema,
 ) -> Option<Vec<RecordField>> {
     let mut record = match schema_fn(named_schemas, enclosing_namespace) {
         Schema::Record(record) => record,
@@ -513,18 +513,18 @@ where
     T: AvroSchemaComponent + ?Sized,
 {
     fn get_schema() -> Schema {
-        T::get_schema_in_ctxt(&mut HashSet::default(), &None)
+        T::get_schema_in_ctxt(&mut HashSet::default(), None)
     }
 }
 
 macro_rules! impl_schema (
     ($type:ty, $variant_constructor:expr) => (
         impl AvroSchemaComponent for $type {
-            fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: &Namespace) -> Schema {
+            fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Schema {
                 $variant_constructor
             }
 
-            fn get_record_fields_in_ctxt(_: usize, _: &mut HashSet<Name>, _: &Namespace) -> Option<Vec<RecordField>> {
+            fn get_record_fields_in_ctxt(_: usize, _: &mut HashSet<Name>, _: NamespaceRef) -> Option<Vec<RecordField>> {
                 None
             }
         }
@@ -549,11 +549,11 @@ impl_schema!((), Schema::Null);
 macro_rules! impl_passthrough_schema (
     ($type:ty where T: AvroSchemaComponent + ?Sized $(+ $bound:tt)*) => (
         impl<T: AvroSchemaComponent $(+ $bound)* + ?Sized> AvroSchemaComponent for $type {
-            fn get_schema_in_ctxt(named_schemas: &mut HashSet<Name>, enclosing_namespace: &Namespace) -> Schema {
+            fn get_schema_in_ctxt(named_schemas: &mut HashSet<Name>, enclosing_namespace: NamespaceRef) -> Schema {
                 T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
             }
 
-            fn get_record_fields_in_ctxt(first_field_position: usize, named_schemas: &mut HashSet<Name>, enclosing_namespace: &Namespace) -> Option<Vec<RecordField>> {
+            fn get_record_fields_in_ctxt(first_field_position: usize, named_schemas: &mut HashSet<Name>, enclosing_namespace: NamespaceRef) -> Option<Vec<RecordField>> {
                 T::get_record_fields_in_ctxt(first_field_position, named_schemas, enclosing_namespace)
             }
 
@@ -573,11 +573,11 @@ impl_passthrough_schema!(std::sync::Mutex<T> where T: AvroSchemaComponent + ?Siz
 macro_rules! impl_array_schema (
     ($type:ty where T: AvroSchemaComponent) => (
         impl<T: AvroSchemaComponent> AvroSchemaComponent for $type {
-            fn get_schema_in_ctxt(named_schemas: &mut HashSet<Name>, enclosing_namespace: &Namespace) -> Schema {
+            fn get_schema_in_ctxt(named_schemas: &mut HashSet<Name>, enclosing_namespace: NamespaceRef) -> Schema {
                 Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace)).build()
             }
 
-            fn get_record_fields_in_ctxt(_: usize, _: &mut HashSet<Name>, _: &Namespace) -> Option<Vec<RecordField>> {
+            fn get_record_fields_in_ctxt(_: usize, _: &mut HashSet<Name>, _: NamespaceRef) -> Option<Vec<RecordField>> {
                 None
             }
         }
@@ -595,7 +595,7 @@ where
 {
     fn get_schema_in_ctxt(
         named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> Schema {
         Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace)).build()
     }
@@ -603,7 +603,7 @@ where
     fn get_record_fields_in_ctxt(
         _: usize,
         _: &mut HashSet<Name>,
-        _: &Namespace,
+        _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
         None
     }
@@ -615,7 +615,7 @@ where
 {
     fn get_schema_in_ctxt(
         named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> Schema {
         Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace)).build()
     }
@@ -623,7 +623,7 @@ where
     fn get_record_fields_in_ctxt(
         _: usize,
         _: &mut HashSet<Name>,
-        _: &Namespace,
+        _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
         None
     }
@@ -635,7 +635,7 @@ where
 {
     fn get_schema_in_ctxt(
         named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> Schema {
         let variants = vec![
             Schema::Null,
@@ -650,7 +650,7 @@ where
     fn get_record_fields_in_ctxt(
         _: usize,
         _: &mut HashSet<Name>,
-        _: &Namespace,
+        _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
         None
     }
@@ -666,11 +666,10 @@ impl AvroSchemaComponent for core::time::Duration {
     /// This is a lossy conversion as this Avro type does not store the amount of nanoseconds.
     fn get_schema_in_ctxt(
         named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> Schema {
-        let name = Name::new("duration")
-            .expect("Name is valid")
-            .fully_qualified_name(enclosing_namespace);
+        let name = Name::new_with_enclosing_namespace("duration", enclosing_namespace)
+            .expect("Name is valid");
         if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {
@@ -689,7 +688,7 @@ impl AvroSchemaComponent for core::time::Duration {
     fn get_record_fields_in_ctxt(
         _: usize,
         _: &mut HashSet<Name>,
-        _: &Namespace,
+        _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
         None
     }
@@ -701,11 +700,10 @@ impl AvroSchemaComponent for uuid::Uuid {
     /// The underlying schema is [`Schema::Fixed`] with a size of 16.
     fn get_schema_in_ctxt(
         named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> Schema {
-        let name = Name::new("uuid")
-            .expect("Name is valid")
-            .fully_qualified_name(enclosing_namespace);
+        let name =
+            Name::new_with_enclosing_namespace("uuid", enclosing_namespace).expect("Name is valid");
         if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {
@@ -724,7 +722,7 @@ impl AvroSchemaComponent for uuid::Uuid {
     fn get_record_fields_in_ctxt(
         _: usize,
         _: &mut HashSet<Name>,
-        _: &Namespace,
+        _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
         None
     }
@@ -734,11 +732,10 @@ impl AvroSchemaComponent for u64 {
     /// The schema is [`Schema::Fixed`] of size 8 with the name `u64`.
     fn get_schema_in_ctxt(
         named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> Schema {
-        let name = Name::new("u64")
-            .expect("Name is valid")
-            .fully_qualified_name(enclosing_namespace);
+        let name =
+            Name::new_with_enclosing_namespace("u64", enclosing_namespace).expect("Name is valid");
         if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {
@@ -757,7 +754,7 @@ impl AvroSchemaComponent for u64 {
     fn get_record_fields_in_ctxt(
         _: usize,
         _: &mut HashSet<Name>,
-        _: &Namespace,
+        _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
         None
     }
@@ -767,11 +764,10 @@ impl AvroSchemaComponent for u128 {
     /// The schema is [`Schema::Fixed`] of size 16 with the name `u128`.
     fn get_schema_in_ctxt(
         named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> Schema {
-        let name = Name::new("u128")
-            .expect("Name is valid")
-            .fully_qualified_name(enclosing_namespace);
+        let name =
+            Name::new_with_enclosing_namespace("u128", enclosing_namespace).expect("Name is valid");
         if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {
@@ -790,7 +786,7 @@ impl AvroSchemaComponent for u128 {
     fn get_record_fields_in_ctxt(
         _: usize,
         _: &mut HashSet<Name>,
-        _: &Namespace,
+        _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
         None
     }
@@ -800,11 +796,10 @@ impl AvroSchemaComponent for i128 {
     /// The schema is [`Schema::Fixed`] of size 16 with the name `i128`.
     fn get_schema_in_ctxt(
         named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> Schema {
-        let name = Name::new("i128")
-            .expect("Name is valid")
-            .fully_qualified_name(enclosing_namespace);
+        let name =
+            Name::new_with_enclosing_namespace("i128", enclosing_namespace).expect("Name is valid");
         if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {
@@ -823,7 +818,7 @@ impl AvroSchemaComponent for i128 {
     fn get_record_fields_in_ctxt(
         _: usize,
         _: &mut HashSet<Name>,
-        _: &Namespace,
+        _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
         None
     }

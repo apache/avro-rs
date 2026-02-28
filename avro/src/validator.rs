@@ -17,27 +17,33 @@
 
 //! # Custom name validation
 //!
-//! By default, the library follows the rules specified in the [Avro specification](https://avro.apache.org/docs/1.11.1/specification/#names).
+//! By default, the library follows the rules specified in the [Avro specification](https://avro.apache.org/docs/++version++/specification/#names).
 //!
 //! Some of the other Apache Avro language SDKs are more flexible in their name validation. For
 //! interoperability with those SDKs, the library provides a way to customize the name validation.
 //!
 //! ```
-//! use apache_avro::AvroResult;
-//! use apache_avro::schema::Namespace;
-//! use apache_avro::validator::{SchemaNameValidator, set_schema_name_validator};
+//! # use apache_avro::{AvroResult, validator::{SchemaNameValidator, set_schema_name_validator}};
+//! # use regex_lite::Regex;
+//! # use std::sync::OnceLock;
+//! struct DontAllowNamespaces;
 //!
-//! struct MyCustomValidator;
-//!
-//! impl SchemaNameValidator for MyCustomValidator {
-//!     fn validate(&self, name: &str) -> AvroResult<(String, Namespace)> {
-//!         todo!()
+//! impl SchemaNameValidator for DontAllowNamespaces {
+//!     fn regex(&self) -> &'static Regex {
+//!         static SCHEMA_NAME_ONCE: OnceLock<Regex> = OnceLock::new();
+//!         SCHEMA_NAME_ONCE.get_or_init(|| {
+//!             Regex::new(
+//!                 // Disallows any namespace. By naming the group `name`, the default
+//!                 // implementation of `SchemaNameValidator::validate` can be reused.
+//!                 r"^(?P<name>[A-Za-z_][A-Za-z0-9_]*)$",
+//!             ).expect("Regex is valid")
+//!         })
 //!     }
 //! }
 //!
 //! // don't parse any schema before registering the custom validator(s)!
 //!
-//! if set_schema_name_validator(Box::new(MyCustomValidator)).is_err() {
+//! if set_schema_name_validator(Box::new(DontAllowNamespaces)).is_err() {
 //!     // `.unwrap()` doesn't work as the return type does not implement `Debug`
 //!     panic!("There was already a schema validator configured")
 //! }
@@ -51,7 +57,7 @@
 //! If the application parses schemas before setting a validator, the default validator will be
 //! registered and used!
 
-use crate::{AvroResult, error::Details, schema::Namespace};
+use crate::{AvroResult, error::Details};
 use log::debug;
 use regex_lite::Regex;
 use std::sync::OnceLock;
@@ -65,6 +71,9 @@ struct SpecificationValidator;
 pub trait SchemaNameValidator: Send + Sync {
     /// The regex used to validate the schema name.
     ///
+    /// When the name part of the full name is provided as a capture group named `name`, the
+    /// default implementation of [`Self::validate`] can be used.
+    ///
     /// The default implementation uses the Avro specified regex.
     fn regex(&self) -> &'static Regex {
         static SCHEMA_NAME_ONCE: OnceLock<Regex> = OnceLock::new();
@@ -77,24 +86,25 @@ pub trait SchemaNameValidator: Send + Sync {
         })
     }
 
-    /// Validates the schema name and returns the name and the optional namespace.
+    /// Validates the schema name and returns the start byte of the name.
+    ///
+    /// Requires that the implementation of [`Self::regex`] provides a capture group named `name`
+    /// that captures the name part of the full name.
     ///
     /// Should return [`Details::InvalidSchemaName`] if it is invalid.
-    fn validate(&self, schema_name: &str) -> AvroResult<(String, Namespace)>;
-}
-
-impl SchemaNameValidator for SpecificationValidator {
-    fn validate(&self, schema_name: &str) -> AvroResult<(String, Namespace)> {
+    fn validate(&self, schema_name: &str) -> AvroResult<usize> {
         let regex = SchemaNameValidator::regex(self);
         let caps = regex
             .captures(schema_name)
             .ok_or_else(|| Details::InvalidSchemaName(schema_name.to_string(), regex.as_str()))?;
-        Ok((
-            caps["name"].to_string(),
-            caps.name("namespace").map(|s| s.as_str().to_string()),
-        ))
+        Ok(caps
+            .name("name")
+            .expect("Regex has no group named `name`")
+            .start())
     }
 }
+
+impl SchemaNameValidator for SpecificationValidator {}
 
 static NAME_VALIDATOR_ONCE: OnceLock<Box<dyn SchemaNameValidator + Send + Sync>> = OnceLock::new();
 
@@ -111,7 +121,7 @@ pub fn set_schema_name_validator(
     NAME_VALIDATOR_ONCE.set(validator)
 }
 
-pub(crate) fn validate_schema_name(schema_name: &str) -> AvroResult<(String, Namespace)> {
+pub(crate) fn validate_schema_name(schema_name: &str) -> AvroResult<usize> {
     NAME_VALIDATOR_ONCE
         .get_or_init(|| {
             debug!("Going to use the default name validator.");
@@ -137,19 +147,17 @@ pub trait SchemaNamespaceValidator: Send + Sync {
     /// Validates a schema namespace.
     ///
     /// Should return [`Details::InvalidNamespace`] if it is invalid.
-    fn validate(&self, namespace: &str) -> AvroResult<()>;
-}
-
-impl SchemaNamespaceValidator for SpecificationValidator {
-    fn validate(&self, ns: &str) -> AvroResult<()> {
+    fn validate(&self, namespace: &str) -> AvroResult<()> {
         let regex = SchemaNamespaceValidator::regex(self);
-        if !regex.is_match(ns) {
-            Err(Details::InvalidNamespace(ns.to_string(), regex.as_str()).into())
+        if !regex.is_match(namespace) {
+            Err(Details::InvalidNamespace(namespace.to_string(), regex.as_str()).into())
         } else {
             Ok(())
         }
     }
 }
+
+impl SchemaNamespaceValidator for SpecificationValidator {}
 
 static NAMESPACE_VALIDATOR_ONCE: OnceLock<Box<dyn SchemaNamespaceValidator + Send + Sync>> =
     OnceLock::new();
@@ -190,10 +198,6 @@ pub trait EnumSymbolNameValidator: Send + Sync {
     /// Validate the symbol of an enum.
     ///
     /// Should return [`Details::EnumSymbolName`] if it is invalid.
-    fn validate(&self, name: &str) -> AvroResult<()>;
-}
-
-impl EnumSymbolNameValidator for SpecificationValidator {
     fn validate(&self, symbol: &str) -> AvroResult<()> {
         let regex = EnumSymbolNameValidator::regex(self);
         if !regex.is_match(symbol) {
@@ -203,6 +207,8 @@ impl EnumSymbolNameValidator for SpecificationValidator {
         Ok(())
     }
 }
+
+impl EnumSymbolNameValidator for SpecificationValidator {}
 
 static ENUM_SYMBOL_NAME_VALIDATOR_ONCE: OnceLock<Box<dyn EnumSymbolNameValidator + Send + Sync>> =
     OnceLock::new();
@@ -243,10 +249,6 @@ pub trait RecordFieldNameValidator: Send + Sync {
     /// Validate the name of a record field.
     ///
     /// Should return [`Details::FieldName`] if it is invalid.
-    fn validate(&self, name: &str) -> AvroResult<()>;
-}
-
-impl RecordFieldNameValidator for SpecificationValidator {
     fn validate(&self, field_name: &str) -> AvroResult<()> {
         let regex = RecordFieldNameValidator::regex(self);
         if !regex.is_match(field_name) {
@@ -256,6 +258,8 @@ impl RecordFieldNameValidator for SpecificationValidator {
         Ok(())
     }
 }
+
+impl RecordFieldNameValidator for SpecificationValidator {}
 
 static RECORD_FIELD_NAME_VALIDATOR_ONCE: OnceLock<Box<dyn RecordFieldNameValidator + Send + Sync>> =
     OnceLock::new();

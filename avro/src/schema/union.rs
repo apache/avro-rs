@@ -17,7 +17,7 @@
 
 use crate::error::Details;
 use crate::schema::{
-    DecimalSchema, InnerDecimalSchema, Name, Namespace, Schema, SchemaKind, UuidSchema,
+    DecimalSchema, InnerDecimalSchema, Name, NamespaceRef, Schema, SchemaKind, UuidSchema,
 };
 use crate::types;
 use crate::{AvroResult, Error};
@@ -88,7 +88,7 @@ impl UnionSchema {
         &self,
         value: &types::Value,
         known_schemata: Option<&HashMap<Name, S>>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> Option<(usize, &Schema)> {
         let known_schemata_if_none = HashMap::new();
         let known_schemata = known_schemata.unwrap_or(&known_schemata_if_none);
@@ -101,11 +101,7 @@ impl UnionSchema {
                 let kind = schema.discriminant();
                 // Maps and arrays need to be checked if they actually match the value
                 if kind == SchemaKind::Map || kind == SchemaKind::Array {
-                    let namespace = if schema.namespace().is_some() {
-                        &schema.namespace()
-                    } else {
-                        enclosing_namespace
-                    };
+                    let namespace = schema.namespace().or(enclosing_namespace);
 
                     // TODO: Do this without the clone
                     value
@@ -129,11 +125,7 @@ impl UnionSchema {
                     s_kind == kind || s_kind == SchemaKind::Ref
                 })
                 .find(|(_i, schema)| {
-                    let namespace = if schema.namespace().is_some() {
-                        &schema.namespace()
-                    } else {
-                        enclosing_namespace
-                    };
+                    let namespace = schema.namespace().or(enclosing_namespace);
 
                     // TODO: Do this without the clone
                     value
@@ -151,11 +143,7 @@ impl UnionSchema {
             (None, None) => {
                 // Slow path, check if value can be promoted to any of the types in the union
                 self.schemas.iter().enumerate().find(|(_i, schema)| {
-                    let namespace = if schema.namespace().is_some() {
-                        &schema.namespace()
-                    } else {
-                        enclosing_namespace
-                    };
+                    let namespace = schema.namespace().or(enclosing_namespace);
 
                     // TODO: Do this without the clone
                     value
@@ -575,7 +563,7 @@ mod tests {
 
         assert!(
             union
-                .find_schema_with_known_schemata(&value, None::<&HashMap<Name, Schema>>, &None)
+                .find_schema_with_known_schemata(&value, None::<&HashMap<Name, Schema>>, None)
                 .is_none()
         );
 
@@ -588,7 +576,7 @@ mod tests {
         let value = Value::Int(42);
 
         assert_eq!(
-            union.find_schema_with_known_schemata(&value, None::<&HashMap<Name, Schema>>, &None),
+            union.find_schema_with_known_schemata(&value, None::<&HashMap<Name, Schema>>, None),
             Some((0, &Schema::Long))
         );
 
@@ -609,7 +597,7 @@ mod tests {
         let value = Value::Fixed(16, vec![0; 16]);
 
         assert_eq!(
-            union.find_schema_with_known_schemata(&value, None::<&HashMap<Name, Schema>>, &None),
+            union.find_schema_with_known_schemata(&value, None::<&HashMap<Name, Schema>>, None),
             Some((0, &uuid))
         );
 

@@ -28,7 +28,7 @@ pub(crate) use crate::schema::resolve::{
     ResolvedOwnedSchema, resolve_names, resolve_names_with_schemata,
 };
 pub use crate::schema::{
-    name::{Alias, Aliases, Name, Names, NamesRef, Namespace},
+    name::{Alias, Aliases, Name, Names, NamesRef, Namespace, NamespaceRef},
     record::{
         RecordField, RecordFieldBuilder, RecordFieldOrder, RecordSchema, RecordSchemaBuilder,
     },
@@ -383,10 +383,10 @@ impl FixedSchema {
         S: Serializer,
     {
         map.serialize_entry("type", "fixed")?;
-        if let Some(n) = self.name.namespace.as_ref() {
+        if let Some(n) = self.name.namespace() {
             map.serialize_entry("namespace", n)?;
         }
-        map.serialize_entry("name", &self.name.name)?;
+        map.serialize_entry("name", &self.name.name())?;
         if let Some(docstr) = self.doc.as_ref() {
             map.serialize_entry("doc", docstr)?;
         }
@@ -408,10 +408,7 @@ impl FixedSchema {
     /// All other fields are `None` or empty.
     pub(crate) fn copy_only_size(&self) -> Self {
         Self {
-            name: Name {
-                name: String::new(),
-                namespace: None,
-            },
+            name: Name::invalid_empty_name(),
             aliases: None,
             doc: None,
             size: self.size,
@@ -558,7 +555,7 @@ impl Schema {
             let json = json.as_ref();
             let schema: JsonValue = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
             if let JsonValue::Object(inner) = &schema {
-                let name = Name::parse(inner, &None)?;
+                let name = Name::parse(inner, None)?;
                 let previous_value = input_schemas.insert(name.clone(), schema);
                 if previous_value.is_some() {
                     return Err(Details::NameCollision(name.fullname(None)).into());
@@ -600,7 +597,7 @@ impl Schema {
             let json = json.as_ref();
             let schema: JsonValue = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
             if let JsonValue::Object(inner) = &schema {
-                let name = Name::parse(inner, &None)?;
+                let name = Name::parse(inner, None)?;
                 if let Some(_previous) = input_schemas.insert(name.clone(), schema) {
                     return Err(Details::NameCollision(name.fullname(None)).into());
                 }
@@ -617,7 +614,7 @@ impl Schema {
         parser.parse_input_schemas()?;
 
         let value = serde_json::from_str(schema).map_err(Details::ParseSchemaJson)?;
-        let schema = parser.parse(&value, &None)?;
+        let schema = parser.parse(&value, None)?;
         let schemata = parser.parse_list()?;
         Ok((schema, schemata))
     }
@@ -634,14 +631,14 @@ impl Schema {
     /// Parses an Avro schema from JSON.
     pub fn parse(value: &JsonValue) -> AvroResult<Schema> {
         let mut parser = Parser::default();
-        parser.parse(value, &None)
+        parser.parse(value, None)
     }
 
     /// Parses an Avro schema from JSON.
     /// Any `Schema::Ref`s must be known in the `names` map.
     pub(crate) fn parse_with_names(value: &JsonValue, names: Names) -> AvroResult<Schema> {
         let mut parser = Parser::new(HashMap::with_capacity(1), Vec::with_capacity(1), names);
-        parser.parse(value, &None)
+        parser.parse(value, None)
     }
 
     /// Returns the custom attributes (metadata) if the schema supports them.
@@ -697,8 +694,8 @@ impl Schema {
     }
 
     /// Returns the namespace of the schema if it has one.
-    pub fn namespace(&self) -> Namespace {
-        self.name().and_then(|n| n.namespace.clone())
+    pub fn namespace(&self) -> NamespaceRef<'_> {
+        self.name().and_then(|n| n.namespace())
     }
 
     /// Returns the aliases of the schema if it has ones.
@@ -873,10 +870,10 @@ impl Serialize for Schema {
             }) => {
                 let mut map = serializer.serialize_map(None)?;
                 map.serialize_entry("type", "record")?;
-                if let Some(ref n) = name.namespace {
+                if let Some(ref n) = name.namespace() {
                     map.serialize_entry("namespace", n)?;
                 }
-                map.serialize_entry("name", &name.name)?;
+                map.serialize_entry("name", &name.name())?;
                 if let Some(docstr) = doc {
                     map.serialize_entry("doc", docstr)?;
                 }
@@ -899,10 +896,10 @@ impl Serialize for Schema {
             }) => {
                 let mut map = serializer.serialize_map(None)?;
                 map.serialize_entry("type", "enum")?;
-                if let Some(ref n) = name.namespace {
+                if let Some(ref n) = name.namespace() {
                     map.serialize_entry("namespace", n)?;
                 }
-                map.serialize_entry("name", &name.name)?;
+                map.serialize_entry("name", &name.name())?;
                 map.serialize_entry("symbols", symbols)?;
 
                 if let Some(aliases) = aliases {
@@ -1801,10 +1798,7 @@ mod tests {
         lookup.insert("next".to_owned(), 1);
 
         let expected = Schema::Record(RecordSchema {
-            name: Name {
-                name: "LongList".to_owned(),
-                namespace: None,
-            },
+            name: Name::new("LongList")?,
             aliases: Some(vec![Alias::new("LinkedLongs").unwrap()]),
             doc: None,
             fields: vec![
@@ -1826,10 +1820,7 @@ mod tests {
                     schema: Schema::Union(UnionSchema::new(vec![
                         Schema::Null,
                         Schema::Ref {
-                            name: Name {
-                                name: "LongList".to_owned(),
-                                namespace: None,
-                            },
+                            name: Name::new("LongList")?,
                         },
                     ])?),
                     order: RecordFieldOrder::Ascending,
@@ -1869,10 +1860,7 @@ mod tests {
         lookup.insert("next".to_owned(), 1);
 
         let expected = Schema::Record(RecordSchema {
-            name: Name {
-                name: "record".to_owned(),
-                namespace: None,
-            },
+            name: Name::new("record")?,
             aliases: None,
             doc: None,
             fields: vec![
@@ -1892,10 +1880,7 @@ mod tests {
                     default: None,
                     aliases: None,
                     schema: Schema::Ref {
-                        name: Name {
-                            name: "record".to_owned(),
-                            namespace: None,
-                        },
+                        name: Name::new("record")?,
                     },
                     order: RecordFieldOrder::Ascending,
                     position: 1,
@@ -1941,10 +1926,7 @@ mod tests {
         lookup.insert("next".to_owned(), 1);
 
         let expected = Schema::Record(RecordSchema {
-            name: Name {
-                name: "record".to_owned(),
-                namespace: None,
-            },
+            name: Name::new("record")?,
             aliases: None,
             doc: None,
             fields: vec![
@@ -2019,10 +2001,7 @@ mod tests {
         lookup.insert("next".to_owned(), 1);
 
         let expected = Schema::Record(RecordSchema {
-            name: Name {
-                name: "record".to_owned(),
-                namespace: None,
-            },
+            name: Name::new("record")?,
             aliases: None,
             doc: None,
             fields: vec![
@@ -2032,10 +2011,7 @@ mod tests {
                     default: None,
                     aliases: None,
                     schema: Schema::Fixed(FixedSchema {
-                        name: Name {
-                            name: "fixed".to_owned(),
-                            namespace: None,
-                        },
+                        name: Name::new("fixed")?,
                         aliases: None,
                         doc: None,
                         size: 456,
@@ -2353,8 +2329,8 @@ mod tests {
 
         let schema = Schema::parse_str(schema)?;
         if let Schema::Record(RecordSchema { name, .. }) = schema {
-            assert_eq!(name.name, "name");
-            assert_eq!(name.namespace, Some("space".to_string()));
+            assert_eq!(name.name(), "name");
+            assert_eq!(name.namespace(), Some("space"));
         } else {
             panic!("Expected a record schema!");
         }
@@ -2380,7 +2356,7 @@ mod tests {
 
         let schema = Schema::parse_str(schema)?;
         if let Schema::Record(RecordSchema { name, .. }) = schema {
-            assert_eq!(name.namespace, Some("space1".to_string()));
+            assert_eq!(name.namespace(), Some("space1"));
         } else {
             panic!("Expected a record schema!");
         }
@@ -2406,7 +2382,7 @@ mod tests {
 
         let schema = Schema::parse_str(schema)?;
         if let Schema::Record(RecordSchema { name, .. }) = schema {
-            assert_eq!(name.namespace, Some("space2".to_string()));
+            assert_eq!(name.namespace(), Some("space2"));
         } else {
             panic!("Expected a record schema!");
         }
@@ -3236,9 +3212,9 @@ mod tests {
         assert_eq!(canonical_form, expected);
 
         let name = Name::new("my_name")?;
-        let fullname = name.fullname(Some("".to_string()));
+        let fullname = name.fullname(Some(""));
         assert_eq!(fullname, "my_name");
-        let qname = name.fully_qualified_name(&Some("".to_string())).to_string();
+        let qname = name.fully_qualified_name(Some("")).to_string();
         assert_eq!(qname, "my_name");
 
         Ok(())
@@ -3587,7 +3563,7 @@ mod tests {
         let name = Name::new(".my_name")?;
         let fullname = name.fullname(None);
         assert_eq!(fullname, "my_name");
-        let qname = name.fully_qualified_name(&None).to_string();
+        let qname = name.fully_qualified_name(None).to_string();
         assert_eq!(qname, "my_name");
 
         Ok(())
@@ -4489,7 +4465,7 @@ mod tests {
             })
         );
         assert_logged(
-            r#"Ignoring uuid logical type for a Fixed schema because its size (6) is not 16! Schema: Fixed(FixedSchema { name: Name { name: "FixedUUID", namespace: None }, size: 6, .. })"#,
+            r#"Ignoring uuid logical type for a Fixed schema because its size (6) is not 16! Schema: Fixed(FixedSchema { name: Name { name: "FixedUUID", .. }, size: 6, .. })"#,
         );
 
         Ok(())
@@ -4591,10 +4567,7 @@ mod tests {
             let mut lookup = BTreeMap::new();
             lookup.insert("value".to_owned(), 0);
             Schema::Record(RecordSchema {
-                name: Name {
-                    name: "LongList".to_owned(),
-                    namespace: None,
-                },
+                name: Name::new("LongList")?,
                 aliases: Some(vec![Alias::new("LinkedLongs").unwrap()]),
                 doc: None,
                 fields: vec![RecordField {
