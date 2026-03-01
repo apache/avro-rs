@@ -106,7 +106,7 @@ impl UnionSchema {
                     // TODO: Do this without the clone
                     value
                         .clone()
-                        .resolve_internal(schema, known_schemata, namespace, &None)
+                        .resolve_internal(schema, known_schemata, namespace, None)
                         .ok()
                         .map(|_| (index, schema))
                 } else {
@@ -130,7 +130,7 @@ impl UnionSchema {
                     // TODO: Do this without the clone
                     value
                         .clone()
-                        .resolve_internal(schema, known_schemata, namespace, &None)
+                        .resolve_internal(schema, known_schemata, namespace, None)
                         .is_ok()
                 })
         });
@@ -148,7 +148,7 @@ impl UnionSchema {
                     // TODO: Do this without the clone
                     value
                         .clone()
-                        .resolve_internal(schema, known_schemata, namespace, &None)
+                        .resolve_internal(schema, known_schemata, namespace, None)
                         .is_ok()
                 })
             }

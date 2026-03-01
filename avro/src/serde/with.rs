@@ -186,6 +186,7 @@ pub mod bytes_opt {
         None
     }
 
+    #[expect(clippy::ref_option, reason = "Required by the Serde API")]
     pub fn serialize<S, B>(bytes: &Option<B>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -343,6 +344,7 @@ pub mod fixed_opt {
         None
     }
 
+    #[expect(clippy::ref_option, reason = "Required by the Serde API")]
     pub fn serialize<S, B>(bytes: &Option<B>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -484,6 +486,7 @@ pub mod slice_opt {
         None
     }
 
+    #[expect(clippy::ref_option, reason = "Required by the Serde API")]
     pub fn serialize<S, B>(bytes: &Option<B>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,

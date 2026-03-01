@@ -106,7 +106,7 @@ impl RecordField {
             name,
             &enclosing_record.fullname(None),
             parser.get_parsed_schemas(),
-            &default,
+            default.as_ref(),
         )?;
 
         let aliases = field
@@ -137,7 +137,7 @@ impl RecordField {
         field_name: &str,
         record_name: &str,
         names: &Names,
-        default: &Option<Value>,
+        default: Option<&Value>,
     ) -> AvroResult<()> {
         if let Some(value) = default {
             let avro_value = types::Value::try_from(value.clone())?;
@@ -147,7 +147,7 @@ impl RecordField {
                     let resolved = schemas.iter().any(|schema| {
                         avro_value
                             .to_owned()
-                            .resolve_internal(schema, names, schema.namespace(), &None)
+                            .resolve_internal(schema, names, schema.namespace(), None)
                             .is_ok()
                     });
 
@@ -165,7 +165,7 @@ impl RecordField {
                 }
                 _ => {
                     let resolved = avro_value
-                        .resolve_internal(field_schema, names, field_schema.namespace(), &None)
+                        .resolve_internal(field_schema, names, field_schema.namespace(), None)
                         .is_ok();
 
                     if !resolved {

@@ -56,6 +56,7 @@ opt-level = "s"
 clippy.all = { level = "warn", priority = -1 }
 clippy.too_long_first_doc_paragraph = "warn"
 clippy.doc_markdown = "warn"
+clippy.ref_option = "warn"
 # TODO: Needs more work
 #clippy.missing_errors_doc = "warn"
 #clippy.missing_panics_doc = "warn"

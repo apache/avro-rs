@@ -69,6 +69,7 @@ pub mod serde_avro_bytes_opt {
         since = "0.22.0",
         note = "Use `apache_avro::serde::bytes_opt::serialize` instead"
     )]
+    #[expect(clippy::ref_option, reason = "Required by the Serde API")]
     pub fn serialize<S, B>(bytes: &Option<B>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -135,6 +136,7 @@ pub mod serde_avro_fixed_opt {
         since = "0.22.0",
         note = "Use `apache_avro::serde::fixed_opt::serialize` instead"
     )]
+    #[expect(clippy::ref_option, reason = "Required by the Serde API")]
     pub fn serialize<S, B>(bytes: &Option<B>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -201,6 +203,7 @@ pub mod serde_avro_slice_opt {
         since = "0.22.0",
         note = "Use `apache_avro::serde::slice_opt::serialize` instead"
     )]
+    #[expect(clippy::ref_option, reason = "Required by the Serde API")]
     pub fn serialize<S, B>(bytes: &Option<B>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,

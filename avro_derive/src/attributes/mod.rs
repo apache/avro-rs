@@ -202,7 +202,7 @@ pub enum With {
 impl With {
     fn from_avro_and_serde(
         avro: &avro::With,
-        serde: &Option<String>,
+        serde: Option<&str>,
         span: Span,
     ) -> Result<Self, syn::Error> {
         match &avro {
@@ -327,7 +327,7 @@ impl FieldOptions {
                 "`#[serde(skip_serializing)]` and `#[serde(skip_serializing_if)]` are incompatible with `#[avro(default = false)]`"
             ));
         }
-        let with = match With::from_avro_and_serde(&avro.with, &serde.with, span) {
+        let with = match With::from_avro_and_serde(&avro.with, serde.with.as_deref(), span) {
             Ok(with) => with,
             Err(error) => {
                 errors.push(error);

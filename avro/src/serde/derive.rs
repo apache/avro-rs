@@ -572,7 +572,10 @@ where
         Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace)).build()
     }
 
-    fn get_record_fields_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Option<Vec<RecordField>> {
+    fn get_record_fields_in_ctxt(
+        _: &mut HashSet<Name>,
+        _: NamespaceRef,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 }
@@ -588,7 +591,10 @@ where
         Schema::map(T::get_schema_in_ctxt(named_schemas, enclosing_namespace)).build()
     }
 
-    fn get_record_fields_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Option<Vec<RecordField>> {
+    fn get_record_fields_in_ctxt(
+        _: &mut HashSet<Name>,
+        _: NamespaceRef,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 }
@@ -611,7 +617,10 @@ where
         )
     }
 
-    fn get_record_fields_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Option<Vec<RecordField>> {
+    fn get_record_fields_in_ctxt(
+        _: &mut HashSet<Name>,
+        _: NamespaceRef,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 
@@ -645,7 +654,10 @@ impl AvroSchemaComponent for core::time::Duration {
         }
     }
 
-    fn get_record_fields_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Option<Vec<RecordField>> {
+    fn get_record_fields_in_ctxt(
+        _: &mut HashSet<Name>,
+        _: NamespaceRef,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 }
@@ -675,7 +687,10 @@ impl AvroSchemaComponent for uuid::Uuid {
         }
     }
 
-    fn get_record_fields_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Option<Vec<RecordField>> {
+    fn get_record_fields_in_ctxt(
+        _: &mut HashSet<Name>,
+        _: NamespaceRef,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 }
@@ -703,7 +718,10 @@ impl AvroSchemaComponent for u64 {
         }
     }
 
-    fn get_record_fields_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Option<Vec<RecordField>> {
+    fn get_record_fields_in_ctxt(
+        _: &mut HashSet<Name>,
+        _: NamespaceRef,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 }
@@ -731,7 +749,10 @@ impl AvroSchemaComponent for u128 {
         }
     }
 
-    fn get_record_fields_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Option<Vec<RecordField>> {
+    fn get_record_fields_in_ctxt(
+        _: &mut HashSet<Name>,
+        _: NamespaceRef,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 }
@@ -759,7 +780,10 @@ impl AvroSchemaComponent for i128 {
         }
     }
 
-    fn get_record_fields_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Option<Vec<RecordField>> {
+    fn get_record_fields_in_ctxt(
+        _: &mut HashSet<Name>,
+        _: NamespaceRef,
+    ) -> Option<Vec<RecordField>> {
         None
     }
 }
