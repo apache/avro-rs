@@ -63,7 +63,7 @@ regex-lite = { default-features = false, version = "0.1.9", features = ["std", "
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
-snap = { default-features = false, version = "1.1.0", optional = true }
+snap = { default-features = false, version = "1.1.1", optional = true }
 strum = { default-features = false, version = "0.28.0", features = ["derive"] }
 thiserror = { default-features = false, version = "2.0.18" }
 uuid = { workspace = true }
