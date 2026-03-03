@@ -99,8 +99,9 @@ pub use schema::Schema;
 pub use serde::{AvroSchema, AvroSchemaComponent, from_value, to_value};
 pub use uuid::Uuid;
 pub use writer::{
-    Clearable, GenericSingleObjectWriter, SpecificSingleObjectWriter, Writer, WriterBuilder,
-    to_avro_datum, to_avro_datum_schemata, write_avro_datum_ref,
+    Clearable, Writer, WriterBuilder,
+    datum::{to_avro_datum, to_avro_datum_schemata, write_avro_datum_ref},
+    single_object::{GenericSingleObjectWriter, SpecificSingleObjectWriter},
 };
 
 #[cfg(feature = "derive")]
