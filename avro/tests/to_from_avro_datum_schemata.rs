@@ -15,11 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use apache_avro::reader::datum::GenericDatumReader;
 use apache_avro::writer::datum::GenericDatumWriter;
-use apache_avro::{
-    Codec, Reader, Schema, Writer, from_avro_datum_reader_schemata, from_avro_datum_schemata,
-    types::Value,
-};
+use apache_avro::{Codec, Reader, Schema, Writer, types::Value};
 use apache_avro_test_helper::{TestResult, init};
 
 static SCHEMA_A_STR: &str = r#"{
@@ -59,7 +57,10 @@ fn test_avro_3683_multiple_schemata_to_from_avro_datum() -> TestResult {
         .write_value_to_vec(record.clone())?;
     assert_eq!(actual, expected);
 
-    let value = from_avro_datum_schemata(schema_b, schemata, &mut actual.as_slice(), None)?;
+    let value = GenericDatumReader::builder(schema_b)
+        .writer_schemata(schemata)?
+        .build()?
+        .read_value(&mut actual.as_slice())?;
     assert_eq!(value, record);
 
     Ok(())
@@ -86,13 +87,12 @@ fn avro_rs_106_test_multiple_schemata_to_from_avro_datum_with_resolution() -> Te
         .write_value_to_vec(record.clone())?;
     assert_eq!(actual, expected);
 
-    let value = from_avro_datum_reader_schemata(
-        schema_b,
-        schemata.clone(),
-        &mut actual.as_slice(),
-        Some(schema_b),
-        schemata,
-    )?;
+    let value = GenericDatumReader::builder(schema_b)
+        .writer_schemata(schemata.clone())?
+        .reader_schema(schema_b)
+        .reader_schemata(schemata)?
+        .build()?
+        .read_value(&mut actual.as_slice())?;
     assert_eq!(value, record);
 
     Ok(())

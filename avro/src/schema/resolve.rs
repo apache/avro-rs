@@ -23,7 +23,7 @@ use crate::schema::{
 use crate::{AvroResult, Error, Schema};
 use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ResolvedSchema<'s> {
     pub(super) names_ref: NamesRef<'s>,
     schemata: Vec<&'s Schema>,

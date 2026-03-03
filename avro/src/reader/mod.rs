@@ -18,14 +18,10 @@
 //! Logic handling reading from Avro format at user level.
 
 mod block;
+pub mod datum;
 pub mod single_object;
 
-use crate::{
-    AvroResult,
-    decode::{decode, decode_internal},
-    schema::{ResolvedSchema, Schema},
-    types::Value,
-};
+use crate::{AvroResult, schema::Schema, types::Value};
 use block::Block;
 use bon::bon;
 use std::{collections::HashMap, io::Read};
@@ -137,74 +133,6 @@ impl<R: Read> Iterator for Reader<'_, R> {
     }
 }
 
-/// Decode a `Value` encoded in Avro format given its `Schema` and anything implementing `io::Read`
-/// to read from.
-///
-/// In case a reader `Schema` is provided, schema resolution will also be performed.
-///
-/// **NOTE** This function has a quite small niche of usage and does NOT take care of reading the
-/// header and consecutive data blocks; use [`Reader`](struct.Reader.html) if you don't know what
-/// you are doing, instead.
-pub fn from_avro_datum<R: Read>(
-    writer_schema: &Schema,
-    reader: &mut R,
-    reader_schema: Option<&Schema>,
-) -> AvroResult<Value> {
-    let value = decode(writer_schema, reader)?;
-    match reader_schema {
-        Some(schema) => value.resolve(schema),
-        None => Ok(value),
-    }
-}
-
-/// Decode a `Value` from raw Avro data.
-///
-/// If the writer schema is incomplete, i.e. contains `Schema::Ref`s then it will use the provided
-/// schemata to resolve any dependencies.
-///
-/// When a reader `Schema` is provided, schema resolution will also be performed.
-pub fn from_avro_datum_schemata<R: Read>(
-    writer_schema: &Schema,
-    writer_schemata: Vec<&Schema>,
-    reader: &mut R,
-    reader_schema: Option<&Schema>,
-) -> AvroResult<Value> {
-    from_avro_datum_reader_schemata(
-        writer_schema,
-        writer_schemata,
-        reader,
-        reader_schema,
-        Vec::with_capacity(0),
-    )
-}
-
-/// Decode a `Value` from raw Avro data.
-///
-/// If the writer schema is incomplete, i.e. contains `Schema::Ref`s then it will use the provided
-/// schemata to resolve any dependencies.
-///
-/// When a reader `Schema` is provided, schema resolution will also be performed.
-pub fn from_avro_datum_reader_schemata<R: Read>(
-    writer_schema: &Schema,
-    writer_schemata: Vec<&Schema>,
-    reader: &mut R,
-    reader_schema: Option<&Schema>,
-    reader_schemata: Vec<&Schema>,
-) -> AvroResult<Value> {
-    let rs = ResolvedSchema::try_from(writer_schemata)?;
-    let value = decode_internal(writer_schema, rs.get_names(), None, reader)?;
-    match reader_schema {
-        Some(schema) => {
-            if reader_schemata.is_empty() {
-                value.resolve(schema)
-            } else {
-                value.resolve_schemata(schema, reader_schemata)
-            }
-        }
-        None => Ok(value),
-    }
-}
-
 /// Reads the marker bytes from Avro bytes generated earlier by a `Writer`
 pub fn read_marker(bytes: &[u8]) -> [u8; 16] {
     assert!(
@@ -219,11 +147,9 @@ pub fn read_marker(bytes: &[u8]) -> [u8; 16] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::from_value;
     use crate::types::Record;
     use apache_avro_test_helper::TestResult;
     use pretty_assertions::assert_eq;
-    use serde::Deserialize;
     use std::io::Cursor;
 
     const SCHEMA: &str = r#"
@@ -243,7 +169,6 @@ mod tests {
       ]
     }
     "#;
-    const UNION_SCHEMA: &str = r#"["null", "long"]"#;
     const ENCODED: &[u8] = &[
         79u8, 98u8, 106u8, 1u8, 4u8, 22u8, 97u8, 118u8, 114u8, 111u8, 46u8, 115u8, 99u8, 104u8,
         101u8, 109u8, 97u8, 222u8, 1u8, 123u8, 34u8, 116u8, 121u8, 112u8, 101u8, 34u8, 58u8, 34u8,
@@ -260,101 +185,6 @@ mod tests {
         6u8, 102u8, 111u8, 111u8, 84u8, 6u8, 98u8, 97u8, 114u8, 94u8, 61u8, 54u8, 221u8, 190u8,
         207u8, 108u8, 180u8, 158u8, 57u8, 114u8, 40u8, 173u8, 199u8, 228u8, 239u8,
     ];
-
-    #[test]
-    fn test_from_avro_datum() -> TestResult {
-        let schema = Schema::parse_str(SCHEMA)?;
-        let mut encoded: &'static [u8] = &[54, 6, 102, 111, 111];
-
-        let mut record = Record::new(&schema).unwrap();
-        record.put("a", 27i64);
-        record.put("b", "foo");
-        let expected = record.into();
-
-        assert_eq!(from_avro_datum(&schema, &mut encoded, None)?, expected);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_from_avro_datum_with_union_to_struct() -> TestResult {
-        const TEST_RECORD_SCHEMA_3240: &str = r#"
-    {
-      "type": "record",
-      "name": "test",
-      "fields": [
-        {
-          "name": "a",
-          "type": "long",
-          "default": 42
-        },
-        {
-          "name": "b",
-          "type": "string"
-        },
-        {
-            "name": "a_nullable_array",
-            "type": ["null", {"type": "array", "items": {"type": "string"}}],
-            "default": null
-        },
-        {
-            "name": "a_nullable_boolean",
-            "type": ["null", {"type": "boolean"}],
-            "default": null
-        },
-        {
-            "name": "a_nullable_string",
-            "type": ["null", {"type": "string"}],
-            "default": null
-        }
-      ]
-    }
-    "#;
-        #[derive(Default, Debug, Deserialize, PartialEq, Eq)]
-        struct TestRecord3240 {
-            a: i64,
-            b: String,
-            a_nullable_array: Option<Vec<String>>,
-            // we are missing the 'a_nullable_boolean' field to simulate missing keys
-            // a_nullable_boolean: Option<bool>,
-            a_nullable_string: Option<String>,
-        }
-
-        let schema = Schema::parse_str(TEST_RECORD_SCHEMA_3240)?;
-        let mut encoded: &'static [u8] = &[54, 6, 102, 111, 111];
-
-        let expected_record: TestRecord3240 = TestRecord3240 {
-            a: 27i64,
-            b: String::from("foo"),
-            a_nullable_array: None,
-            a_nullable_string: None,
-        };
-
-        let avro_datum = from_avro_datum(&schema, &mut encoded, None)?;
-        let parsed_record: TestRecord3240 = match &avro_datum {
-            Value::Record(_) => from_value::<TestRecord3240>(&avro_datum)?,
-            unexpected => {
-                panic!("could not map avro data to struct, found unexpected: {unexpected:?}")
-            }
-        };
-
-        assert_eq!(parsed_record, expected_record);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_null_union() -> TestResult {
-        let schema = Schema::parse_str(UNION_SCHEMA)?;
-        let mut encoded: &'static [u8] = &[2, 0];
-
-        assert_eq!(
-            from_avro_datum(&schema, &mut encoded, None)?,
-            Value::Union(1, Box::new(Value::Long(0)))
-        );
-
-        Ok(())
-    }
 
     #[test]
     fn test_reader_iterator() -> TestResult {
