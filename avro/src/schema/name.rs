@@ -81,6 +81,9 @@ impl Name {
         //   skipping that allocation.
         let name_ref = name.as_ref();
         let index_of_name = validate_schema_name(name_ref)?;
+        if index_of_name > name_ref.len() {
+            return Err(Details::InvalidSchemaNameValidatorImplementation.into());
+        }
 
         if index_of_name == 0
             && let Some(namespace) = enclosing_namespace
@@ -212,19 +215,27 @@ impl FromStr for Name {
 
 impl Debug for Name {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut debug = f.debug_struct("Name");
-        debug.field("name", &self.name());
-        if self.index_of_name != 0 {
-            debug.field("namespace", &self.namespace());
-            debug.finish()
+        if self.index_of_name > self.namespace_and_name.len() {
+            f.debug_tuple("Name").field(&"Invalid name!").finish()
         } else {
-            debug.finish_non_exhaustive()
+            let mut debug = f.debug_struct("Name");
+            debug.field("name", &self.name());
+            if self.index_of_name != 0 {
+                debug.field("namespace", &self.namespace());
+                debug.finish()
+            } else {
+                debug.finish_non_exhaustive()
+            }
         }
     }
 }
 
 impl Display for Name {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        assert!(
+            self.index_of_name <= self.namespace_and_name.len(),
+            "Invalid name used"
+        );
         f.write_str(&self.namespace_and_name)
     }
 }

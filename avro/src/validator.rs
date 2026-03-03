@@ -99,7 +99,7 @@ pub trait SchemaNameValidator: Send + Sync {
             .ok_or_else(|| Details::InvalidSchemaName(schema_name.to_string(), regex.as_str()))?;
         Ok(caps
             .name("name")
-            .expect("Regex has no group named `name`")
+            .ok_or(Details::InvalidSchemaNameValidatorImplementation)?
             .start())
     }
 }

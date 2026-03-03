@@ -637,6 +637,11 @@ pub enum Details {
 
     #[error("No key for value when serializing a map")]
     MapNoKey,
+
+    #[error(
+        "The implementation of `SchemaNameValidator` is incorrect, it returned an out-of-bounds index or provided a regex that did not capture a group named `name`"
+    )]
+    InvalidSchemaNameValidatorImplementation,
 }
 
 #[derive(thiserror::Error, PartialEq)]
