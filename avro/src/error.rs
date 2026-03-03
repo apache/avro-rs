@@ -639,7 +639,7 @@ pub enum Details {
     MapNoKey,
 
     #[error(
-        "The implementation of `SchemaNameValidator` is incorrect, it returned an out-of-bounds index or provided a regex that did not capture a group named `name`"
+        "The implementation of `SchemaNameValidator` is incorrect! It returned an out-of-bounds index or provided a regex that did not capture a group named `name`"
     )]
     InvalidSchemaNameValidatorImplementation,
 }
