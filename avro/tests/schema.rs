@@ -15,23 +15,24 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::{
-    collections::HashMap,
-    io::{Cursor, Read},
-};
-
+use apache_avro::writer::datum::GenericDatumWriter;
 use apache_avro::{
     Codec, Error, Reader, Schema, Writer,
     error::Details,
     from_avro_datum, from_value,
     schema::{EnumSchema, FixedSchema, Name, RecordField, RecordSchema},
-    to_avro_datum, to_value,
+    to_value,
     types::{Record, Value},
 };
 use apache_avro_test_helper::{
     TestResult,
     data::{DOC_EXAMPLES, OTHER_ATTRIBUTES_EXAMPLES, examples, valid_examples},
     init,
+};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    io::{Cursor, Read},
 };
 
 #[test]
@@ -857,7 +858,9 @@ fn avro_old_issue_47() -> TestResult {
     };
 
     let ser_value = to_value(record.clone())?;
-    let serialized_bytes = to_avro_datum(&schema, ser_value)?;
+    let serialized_bytes = GenericDatumWriter::builder(&schema)
+        .build()?
+        .write_value_to_vec(ser_value)?;
 
     let de_value = &from_avro_datum(&schema, &mut &*serialized_bytes, None)?;
     let deserialized_record = from_value::<MyRecord>(de_value)?;
@@ -869,9 +872,6 @@ fn avro_old_issue_47() -> TestResult {
 #[test]
 fn test_avro_3785_deserialize_namespace_with_nullable_type_containing_reference_type() -> TestResult
 {
-    use apache_avro::{from_avro_datum, to_avro_datum, types::Value};
-    use serde::{Deserialize, Serialize};
-
     #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
     pub struct BarUseParent {
         #[serde(rename = "barUse")]
@@ -978,12 +978,14 @@ fn test_avro_3785_deserialize_namespace_with_nullable_type_containing_reference_
         bar_init: Bar::Bar0,
         bar_use_parent: Some(BarUseParent { bar_use: Bar::Bar1 }),
     };
-    let avro_value = crate::to_value(foo1)?;
+    let avro_value = to_value(foo1)?;
     assert!(
         avro_value.validate(&writer_schema),
         "value is valid for schema",
     );
-    let datum = to_avro_datum(&writer_schema, avro_value)?;
+    let datum = GenericDatumWriter::builder(&writer_schema)
+        .build()?
+        .write_value_to_vec(avro_value)?;
     let mut x = &datum[..];
     let reader_schema = Schema::parse_str(reader_schema)?;
     let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;

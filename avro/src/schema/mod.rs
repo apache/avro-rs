@@ -1168,6 +1168,7 @@ fn field_ordering_position(field: &str) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::writer::datum::GenericDatumWriter;
     use crate::{error::Details, rabin::Rabin};
     use apache_avro_test_helper::{
         TestResult,
@@ -2992,7 +2993,9 @@ mod tests {
             avro_value.validate(&writer_schema),
             "value is valid for schema",
         );
-        let datum = crate::to_avro_datum(&writer_schema, avro_value)?;
+        let datum = GenericDatumWriter::builder(&writer_schema)
+            .build()?
+            .write_value_to_vec(avro_value)?;
         let mut x = &datum[..];
         let reader_schema = Schema::parse_str(reader_schema)?;
         let deser_value = crate::from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
@@ -3573,7 +3576,9 @@ mod tests {
             avro_value.validate(&writer_schema),
             "value is valid for schema",
         );
-        let datum = crate::to_avro_datum(&writer_schema, avro_value)?;
+        let datum = GenericDatumWriter::builder(&writer_schema)
+            .build()?
+            .write_value_to_vec(avro_value)?;
 
         // Now, attempt to deserialize using the reader schema.
         let reader_schema = Schema::parse(&reader_schema)?;

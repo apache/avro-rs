@@ -15,28 +15,124 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::io::Write;
-
+use bon::bon;
 use serde::Serialize;
+use std::io::Write;
 
 use crate::{
     AvroResult, Schema,
-    encode::{encode, encode_internal},
+    encode::encode_internal,
     error::Details,
-    schema::{NamesRef, ResolvedOwnedSchema, ResolvedSchema},
+    schema::{NamesRef, ResolvedSchema},
     serde::ser_schema::SchemaAwareWriteSerializer,
     types::Value,
 };
+
+pub struct GenericDatumWriter<'s> {
+    schema: &'s Schema,
+    resolved: ResolvedSchema<'s>,
+    validate: bool,
+}
+
+#[bon]
+impl<'s> GenericDatumWriter<'s> {
+    #[builder]
+    pub fn new(
+        #[builder(start_fn)] schema: &'s Schema,
+        resolved_schemata: Option<ResolvedSchema<'s>>,
+        #[builder(default = true)]
+        validate: bool,
+    ) -> AvroResult<Self> {
+        let resolved = if let Some(resolved) = resolved_schemata {
+            resolved
+        } else {
+            ResolvedSchema::try_from(schema)?
+        };
+        Ok(Self {
+            schema,
+            resolved,
+            validate,
+        })
+    }
+}
+
+impl<'s, S: generic_datum_writer_builder::State> GenericDatumWriterBuilder<'s, S> {
+    /// Set the schemata that will be used to resolve any references in the schema.
+    ///
+    /// This is equivalent to `.resolved_schemata(ResolvedSchema::new_with_schemata(schemata)?)`.
+    /// If you already have a [`ResolvedSchema`], use that function instead.
+    pub fn schemata(
+        self,
+        schemata: Vec<&'s Schema>,
+    ) -> AvroResult<
+        GenericDatumWriterBuilder<'s, generic_datum_writer_builder::SetResolvedSchemata<S>>,
+    >
+    where
+        S::ResolvedSchemata: generic_datum_writer_builder::IsUnset,
+    {
+        let resolved = ResolvedSchema::new_with_schemata(schemata)?;
+        Ok(self.resolved_schemata(resolved))
+    }
+}
+
+impl GenericDatumWriter<'_> {
+    /// Write a value to the writer.
+    pub fn write_value<W: Write, V: Into<Value>>(
+        &self,
+        writer: &mut W,
+        value: V,
+    ) -> AvroResult<usize> {
+        let value = value.into();
+        self.write_value_ref(writer, &value)
+    }
+
+    pub fn write_value_ref<W: Write>(&self, writer: &mut W, value: &Value) -> AvroResult<usize> {
+        if self.validate
+            && self.resolved.get_schemata().iter().all(|s| {
+                value
+                    .validate_internal(s, self.resolved.get_names(), None)
+                    .is_some()
+            })
+        {
+            return Err(Details::Validation.into());
+        }
+        encode_internal(value, self.schema, self.resolved.get_names(), None, writer)
+    }
+
+    /// Write a value to a [`Vec`].
+    pub fn write_value_to_vec<V: Into<Value>>(&self, value: V) -> AvroResult<Vec<u8>> {
+        let mut vec = Vec::new();
+        self.write_value(&mut vec, value)?;
+        Ok(vec)
+    }
+
+    pub fn write_ser<W: Write, T: Serialize>(
+        &self,
+        writer: &mut W,
+        value: &T,
+    ) -> AvroResult<usize> {
+        let mut serializer =
+            SchemaAwareWriteSerializer::new(writer, self.schema, self.resolved.get_names(), None);
+        value.serialize(&mut serializer)
+    }
+
+    pub fn write_ser_to_vec<T: Serialize>(&self, value: &T) -> AvroResult<Vec<u8>> {
+        let mut vec = Vec::new();
+        self.write_ser(&mut vec, value)?;
+        Ok(vec)
+    }
+}
 
 /// Encode a value into raw Avro data, also performs schema validation.
 ///
 /// **NOTE**: This function has a quite small niche of usage and does NOT generate headers and sync
 /// markers; use [`Writer`] to be fully Avro-compatible if you don't know what
 /// you are doing, instead.
+#[deprecated(since = "0.22.0", note = "Use GenericDatumWriter instead")]
 pub fn to_avro_datum<T: Into<Value>>(schema: &Schema, value: T) -> AvroResult<Vec<u8>> {
-    let mut buffer = Vec::new();
-    write_avro_datum(schema, value, &mut buffer)?;
-    Ok(buffer)
+    GenericDatumWriter::builder(schema)
+        .build()?
+        .write_value_to_vec(value)
 }
 
 /// Write the referenced [Serialize]able object to the provided [Write] object.
@@ -46,6 +142,7 @@ pub fn to_avro_datum<T: Into<Value>>(schema: &Schema, value: T) -> AvroResult<Ve
 /// **NOTE**: This function has a quite small niche of usage and does **NOT** generate headers and sync
 /// markers; use [`append_ser`](Writer::append_ser) to be fully Avro-compatible
 /// if you don't know what you are doing, instead.
+#[deprecated(since = "0.22.0", note = "Use GenericDatumWriter instead")]
 pub fn write_avro_datum_ref<T: Serialize, W: Write>(
     schema: &Schema,
     names: &NamesRef,
@@ -60,80 +157,20 @@ pub fn write_avro_datum_ref<T: Serialize, W: Write>(
 ///
 /// If the provided `schema` is incomplete then its dependencies must be
 /// provided in `schemata`
+#[deprecated(since = "0.22.0", note = "Use GenericDatumWriter instead")]
 pub fn to_avro_datum_schemata<T: Into<Value>>(
     schema: &Schema,
     schemata: Vec<&Schema>,
     value: T,
 ) -> AvroResult<Vec<u8>> {
-    let mut buffer = Vec::new();
-    write_avro_datum_schemata(schema, schemata, value, &mut buffer)?;
-    Ok(buffer)
-}
-
-/// Encode a value into raw Avro data, also performs schema validation.
-///
-/// This is an internal function which gets the bytes buffer where to write as parameter instead of
-/// creating a new one like `to_avro_datum`.
-pub(super) fn write_avro_datum<T: Into<Value>, W: Write>(
-    schema: &Schema,
-    value: T,
-    writer: &mut W,
-) -> AvroResult<()> {
-    let avro = value.into();
-    if !avro.validate(schema) {
-        return Err(Details::Validation.into());
-    }
-    encode(&avro, schema, writer)?;
-    Ok(())
-}
-
-pub(super) fn write_avro_datum_schemata<T: Into<Value>>(
-    schema: &Schema,
-    schemata: Vec<&Schema>,
-    value: T,
-    buffer: &mut Vec<u8>,
-) -> AvroResult<usize> {
-    let avro = value.into();
-    let rs = ResolvedSchema::try_from(schemata)?;
-    let names = rs.get_names();
-    let enclosing_namespace = schema.namespace();
-    if let Some(_err) = avro.validate_internal(schema, names, enclosing_namespace) {
-        return Err(Details::Validation.into());
-    }
-    encode_internal(&avro, schema, names, enclosing_namespace, buffer)
-}
-
-pub(super) fn write_value_ref_owned_resolved<W: Write>(
-    resolved_schema: &ResolvedOwnedSchema,
-    value: &Value,
-    writer: &mut W,
-) -> AvroResult<usize> {
-    let root_schema = resolved_schema.get_root_schema();
-    if let Some(reason) = value.validate_internal(
-        root_schema,
-        resolved_schema.get_names(),
-        root_schema.namespace(),
-    ) {
-        return Err(Details::ValidationWithReason {
-            value: value.clone(),
-            schema: root_schema.clone(),
-            reason,
-        }
-        .into());
-    }
-    encode_internal(
-        value,
-        root_schema,
-        resolved_schema.get_names(),
-        root_schema.namespace(),
-        writer,
-    )
+    GenericDatumWriter::builder(schema)
+        .schemata(schemata)?
+        .build()?
+        .write_value_to_vec(value)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use apache_avro_test_helper::TestResult;
 
     use crate::{
@@ -177,7 +214,11 @@ mod tests {
         zig_i64(3, &mut expected)?;
         expected.extend([b'f', b'o', b'o']);
 
-        assert_eq!(to_avro_datum(&schema, record)?, expected);
+        let written = GenericDatumWriter::builder(&schema)
+            .build()?
+            .write_value_to_vec(record)?;
+
+        assert_eq!(written, expected);
 
         Ok(())
     }
@@ -202,7 +243,9 @@ mod tests {
         zig_i64(3, &mut expected)?;
         expected.extend([b'f', b'o', b'o']);
 
-        let bytes = write_avro_datum_ref(&schema, &HashMap::new(), &data, &mut writer)?;
+        let bytes = GenericDatumWriter::builder(&schema)
+            .build()?
+            .write_ser(&mut writer, &data)?;
 
         assert_eq!(bytes, expected.len());
         assert_eq!(writer, expected);
@@ -219,7 +262,10 @@ mod tests {
         zig_i64(1, &mut expected)?;
         zig_i64(3, &mut expected)?;
 
-        assert_eq!(to_avro_datum(&schema, union)?, expected);
+        let written = GenericDatumWriter::builder(&schema)
+            .build()?
+            .write_value_to_vec(union)?;
+        assert_eq!(written, expected);
 
         Ok(())
     }
@@ -232,7 +278,10 @@ mod tests {
         let mut expected = Vec::new();
         zig_i64(0, &mut expected)?;
 
-        assert_eq!(to_avro_datum(&schema, union)?, expected);
+        let written = GenericDatumWriter::builder(&schema)
+            .build()?
+            .write_value_to_vec(union)?;
+        assert_eq!(written, expected);
 
         Ok(())
     }
@@ -249,8 +298,12 @@ mod tests {
         let schema = Schema::parse_str(schema_str)?;
         assert_eq!(&schema, expected_schema);
         // The serialized format should be the same as the schema.
-        let ser = to_avro_datum(&schema, value.clone())?;
-        let raw_ser = to_avro_datum(raw_schema, raw_value)?;
+        let ser = GenericDatumWriter::builder(&schema)
+            .build()?
+            .write_value_to_vec(value.clone())?;
+        let raw_ser = GenericDatumWriter::builder(raw_schema)
+            .build()?
+            .write_value_to_vec(raw_value)?;
         assert_eq!(ser, raw_ser);
 
         // Should deserialize from the schema into the logical type.
