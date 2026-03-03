@@ -27,7 +27,7 @@ use crate::{
 };
 use bigdecimal::BigDecimal;
 use serde::{Serialize, ser};
-use std::{borrow::Cow, cmp::Ordering, collections::HashMap, io::Write, str::FromStr};
+use std::{cmp::Ordering, collections::HashMap, io::Write, str::FromStr};
 
 const COLLECTION_SERIALIZER_ITEM_LIMIT: usize = 1024;
 const COLLECTION_SERIALIZER_DEFAULT_INIT_ITEM_CAPACITY: usize = 32;
@@ -633,13 +633,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     }
 
     fn get_ref_schema(&self, name: &'s Name) -> Result<&'s Schema, Error> {
-        let full_name = match name.namespace {
-            Some(_) => Cow::Borrowed(name),
-            None => Cow::Owned(Name {
-                name: name.name.clone(),
-                namespace: self.enclosing_namespace.clone(),
-            }),
-        };
+        let full_name = name.fully_qualified_name(self.enclosing_namespace.as_deref());
 
         let ref_schema = self.names.get(full_name.as_ref()).copied();
 
@@ -799,7 +793,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         };
 
         match schema {
-            Schema::Fixed(fixed) if fixed.size == 16 && fixed.name.name == "i128" => {
+            Schema::Fixed(fixed) if fixed.size == 16 && fixed.name.name() == "i128" => {
                 self.writer
                     .write_all(&value.to_le_bytes())
                     .map_err(Details::WriteBytes)?;
@@ -808,7 +802,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
             Schema::Union(union_schema) => {
                 for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
                     match variant_schema {
-                        Schema::Fixed(fixed) if fixed.size == 16 && fixed.name.name == "i128" => {
+                        Schema::Fixed(fixed) if fixed.size == 16 && fixed.name.name() == "i128" => {
                             encode_int(i as i32, &mut *self.writer)?;
                             return self.serialize_i128_with_schema(value, variant_schema);
                         }
@@ -953,7 +947,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                     i64::try_from(value).map_err(|cause| create_error(cause.to_string()))?;
                 encode_long(long_value, &mut self.writer)
             }
-            Schema::Fixed(fixed) if fixed.size == 8 && fixed.name.name == "u64" => {
+            Schema::Fixed(fixed) if fixed.size == 8 && fixed.name.name() == "u64" => {
                 self.writer
                     .write_all(&value.to_le_bytes())
                     .map_err(Details::WriteBytes)?;
@@ -976,7 +970,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                             encode_int(i as i32, &mut *self.writer)?;
                             return self.serialize_u64_with_schema(value, variant_schema);
                         }
-                        Schema::Fixed(fixed) if fixed.size == 8 && fixed.name.name == "u64" => {
+                        Schema::Fixed(fixed) if fixed.size == 8 && fixed.name.name() == "u64" => {
                             encode_int(i as i32, &mut *self.writer)?;
                             return self.serialize_u64_with_schema(value, variant_schema);
                         }
@@ -1002,7 +996,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
         };
 
         match schema {
-            Schema::Fixed(fixed) if fixed.size == 16 && fixed.name.name == "u128" => {
+            Schema::Fixed(fixed) if fixed.size == 16 && fixed.name.name() == "u128" => {
                 self.writer
                     .write_all(&value.to_le_bytes())
                     .map_err(Details::WriteBytes)?;
@@ -1011,7 +1005,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
             Schema::Union(union_schema) => {
                 for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
                     match variant_schema {
-                        Schema::Fixed(fixed) if fixed.size == 16 && fixed.name.name == "u128" => {
+                        Schema::Fixed(fixed) if fixed.size == 16 && fixed.name.name() == "u128" => {
                             encode_int(i as i32, &mut *self.writer)?;
                             return self.serialize_u128_with_schema(value, variant_schema);
                         }
@@ -1112,7 +1106,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
 
         match schema {
             Schema::String | Schema::Bytes => self.write_bytes(String::from(value).as_bytes()),
-            Schema::Fixed(fixed) if fixed.size == 4 && fixed.name.name == "char" => {
+            Schema::Fixed(fixed) if fixed.size == 4 && fixed.name.name() == "char" => {
                 self.writer
                     .write_all(&u32::from(value).to_le_bytes())
                     .map_err(Details::WriteBytes)?;
@@ -1125,7 +1119,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                             encode_int(i as i32, &mut *self.writer)?;
                             return self.serialize_char_with_schema(value, variant_schema);
                         }
-                        Schema::Fixed(fixed) if fixed.size == 4 && fixed.name.name == "char" => {
+                        Schema::Fixed(fixed) if fixed.size == 4 && fixed.name.name() == "char" => {
                             encode_int(i as i32, &mut *self.writer)?;
                             return self.serialize_char_with_schema(value, variant_schema);
                         }
@@ -1795,7 +1789,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
                     match variant_schema {
                         Schema::Record(inner)
-                            if inner.fields.len() == len && inner.name.name == name =>
+                            if inner.fields.len() == len && inner.name.name() == name =>
                         {
                             encode_int(i as i32, &mut *self.writer)?;
                             return self.serialize_struct_with_schema(name, len, variant_schema);

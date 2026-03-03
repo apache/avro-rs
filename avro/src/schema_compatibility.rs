@@ -182,11 +182,11 @@ impl Checker {
         // Compare unqualified names if the schemas have them
         if let Some(w_name) = writers_schema.name()
             && let Some(r_name) = readers_schema.name()
-            && w_name.name != r_name.name
+            && w_name.name() != r_name.name()
         {
             return Err(CompatibilityError::NameMismatch {
-                writer_name: w_name.name.clone(),
-                reader_name: r_name.name.clone(),
+                writer_name: w_name.name().into(),
+                reader_name: r_name.name().into(),
             });
         }
 

@@ -18,7 +18,7 @@
 use crate::error::Details;
 use crate::schema::{
     Alias, Aliases, ArraySchema, DecimalMetadata, DecimalSchema, EnumSchema, FixedSchema,
-    MapSchema, Name, Names, Namespace, Precision, RecordField, RecordSchema, Scale, Schema,
+    MapSchema, Name, Names, NamespaceRef, Precision, RecordField, RecordSchema, Scale, Schema,
     SchemaKind, UnionSchema, UuidSchema,
 };
 use crate::types;
@@ -61,7 +61,7 @@ impl Parser {
     /// Create a `Schema` from a string representing a JSON Avro schema.
     pub(super) fn parse_str(&mut self, input: &str) -> AvroResult<Schema> {
         let value = serde_json::from_str(input).map_err(Details::ParseSchemaJson)?;
-        self.parse(&value, &None)
+        self.parse(&value, None)
     }
 
     /// Create an array of `Schema`s from an iterator of JSON Avro schemas.
@@ -94,7 +94,7 @@ impl Parser {
                 .input_schemas
                 .remove_entry(&next_name)
                 .expect("Key unexpectedly missing");
-            let parsed = self.parse(&value, &None)?;
+            let parsed = self.parse(&value, None)?;
             self.parsed_schemas
                 .insert(self.get_schema_type_name(name, value), parsed);
         }
@@ -105,7 +105,7 @@ impl Parser {
     pub(super) fn parse(
         &mut self,
         value: &Value,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> AvroResult<Schema> {
         match *value {
             Value::String(ref t) => self.parse_known_schema(t.as_str(), enclosing_namespace),
@@ -119,7 +119,7 @@ impl Parser {
     fn parse_known_schema(
         &mut self,
         name: &str,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> AvroResult<Schema> {
         match name {
             "null" => Ok(Schema::Null),
@@ -147,7 +147,7 @@ impl Parser {
     pub(super) fn fetch_schema_ref(
         &mut self,
         name: &str,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> AvroResult<Schema> {
         fn get_schema_ref(parsed: &Schema) -> Schema {
             match parsed {
@@ -160,8 +160,7 @@ impl Parser {
             }
         }
 
-        let name = Name::new(name)?;
-        let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
+        let fully_qualified_name = Name::new_with_enclosing_namespace(name, enclosing_namespace)?;
 
         if self.parsed_schemas.contains_key(&fully_qualified_name) {
             return Ok(Schema::Ref {
@@ -173,9 +172,11 @@ impl Parser {
         }
 
         // For good error reporting we add this check
-        match name.name.as_str() {
+        match fully_qualified_name.name() {
             "record" | "enum" | "fixed" => {
-                return Err(Details::InvalidSchemaRecord(name.to_string()).into());
+                return Err(
+                    Details::InvalidSchemaRecord(fully_qualified_name.name().to_string()).into(),
+                );
             }
             _ => (),
         }
@@ -194,9 +195,11 @@ impl Parser {
             })?;
 
         // parsing a full schema from inside another schema. Other full schema will not inherit namespace
-        let parsed = self.parse(&value, &None)?;
-        self.parsed_schemas
-            .insert(self.get_schema_type_name(name, value), parsed.clone());
+        let parsed = self.parse(&value, None)?;
+        self.parsed_schemas.insert(
+            self.get_schema_type_name(fully_qualified_name, value),
+            parsed.clone(),
+        );
 
         Ok(get_schema_ref(&parsed))
     }
@@ -248,13 +251,13 @@ impl Parser {
     pub(super) fn parse_complex(
         &mut self,
         complex: &Map<String, Value>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> AvroResult<Schema> {
         // Try to parse this as a native complex type.
         fn parse_as_native_complex(
             complex: &Map<String, Value>,
             parser: &mut Parser,
-            enclosing_namespace: &Namespace,
+            enclosing_namespace: NamespaceRef,
         ) -> AvroResult<Schema> {
             match complex.get("type") {
                 Some(value) => match value {
@@ -476,11 +479,11 @@ impl Parser {
         self.resolving_schemas
             .insert(name.clone(), resolving_schema.clone());
 
-        let namespace = &name.namespace;
+        let namespace = name.namespace();
 
         if let Some(aliases) = aliases {
             aliases.iter().for_each(|alias| {
-                let alias_fullname = alias.fully_qualified_name(namespace);
+                let alias_fullname = alias.fully_qualified_name(namespace).into_owned();
                 self.resolving_schemas
                     .insert(alias_fullname, resolving_schema.clone());
             });
@@ -499,13 +502,14 @@ impl Parser {
             .insert(fully_qualified_name.clone(), schema.clone());
         self.resolving_schemas.remove(fully_qualified_name);
 
-        let namespace = &fully_qualified_name.namespace;
+        let namespace = fully_qualified_name.namespace();
 
         if let Some(aliases) = aliases {
             aliases.iter().for_each(|alias| {
                 let alias_fullname = alias.fully_qualified_name(namespace);
                 self.resolving_schemas.remove(&alias_fullname);
-                self.parsed_schemas.insert(alias_fullname, schema.clone());
+                self.parsed_schemas
+                    .insert(alias_fullname.into_owned(), schema.clone());
             });
         }
     }
@@ -514,13 +518,12 @@ impl Parser {
     fn get_already_seen_schema(
         &self,
         complex: &Map<String, Value>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> Option<&Schema> {
         match complex.get("type") {
             Some(Value::String(typ)) => {
-                let name = Name::new(typ.as_str())
-                    .unwrap()
-                    .fully_qualified_name(enclosing_namespace);
+                let name =
+                    Name::new_with_enclosing_namespace(typ.as_str(), enclosing_namespace).unwrap();
                 self.resolving_schemas
                     .get(&name)
                     .or_else(|| self.parsed_schemas.get(&name))
@@ -533,7 +536,7 @@ impl Parser {
     fn parse_record(
         &mut self,
         complex: &Map<String, Value>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> AvroResult<Schema> {
         let fields_opt = complex.get("fields");
 
@@ -545,7 +548,7 @@ impl Parser {
 
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
         let aliases =
-            self.fix_aliases_namespace(complex.aliases(), &fully_qualified_name.namespace);
+            self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace());
 
         let mut lookup = BTreeMap::new();
 
@@ -607,7 +610,7 @@ impl Parser {
     fn parse_enum(
         &mut self,
         complex: &Map<String, Value>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> AvroResult<Schema> {
         let symbols_opt = complex.get("symbols");
 
@@ -619,7 +622,7 @@ impl Parser {
 
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
         let aliases =
-            self.fix_aliases_namespace(complex.aliases(), &fully_qualified_name.namespace);
+            self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace());
 
         let symbols: Vec<String> = symbols_opt
             .and_then(|v| v.as_array())
@@ -684,7 +687,7 @@ impl Parser {
     fn parse_array(
         &mut self,
         complex: &Map<String, Value>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> AvroResult<Schema> {
         let items = complex
             .get("items")
@@ -721,7 +724,7 @@ impl Parser {
     fn parse_map(
         &mut self,
         complex: &Map<String, Value>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> AvroResult<Schema> {
         let types = complex
             .get("values")
@@ -759,7 +762,7 @@ impl Parser {
     fn parse_union(
         &mut self,
         items: &[Value],
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> AvroResult<Schema> {
         items
             .iter()
@@ -787,7 +790,7 @@ impl Parser {
     fn parse_fixed(
         &mut self,
         complex: &Map<String, Value>,
-        enclosing_namespace: &Namespace,
+        enclosing_namespace: NamespaceRef,
     ) -> AvroResult<Schema> {
         let size_opt = complex.get("size");
         if size_opt.is_none()
@@ -810,7 +813,7 @@ impl Parser {
 
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
         let aliases =
-            self.fix_aliases_namespace(complex.aliases(), &fully_qualified_name.namespace);
+            self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace());
 
         let schema = Schema::Fixed(FixedSchema {
             name: fully_qualified_name.clone(),
@@ -833,7 +836,7 @@ impl Parser {
     fn fix_aliases_namespace(
         &self,
         aliases: Option<Vec<String>>,
-        namespace: &Namespace,
+        namespace: NamespaceRef,
     ) -> Aliases {
         aliases.map(|aliases| {
             aliases
@@ -856,7 +859,7 @@ impl Parser {
     fn get_schema_type_name(&self, name: Name, value: Value) -> Name {
         match value.get("type") {
             Some(Value::Object(complex_type)) => match complex_type.name() {
-                Some(name) => Name::new(name.as_str()).unwrap(),
+                Some(name) => Name::new(name).unwrap(),
                 _ => name,
             },
             _ => name,
