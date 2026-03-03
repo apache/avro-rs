@@ -69,7 +69,7 @@ impl Debug for RecordField {
             debug.field("custom_attributes", &self.custom_attributes);
         }
         if self.doc.is_none()
-            || !self.aliases.is_empty()
+            || self.aliases.is_empty()
             || self.default.is_none()
             || self.custom_attributes.is_empty()
         {

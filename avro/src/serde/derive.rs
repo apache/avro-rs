@@ -191,7 +191,7 @@ use std::collections::{HashMap, HashSet};
 /// 1. In combination with `#[serde(with = "path::to::module)]`
 ///
 ///    To get the schema, it will call the functions `fn get_schema_in_ctxt(&mut HashSet<Name>, &Namespace) -> Schema`
-///    and `fn get_record_fields_in_ctxt(usize, &mut HashSet<Name>, &Namespace) -> Option<Vec<RecordField>>` in the module provided
+///    and `fn get_record_fields_in_ctxt(&mut HashSet<Name>, &Namespace) -> Option<Vec<RecordField>>` in the module provided
 ///    to the Serde attribute. See [`AvroSchemaComponent`] for details on how to implement those
 ///    functions.
 ///

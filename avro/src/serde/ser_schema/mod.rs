@@ -379,7 +379,11 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
         T: ?Sized + ser::Serialize,
     {
         if let Some(position) = self.record_schema.lookup.get(key).copied() {
-            let field = &self.record_schema.fields[position];
+            let field = self
+                .record_schema
+                .fields
+                .get(position)
+                .ok_or_else(|| Details::FieldName(String::from(key)))?;
             self.serialize_next_field(field, position, value)
                 .map_err(|e| {
                     Details::SerializeRecordFieldWithSchema {
