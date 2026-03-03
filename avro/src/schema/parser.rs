@@ -560,22 +560,17 @@ impl Parser {
                 fields
                     .iter()
                     .filter_map(|field| field.as_object())
-                    .enumerate()
-                    .map(|(position, field)| {
-                        RecordField::parse(field, position, self, &fully_qualified_name)
-                    })
+                    .map(|field| RecordField::parse(field, self, &fully_qualified_name))
                     .collect::<Result<_, _>>()
             })?;
 
-        for field in &fields {
-            if let Some(_old) = lookup.insert(field.name.clone(), field.position) {
+        for (position, field) in fields.iter().enumerate() {
+            if let Some(_old) = lookup.insert(field.name.clone(), position) {
                 return Err(Details::FieldNameDuplicate(field.name.clone()).into());
             }
 
-            if let Some(ref field_aliases) = field.aliases {
-                for alias in field_aliases {
-                    lookup.insert(alias.clone(), field.position);
-                }
+            for alias in &field.aliases {
+                lookup.insert(alias.clone(), position);
             }
         }
 

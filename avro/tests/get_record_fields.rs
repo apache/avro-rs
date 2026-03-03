@@ -33,7 +33,7 @@ fn avro_rs_448_default_get_record_fields_no_recursion() -> TestResult {
 
     let mut named_schemas = HashSet::new();
     let fields =
-        get_record_fields_in_ctxt(0, &mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
+        get_record_fields_in_ctxt(&mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
 
     assert_eq!(fields.len(), 2);
     assert!(
@@ -53,7 +53,7 @@ fn avro_rs_448_default_get_record_fields_no_recursion() -> TestResult {
     );
 
     let fields =
-        get_record_fields_in_ctxt(0, &mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
+        get_record_fields_in_ctxt(&mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
     assert_eq!(fields.len(), 2);
     assert_eq!(
         named_schemas.len(),
@@ -74,7 +74,7 @@ fn avro_rs_448_default_get_record_fields_recursion() -> TestResult {
 
     let mut named_schemas = HashSet::new();
     let fields =
-        get_record_fields_in_ctxt(0, &mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
+        get_record_fields_in_ctxt(&mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
 
     assert_eq!(fields.len(), 2);
     assert_eq!(
@@ -91,59 +91,13 @@ fn avro_rs_448_default_get_record_fields_recursion() -> TestResult {
     assert_eq!(named_schemas.len(), 1);
 
     let fields =
-        get_record_fields_in_ctxt(0, &mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
+        get_record_fields_in_ctxt(&mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
     assert_eq!(fields.len(), 2);
     assert_eq!(
         named_schemas.len(),
         1,
         "Name shouldn't have been removed: {named_schemas:?}"
     );
-
-    Ok(())
-}
-
-#[test]
-fn avro_rs_448_default_get_record_fields_position() -> TestResult {
-    #[derive(apache_avro_derive::AvroSchema)]
-    struct Foo {
-        _a: i32,
-        _b: String,
-    }
-
-    let mut named_schemas = HashSet::new();
-    let fields =
-        get_record_fields_in_ctxt(10, &mut named_schemas, &None, Foo::get_schema_in_ctxt).unwrap();
-
-    assert_eq!(fields.len(), 2);
-    assert!(
-        named_schemas.is_empty(),
-        "Name shouldn't have been added: {named_schemas:?}"
-    );
-    let positions = fields.into_iter().map(|f| f.position).collect::<Vec<_>>();
-    assert_eq!(positions.as_slice(), &[10, 11][..]);
-
-    // Insert Foo into named_schemas
-    match Foo::get_schema_in_ctxt(&mut named_schemas, &None) {
-        Schema::Record(_) => {}
-        schema => panic!("Expected a record got {schema:?}"),
-    }
-    assert_eq!(
-        named_schemas.len(),
-        1,
-        "Name should have been added: {named_schemas:?}"
-    );
-
-    let fields =
-        get_record_fields_in_ctxt(5043, &mut named_schemas, &None, Foo::get_schema_in_ctxt)
-            .unwrap();
-    assert_eq!(fields.len(), 2);
-    assert_eq!(
-        named_schemas.len(),
-        1,
-        "Name shouldn't have been removed: {named_schemas:?}"
-    );
-    let positions = fields.into_iter().map(|f| f.position).collect::<Vec<_>>();
-    assert_eq!(positions.as_slice(), &[5043, 5044][..]);
 
     Ok(())
 }

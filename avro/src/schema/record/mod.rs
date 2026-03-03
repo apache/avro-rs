@@ -16,7 +16,7 @@
 // under the License.
 
 mod field;
-pub use field::{RecordField, RecordFieldBuilder, RecordFieldOrder};
+pub use field::{RecordField, RecordFieldBuilder};
 
 mod schema;
 pub use schema::{RecordSchema, RecordSchemaBuilder};

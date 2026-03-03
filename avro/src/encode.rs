@@ -301,11 +301,10 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
                 for schema_field in schema_fields.iter() {
                     let name = &schema_field.name;
                     let value_opt = lookup.get(name).or_else(|| {
-                        if let Some(aliases) = &schema_field.aliases {
-                            aliases.iter().find_map(|alias| lookup.get(alias))
-                        } else {
-                            None
-                        }
+                        schema_field
+                            .aliases
+                            .iter()
+                            .find_map(|alias| lookup.get(alias))
                     });
 
                     if let Some(value) = value_opt {
