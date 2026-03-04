@@ -28,6 +28,11 @@ use crate::{
     types::Value,
 };
 
+/// Writer for writing raw Avro data.
+///
+/// This is most likely not what you need. Most users should use [`Writer`][crate::Writer],
+/// [`GenericSingleObjectWriter`][crate::GenericSingleObjectWriter], or
+/// [`SpecificSingleObjectWriter`][crate::SpecificSingleObjectWriter] instead.
 pub struct GenericDatumWriter<'s> {
     schema: &'s Schema,
     resolved: ResolvedSchema<'s>,
@@ -36,11 +41,24 @@ pub struct GenericDatumWriter<'s> {
 
 #[bon]
 impl<'s> GenericDatumWriter<'s> {
+    /// Configure a new writer.
     #[builder]
     pub fn new(
-        #[builder(start_fn)] schema: &'s Schema,
+        /// The schema for the data that will be written
+        #[builder(start_fn)]
+        schema: &'s Schema,
+        /// Already resolved schemata that will be used to resolve references in the writer's schema.
+        ///
+        /// You can also use [`Self::schemata`] instead.
         resolved_schemata: Option<ResolvedSchema<'s>>,
-        #[builder(default = true)] validate: bool,
+        /// Validate values against the writer schema before writing them.
+        ///
+        /// Defaults to `true`.
+        ///
+        /// Setting this to `false` and writing values that don't match the schema will make the
+        /// written data unreadable.
+        #[builder(default = true)]
+        validate: bool,
     ) -> AvroResult<Self> {
         let resolved = if let Some(resolved) = resolved_schemata {
             resolved
@@ -85,13 +103,12 @@ impl GenericDatumWriter<'_> {
         self.write_value_ref(writer, &value)
     }
 
+    /// Write a value to the writer.
     pub fn write_value_ref<W: Write>(&self, writer: &mut W, value: &Value) -> AvroResult<usize> {
         if self.validate
-            && self.resolved.get_schemata().iter().all(|s| {
-                value
-                    .validate_internal(s, self.resolved.get_names(), None)
-                    .is_some()
-            })
+            && value
+                .validate_internal(self.schema, self.resolved.get_names(), None)
+                .is_some()
         {
             return Err(Details::Validation.into());
         }
@@ -105,6 +122,7 @@ impl GenericDatumWriter<'_> {
         Ok(vec)
     }
 
+    /// Serialize `T` to the writer.
     pub fn write_ser<W: Write, T: Serialize>(
         &self,
         writer: &mut W,
@@ -115,6 +133,7 @@ impl GenericDatumWriter<'_> {
         value.serialize(&mut serializer)
     }
 
+    /// Serialize `T` to a [`Vec`].
     pub fn write_ser_to_vec<T: Serialize>(&self, value: &T) -> AvroResult<Vec<u8>> {
         let mut vec = Vec::new();
         self.write_ser(&mut vec, value)?;
@@ -122,6 +141,15 @@ impl GenericDatumWriter<'_> {
     }
 }
 
+/// Deprecated. Use [`GenericDatumWriter`] instead.
+///
+/// This is equivalent to:
+/// ```ignore
+/// GenericDatumWriter::builder(schema)
+///     .build()?
+///     .write_value_to_vec(value)
+/// ```
+///
 /// Encode a value into raw Avro data, also performs schema validation.
 ///
 /// **NOTE**: This function has a quite small niche of usage and does NOT generate headers and sync
@@ -136,12 +164,13 @@ pub fn to_avro_datum<T: Into<Value>>(schema: &Schema, value: T) -> AvroResult<Ve
 
 /// Write the referenced [Serialize]able object to the provided [Write] object.
 ///
+/// It is recommended to use [`GenericDatumWriter`] instead.
+///
 /// Returns a result with the number of bytes written.
 ///
 /// **NOTE**: This function has a quite small niche of usage and does **NOT** generate headers and sync
 /// markers; use [`append_ser`](Writer::append_ser) to be fully Avro-compatible
 /// if you don't know what you are doing, instead.
-#[deprecated(since = "0.22.0", note = "Use GenericDatumWriter instead")]
 pub fn write_avro_datum_ref<T: Serialize, W: Write>(
     schema: &Schema,
     names: &NamesRef,
@@ -152,6 +181,16 @@ pub fn write_avro_datum_ref<T: Serialize, W: Write>(
     data.serialize(&mut serializer)
 }
 
+/// Deprecated. Use [`GenericDatumWriter`] instead.
+///
+/// This is equivalent to:
+/// ```ignore
+/// GenericDatumWriter::builder(schema)
+///     .schemata(schemata)?
+///     .build()?
+///     .write_value_to_vec(value)
+/// ```
+///
 /// Encode a value into raw Avro data, also performs schema validation.
 ///
 /// If the provided `schema` is incomplete then its dependencies must be
