@@ -40,8 +40,7 @@ impl<'s> GenericDatumWriter<'s> {
     pub fn new(
         #[builder(start_fn)] schema: &'s Schema,
         resolved_schemata: Option<ResolvedSchema<'s>>,
-        #[builder(default = true)]
-        validate: bool,
+        #[builder(default = true)] validate: bool,
     ) -> AvroResult<Self> {
         let resolved = if let Some(resolved) = resolved_schemata {
             resolved
