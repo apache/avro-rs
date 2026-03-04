@@ -380,10 +380,8 @@ impl Value {
         let rs = ResolvedSchema::try_from(schemata.clone())
             .expect("Schemata didn't successfully resolve");
         let schemata_len = schemata.len();
-        schemata.iter().any(|schema| {
-            let enclosing_namespace = schema.namespace();
-
-            match self.validate_internal(schema, rs.get_names(), enclosing_namespace) {
+        schemata.iter().any(
+            |schema| match self.validate_internal(schema, rs.get_names(), None) {
                 Some(reason) => {
                     let log_message =
                         format!("Invalid value: {self:?} for schema: {schema:?}. Reason: {reason}");
@@ -395,8 +393,8 @@ impl Value {
                     false
                 }
                 None => true,
-            }
-        })
+            },
+        )
     }
 
     fn accumulate(accumulator: Option<String>, other: Option<String>) -> Option<String> {
