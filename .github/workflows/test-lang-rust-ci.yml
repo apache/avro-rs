@@ -62,8 +62,14 @@ jobs:
 
     steps:
       - uses: taiki-e/install-action@v2
+        if: matrix.rust == 'nightly'
         with:
-          tool: cargo-rdme,cargo-expand
+          tool: cargo-expand
+
+      - uses: taiki-e/install-action@v2
+        if: matrix.rust == 'stable' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
+        with:
+          tool: cargo-rdme
 
       - name: Checkout
         uses: actions/checkout@v6
