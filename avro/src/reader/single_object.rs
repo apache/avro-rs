@@ -19,8 +19,9 @@ use crate::decode::decode_internal;
 use crate::error::Details;
 use crate::headers::{HeaderBuilder, RabinFingerprintHeader};
 use crate::schema::ResolvedOwnedSchema;
+use crate::serde::deser_schema::{Config, SchemaAwareDeserializer};
 use crate::types::Value;
-use crate::{AvroResult, AvroSchema, Schema, from_value};
+use crate::{AvroResult, AvroSchema, Schema};
 use serde::de::DeserializeOwned;
 use std::io::Read;
 use std::marker::PhantomData;
@@ -68,6 +69,30 @@ impl GenericSingleObjectReader {
             Err(io_error) => Err(Details::ReadHeader(io_error).into()),
         }
     }
+
+    pub fn read_deser<R: Read, T: DeserializeOwned>(&self, reader: &mut R) -> AvroResult<T> {
+        let mut header = vec![0; self.expected_header.len()];
+        match reader.read_exact(&mut header) {
+            Ok(_) => {
+                if self.expected_header == header {
+                    T::deserialize(SchemaAwareDeserializer::new(
+                        reader,
+                        self.write_schema.get_root_schema(),
+                        Config {
+                            names: self.write_schema.get_names(),
+                            human_readable: false,
+                        },
+                    )?)
+                } else {
+                    Err(
+                        Details::SingleObjectHeaderMismatch(self.expected_header.clone(), header)
+                            .into(),
+                    )
+                }
+            }
+            Err(io_error) => Err(Details::ReadHeader(io_error).into()),
+        }
+    }
 }
 
 pub struct SpecificSingleObjectReader<T>
@@ -104,7 +129,7 @@ where
     T: AvroSchema + DeserializeOwned,
 {
     pub fn read<R: Read>(&self, reader: &mut R) -> AvroResult<T> {
-        from_value::<T>(&self.inner.read_value(reader)?)
+        self.inner.read_deser(reader)
     }
 }
 
@@ -131,7 +156,7 @@ mod tests {
             let schema = r#"
             {
                 "type":"record",
-                "name":"TestSingleObjectWrtierSerialize",
+                "name":"TestSingleObjectReader",
                 "fields":[
                     {
                         "name":"a",

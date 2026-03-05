@@ -101,6 +101,10 @@ pub use reader::{
     single_object::{GenericSingleObjectReader, SpecificSingleObjectReader},
 };
 pub use schema::Schema;
+#[expect(
+    deprecated,
+    reason = "Still need to export it until we remove it completely"
+)]
 pub use serde::{AvroSchema, AvroSchemaComponent, from_value, to_value};
 pub use uuid::Uuid;
 #[expect(

@@ -92,8 +92,8 @@ pub struct ContainerAttributes {
     #[darling(default)]
     pub rename_all: RenameAll,
     /// Rename all the fields of the struct variants in this enum.
-    #[darling(default, rename = "rename_all_fields")]
-    pub _rename_all_fields: RenameAll,
+    #[darling(default)]
+    pub rename_all_fields: RenameAll,
     /// Error when encountering unknown fields when deserialising.
     #[darling(default, rename = "deny_unknown_fields")]
     pub _deny_unknown_fields: bool,
@@ -124,13 +124,13 @@ pub struct ContainerAttributes {
     pub transparent: bool,
     /// Deserialize using the given type and then convert to this type with `From`.
     #[darling(default, rename = "from")]
-    pub _from: Option<String>,
+    pub from: Option<String>,
     /// Deserialize using the given type and then convert to this type with `TryFrom`.
     #[darling(default, rename = "try_from")]
-    pub _try_from: Option<String>,
+    pub try_from: Option<String>,
     /// Convert this type to the given type using `Into` and then serialize using the given type.
     #[darling(default, rename = "into")]
-    pub _into: Option<String>,
+    pub into: Option<String>,
     /// Use the Serde API at this path.
     #[darling(default, rename = "crate")]
     pub _crate: Option<String>,
@@ -155,9 +155,14 @@ pub struct VariantAttributes {
     /// Aliases for this variant, only used during deserialisation.
     #[darling(multiple, rename = "alias")]
     pub _alias: Vec<String>,
-    #[darling(default, rename = "rename_all")]
-    pub _rename_all: RenameAll,
+    /// Rename struct fields of this variant
+    #[darling(default)]
+    pub rename_all: RenameAll,
     /// Do not serialize or deserialize this variant.
+    ///
+    /// Skip (and skip_{de,}serializing) should not be used.
+    /// Serde will remove the variant from the list of variants when deserializing but
+    /// will not update the index when serializing.
     #[darling(default, rename = "skip")]
     pub _skip: bool,
     /// Do not serialize this variant.

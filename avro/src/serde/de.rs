@@ -938,11 +938,13 @@ impl<'de> de::Deserializer<'de> for StringDeserializer {
 ///
 /// This conversion can fail if the structure of the `Value` does not match the
 /// structure expected by `D`.
+#[deprecated(since = "0.22.0", note = "Use the `deser` functions instead")]
 pub fn from_value<'de, D: Deserialize<'de>>(value: &'de Value) -> Result<D, Error> {
     let de = Deserializer::new(value);
     D::deserialize(de)
 }
 
+#[expect(deprecated, reason = "This tests the deprecated function")]
 #[cfg(test)]
 mod tests {
     use num_bigint::BigInt;

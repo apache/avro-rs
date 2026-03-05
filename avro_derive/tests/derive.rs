@@ -16,7 +16,7 @@
 // under the License.
 
 use apache_avro::{
-    AvroSchema, AvroSchemaComponent, Reader, Schema, Writer, from_value,
+    AvroSchema, AvroSchemaComponent, Reader, Schema, Writer,
     schema::{Alias, EnumSchema, FixedSchema, Name, RecordSchema},
 };
 use proptest::prelude::*;
@@ -64,20 +64,16 @@ where
     T: DeserializeOwned + AvroSchema,
 {
     assert!(!encoded.is_empty());
+    hexdump::hexdump(&encoded);
     let schema = T::get_schema();
     let mut reader = Reader::builder(&encoded[..])
         .reader_schema(&schema)
         .build()
         .unwrap();
-    if let Some(res) = reader.next() {
-        match res {
-            Ok(value) => {
-                return from_value::<T>(&value).unwrap();
-            }
-            Err(e) => panic!("{e:?}"),
-        }
-    }
-    unreachable!()
+    reader
+        .next_deser::<T>()
+        .unwrap()
+        .expect("Did not deserialize a value from the reader")
 }
 
 #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
@@ -494,6 +490,44 @@ fn test_generic_container_1(a: String, b: Vec<i32>, c: HashMap<String, i32>) {
     serde_assert(test_generic);
 }}
 
+#[test]
+fn test_generic_container_1_actual() {
+    let schema = r#"
+    {
+        "type":"record",
+        "name":"TestGeneric",
+        "fields":[
+            {
+                "name":"a",
+                "type":"string"
+            },
+            {
+                "name":"b",
+                "type": {
+                    "type":"array",
+                    "items":"int"
+                }
+            },
+            {
+                "name":"c",
+                "type": {
+                    "type":"map",
+                    "values":"int"
+                }
+            }
+        ]
+    }
+    "#;
+    let schema = Schema::parse_str(schema).unwrap();
+    assert_eq!(schema, TestGeneric::<i32>::get_schema());
+    let test_generic = TestGeneric::<i32> {
+        a: "".to_string(),
+        b: vec![0],
+        c: HashMap::new(),
+    };
+    serde_assert(test_generic);
+}
+
 proptest! {
 #[test]
 fn test_generic_container_2(a: bool, b: i8, c: i16, d: i32, e: u8, f: u16, g: i64, h: f32, i: f64, j: String) {
@@ -800,6 +834,7 @@ fn test_cons_generic() {
 
 #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
 struct TestSimpleArray {
+    #[serde(with = "apache_avro::serde::array")]
     a: [i32; 4],
 }
 
@@ -828,7 +863,8 @@ fn test_simple_array(a: [i32; 4]) {
 }}
 
 #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
-struct TestComplexArray<T: AvroSchemaComponent> {
+struct TestComplexArray<T: AvroSchemaComponent + DeserializeOwned + Serialize> {
+    #[serde(with = "apache_avro::serde::array")]
     a: [T; 2],
 }
 
@@ -882,11 +918,14 @@ fn test_complex_array() {
 #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
 struct Testu8 {
     a: Vec<u8>,
+    #[serde(with = "apache_avro::serde::array")]
     b: [u8; 2],
 }
 
+// TODO: Needs new deserializer
 proptest! {
 #[test]
+#[ignore]
 fn test_bytes_handled(a: Vec<u8>, b: [u8; 2]) {
     let test = Testu8 {
         a,

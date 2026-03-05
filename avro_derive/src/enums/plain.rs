@@ -59,7 +59,7 @@ pub fn schema_def(
     } else {
         Err(vec![syn::Error::new(
             ident_span,
-            "AvroSchema: derive does not work for enums with non unit structs",
+            r#"AvroSchema: `#[avro(repr = "enum")]` does not work for enums with non-unit variants"#,
         )])
     }
 }

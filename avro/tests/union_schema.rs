@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{AvroResult, Codec, Reader, Schema, Writer, from_value};
+use apache_avro::{AvroResult, Codec, Reader, Schema, Writer};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 static SCHEMA_A_STR: &str = r#"{
@@ -80,7 +80,7 @@ where
         .reader_schema(schema)
         .schemata(schemata.iter().collect())
         .build()?;
-    from_value::<T>(&reader.next().expect("")?)
+    Ok(reader.next_deser::<T>()?.expect("Expected a value"))
 }
 
 #[test]

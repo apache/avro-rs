@@ -40,7 +40,6 @@ use syn::{
     spanned::Spanned,
 };
 
-use crate::enums::get_data_enum_schema_def;
 use crate::{
     attributes::{FieldDefault, FieldOptions, NamedTypeOptions, With},
     case::RenameRule,
@@ -59,50 +58,71 @@ fn derive_avro_schema(input: DeriveInput) -> Result<TokenStream, Vec<syn::Error>
     // It would be nice to parse the attributes before the `match`, but we first need to validate that `input` is not a union.
     // Otherwise a user could get errors related to the attributes and after fixing those get an error because the attributes were on a union.
     let input_span = input.span();
-    match input.data {
-        syn::Data::Struct(data_struct) => {
-            let named_type_options = NamedTypeOptions::new(&input.ident, &input.attrs, input_span)?;
-            let (get_schema_impl, get_record_fields_impl) = if named_type_options.transparent {
-                get_transparent_struct_schema_def(data_struct.fields, input_span)?
-            } else {
-                let (schema_def, record_fields) =
-                    get_struct_schema_def(&named_type_options, data_struct, input.ident.span())?;
-                (
-                    handle_named_schemas(named_type_options.name, schema_def),
-                    record_fields,
-                )
-            };
-            Ok(create_trait_definition(
-                input.ident,
-                &input.generics,
-                get_schema_impl,
-                get_record_fields_impl,
-                named_type_options.default,
-            ))
-        }
-        syn::Data::Enum(data_enum) => {
-            let named_type_options = NamedTypeOptions::new(&input.ident, &input.attrs, input_span)?;
-            if named_type_options.transparent {
-                return Err(vec![syn::Error::new(
-                    input_span,
-                    "AvroSchema: `#[serde(transparent)]` is only supported on structs",
-                )]);
+    let named_type_options = NamedTypeOptions::new(&input.ident, &input.attrs, input_span)?;
+    if let Some(path) = named_type_options.with {
+        Ok(create_trait_definition(
+            input.ident,
+            &input.generics,
+            quote! { #path::get_schema_in_ctxt(named_schemas, enclosing_namespace) },
+            quote! { #path::get_record_fields_in_ctxt(named_schemas, enclosing_namespace) },
+            quote! { #path::field_default() },
+        ))
+    } else {
+        match input.data {
+            syn::Data::Struct(data_struct) => {
+                if named_type_options.repr.is_some() {
+                    return Err(vec![syn::Error::new(
+                        input_span,
+                        r#"AvroSchema: `#[avro(repr = "..")]`, `#[serde(tag = "..")]`, `#[serde(content = "..")]`, and `#[serde(untagged)]` are only supported on enums"#,
+                    )]);
+                }
+                let (get_schema_impl, get_record_fields_impl) = if named_type_options.transparent {
+                    get_transparent_struct_schema_def(data_struct.fields, input_span)?
+                } else {
+                    let (schema_def, record_fields) = get_struct_schema_def(
+                        &named_type_options,
+                        data_struct,
+                        input.ident.span(),
+                    )?;
+                    (
+                        handle_named_schemas(named_type_options.name, schema_def),
+                        record_fields,
+                    )
+                };
+                Ok(create_trait_definition(
+                    input.ident,
+                    &input.generics,
+                    get_schema_impl,
+                    get_record_fields_impl,
+                    named_type_options.default,
+                ))
             }
-            let schema_def =
-                get_data_enum_schema_def(&named_type_options, data_enum, input.ident.span())?;
-            let inner = handle_named_schemas(named_type_options.name, schema_def);
-            Ok(create_trait_definition(
-                input.ident,
-                &input.generics,
-                inner,
-                quote! { ::std::option::Option::None },
-                named_type_options.default,
-            ))
+            syn::Data::Enum(data_enum) => {
+                if named_type_options.transparent {
+                    return Err(vec![syn::Error::new(
+                        input_span,
+                        "AvroSchema: `#[serde(transparent)]` is only supported on structs",
+                    )]);
+                }
+                let schema_def = enums::get_data_enum_schema_def(
+                    &named_type_options,
+                    data_enum,
+                    input.ident.span(),
+                )?;
+                let inner = handle_named_schemas(named_type_options.name, schema_def);
+                Ok(create_trait_definition(
+                    input.ident,
+                    &input.generics,
+                    inner,
+                    quote! { None },
+                    named_type_options.default,
+                ))
+            }
+            syn::Data::Union(_) => Err(vec![syn::Error::new(
+                input_span,
+                "AvroSchema: derive only works for structs and enums",
+            )]),
         }
-        syn::Data::Union(_) => Err(vec![syn::Error::new(
-            input_span,
-            "AvroSchema: derive only works for structs and simple enums",
-        )]),
     }
 }
 
@@ -127,7 +147,7 @@ fn create_trait_definition(
             }
 
             fn field_default() -> ::std::option::Option<::serde_json::Value> {
-                ::std::option::Option::#field_default_impl
+                #field_default_impl
             }
         }
     }

@@ -24,7 +24,7 @@ use crate::{
     encode::encode_internal,
     error::Details,
     schema::{NamesRef, ResolvedSchema},
-    serde::ser_schema::SchemaAwareWriteSerializer,
+    serde::ser_schema::{Config, SchemaAwareSerializer},
     types::Value,
 };
 
@@ -37,6 +37,8 @@ pub struct GenericDatumWriter<'s> {
     schema: &'s Schema,
     resolved: ResolvedSchema<'s>,
     validate: bool,
+    human_readable: bool,
+    map_array_target_block_size: Option<usize>,
 }
 
 #[bon]
@@ -59,6 +61,8 @@ impl<'s> GenericDatumWriter<'s> {
         /// written data unreadable.
         #[builder(default = true)]
         validate: bool,
+        #[builder(default)] human_readable: bool,
+        map_array_target_block_size: Option<usize>,
     ) -> AvroResult<Self> {
         let resolved = if let Some(resolved) = resolved_schemata {
             resolved
@@ -69,6 +73,8 @@ impl<'s> GenericDatumWriter<'s> {
             schema,
             resolved,
             validate,
+            human_readable,
+            map_array_target_block_size,
         })
     }
 }
@@ -128,9 +134,16 @@ impl GenericDatumWriter<'_> {
         writer: &mut W,
         value: &T,
     ) -> AvroResult<usize> {
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(writer, self.schema, self.resolved.get_names(), None);
-        value.serialize(&mut serializer)
+        let serializer = SchemaAwareSerializer::new(
+            writer,
+            self.schema,
+            Config {
+                human_readable: self.human_readable,
+                names: self.resolved.get_names(),
+                target_block_size: self.map_array_target_block_size,
+            },
+        )?;
+        value.serialize(serializer)
     }
 
     /// Serialize `T` to a [`Vec`].
@@ -181,8 +194,16 @@ pub fn write_avro_datum_ref<T: Serialize, W: Write>(
     data: &T,
     writer: &mut W,
 ) -> AvroResult<usize> {
-    let mut serializer = SchemaAwareWriteSerializer::new(writer, schema, names, None);
-    data.serialize(&mut serializer)
+    let serializer = SchemaAwareSerializer::new(
+        writer,
+        schema,
+        Config {
+            names,
+            target_block_size: None,
+            human_readable: false,
+        },
+    )?;
+    data.serialize(serializer)
 }
 
 /// Deprecated. Use [`GenericDatumWriter`] instead.
@@ -268,6 +289,7 @@ mod tests {
     #[test]
     fn avro_rs_193_write_avro_datum_ref() -> TestResult {
         #[derive(Serialize)]
+        #[serde(rename = "test")]
         struct TestStruct {
             a: i64,
             b: String,

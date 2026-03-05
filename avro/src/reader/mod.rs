@@ -24,7 +24,8 @@ pub mod single_object;
 use crate::{AvroResult, schema::Schema, types::Value};
 use block::Block;
 use bon::bon;
-use std::{collections::HashMap, io::Read};
+use serde::de::DeserializeOwned;
+use std::{collections::HashMap, io::Read, marker::PhantomData};
 
 /// Main interface for reading Avro formatted values.
 ///
@@ -46,6 +47,29 @@ pub struct Reader<'a, R> {
     reader_schema: Option<&'a Schema>,
     errored: bool,
     should_resolve_schema: bool,
+}
+
+pub struct ReaderSerde<'a, R, T: DeserializeOwned> {
+    inner: Reader<'a, R>,
+    phantom: PhantomData<T>,
+}
+
+impl<R: Read, T: DeserializeOwned> Iterator for ReaderSerde<'_, R, T> {
+    type Item = AvroResult<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // to prevent keep on reading after the first error occurs
+        if self.inner.errored {
+            return None;
+        };
+        match self.inner.next_deser::<T>() {
+            Ok(opt) => opt.map(Ok),
+            Err(e) => {
+                self.inner.errored = true;
+                Some(Err(e))
+            }
+        }
+    }
 }
 
 #[bon]
@@ -103,6 +127,13 @@ impl<'a, R: Read> Reader<'a, R> {
         &self.block.user_metadata
     }
 
+    pub fn into_serde_iter<T: DeserializeOwned>(self) -> ReaderSerde<'a, R, T> {
+        ReaderSerde {
+            inner: self,
+            phantom: PhantomData,
+        }
+    }
+
     #[inline]
     fn read_next(&mut self) -> AvroResult<Option<Value>> {
         let read_schema = if self.should_resolve_schema {
@@ -112,6 +143,10 @@ impl<'a, R: Read> Reader<'a, R> {
         };
 
         self.block.read_next(read_schema)
+    }
+
+    pub fn next_deser<T: DeserializeOwned>(&mut self) -> AvroResult<Option<T>> {
+        self.block.read_next_deser()
     }
 }
 
