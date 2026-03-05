@@ -20,10 +20,14 @@
 //! We would prefer to just do `#![rustversion::attr(nightly, feature(proc_macro_diagnostic)]`
 //! but that's currently not possible, see <https://github.com/dtolnay/rustversion/issues/8>
 
-#[rustversion::nightly]
-fn main() {
-    println!("cargo:rustc-cfg=nightly");
-}
+use rustc_version::version;
 
-#[rustversion::not(nightly)]
-fn main() {}
+fn main() {
+    println!("cargo::rustc-check-cfg=cfg(msrv)");
+    let msrv = std::env::var("CARGO_PKG_RUST_VERSION").unwrap();
+    let current = version().unwrap().to_string();
+
+    if current == msrv {
+        println!(r#"cargo:rustc-cfg=msrv"#);
+    }
+}

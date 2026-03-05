@@ -105,7 +105,7 @@ dependencies = [
  "proc-macro2",
  "proptest",
  "quote",
- "rustversion",
+ "rustc_version",
  "serde",
  "serde_json",
  "syn",
