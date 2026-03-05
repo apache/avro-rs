@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// By including the (unexpended) modules, we can also test that the
+// By including the (unexpanded) modules, we can also test that the
 // generated code is valid.
 mod expanded;
 
