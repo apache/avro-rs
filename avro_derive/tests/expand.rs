@@ -20,8 +20,9 @@
 mod expanded;
 
 /// These tests only run on nightly as the output can change per compiler version.
+/// Use `MACROTEST=overwrite cargo +nightly test expand` to re-generate them 
 #[rustversion::attr(not(nightly), ignore)]
 #[test]
-pub fn expand() {
+fn expand() {
     macrotest::expand("tests/expanded/avro_*.rs");
 }

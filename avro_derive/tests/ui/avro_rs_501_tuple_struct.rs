@@ -18,6 +18,6 @@
 use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
-struct B (i32, String);
+struct B(i32, String);
 
 fn main() {}

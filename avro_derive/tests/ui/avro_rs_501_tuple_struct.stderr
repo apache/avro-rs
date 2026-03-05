@@ -1,5 +1,5 @@
 error: AvroSchema derive does not work for tuple structs
   --> tests/ui/avro_rs_501_tuple_struct.rs:21:8
    |
-21 | struct B (i32, String);
+21 | struct B(i32, String);
    |        ^
