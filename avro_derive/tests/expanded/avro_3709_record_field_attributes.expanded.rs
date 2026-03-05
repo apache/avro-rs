@@ -99,7 +99,7 @@ impl ::apache_avro::AvroSchemaComponent for A {
         named_schemas: &mut ::std::collections::HashSet<::apache_avro::schema::Name>,
         enclosing_namespace: ::apache_avro::schema::NamespaceRef,
     ) -> ::std::option::Option<::std::vec::Vec<::apache_avro::schema::RecordField>> {
-        let mut schema_fields = Vec::with_capacity(1usize);
+        let mut schema_fields = ::std::vec::Vec::with_capacity(1usize);
         schema_fields
             .push(::apache_avro::schema::RecordField {
                 name: "a3".to_string(),
@@ -123,7 +123,7 @@ impl ::apache_avro::AvroSchemaComponent for A {
                 ),
                 custom_attributes: ::std::collections::BTreeMap::new(),
             });
-        Some(schema_fields)
+        ::std::option::Option::Some(schema_fields)
     }
     fn field_default() -> ::std::option::Option<::serde_json::Value> {
         ::std::option::Option::None

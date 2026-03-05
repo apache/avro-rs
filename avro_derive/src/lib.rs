@@ -269,9 +269,9 @@ fn get_struct_schema_def(
         }
     };
     let record_fields = quote! {
-        let mut schema_fields = Vec::with_capacity(#minimum_fields);
+        let mut schema_fields = ::std::vec::Vec::with_capacity(#minimum_fields);
         #(#record_field_exprs)*
-        Some(schema_fields)
+        ::std::option::Option::Some(schema_fields)
     };
 
     Ok((schema_def, record_fields))
