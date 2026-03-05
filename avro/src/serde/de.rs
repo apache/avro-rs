@@ -954,6 +954,7 @@ mod tests {
 
     use super::*;
     use crate::Decimal;
+    use crate::writer::datum::GenericDatumWriter;
 
     #[derive(PartialEq, Eq, Serialize, Deserialize, Debug)]
     pub struct StringEnum {
@@ -989,7 +990,11 @@ mod tests {
         // encode into avro
         let value = crate::to_value(&data)?;
 
-        let mut buf = std::io::Cursor::new(crate::to_avro_datum(&schema, value)?);
+        let mut buf = std::io::Cursor::new(
+            GenericDatumWriter::builder(&schema)
+                .build()?
+                .write_value_to_vec(value)?,
+        );
 
         // decode from avro
         let value = crate::from_avro_datum(&schema, &mut buf, None)?;
@@ -1031,7 +1036,9 @@ mod tests {
         let value = crate::to_value(data)?;
 
         // The following sentence have to fail has the data is wrong.
-        let encoded_data = crate::to_avro_datum(&schema, value);
+        let encoded_data = GenericDatumWriter::builder(&schema)
+            .build()?
+            .write_value_to_vec(value);
 
         assert!(encoded_data.is_err());
 

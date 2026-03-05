@@ -19,14 +19,14 @@ use std::{io::Write, marker::PhantomData, ops::RangeInclusive};
 
 use serde::Serialize;
 
+use crate::encode::encode_internal;
+use crate::serde::ser_schema::SchemaAwareWriteSerializer;
 use crate::{
     AvroResult, AvroSchema, Schema,
     error::Details,
     headers::{HeaderBuilder, RabinFingerprintHeader},
     schema::ResolvedOwnedSchema,
     types::Value,
-    write_avro_datum_ref,
-    writer::datum::write_value_ref_owned_resolved,
 };
 
 /// Writer that encodes messages according to the single object encoding v1 spec
@@ -163,12 +163,13 @@ where
             .write_all(&self.header)
             .map_err(Details::WriteBytes)?;
 
-        let bytes = write_avro_datum_ref(
+        let mut serializer = SchemaAwareWriteSerializer::new(
+            writer,
             self.resolved.get_root_schema(),
             self.resolved.get_names(),
-            data,
-            writer,
-        )?;
+            None,
+        );
+        let bytes = data.serialize(&mut serializer)?;
 
         Ok(bytes + self.header.len())
     }
@@ -182,6 +183,33 @@ where
     pub fn write<W: Write>(&self, data: T, writer: &mut W) -> AvroResult<usize> {
         self.write_ref(&data, writer)
     }
+}
+
+fn write_value_ref_owned_resolved<W: Write>(
+    resolved_schema: &ResolvedOwnedSchema,
+    value: &Value,
+    writer: &mut W,
+) -> AvroResult<usize> {
+    let root_schema = resolved_schema.get_root_schema();
+    if let Some(reason) = value.validate_internal(
+        root_schema,
+        resolved_schema.get_names(),
+        root_schema.namespace(),
+    ) {
+        return Err(Details::ValidationWithReason {
+            value: value.clone(),
+            schema: root_schema.clone(),
+            reason,
+        }
+        .into());
+    }
+    encode_internal(
+        value,
+        root_schema,
+        resolved_schema.get_names(),
+        root_schema.namespace(),
+        writer,
+    )
 }
 
 #[cfg(test)]

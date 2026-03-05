@@ -57,7 +57,6 @@ mod decode;
 mod duration;
 mod encode;
 mod reader;
-mod writer;
 
 #[cfg(doc)]
 pub mod documentation;
@@ -71,6 +70,7 @@ pub mod serde;
 pub mod types;
 pub mod util;
 pub mod validator;
+pub mod writer;
 
 #[expect(deprecated)]
 pub use crate::{
@@ -98,6 +98,10 @@ pub use reader::{
 pub use schema::Schema;
 pub use serde::{AvroSchema, AvroSchemaComponent, from_value, to_value};
 pub use uuid::Uuid;
+#[expect(
+    deprecated,
+    reason = "Still need to export it until we remove it completely"
+)]
 pub use writer::{
     Clearable, Writer, WriterBuilder,
     datum::{to_avro_datum, to_avro_datum_schemata, write_avro_datum_ref},
