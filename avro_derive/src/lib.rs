@@ -60,12 +60,14 @@ fn derive_avro_schema(input: DeriveInput) -> Result<TokenStream, Vec<syn::Error>
     let input_span = input.span();
     let named_type_options = NamedTypeOptions::new(&input.ident, &input.attrs, input_span)?;
     if let Some(path) = named_type_options.with {
+        // `#[serde(into = "..", {try_,}from = ".."]` was specified. This means Serde will use the `Serialize`/`Deserialize`
+        // implementation of that type, so we also use the `AvroSchema` of that type.
         Ok(create_trait_definition(
             input.ident,
             &input.generics,
-            quote! { #path::get_schema_in_ctxt(named_schemas, enclosing_namespace) },
-            quote! { #path::get_record_fields_in_ctxt(named_schemas, enclosing_namespace) },
-            quote! { #path::field_default() },
+            quote! { <#path as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(named_schemas, enclosing_namespace) },
+            quote! { <#path as ::apache_avro::AvroSchemaComponent>::get_record_fields_in_ctxt(named_schemas, enclosing_namespace) },
+            quote! { <#path as ::apache_avro::AvroSchemaComponent>::field_default() },
         ))
     } else {
         match input.data {
