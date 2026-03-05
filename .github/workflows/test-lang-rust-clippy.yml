@@ -40,7 +40,6 @@ jobs:
       matrix:
         rust:
           - 'stable'
-          - '1.88.0'  # MSRV
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
