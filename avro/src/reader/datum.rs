@@ -34,7 +34,7 @@ pub struct GenericDatumReader<'s> {
 
 #[bon]
 impl<'s> GenericDatumReader<'s> {
-    /// Build a [`DatumReader`].
+    /// Build a [`GenericDatumReader`].
     ///
     /// This is most likely not what you need. Most users should use [`Reader`][crate::Reader],
     /// [`GenericSingleObjectReader`][crate::GenericSingleObjectReader], or
@@ -144,7 +144,7 @@ impl<'s> GenericDatumReader<'s> {
 /// **NOTE** This function has a quite small niche of usage and does NOT take care of reading the
 /// header and consecutive data blocks; use [`Reader`](struct.Reader.html) if you don't know what
 /// you are doing, instead.
-#[deprecated(since = "0.22.0", note = "Use `DatumReader` instead")]
+#[deprecated(since = "0.22.0", note = "Use `GenericDatumReader` instead")]
 pub fn from_avro_datum<R: Read>(
     writer_schema: &Schema,
     reader: &mut R,
@@ -173,7 +173,7 @@ pub fn from_avro_datum<R: Read>(
 /// schemata to resolve any dependencies.
 ///
 /// When a reader `Schema` is provided, schema resolution will also be performed.
-#[deprecated(since = "0.22.0", note = "Use `DatumReader` instead")]
+#[deprecated(since = "0.22.0", note = "Use `GenericDatumReader` instead")]
 pub fn from_avro_datum_schemata<R: Read>(
     writer_schema: &Schema,
     writer_schemata: Vec<&Schema>,
@@ -205,7 +205,7 @@ pub fn from_avro_datum_schemata<R: Read>(
 /// schemata to resolve any dependencies.
 ///
 /// When a reader `Schema` is provided, schema resolution will also be performed.
-#[deprecated(since = "0.22.0", note = "Use `DatumReader` instead")]
+#[deprecated(since = "0.22.0", note = "Use `GenericDatumReader` instead")]
 pub fn from_avro_datum_reader_schemata<R: Read>(
     writer_schema: &Schema,
     writer_schemata: Vec<&Schema>,
