@@ -209,6 +209,7 @@ mod tests {
     use crate::types::Value;
     use apache_avro_test_helper::TestResult;
 
+    #[expect(deprecated, reason = "This tests the deprecated function")]
     #[test]
     fn avro_rs_382_duration_from_value() -> TestResult {
         let val = Value::Duration(Duration::new(Months::new(7), Days::new(4), Millis::new(45)));

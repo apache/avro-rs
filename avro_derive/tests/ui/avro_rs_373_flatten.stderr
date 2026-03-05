@@ -7,7 +7,7 @@ warning: `#[avro(flatten)]` is deprecated
    |
    = help: Use `#[serde(flatten)]` instead
 
-error: `#[avro(flatten)]` requires `#[serde(flatten)]`, it's also deprecated. Please use only `#[serde(flatten)]`
+error: AvroSchema: `#[avro(flatten)]` requires `#[serde(flatten)]`, it's also deprecated. Please use only `#[serde(flatten)]`
   --> tests/ui/avro_rs_373_flatten.rs:22:5
    |
 22 | /     #[avro(flatten)]

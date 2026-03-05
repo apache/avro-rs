@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{AvroSchema, Error, Reader, Schema, Writer, from_value};
+use apache_avro::{AvroSchema, Error, Reader, Schema, Writer};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// Takes in a type that implements the right combination of traits and runs it through a Serde
@@ -27,18 +27,18 @@ where
     assert_eq!(obj, serde(obj.clone()).unwrap());
 }
 
-/// Takes in a type that implements the right combination of traits and runs it through a Serde
-/// round-trip and asserts that the error matches the expected string.
-fn serde_assert_err<T>(obj: T, expected: &str)
-where
-    T: std::fmt::Debug + Serialize + DeserializeOwned + AvroSchema + Clone + PartialEq,
-{
-    let error = serde(obj).unwrap_err().to_string();
-    assert!(
-        error.contains(expected),
-        "Error `{error}` does not contain `{expected}`"
-    );
-}
+// /// Takes in a type that implements the right combination of traits and runs it through a Serde
+// /// round-trip and asserts that the error matches the expected string.
+// fn serde_assert_err<T>(obj: T, expected: &str)
+// where
+//     T: std::fmt::Debug + Serialize + DeserializeOwned + AvroSchema + Clone + PartialEq,
+// {
+//     let error = serde(obj).unwrap_err().to_string();
+//     assert!(
+//         error.contains(expected),
+//         "Error `{error}` does not contain `{expected}`"
+//     );
+// }
 
 fn serde<T>(obj: T) -> Result<T, Error>
 where
@@ -66,8 +66,8 @@ where
     let mut reader = Reader::builder(&encoded[..])
         .reader_schema(&schema)
         .build()?;
-    if let Some(res) = reader.next() {
-        return res.and_then(|v| from_value::<T>(&v));
+    if let Some(res) = reader.next_deser::<T>()? {
+        return Ok(res);
     }
     panic!("Nothing was encoded!")
 }
@@ -231,7 +231,7 @@ mod container_attributes {
         let schema = r#"
         {
             "type":"record",
-            "name":"Foo",
+            "name":"FooFromInto",
             "fields": [
                 {
                     "name":"a",
@@ -291,7 +291,7 @@ mod container_attributes {
         let schema = r#"
         {
             "type":"record",
-            "name":"Foo",
+            "name":"FooFromInto",
             "fields": [
                 {
                     "name":"a",
@@ -300,6 +300,10 @@ mod container_attributes {
                 {
                     "name":"b",
                     "type":"int"
+                },
+                {
+                    "name":"c",
+                    "type":"boolean"
                 }
             ]
         }
@@ -308,13 +312,10 @@ mod container_attributes {
         let schema = Schema::parse_str(schema).unwrap();
         assert_eq!(schema, Foo::get_schema());
 
-        serde_assert_err(
-            Foo {
-                a: "spam".to_string(),
-                b: 321,
-            },
-            "Invalid field name c",
-        );
+        serde_assert(Foo {
+            a: "spam".to_string(),
+            b: 321,
+        });
     }
 
     #[test]

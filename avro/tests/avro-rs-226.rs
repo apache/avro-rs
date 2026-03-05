@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{AvroSchema, Schema, Writer, from_value};
+use apache_avro::{AvroSchema, Schema, Writer};
 use apache_avro_test_helper::TestResult;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::fmt::Debug;
@@ -29,13 +29,10 @@ where
     writer.append_ser(record)?;
     let bytes_written = writer.into_inner()?;
 
-    let reader = apache_avro::Reader::new(&bytes_written[..])?;
-    for value in reader {
-        let value = value?;
-        let deserialized = from_value::<T>(&value)?;
-        assert_eq!(deserialized, record2);
+    let mut reader = apache_avro::Reader::new(&bytes_written[..])?;
+    while let Some(value) = reader.next_deser::<T>()? {
+        assert_eq!(value, record2);
     }
-
     Ok(())
 }
 

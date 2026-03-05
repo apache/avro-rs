@@ -36,7 +36,7 @@ fn avro_rs_285_bytes_deserialization_round_trip() -> TestResult {
     let raw_schema = r#"
     {
         "type": "record",
-        "name": "SimpleRecord",
+        "name": "ExampleByteArray",
         "fields": [
             {"name": "data_bytes", "type": ["null", "bytes"], "default": null},
             {"name": "description", "type": ["null", "string"], "default": null}
@@ -72,19 +72,21 @@ fn avro_rs_285_bytes_deserialization_round_trip() -> TestResult {
     // deserialize Avro binary data back into ExampleByteArray structs
     let reader = apache_avro::Reader::new(&avro_data[..])?;
     let deserialized_records: Vec<ExampleByteArray> = reader
-        .map(|value| apache_avro::from_value::<ExampleByteArray>(&value.unwrap()).unwrap())
+        .into_serde_iter()
+        .map(|value| value.unwrap())
         .collect();
 
     assert_eq!(records, deserialized_records);
     Ok(())
 }
 
+#[expect(deprecated, reason = "Schema resolution is WIP")]
 #[test]
 fn avro_rs_285_bytes_deserialization_filtered_round_trip() -> TestResult {
     let raw_schema = r#"
     {
         "type": "record",
-        "name": "SimpleRecord",
+        "name": "ExampleByteArray",
         "fields": [
             {"name": "data_bytes", "type": ["null", "bytes"], "default": null},
             {"name": "description", "type": ["null", "string"], "default": null}

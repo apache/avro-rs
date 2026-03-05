@@ -17,10 +17,12 @@
 
 use std::{io::Write, marker::PhantomData, ops::RangeInclusive};
 
+use bon::Builder;
 use serde::Serialize;
 
+use crate::Error;
 use crate::encode::encode_internal;
-use crate::serde::ser_schema::SchemaAwareWriteSerializer;
+use crate::serde::ser_schema::{Config, SchemaAwareSerializer};
 use crate::{
     AvroResult, AvroSchema, Schema,
     error::Details,
@@ -86,12 +88,29 @@ impl GenericSingleObjectWriter {
 }
 
 /// Writer that encodes messages according to the single object encoding v1 spec
+#[derive(Builder)]
 pub struct SpecificSingleObjectWriter<T>
 where
     T: AvroSchema,
 {
+    // TODO: Make default fallibe
+    #[builder(
+        with = |schema: Schema| -> Result<_, Error> { ResolvedOwnedSchema::new(schema) },
+        default = ResolvedOwnedSchema::new(T::get_schema()).expect("Invalid schema")
+    )]
     resolved: ResolvedOwnedSchema,
+    #[builder(
+        default = RabinFingerprintHeader::from_schema(resolved.get_root_schema()).build_header(),
+        with = |header_builder: impl HeaderBuilder| header_builder.build_header(),
+    )]
     header: Vec<u8>,
+    /// Should data be encoded as human-readable where possible.
+    human_readable: bool,
+    /// How many bytes should blocks of array and map values be.
+    ///
+    /// Every block except the last will have at least this size.
+    map_array_target_block_size: Option<usize>,
+    #[builder(skip)]
     _model: PhantomData<T>,
 }
 
@@ -108,6 +127,8 @@ where
             resolved,
             header,
             _model: PhantomData,
+            human_readable: false,
+            map_array_target_block_size: None,
         })
     }
 
@@ -118,6 +139,8 @@ where
             resolved,
             header,
             _model: PhantomData,
+            human_readable: false,
+            map_array_target_block_size: None,
         })
     }
 
@@ -163,13 +186,16 @@ where
             .write_all(&self.header)
             .map_err(Details::WriteBytes)?;
 
-        let mut serializer = SchemaAwareWriteSerializer::new(
+        let serializer = SchemaAwareSerializer::new(
             writer,
             self.resolved.get_root_schema(),
-            self.resolved.get_names(),
-            None,
-        );
-        let bytes = data.serialize(&mut serializer)?;
+            Config {
+                names: self.resolved.get_names(),
+                target_block_size: self.map_array_target_block_size,
+                human_readable: self.human_readable,
+            },
+        )?;
+        let bytes = data.serialize(serializer)?;
 
         Ok(bytes + self.header.len())
     }
@@ -233,7 +259,7 @@ mod tests {
             let schema = r#"
             {
                 "type":"record",
-                "name":"TestSingleObjectWrtierSerialize",
+                "name":"TestSingleObjectWriter",
                 "fields":[
                     {
                         "name":"a",

@@ -28,6 +28,10 @@ pub(crate) use crate::schema::resolve::{
     ResolvedOwnedSchema, resolve_names, resolve_names_with_schemata,
 };
 pub use crate::schema::{
+    builders::{
+        SchemaArrayBuilder, SchemaEnumBuilder, SchemaFixedBuilder, SchemaMapBuilder,
+        SchemaRecordBuilder,
+    },
     name::{Alias, Aliases, Name, Names, NamesRef, Namespace, NamespaceRef},
     record::{RecordField, RecordFieldBuilder, RecordSchema, RecordSchemaBuilder},
     resolve::ResolvedSchema,
@@ -3471,6 +3475,7 @@ mod tests {
         Ok(())
     }
 
+    #[expect(deprecated, reason = "Schema resolution is a WIP")]
     #[test]
     fn test_avro_3814_schema_resolution_failure() -> TestResult {
         // Define a reader schema: a nested record with an optional field.
