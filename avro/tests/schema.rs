@@ -19,7 +19,8 @@ use apache_avro::writer::datum::GenericDatumWriter;
 use apache_avro::{
     Codec, Error, Reader, Schema, Writer,
     error::Details,
-    from_avro_datum, from_value,
+    from_value,
+    reader::datum::GenericDatumReader,
     schema::{EnumSchema, FixedSchema, Name, RecordField, RecordSchema},
     to_value,
     types::{Record, Value},
@@ -862,8 +863,10 @@ fn avro_old_issue_47() -> TestResult {
         .build()?
         .write_value_to_vec(ser_value)?;
 
-    let de_value = &from_avro_datum(&schema, &mut &*serialized_bytes, None)?;
-    let deserialized_record = from_value::<MyRecord>(de_value)?;
+    let de_value = GenericDatumReader::builder(&schema)
+        .build()?
+        .read_value(&mut &*serialized_bytes)?;
+    let deserialized_record = from_value::<MyRecord>(&de_value)?;
 
     assert_eq!(record, deserialized_record);
     Ok(())
@@ -988,7 +991,10 @@ fn test_avro_3785_deserialize_namespace_with_nullable_type_containing_reference_
         .write_value_to_vec(avro_value)?;
     let mut x = &datum[..];
     let reader_schema = Schema::parse_str(reader_schema)?;
-    let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
+    let deser_value = GenericDatumReader::builder(&writer_schema)
+        .reader_schema(&reader_schema)
+        .build()?
+        .read_value(&mut x)?;
     match deser_value {
         Value::Record(fields) => {
             assert_eq!(fields.len(), 2);

@@ -56,13 +56,13 @@ mod decimal;
 mod decode;
 mod duration;
 mod encode;
-mod reader;
 
 #[cfg(doc)]
 pub mod documentation;
 pub mod error;
 pub mod headers;
 pub mod rabin;
+pub mod reader;
 pub mod schema;
 pub mod schema_compatibility;
 pub mod schema_equality;
@@ -90,8 +90,13 @@ pub use codec::{Codec, DeflateSettings};
 pub use decimal::Decimal;
 pub use duration::{Days, Duration, Millis, Months};
 pub use error::Error;
+#[expect(
+    deprecated,
+    reason = "Still need to export it until we remove it completely"
+)]
 pub use reader::{
-    Reader, from_avro_datum, from_avro_datum_reader_schemata, from_avro_datum_schemata,
+    Reader,
+    datum::{from_avro_datum, from_avro_datum_reader_schemata, from_avro_datum_schemata},
     read_marker,
     single_object::{GenericSingleObjectReader, SpecificSingleObjectReader},
 };
@@ -154,9 +159,11 @@ pub fn set_serde_human_readable(human_readable: bool) -> bool {
 #[cfg(test)]
 mod tests {
     use crate::{
-        Codec, Reader, Schema, Writer, from_avro_datum,
+        Codec, Reader, Schema, Writer,
+        reader::datum::GenericDatumReader,
         types::{Record, Value},
     };
+    use apache_avro_test_helper::TestResult;
     use pretty_assertions::assert_eq;
 
     //TODO: move where it fits better
@@ -301,7 +308,7 @@ mod tests {
     }
 
     #[test]
-    fn test_illformed_length() {
+    fn test_illformed_length() -> TestResult {
         let raw_schema = r#"
             {
                 "type": "record",
@@ -318,7 +325,11 @@ mod tests {
         // Would allocate 18446744073709551605 bytes
         let illformed: &[u8] = &[0x3e, 0x15, 0xff, 0x1f, 0x15, 0xff];
 
-        let value = from_avro_datum(&schema, &mut &*illformed, None);
+        let value = GenericDatumReader::builder(&schema)
+            .build()?
+            .read_value(&mut &*illformed);
         assert!(value.is_err());
+
+        Ok(())
     }
 }

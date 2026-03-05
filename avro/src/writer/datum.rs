@@ -211,14 +211,14 @@ pub fn to_avro_datum_schemata<T: Into<Value>>(
 mod tests {
     use apache_avro_test_helper::TestResult;
 
+    use super::*;
+    use crate::reader::datum::GenericDatumReader;
     use crate::{
         Days, Decimal, Duration, Millis, Months,
         schema::{DecimalSchema, FixedSchema, InnerDecimalSchema, Name},
         types::Record,
         util::zig_i64,
     };
-
-    use super::*;
 
     const SCHEMA: &str = r#"
     {
@@ -346,7 +346,9 @@ mod tests {
 
         // Should deserialize from the schema into the logical type.
         let mut r = ser.as_slice();
-        let de = crate::from_avro_datum(&schema, &mut r, None)?;
+        let de = GenericDatumReader::builder(&schema)
+            .build()?
+            .read_value(&mut r)?;
         assert_eq!(de, value);
         Ok(())
     }

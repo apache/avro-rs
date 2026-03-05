@@ -1169,7 +1169,7 @@ fn field_ordering_position(field: &str) -> Option<usize> {
 mod tests {
     use super::*;
     use crate::writer::datum::GenericDatumWriter;
-    use crate::{error::Details, rabin::Rabin};
+    use crate::{error::Details, rabin::Rabin, reader::datum::GenericDatumReader};
     use apache_avro_test_helper::{
         TestResult,
         logger::{assert_logged, assert_not_logged},
@@ -2998,7 +2998,10 @@ mod tests {
             .write_value_to_vec(avro_value)?;
         let mut x = &datum[..];
         let reader_schema = Schema::parse_str(reader_schema)?;
-        let deser_value = crate::from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
+        let deser_value = GenericDatumReader::builder(&writer_schema)
+            .reader_schema(&reader_schema)
+            .build()?
+            .read_value(&mut x)?;
         match deser_value {
             types::Value::Record(fields) => {
                 assert_eq!(fields.len(), 2);
@@ -3585,7 +3588,10 @@ mod tests {
         let mut x = &datum[..];
 
         // Deserialization should succeed and we should be able to resolve the schema.
-        let deser_value = crate::from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
+        let deser_value = GenericDatumReader::builder(&writer_schema)
+            .reader_schema(&reader_schema)
+            .build()?
+            .read_value(&mut x)?;
         assert!(deser_value.validate(&reader_schema));
 
         // Verify that we can read a field from the record.

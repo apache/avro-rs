@@ -16,7 +16,7 @@
 // under the License.
 
 use apache_avro::writer::datum::GenericDatumWriter;
-use apache_avro::{Schema, from_avro_datum, to_value, types};
+use apache_avro::{Schema, reader::datum::GenericDatumReader, to_value, types};
 use apache_avro_test_helper::TestResult;
 
 #[test]
@@ -139,7 +139,10 @@ fn avro_3787_deserialize_union_with_unknown_symbol() -> TestResult {
         .write_value_to_vec(avro_value)?;
     let mut x = &datum[..];
     let reader_schema = Schema::parse_str(reader_schema)?;
-    let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
+    let deser_value = GenericDatumReader::builder(&writer_schema)
+        .reader_schema(&reader_schema)
+        .build()?
+        .read_value(&mut x)?;
     match deser_value {
         types::Value::Record(fields) => {
             assert_eq!(fields.len(), 2);
@@ -272,7 +275,10 @@ fn avro_3787_deserialize_union_with_unknown_symbol_no_ref() -> TestResult {
         .write_value_to_vec(avro_value)?;
     let mut x = &datum[..];
     let reader_schema = Schema::parse_str(reader_schema)?;
-    let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
+    let deser_value = GenericDatumReader::builder(&writer_schema)
+        .reader_schema(&reader_schema)
+        .build()?
+        .read_value(&mut x)?;
     match deser_value {
         types::Value::Record(fields) => {
             assert_eq!(fields.len(), 1);

@@ -953,8 +953,8 @@ mod tests {
     use apache_avro_test_helper::TestResult;
 
     use super::*;
-    use crate::Decimal;
     use crate::writer::datum::GenericDatumWriter;
+    use crate::{Decimal, reader::datum::GenericDatumReader};
 
     #[derive(PartialEq, Eq, Serialize, Deserialize, Debug)]
     pub struct StringEnum {
@@ -997,7 +997,9 @@ mod tests {
         );
 
         // decode from avro
-        let value = crate::from_avro_datum(&schema, &mut buf, None)?;
+        let value = GenericDatumReader::builder(&schema)
+            .build()?
+            .read_value(&mut buf)?;
 
         let decoded_data: StringEnum = crate::from_value(&value)?;
 
