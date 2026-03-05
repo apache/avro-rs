@@ -32,17 +32,19 @@
 mod attributes;
 mod case;
 mod enums;
+mod tuple;
 
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{
-    DataStruct, DeriveInput, Expr, Field, Fields, Generics, Ident, Type, parse_macro_input,
-    spanned::Spanned,
+    DataStruct, DeriveInput, Expr, Field, Fields, FieldsNamed, Generics, Ident, Type,
+    parse_macro_input, spanned::Spanned,
 };
 
 use crate::{
-    attributes::{FieldDefault, FieldOptions, NamedTypeOptions, With},
+    attributes::{FieldOptions, NamedTypeOptions, With},
     case::RenameRule,
+    tuple::unnamed_to_record_fields,
 };
 
 #[proc_macro_derive(AvroSchema, attributes(avro, serde))]
@@ -81,11 +83,8 @@ fn derive_avro_schema(input: DeriveInput) -> Result<TokenStream, Vec<syn::Error>
                 let (get_schema_impl, get_record_fields_impl) = if named_type_options.transparent {
                     get_transparent_struct_schema_def(data_struct.fields, input_span)?
                 } else {
-                    let (schema_def, record_fields) = get_struct_schema_def(
-                        &named_type_options,
-                        data_struct,
-                        input.ident.span(),
-                    )?;
+                    let (schema_def, record_fields) =
+                        get_struct_schema_def(&named_type_options, data_struct)?;
                     (
                         handle_named_schemas(named_type_options.name, schema_def),
                         record_fields,
@@ -173,105 +172,20 @@ fn handle_named_schemas(full_schema_name: String, schema_def: TokenStream) -> To
 fn get_struct_schema_def(
     container_attrs: &NamedTypeOptions,
     data_struct: DataStruct,
-    ident_span: Span,
 ) -> Result<(TokenStream, TokenStream), Vec<syn::Error>> {
-    let mut record_field_exprs = vec![];
-    match data_struct.fields {
-        Fields::Named(a) => {
-            for field in a.named {
-                let mut name = field
-                    .ident
-                    .as_ref()
-                    .expect("Field must have a name")
-                    .to_string();
-                if let Some(raw_name) = name.strip_prefix("r#") {
-                    name = raw_name.to_string();
-                }
-                let field_attrs = FieldOptions::new(&field.attrs, field.span())?;
-                let doc = preserve_optional(field_attrs.doc);
-                match (field_attrs.rename, container_attrs.rename_all) {
-                    (Some(rename), _) => {
-                        name = rename;
-                    }
-                    (None, rename_all) if rename_all != RenameRule::None => {
-                        name = rename_all.apply_to_field(&name);
-                    }
-                    _ => {}
-                }
-                if field_attrs.skip {
-                    continue;
-                } else if field_attrs.flatten {
-                    // Inline the fields of the child record at runtime, as we don't have access to
-                    // the schema here.
-                    let get_record_fields =
-                        get_field_get_record_fields_expr(&field, field_attrs.with)?;
-                    record_field_exprs.push(quote! {
-                        if let Some(flattened_fields) = #get_record_fields {
-                            schema_fields.extend(flattened_fields);
-                        } else {
-                            panic!("{} does not have any fields to flatten to", stringify!(#field));
-                        }
-                    });
-
-                    // Don't add this field as it's been replaced by the child record fields
-                    continue;
-                }
-                let default_value = match field_attrs.default {
-                    FieldDefault::Disabled => quote! { ::std::option::Option::None },
-                    FieldDefault::Trait => type_to_field_default_expr(&field.ty)?,
-                    FieldDefault::Value(default_value) => {
-                        let _: serde_json::Value = serde_json::from_str(&default_value[..])
-                            .map_err(|e| {
-                                vec![syn::Error::new(
-                                    field.ident.span(),
-                                    format!("Invalid avro default json: \n{e}"),
-                                )]
-                            })?;
-                        quote! {
-                            ::std::option::Option::Some(::serde_json::from_str(#default_value).expect("Unreachable! This parsed at compile time!"))
-                        }
-                    }
-                };
-                let aliases = field_aliases(&field_attrs.alias);
-                let schema_expr = get_field_schema_expr(&field, field_attrs.with)?;
-                record_field_exprs.push(quote! {
-                    schema_fields.push(::apache_avro::schema::RecordField {
-                        name: #name.to_string(),
-                        doc: #doc,
-                        default: #default_value,
-                        aliases: #aliases,
-                        schema: #schema_expr,
-                        custom_attributes: ::std::collections::BTreeMap::new(),
-                    });
-                });
-            }
-        }
-        Fields::Unnamed(_) => {
-            return Err(vec![syn::Error::new(
-                ident_span,
-                "AvroSchema derive does not work for tuple structs",
-            )]);
-        }
-        Fields::Unit => {
-            return Err(vec![syn::Error::new(
-                ident_span,
-                "AvroSchema derive does not work for unit structs",
-            )]);
-        }
-    }
+    let record_fields = match data_struct.fields {
+        Fields::Named(a) => named_to_record_fields(a, container_attrs.rename_all)?,
+        Fields::Unnamed(unnamed) => unnamed_to_record_fields(unnamed)?,
+        Fields::Unit => quote! { std::vec::Vec::<::apache_avro::schema::RecordField>::new() },
+    };
 
     let record_doc = preserve_optional(container_attrs.doc.as_ref());
     let record_aliases = aliases(&container_attrs.aliases);
     let full_schema_name = &container_attrs.name;
 
-    // When flatten is involved, there will be more but we don't know how many. This optimises for
-    // the most common case where there is no flatten.
-    let minimum_fields = record_field_exprs.len();
-
     let schema_def = quote! {
         {
-            let mut schema_fields = ::std::vec::Vec::with_capacity(#minimum_fields);
-            #(#record_field_exprs)*
+            let schema_fields = #record_fields;
             let schema_field_set: ::std::collections::HashSet<_> = schema_fields.iter().map(|rf| &rf.name).collect();
             assert_eq!(schema_fields.len(), schema_field_set.len(), "Duplicate field names found: {schema_fields:?}");
             let name = ::apache_avro::schema::Name::new(#full_schema_name).expect(&format!("Unable to parse struct name for schema {}", #full_schema_name)[..]);
@@ -291,9 +205,7 @@ fn get_struct_schema_def(
         }
     };
     let record_fields = quote! {
-        let mut schema_fields = ::std::vec::Vec::with_capacity(#minimum_fields);
-        #(#record_field_exprs)*
-        ::std::option::Option::Some(schema_fields)
+        ::std::option::Option::Some(#record_fields)
     };
 
     Ok((schema_def, record_fields))
@@ -332,13 +244,36 @@ fn get_transparent_struct_schema_def(
                 )])
             }
         }
-        Fields::Unnamed(_) => Err(vec![syn::Error::new(
-            input_span,
-            "AvroSchema: derive does not work for tuple structs",
-        )]),
+        Fields::Unnamed(unnamed) => {
+            let mut found = None;
+            for field in unnamed.unnamed {
+                let attrs = FieldOptions::new(&field.attrs, field.span())?;
+                if attrs.skip {
+                    continue;
+                }
+                if found.replace((field, attrs)).is_some() {
+                    return Err(vec![syn::Error::new(
+                        input_span,
+                        "AvroSchema: #[serde(transparent)] is only allowed on structs with one unskipped field",
+                    )]);
+                }
+            }
+
+            if let Some((field, attrs)) = found {
+                Ok((
+                    get_field_schema_expr(&field, attrs.with.clone())?,
+                    get_field_get_record_fields_expr(&field, attrs.with)?,
+                ))
+            } else {
+                Err(vec![syn::Error::new(
+                    input_span,
+                    "AvroSchema: #[serde(transparent)] is only allowed on structs with one unskipped field",
+                )])
+            }
+        }
         Fields::Unit => Err(vec![syn::Error::new(
             input_span,
-            "AvroSchema: derive does not work for unit structs",
+            "AvroSchema: `#[serde(transparent)` does not work for unit structs",
         )]),
     }
 }
@@ -469,6 +404,78 @@ fn type_to_field_default_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>>
     }
 }
 
+/// Create a vector of `RecordField`s.
+fn named_to_record_fields(
+    named: FieldsNamed,
+    rename_all: RenameRule,
+) -> Result<TokenStream, Vec<syn::Error>> {
+    let mut fields = Vec::with_capacity(named.named.len());
+    for field in named.named {
+        let field_attrs = FieldOptions::new(&field.attrs, field.span())?;
+        if field_attrs.skip {
+            continue;
+        } else if field_attrs.flatten {
+            // Inline the fields of the child record at runtime, as we don't have access to
+            // the schema here.
+            let get_record_fields = get_field_get_record_fields_expr(&field, field_attrs.with)?;
+            fields.push(quote! {
+                if let Some(flattened_fields) = #get_record_fields {
+                    fields.extend(flattened_fields);
+                } else {
+                    panic!("{} does not have any fields to flatten to", stringify!(#field));
+                }
+            });
+
+            // Don't add this field as it's been replaced by the child record fields
+            continue;
+        }
+        let mut name = field
+            .ident
+            .as_ref()
+            .expect("Field must have a name")
+            .to_string();
+        if let Some(raw_name) = name.strip_prefix("r#") {
+            name = raw_name.to_string();
+        }
+        match (field_attrs.rename, rename_all) {
+            (Some(rename), _) => {
+                name = rename;
+            }
+            (None, rename_all) if rename_all != RenameRule::None => {
+                name = rename_all.apply_to_field(&name);
+            }
+            _ => {}
+        }
+        let default_value = field_attrs
+            .default
+            .into_tokenstream(field.ident.span(), &field.ty)?;
+        let aliases = field_aliases(&field_attrs.alias);
+        let doc = doc_into_tokenstream(field_attrs.doc);
+        let field_schema_expr = get_field_schema_expr(&field, field_attrs.with)?;
+        fields.push(quote! {
+            fields.push(::apache_avro::schema::RecordField::builder()
+                .name(#name.to_string())
+                .doc(#doc)
+                .maybe_default(#default_value)
+                .aliases(#aliases)
+                .schema(#field_schema_expr)
+                .build());
+        });
+    }
+
+    // When fields are flattened there might be more fields, but this is good for the regular case
+    let minimum_length = fields.len();
+    Ok(quote! {
+        {
+            let mut fields = ::std::vec::Vec::with_capacity(#minimum_length);
+            #(
+                #fields
+            )*
+            fields
+        }
+    })
+}
+
 /// Stolen from serde
 fn to_compile_errors(errors: Vec<syn::Error>) -> proc_macro2::TokenStream {
     let compile_errors = errors.iter().map(syn::Error::to_compile_error);
@@ -478,6 +485,13 @@ fn to_compile_errors(errors: Vec<syn::Error>) -> proc_macro2::TokenStream {
 fn preserve_optional(op: Option<impl quote::ToTokens>) -> TokenStream {
     match op {
         Some(tt) => quote! {::std::option::Option::Some(#tt.into())},
+        None => quote! {::std::option::Option::None},
+    }
+}
+
+fn doc_into_tokenstream(doc: Option<String>) -> TokenStream {
+    match doc {
+        Some(doc) => quote! {::std::option::Option::Some(#doc.to_string())},
         None => quote! {::std::option::Option::None},
     }
 }

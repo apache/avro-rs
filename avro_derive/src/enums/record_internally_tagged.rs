@@ -1,5 +1,5 @@
 use crate::attributes::{NamedTypeOptions, VariantOptions};
-use crate::{aliases, preserve_optional, type_to_schema_expr};
+use crate::{aliases, named_to_record_fields, preserve_optional, type_to_schema_expr};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::spanned::Spanned;
@@ -15,33 +15,31 @@ pub fn get_data_enum_schema_def(
     let mut symbols = Vec::new();
     let mut field_additions = Vec::new();
     for variant in data_enum.variants {
-        let field_attrs = VariantOptions::new(&variant.attrs, variant.span())?;
-        let name = field_attrs.rename.unwrap_or_else(|| {
+        let variant_attrs = VariantOptions::new(&variant.attrs, variant.span())?;
+        let name = variant_attrs.rename.unwrap_or_else(|| {
             container_attrs
                 .rename_all
                 .apply_to_variant(&variant.ident.to_string())
         });
         match variant.fields {
             Fields::Named(named) => {
-                for field in named.named {
-                    let ident = field_attrs
+                let named_fields = named_to_record_fields(
+                    named,
+                    variant_attrs
                         .rename_all
-                        .or(container_attrs.rename_all_fields)
-                        .apply_to_field(&field.ident.unwrap().to_string());
-                    let schema_expr = type_to_schema_expr(&field.ty)?;
-                    field_additions.push(quote! {
-                        fields.push(::apache_avro::schema::RecordField::builder()
-                            .name(#ident.to_string())
-                            .schema(#schema_expr)
-                            .build())
-                    });
-                }
+                        .or(container_attrs.rename_all_fields),
+                )?;
+                field_additions.push(quote! {
+                    fields.extend(#named_fields);
+                });
             }
             Fields::Unnamed(unnamed) => {
                 if unnamed.unnamed.len() == 1 {
                     let only_one = unnamed.unnamed.iter().next().expect("There is one");
                     let schema_expr = type_to_schema_expr(&only_one.ty)?;
-                    field_additions.push(schema_expr);
+                    field_additions.push(quote! {
+                        fields.push(#schema_expr);
+                    });
                 } else if unnamed.unnamed.len() > 1 {
                     return Err(vec![syn::Error::new(
                         unnamed.span(),
@@ -71,7 +69,7 @@ pub fn get_data_enum_schema_def(
         ::apache_avro::schema::Schema::Record(::apache_avro::schema::RecordSchema::builder()
             .name(name)
             .maybe_aliases(#enum_aliases)
-            .maybe_doc(#doc)
+            .doc(#doc)
             .fields(fields)
             .build()
         )

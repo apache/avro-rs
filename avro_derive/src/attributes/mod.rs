@@ -15,11 +15,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::case::RenameRule;
+use crate::{case::RenameRule, type_to_field_default_expr};
 use darling::{FromAttributes, FromMeta};
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::{AttrStyle, Attribute, Expr, Ident, Path, spanned::Spanned};
+use syn::{AttrStyle, Attribute, Expr, Ident, Path, Type, spanned::Spanned};
 
 mod avro;
 mod serde;
@@ -387,6 +387,31 @@ pub enum FieldDefault {
     Disabled,
     /// Use this JSON value.
     Value(String),
+}
+
+impl FieldDefault {
+    pub fn into_tokenstream(
+        self,
+        span: Span,
+        field_type: &Type,
+    ) -> Result<TokenStream, Vec<syn::Error>> {
+        match self {
+            FieldDefault::Disabled => Ok(quote! { None }),
+            FieldDefault::Trait => type_to_field_default_expr(field_type),
+            FieldDefault::Value(default_value) => {
+                let _: serde_json::Value =
+                    serde_json::from_str(&default_value[..]).map_err(|e| {
+                        vec![syn::Error::new(
+                            span,
+                            format!("Invalid avro default json: \n{e}"),
+                        )]
+                    })?;
+                Ok(quote! {
+                    Some(::serde_json::from_str(#default_value).expect(format!("Invalid JSON: {:?}", #default_value).as_str()))
+                })
+            }
+        }
+    }
 }
 
 impl FromMeta for FieldDefault {

@@ -18,11 +18,17 @@
 use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
-enum NonBasic {
-    A(i32),
-    B,
-    C,
-    D
+struct A {
+    a: i32,
+    b: String,
 }
 
-fn main() {}
+#[derive(AvroSchema)]
+#[serde(transparent)]
+struct B {
+    a: A,
+}
+
+// #[derive(AvroSchema)]
+// #[serde(transparent)]
+// struct C(A);

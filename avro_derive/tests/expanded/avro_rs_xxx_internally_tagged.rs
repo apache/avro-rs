@@ -18,6 +18,17 @@
 use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
-struct B(i32, String);
+struct A {
+    a: i32,
+    b: String,
+}
 
-fn main() {}
+#[derive(AvroSchema)]
+#[serde(transparent)]
+struct B {
+    a: A,
+}
+
+// #[derive(AvroSchema)]
+// #[serde(transparent)]
+// struct C(A);

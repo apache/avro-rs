@@ -1,0 +1,20 @@
+error: AvroSchema: `#[avro(repr = "bare_union")]` requires `#[serde(untagged)]`
+  --> tests/ui/avro_rs_xxx_bare_union_and_untagged.rs:21:1
+   |
+21 | / #[avro(repr = "bare_union")]
+22 | | enum A {
+23 | |     A
+24 | | }
+   | |_^
+
+error: More than one variant maps to Schema::Null, this is not supported for bare unions
+  --> tests/ui/avro_rs_xxx_bare_union_and_untagged.rs:29:6
+   |
+29 | enum B {
+   |      ^
+
+error: AvroSchema: Empty tuple variants are not supported for bare unions
+  --> tests/ui/avro_rs_xxx_bare_union_and_untagged.rs:38:6
+   |
+38 |     A(),
+   |      ^^

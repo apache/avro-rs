@@ -29,6 +29,6 @@ struct B {
     a: A,
 }
 
-// #[derive(AvroSchema)]
-// #[serde(transparent)]
-// struct C(A);
+#[derive(AvroSchema)]
+#[serde(transparent)]
+struct C(A);
