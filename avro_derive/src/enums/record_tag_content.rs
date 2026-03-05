@@ -1,5 +1,6 @@
 use crate::attributes::{NamedTypeOptions, VariantOptions};
-use crate::{aliases, preserve_optional, type_to_schema_expr};
+use crate::tuple::tuple_to_record_schema;
+use crate::{aliases, named_to_record_fields, preserve_optional, type_to_schema_expr};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::spanned::Spanned;
@@ -16,36 +17,26 @@ pub fn get_data_enum_schema_def(
     let mut symbols = Vec::new();
     let mut schema_definitions = Vec::new();
     for variant in data_enum.variants {
-        let field_attrs = VariantOptions::new(&variant.attrs, variant.span())?;
-        let name = field_attrs.rename.unwrap_or_else(|| {
+        let variant_attrs = VariantOptions::new(&variant.attrs, variant.span())?;
+        let name = variant_attrs.rename.unwrap_or_else(|| {
             container_attrs
                 .rename_all
                 .apply_to_variant(&variant.ident.to_string())
         });
         match variant.fields {
             Fields::Named(named) => {
-                let mut fields = Vec::with_capacity(named.named.len());
-                for field in named.named {
-                    let ident = field_attrs
+                let fields = named_to_record_fields(
+                    named,
+                    variant_attrs
                         .rename_all
-                        .or(container_attrs.rename_all_fields)
-                        .apply_to_field(&field.ident.unwrap().to_string());
-                    let schema_expr = type_to_schema_expr(&field.ty)?;
-                    fields.push(quote! {
-                        ::apache_avro::schema::RecordField::builder()
-                            .name(#ident.to_string())
-                            .schema(#schema_expr)
-                            .build()
-                    });
-                }
+                        .or(container_attrs.rename_all_fields),
+                )?;
 
                 let schema_expr = quote! {
                     ::apache_avro::schema::Schema::Record(
                         ::apache_avro::schema::RecordSchema::builder()
                             .name(::apache_avro::schema::Name::new_with_enclosing_namespace(#name, enclosing_namespace).expect(&format!("Unable to parse variant record name for schema {}", #name)[..]))
-                            .fields(vec![
-                                #(#fields,)*
-                            ])
+                            .fields(#fields)
                             .build()
                     )
                 };
@@ -62,27 +53,8 @@ pub fn get_data_enum_schema_def(
                     let field_schema_expr = type_to_schema_expr(&only_one.ty)?;
                     schema_definitions.push(field_schema_expr);
                 } else if unnamed.unnamed.len() > 1 {
-                    let mut fields = Vec::with_capacity(unnamed.unnamed.len());
-                    for (index, field) in unnamed.unnamed.iter().enumerate() {
-                        let field_schema_expr = type_to_schema_expr(&field.ty)?;
-                        fields.push(quote! {
-                            ::apache_avro::schema::RecordField::builder()
-                                .name(format!("field_{}", #index))
-                                .schema(#field_schema_expr)
-                                .build()
-                        });
-                    }
+                    let schema_expr = tuple_to_record_schema(unnamed, &name, &[])?;
 
-                    let schema_expr = quote! {
-                        ::apache_avro::schema::Schema::Record(
-                            ::apache_avro::schema::RecordSchema::builder()
-                                .name(::apache_avro::schema::Name::new_with_enclosing_namespace(#name, enclosing_namespace).expect(&format!("Unable to parse variant record name for schema {}", #name)[..]))
-                                .fields(vec![
-                                    #(#fields,)*
-                                ])
-                                .build()
-                        )
-                    };
                     schema_definitions.push(schema_expr);
                 }
             }
@@ -119,7 +91,7 @@ pub fn get_data_enum_schema_def(
         ::apache_avro::schema::Schema::Record(::apache_avro::schema::RecordSchema::builder()
             .name(name)
             .maybe_aliases(#enum_aliases)
-            .maybe_doc(#doc)
+            .doc(#doc)
             .fields(fields)
             .build()
         )

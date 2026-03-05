@@ -1,18 +1,19 @@
 use apache_avro::AvroSchema;
-struct TestOptional {
-    a: Option<i32>,
+struct A {
+    a: i32,
+    b: String,
 }
 #[automatically_derived]
-impl ::apache_avro::AvroSchemaComponent for TestOptional {
+impl ::apache_avro::AvroSchemaComponent for A {
     fn get_schema_in_ctxt(
         named_schemas: &mut ::std::collections::HashSet<::apache_avro::schema::Name>,
         enclosing_namespace: ::apache_avro::schema::NamespaceRef,
     ) -> ::apache_avro::schema::Schema {
         let name = ::apache_avro::schema::Name::new_with_enclosing_namespace(
-                "TestOptional",
+                "A",
                 enclosing_namespace,
             )
-            .expect("Unable to parse schema name TestOptional");
+            .expect("Unable to parse schema name A");
         if named_schemas.contains(&name) {
             ::apache_avro::schema::Schema::Ref {
                 name,
@@ -22,22 +23,35 @@ impl ::apache_avro::AvroSchemaComponent for TestOptional {
             named_schemas.insert(name.clone());
             {
                 let schema_fields = {
-                    let mut fields = ::std::vec::Vec::with_capacity(1usize);
+                    let mut fields = ::std::vec::Vec::with_capacity(2usize);
                     fields
                         .push(
                             ::apache_avro::schema::RecordField::builder()
                                 .name("a".to_string())
                                 .doc(::std::option::Option::None)
                                 .maybe_default(
-                                    <Option<
-                                        i32,
-                                    > as ::apache_avro::AvroSchemaComponent>::field_default(),
+                                    <i32 as ::apache_avro::AvroSchemaComponent>::field_default(),
                                 )
                                 .aliases(::std::vec::Vec::new())
                                 .schema(
-                                    <Option<
-                                        i32,
-                                    > as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
+                                    <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
+                                        named_schemas,
+                                        enclosing_namespace,
+                                    ),
+                                )
+                                .build(),
+                        );
+                    fields
+                        .push(
+                            ::apache_avro::schema::RecordField::builder()
+                                .name("b".to_string())
+                                .doc(::std::option::Option::None)
+                                .maybe_default(
+                                    <String as ::apache_avro::AvroSchemaComponent>::field_default(),
+                                )
+                                .aliases(::std::vec::Vec::new())
+                                .schema(
+                                    <String as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
                                         named_schemas,
                                         enclosing_namespace,
                                     ),
@@ -67,13 +81,12 @@ impl ::apache_avro::AvroSchemaComponent for TestOptional {
                         }
                     }
                 };
-                let name = ::apache_avro::schema::Name::new("TestOptional")
+                let name = ::apache_avro::schema::Name::new("A")
                     .expect(
                         &::alloc::__export::must_use({
                             ::alloc::fmt::format(
                                 format_args!(
-                                    "Unable to parse struct name for schema {0}",
-                                    "TestOptional",
+                                    "Unable to parse struct name for schema {0}", "A",
                                 ),
                             )
                         })[..],
@@ -99,22 +112,35 @@ impl ::apache_avro::AvroSchemaComponent for TestOptional {
         enclosing_namespace: ::apache_avro::schema::NamespaceRef,
     ) -> ::std::option::Option<::std::vec::Vec<::apache_avro::schema::RecordField>> {
         ::std::option::Option::Some({
-            let mut fields = ::std::vec::Vec::with_capacity(1usize);
+            let mut fields = ::std::vec::Vec::with_capacity(2usize);
             fields
                 .push(
                     ::apache_avro::schema::RecordField::builder()
                         .name("a".to_string())
                         .doc(::std::option::Option::None)
                         .maybe_default(
-                            <Option<
-                                i32,
-                            > as ::apache_avro::AvroSchemaComponent>::field_default(),
+                            <i32 as ::apache_avro::AvroSchemaComponent>::field_default(),
                         )
                         .aliases(::std::vec::Vec::new())
                         .schema(
-                            <Option<
-                                i32,
-                            > as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
+                            <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
+                                named_schemas,
+                                enclosing_namespace,
+                            ),
+                        )
+                        .build(),
+                );
+            fields
+                .push(
+                    ::apache_avro::schema::RecordField::builder()
+                        .name("b".to_string())
+                        .doc(::std::option::Option::None)
+                        .maybe_default(
+                            <String as ::apache_avro::AvroSchemaComponent>::field_default(),
+                        )
+                        .aliases(::std::vec::Vec::new())
+                        .schema(
+                            <String as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
                                 named_schemas,
                                 enclosing_namespace,
                             ),
@@ -123,6 +149,34 @@ impl ::apache_avro::AvroSchemaComponent for TestOptional {
                 );
             fields
         })
+    }
+    fn field_default() -> ::std::option::Option<::serde_json::Value> {
+        ::std::option::Option::None
+    }
+}
+#[serde(transparent)]
+struct B {
+    a: A,
+}
+#[automatically_derived]
+impl ::apache_avro::AvroSchemaComponent for B {
+    fn get_schema_in_ctxt(
+        named_schemas: &mut ::std::collections::HashSet<::apache_avro::schema::Name>,
+        enclosing_namespace: ::apache_avro::schema::NamespaceRef,
+    ) -> ::apache_avro::schema::Schema {
+        <A as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
+            named_schemas,
+            enclosing_namespace,
+        )
+    }
+    fn get_record_fields_in_ctxt(
+        named_schemas: &mut ::std::collections::HashSet<::apache_avro::schema::Name>,
+        enclosing_namespace: ::apache_avro::schema::NamespaceRef,
+    ) -> ::std::option::Option<::std::vec::Vec<::apache_avro::schema::RecordField>> {
+        <A as ::apache_avro::AvroSchemaComponent>::get_record_fields_in_ctxt(
+            named_schemas,
+            enclosing_namespace,
+        )
     }
     fn field_default() -> ::std::option::Option<::serde_json::Value> {
         ::std::option::Option::None

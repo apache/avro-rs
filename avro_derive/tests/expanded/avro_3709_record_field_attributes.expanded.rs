@@ -24,30 +24,47 @@ impl ::apache_avro::AvroSchemaComponent for A {
             let enclosing_namespace = name.namespace();
             named_schemas.insert(name.clone());
             {
-                let mut schema_fields = ::std::vec::Vec::with_capacity(1usize);
-                schema_fields
-                    .push(::apache_avro::schema::RecordField {
-                        name: "a3".to_string(),
-                        doc: ::std::option::Option::Some("a doc".into()),
-                        default: ::std::option::Option::Some(
-                            ::serde_json::from_str("123")
-                                .expect("Unreachable! This parsed at compile time!"),
-                        ),
-                        aliases: ::alloc::boxed::box_assume_init_into_vec_unsafe(
-                            ::alloc::intrinsics::write_box_via_move(
-                                ::alloc::boxed::Box::new_uninit(),
-                                [
-                                    "a1".try_into().expect("Alias is invalid"),
-                                    "a2".try_into().expect("Alias is invalid"),
-                                ],
-                            ),
-                        ),
-                        schema: <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
-                            named_schemas,
-                            enclosing_namespace,
-                        ),
-                        custom_attributes: ::std::collections::BTreeMap::new(),
-                    });
+                let schema_fields = {
+                    let mut fields = ::std::vec::Vec::with_capacity(1usize);
+                    fields
+                        .push(
+                            ::apache_avro::schema::RecordField::builder()
+                                .name("a3".to_string())
+                                .doc(::std::option::Option::Some("a doc".to_string()))
+                                .maybe_default(
+                                    Some(
+                                        ::serde_json::from_str("123")
+                                            .expect(
+                                                ::alloc::__export::must_use({
+                                                        ::alloc::fmt::format(
+                                                            format_args!("Invalid JSON: {0:?}", "123"),
+                                                        )
+                                                    })
+                                                    .as_str(),
+                                            ),
+                                    ),
+                                )
+                                .aliases(
+                                    ::alloc::boxed::box_assume_init_into_vec_unsafe(
+                                        ::alloc::intrinsics::write_box_via_move(
+                                            ::alloc::boxed::Box::new_uninit(),
+                                            [
+                                                "a1".try_into().expect("Alias is invalid"),
+                                                "a2".try_into().expect("Alias is invalid"),
+                                            ],
+                                        ),
+                                    ),
+                                )
+                                .schema(
+                                    <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
+                                        named_schemas,
+                                        enclosing_namespace,
+                                    ),
+                                )
+                                .build(),
+                        );
+                    fields
+                };
                 let schema_field_set: ::std::collections::HashSet<_> = schema_fields
                     .iter()
                     .map(|rf| &rf.name)
@@ -99,31 +116,47 @@ impl ::apache_avro::AvroSchemaComponent for A {
         named_schemas: &mut ::std::collections::HashSet<::apache_avro::schema::Name>,
         enclosing_namespace: ::apache_avro::schema::NamespaceRef,
     ) -> ::std::option::Option<::std::vec::Vec<::apache_avro::schema::RecordField>> {
-        let mut schema_fields = ::std::vec::Vec::with_capacity(1usize);
-        schema_fields
-            .push(::apache_avro::schema::RecordField {
-                name: "a3".to_string(),
-                doc: ::std::option::Option::Some("a doc".into()),
-                default: ::std::option::Option::Some(
-                    ::serde_json::from_str("123")
-                        .expect("Unreachable! This parsed at compile time!"),
-                ),
-                aliases: ::alloc::boxed::box_assume_init_into_vec_unsafe(
-                    ::alloc::intrinsics::write_box_via_move(
-                        ::alloc::boxed::Box::new_uninit(),
-                        [
-                            "a1".try_into().expect("Alias is invalid"),
-                            "a2".try_into().expect("Alias is invalid"),
-                        ],
-                    ),
-                ),
-                schema: <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
-                    named_schemas,
-                    enclosing_namespace,
-                ),
-                custom_attributes: ::std::collections::BTreeMap::new(),
-            });
-        ::std::option::Option::Some(schema_fields)
+        ::std::option::Option::Some({
+            let mut fields = ::std::vec::Vec::with_capacity(1usize);
+            fields
+                .push(
+                    ::apache_avro::schema::RecordField::builder()
+                        .name("a3".to_string())
+                        .doc(::std::option::Option::Some("a doc".to_string()))
+                        .maybe_default(
+                            Some(
+                                ::serde_json::from_str("123")
+                                    .expect(
+                                        ::alloc::__export::must_use({
+                                                ::alloc::fmt::format(
+                                                    format_args!("Invalid JSON: {0:?}", "123"),
+                                                )
+                                            })
+                                            .as_str(),
+                                    ),
+                            ),
+                        )
+                        .aliases(
+                            ::alloc::boxed::box_assume_init_into_vec_unsafe(
+                                ::alloc::intrinsics::write_box_via_move(
+                                    ::alloc::boxed::Box::new_uninit(),
+                                    [
+                                        "a1".try_into().expect("Alias is invalid"),
+                                        "a2".try_into().expect("Alias is invalid"),
+                                    ],
+                                ),
+                            ),
+                        )
+                        .schema(
+                            <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
+                                named_schemas,
+                                enclosing_namespace,
+                            ),
+                        )
+                        .build(),
+                );
+            fields
+        })
     }
     fn field_default() -> ::std::option::Option<::serde_json::Value> {
         ::std::option::Option::None

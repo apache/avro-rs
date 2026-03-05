@@ -18,6 +18,22 @@
 use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
-struct AbsoluteUnit;
-
-fn main() {}
+#[serde(untagged)]
+enum Abc {
+    A,
+    B(bool),
+    C(
+        #[avro(doc = "This is an int")]
+        i32, 
+        i64
+    ),
+    D {},
+    E {
+        is_it_true: bool,
+    },
+    F {
+        #[avro(doc = "This is X")]
+        x: f64,
+        y: f32,
+    }
+}

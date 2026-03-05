@@ -23,31 +23,44 @@ impl ::apache_avro::AvroSchemaComponent for A {
             let enclosing_namespace = name.namespace();
             named_schemas.insert(name.clone());
             {
-                let mut schema_fields = ::std::vec::Vec::with_capacity(2usize);
-                schema_fields
-                    .push(::apache_avro::schema::RecordField {
-                        name: "ITEM".to_string(),
-                        doc: ::std::option::Option::None,
-                        default: <i32 as ::apache_avro::AvroSchemaComponent>::field_default(),
-                        aliases: ::std::vec::Vec::new(),
-                        schema: <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
-                            named_schemas,
-                            enclosing_namespace,
-                        ),
-                        custom_attributes: ::std::collections::BTreeMap::new(),
-                    });
-                schema_fields
-                    .push(::apache_avro::schema::RecordField {
-                        name: "DOUBLE_ITEM".to_string(),
-                        doc: ::std::option::Option::None,
-                        default: <i32 as ::apache_avro::AvroSchemaComponent>::field_default(),
-                        aliases: ::std::vec::Vec::new(),
-                        schema: <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
-                            named_schemas,
-                            enclosing_namespace,
-                        ),
-                        custom_attributes: ::std::collections::BTreeMap::new(),
-                    });
+                let schema_fields = {
+                    let mut fields = ::std::vec::Vec::with_capacity(2usize);
+                    fields
+                        .push(
+                            ::apache_avro::schema::RecordField::builder()
+                                .name("ITEM".to_string())
+                                .doc(::std::option::Option::None)
+                                .maybe_default(
+                                    <i32 as ::apache_avro::AvroSchemaComponent>::field_default(),
+                                )
+                                .aliases(::std::vec::Vec::new())
+                                .schema(
+                                    <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
+                                        named_schemas,
+                                        enclosing_namespace,
+                                    ),
+                                )
+                                .build(),
+                        );
+                    fields
+                        .push(
+                            ::apache_avro::schema::RecordField::builder()
+                                .name("DOUBLE_ITEM".to_string())
+                                .doc(::std::option::Option::None)
+                                .maybe_default(
+                                    <i32 as ::apache_avro::AvroSchemaComponent>::field_default(),
+                                )
+                                .aliases(::std::vec::Vec::new())
+                                .schema(
+                                    <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
+                                        named_schemas,
+                                        enclosing_namespace,
+                                    ),
+                                )
+                                .build(),
+                        );
+                    fields
+                };
                 let schema_field_set: ::std::collections::HashSet<_> = schema_fields
                     .iter()
                     .map(|rf| &rf.name)
@@ -99,32 +112,44 @@ impl ::apache_avro::AvroSchemaComponent for A {
         named_schemas: &mut ::std::collections::HashSet<::apache_avro::schema::Name>,
         enclosing_namespace: ::apache_avro::schema::NamespaceRef,
     ) -> ::std::option::Option<::std::vec::Vec<::apache_avro::schema::RecordField>> {
-        let mut schema_fields = ::std::vec::Vec::with_capacity(2usize);
-        schema_fields
-            .push(::apache_avro::schema::RecordField {
-                name: "ITEM".to_string(),
-                doc: ::std::option::Option::None,
-                default: <i32 as ::apache_avro::AvroSchemaComponent>::field_default(),
-                aliases: ::std::vec::Vec::new(),
-                schema: <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
-                    named_schemas,
-                    enclosing_namespace,
-                ),
-                custom_attributes: ::std::collections::BTreeMap::new(),
-            });
-        schema_fields
-            .push(::apache_avro::schema::RecordField {
-                name: "DOUBLE_ITEM".to_string(),
-                doc: ::std::option::Option::None,
-                default: <i32 as ::apache_avro::AvroSchemaComponent>::field_default(),
-                aliases: ::std::vec::Vec::new(),
-                schema: <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
-                    named_schemas,
-                    enclosing_namespace,
-                ),
-                custom_attributes: ::std::collections::BTreeMap::new(),
-            });
-        ::std::option::Option::Some(schema_fields)
+        ::std::option::Option::Some({
+            let mut fields = ::std::vec::Vec::with_capacity(2usize);
+            fields
+                .push(
+                    ::apache_avro::schema::RecordField::builder()
+                        .name("ITEM".to_string())
+                        .doc(::std::option::Option::None)
+                        .maybe_default(
+                            <i32 as ::apache_avro::AvroSchemaComponent>::field_default(),
+                        )
+                        .aliases(::std::vec::Vec::new())
+                        .schema(
+                            <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
+                                named_schemas,
+                                enclosing_namespace,
+                            ),
+                        )
+                        .build(),
+                );
+            fields
+                .push(
+                    ::apache_avro::schema::RecordField::builder()
+                        .name("DOUBLE_ITEM".to_string())
+                        .doc(::std::option::Option::None)
+                        .maybe_default(
+                            <i32 as ::apache_avro::AvroSchemaComponent>::field_default(),
+                        )
+                        .aliases(::std::vec::Vec::new())
+                        .schema(
+                            <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
+                                named_schemas,
+                                enclosing_namespace,
+                            ),
+                        )
+                        .build(),
+                );
+            fields
+        })
     }
     fn field_default() -> ::std::option::Option<::serde_json::Value> {
         ::std::option::Option::None
