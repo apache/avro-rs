@@ -18,6 +18,7 @@
 headerPath = "Apache-2.0-ASF.txt"
 excludes = [
   "*.stderr",
+  "*.expanded.rs",
   "*.avro",
   "NOTICE",
   "README.tpl",

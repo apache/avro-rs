@@ -94,11 +94,18 @@ jobs:
           key: cargo-rdme-
 
       - name: Cache cargo-expand
-        if: matrix.rust == 'stable'
+        if: matrix.rust == 'nightly'
         uses: actions/cache@v5
         with:
           path: ~/.cargo-${{ matrix.rust }}/cargo-expand
           key: cargo-expand-
+
+      - name: Install cargo-expand
+        # The result is environment independent so one test pattern is enough.
+        if: matrix.rust == 'nightly'
+        run: |
+          cargo install --root ~/.cargo-${{ matrix.rust }}/cargo-expand --locked cargo-expand
+          export PATH=$PATH:~/.cargo-${{ matrix.rust }}/cargo-expand/bin
 
       # Check if the doc cumment in avro/src/lib.rs and avro/README.md are in sync.
       - name: Run cargo-rdme
