@@ -155,6 +155,8 @@ impl GenericDatumWriter<'_> {
 /// **NOTE**: This function has a quite small niche of usage and does NOT generate headers and sync
 /// markers; use [`Writer`] to be fully Avro-compatible if you don't know what
 /// you are doing, instead.
+///
+/// [`Writer`]: crate::Writer
 #[deprecated(since = "0.22.0", note = "Use GenericDatumWriter instead")]
 pub fn to_avro_datum<T: Into<Value>>(schema: &Schema, value: T) -> AvroResult<Vec<u8>> {
     GenericDatumWriter::builder(schema)
@@ -169,8 +171,10 @@ pub fn to_avro_datum<T: Into<Value>>(schema: &Schema, value: T) -> AvroResult<Ve
 /// Returns a result with the number of bytes written.
 ///
 /// **NOTE**: This function has a quite small niche of usage and does **NOT** generate headers and sync
-/// markers; use [`append_ser`](Writer::append_ser) to be fully Avro-compatible
+/// markers; use [`Writer::append_ser`] to be fully Avro-compatible
 /// if you don't know what you are doing, instead.
+///
+/// [`Writer::append_ser`]: crate::Writer::append_ser
 pub fn write_avro_datum_ref<T: Serialize, W: Write>(
     schema: &Schema,
     names: &NamesRef,
