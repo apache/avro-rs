@@ -1,0 +1,5 @@
+error: AvroSchema derive does not work for unit structs
+  --> tests/ui/avro_rs_501_unit_struct.rs:21:8
+   |
+21 | struct AbsoluteUnit;
+   |        ^^^^^^^^^^^^

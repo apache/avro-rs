@@ -61,6 +61,16 @@ jobs:
             target: aarch64-unknown-linux-gnu
 
     steps:
+      - uses: taiki-e/install-action@v2
+        if: matrix.rust == 'nightly'
+        with:
+          tool: cargo-expand
+
+      - uses: taiki-e/install-action@v2
+        if: matrix.rust == 'stable' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
+        with:
+          tool: cargo-rdme
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -86,21 +96,11 @@ jobs:
           components: rustfmt
           targets: ${{ matrix.runner.target }}
 
-      - name: Cache cargo-rdme
-        if: matrix.rust == 'stable' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
-        uses: actions/cache@v5
-        with:
-          path: ~/.cargo-${{ matrix.rust }}/cargo-rdme
-          key: cargo-rdme-
-
       # Check if the doc cumment in avro/src/lib.rs and avro/README.md are in sync.
       - name: Run cargo-rdme
         # The result is environment independent so one test pattern is enough.
         if: matrix.rust == 'stable' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
-        run: |
-          cargo install --root ~/.cargo-${{ matrix.rust }}/cargo-rdme --locked cargo-rdme
-          export PATH=$PATH:~/.cargo-${{ matrix.rust }}/cargo-rdme/bin
-          cargo rdme --check
+        run: cargo rdme --check
 
       - name: Rust Format
         if: matrix.runner.target != 'wasm32-unknown-unknown'
