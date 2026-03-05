@@ -46,15 +46,14 @@ pub fn schema_def(
             };
             symbols.push(name);
         }
-        let full_schema_name = &container_attrs.name;
         Ok(quote! {
-            ::apache_avro::schema::Schema::Enum(apache_avro::schema::EnumSchema {
-                name: ::apache_avro::schema::Name::new(#full_schema_name).expect(&format!("Unable to parse enum name for schema {}", #full_schema_name)[..]),
+            ::apache_avro::schema::Schema::Enum(::apache_avro::schema::EnumSchema {
+                name,
                 aliases: #enum_aliases,
                 doc: #doc,
                 symbols: vec![#(#symbols.to_owned()),*],
                 default: #default,
-                attributes: Default::default(),
+                attributes: ::std::collections::BTreeMap::new(),
             })
         })
     } else {
