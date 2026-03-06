@@ -15,9 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! Deprecated. Use [`apache_avro::serde::*`] instead.
+//! Deprecated. Use [`apache_avro::serde`] instead.
 //!
-//! [`apache_avro::serde::*`](crate::serde)
+//! [`apache_avro::serde`](crate::serde)
 
 #[cfg(doc)]
 use crate as apache_avro;

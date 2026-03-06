@@ -430,8 +430,8 @@ impl<W: Write> ser::SerializeStruct for SchemaAwareWriteSerializeStruct<'_, '_, 
 
 /// This implementation is used to support `#[serde(flatten)]` as that uses [`SerializeMap`] instead of [`SerializeStruct`].
 ///
-/// [`SerializeMap`](ser::SerializeMap)
-/// [`SerializeStruct`](ser::SerializeStruct)
+/// [`SerializeMap`]: ser::SerializeMap
+/// [`SerializeStruct`]: ser::SerializeStruct
 impl<W: Write> ser::SerializeMap for SchemaAwareWriteSerializeStruct<'_, '_, W> {
     type Ok = usize;
     type Error = Error;
