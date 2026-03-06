@@ -106,7 +106,6 @@ jobs:
         # The result is environment independent, so one test pattern is enough.
         if: matrix.rust == 'nightly' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
         env:
-          RUSTFLAGS: --cfg docsrs
           RUSTDOCFLAGS: --cfg docsrs -Dwarnings
         run: cargo doc --lib --no-deps --document-private-items --features derive
 
