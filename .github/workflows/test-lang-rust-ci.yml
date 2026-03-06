@@ -98,9 +98,16 @@ jobs:
 
       # Check if the doc cumment in avro/src/lib.rs and avro/README.md are in sync.
       - name: Run cargo-rdme
-        # The result is environment independent so one test pattern is enough.
+        # The result is environment independent, so one test pattern is enough.
         if: matrix.rust == 'stable' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
         run: cargo rdme --check
+
+      - name: Run cargo doc
+        # The result is environment independent, so one test pattern is enough.
+        if: matrix.rust == 'nightly' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
+        env:
+          RUSTDOCFLAGS: --cfg docsrs -Dwarnings
+        run: cargo doc --lib --no-deps --document-private-items --features derive
 
       - name: Rust Format
         if: matrix.runner.target != 'wasm32-unknown-unknown'
