@@ -396,7 +396,7 @@ impl FieldDefault {
         field_type: &Type,
     ) -> Result<TokenStream, Vec<syn::Error>> {
         match self {
-            FieldDefault::Disabled => Ok(quote! { None }),
+            FieldDefault::Disabled => Ok(quote! { ::std::option::Option::None }),
             FieldDefault::Trait => type_to_field_default_expr(field_type),
             FieldDefault::Value(default_value) => {
                 let _: serde_json::Value =
@@ -407,7 +407,7 @@ impl FieldDefault {
                         )]
                     })?;
                 Ok(quote! {
-                    Some(::serde_json::from_str(#default_value).expect(format!("Invalid JSON: {:?}", #default_value).as_str()))
+                    ::std::option::Option::Some(::serde_json::from_str(#default_value).expect(format!("Invalid JSON: {:?}", #default_value).as_str()))
                 })
             }
         }

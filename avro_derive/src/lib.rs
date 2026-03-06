@@ -302,6 +302,15 @@ fn get_field_schema_expr(field: &Field, with: With) -> Result<TokenStream, Vec<s
     }
 }
 
+/// Call `get_record_fields_in_ctxt` for this field.
+///
+/// # `TokenStream`
+/// ## Context
+/// The token stream expects the following variables to be defined:
+/// - `named_schemas`: `&mut HashSet<Name>`
+/// - `enclosing_namespace`: `Option<&str>`
+/// ## Returns
+/// A call to a `get_record_fields_in_ctxt(named_schemas, enclosing_namespace) -> Option<Vec<RecordField>>`
 fn get_field_get_record_fields_expr(
     field: &Field,
     with: With,
@@ -338,6 +347,14 @@ fn get_field_get_record_fields_expr(
 }
 
 /// Takes in the Tokens of a type and returns the tokens of an expression with return type `Schema`
+///
+/// # `TokenStream`
+/// ## Context
+/// The token stream expects the following variables to be defined:
+/// - `named_schemas`: `&mut HashSet<Name>`
+/// - `enclosing_namespace`: `Option<&str>`
+/// ## Returns
+/// A call to a `get_schema_in_ctxt(named_schemas, enclosing_namespace) -> Schema`
 fn type_to_schema_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>> {
     match ty {
         Type::Array(_) | Type::Slice(_) | Type::Path(_) | Type::Reference(_) => Ok(
@@ -477,7 +494,7 @@ fn named_to_record_fields(
 }
 
 /// Stolen from serde
-fn to_compile_errors(errors: Vec<syn::Error>) -> proc_macro2::TokenStream {
+fn to_compile_errors(errors: Vec<syn::Error>) -> TokenStream {
     let compile_errors = errors.iter().map(syn::Error::to_compile_error);
     quote!(#(#compile_errors)*)
 }
