@@ -19,42 +19,35 @@ use crate::schema::{
     Alias, ArraySchema, EnumSchema, FixedSchema, MapSchema, Name, RecordField, RecordSchema,
     UnionSchema,
 };
-use crate::types::Value;
 use crate::{AvroResult, Schema};
 use bon::bon;
 use serde_json::Value as JsonValue;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 #[bon]
 impl Schema {
-    /// Returns a `Schema::Map` with the given types and optional default
-    /// and custom attributes.
+    /// Returns a `Schema::Map` with the given types and custom attributes.
     #[builder(finish_fn = build)]
     pub fn map(
         #[builder(start_fn)] types: Schema,
-        default: Option<HashMap<String, Value>>,
         attributes: Option<BTreeMap<String, JsonValue>>,
     ) -> Self {
         let attributes = attributes.unwrap_or_default();
         Schema::Map(MapSchema {
             types: Box::new(types),
-            default,
             attributes,
         })
     }
 
-    /// Returns a `Schema::Array` with the given items and optional default
-    /// and custom attributes.
+    /// Returns a `Schema::Array` with the given items and custom attributes.
     #[builder(finish_fn = build)]
     pub fn array(
         #[builder(start_fn)] items: Schema,
-        default: Option<Vec<Value>>,
         attributes: Option<BTreeMap<String, JsonValue>>,
     ) -> Self {
         let attributes = attributes.unwrap_or_default();
         Schema::Array(ArraySchema {
             items: Box::new(items),
-            default,
             attributes,
         })
     }
