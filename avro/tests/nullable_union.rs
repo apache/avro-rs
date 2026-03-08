@@ -32,7 +32,9 @@ where
     let mut writer = Writer::new(test_case.schema, Vec::new())?;
     writer.append_ser(&test_case.input)?;
     let bytes = writer.into_inner()?;
-    let mut reader = Reader::with_schema(test_case.schema, &bytes[..])?;
+    let mut reader = Reader::builder(&bytes[..])
+        .reader_schema(test_case.schema)
+        .build()?;
     let read_avro_value = reader.next().unwrap()?;
     assert_eq!(
         &read_avro_value, test_case.expected_avro,

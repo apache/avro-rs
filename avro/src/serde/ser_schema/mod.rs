@@ -1483,7 +1483,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                 if self.serializing_some {
                     for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
                         match variant_schema {
-                            Schema::Enum(enum_schema) if enum_schema.name.name == name => {
+                            Schema::Enum(enum_schema) if enum_schema.name.name() == name => {
                                 if variant_index as usize >= enum_schema.symbols.len() {
                                     return Err(create_error(format!(
                                         "Variant index out of bounds: {}. The Enum schema has '{}' symbols",
@@ -1497,7 +1497,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
                             Schema::Ref { name: ref_name } => {
                                 let ref_schema = self.get_ref_schema(ref_name)?;
                                 if let Schema::Enum(enum_schema) = ref_schema
-                                    && enum_schema.name.name == name
+                                    && enum_schema.name.name() == name
                                 {
                                     if variant_index as usize >= enum_schema.symbols.len() {
                                         return Err(create_error(format!(
@@ -3805,7 +3805,10 @@ mod tests {
         )?;
         writer.append_ser(&input)?;
         let bytes = writer.into_inner()?;
-        let mut reader = Reader::with_schemata(&schemas[1], schemas.iter().collect(), &bytes[..])?;
+        let mut reader = Reader::builder(&bytes[..])
+            .reader_schema(&schemas[1])
+            .schemata(schemas.iter().collect())
+            .build()?;
         let read_avro_value = reader.next().unwrap()?;
         assert_eq!(
             &read_avro_value, &expected,
