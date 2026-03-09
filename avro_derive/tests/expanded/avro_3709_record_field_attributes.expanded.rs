@@ -32,7 +32,7 @@ impl ::apache_avro::AvroSchemaComponent for A {
                                 .name("a3".to_string())
                                 .doc(::std::option::Option::Some("a doc".to_string()))
                                 .maybe_default(
-                                    Some(
+                                    ::std::option::Option::Some(
                                         ::serde_json::from_str("123")
                                             .expect(
                                                 ::alloc::__export::must_use({
@@ -124,7 +124,7 @@ impl ::apache_avro::AvroSchemaComponent for A {
                         .name("a3".to_string())
                         .doc(::std::option::Option::Some("a doc".to_string()))
                         .maybe_default(
-                            Some(
+                            ::std::option::Option::Some(
                                 ::serde_json::from_str("123")
                                     .expect(
                                         ::alloc::__export::must_use({

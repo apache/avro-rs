@@ -100,7 +100,6 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> VariantAccess<'de>
     {
         if let Schema::Record(record) = self.schema
             && record.fields.len() == 1
-            && record.fields[0].name == "field_0"
             && record
                 .attributes
                 .get("org.apache.avro.rust.union_of_records")

@@ -18,17 +18,18 @@
 use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
-struct A {
-    a: i32,
-    b: String,
+#[avro(repr = "record_tag_content")]
+#[serde(tag = "type", content = "value")]
+enum Abc {
+    A,
+    B(bool),
+    D {},
+    E {
+        is_it_true: bool,
+    },
+    F {
+        #[avro(doc = "This is X")]
+        x: f64,
+        y: f32,
+    },
 }
-
-#[derive(AvroSchema)]
-#[serde(transparent)]
-struct B {
-    a: A,
-}
-
-// #[derive(AvroSchema)]
-// #[serde(transparent)]
-// struct C(A);

@@ -1,7 +1,8 @@
-use crate::attributes::{FieldOptions, NamedTypeOptions, VariantOptions};
+use crate::attributes::{NamedTypeOptions, VariantOptions};
 use crate::tuple::tuple_struct_variant_to_record_schema;
-use crate::{fields, named_to_record_fields};
-use proc_macro2::{Span, TokenStream};
+use crate::utils::{Schema, TypedTokenStream};
+use crate::{FieldOptions, fields};
+use proc_macro2::Span;
 use quote::quote;
 use syn::spanned::Spanned;
 use syn::{DataEnum, Fields};
@@ -10,7 +11,7 @@ pub fn get_data_enum_schema_def(
     container_attrs: &NamedTypeOptions,
     data_enum: DataEnum,
     ident_span: Span,
-) -> Result<TokenStream, Vec<syn::Error>> {
+) -> Result<TypedTokenStream<Schema>, Vec<syn::Error>> {
     let mut variant_expr = Vec::new();
     let mut have_null = false;
     for variant in data_enum.variants {
@@ -22,22 +23,12 @@ pub fn get_data_enum_schema_def(
         });
         match variant.fields {
             Fields::Named(named) => {
-                let fields = named_to_record_fields(
-                    named,
-                    variant_attrs
-                        .rename_all
-                        .or(container_attrs.rename_all_fields),
-                )?;
-
-                let schema_expr = quote! {
-                    ::apache_avro::schema::Schema::Record(
-                        ::apache_avro::schema::RecordSchema::builder()
-                            .name(::apache_avro::schema::Name::new_with_enclosing_namespace(#name, enclosing_namespace).expect(&format!("Unable to parse variant record name for schema {}", #name)[..]))
-                            .fields(#fields)
-                            .build()
-                    )
-                };
-                variant_expr.push(schema_expr);
+                // TODO: Support struct variants for untagged enums. All fields of all variants need to be in one record with
+                //       defaults for every field and the record named as the enum.
+                return Err(vec![syn::Error::new(
+                    named.span(),
+                    "AvroSchema: Struct variants are not supported for untagged structs",
+                )]);
             }
             Fields::Unnamed(unnamed) => {
                 if unnamed.unnamed.is_empty() {
@@ -47,8 +38,9 @@ pub fn get_data_enum_schema_def(
                     )]);
                 } else if unnamed.unnamed.len() == 1 {
                     let only_one = unnamed.unnamed.iter().next().expect("There is one");
-                    let field_attrs = FieldOptions::new(&only_one.attrs, only_one.span())?;
-                    let schema_expr = fields::to_schema(&only_one, field_attrs.with)?;
+                    let field_attrs =
+                        FieldOptions::new_for_newtype(&only_one.attrs, only_one.span())?;
+                    let schema_expr = fields::to_schema(only_one, field_attrs.with)?;
                     variant_expr.push(schema_expr);
                 } else if unnamed.unnamed.len() > 1 {
                     let schema_expr = tuple_struct_variant_to_record_schema(unnamed, &name, &[])?;
@@ -63,16 +55,18 @@ pub fn get_data_enum_schema_def(
                         "More than one variant maps to Schema::Null, this is not supported for bare unions",
                     )]);
                 }
-                variant_expr.push(quote! { ::apache_avro::schema::Schema::Null });
+                variant_expr.push(TypedTokenStream::<Schema>::new(
+                    quote! { ::apache_avro::schema::Schema::Null },
+                ));
                 have_null = true;
             }
         }
     }
-    Ok(quote! {
+    Ok(TypedTokenStream::new(quote! {{
         let mut builder = ::apache_avro::schema::UnionSchema::builder();
 
         #(builder.variant(#variant_expr).expect("Duplicate Schema found");)*
 
         ::apache_avro::schema::Schema::Union(builder.build())
-    })
+    }}))
 }

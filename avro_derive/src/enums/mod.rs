@@ -21,8 +21,12 @@ mod record_internally_tagged;
 mod record_tag_content;
 mod union_of_records;
 
-use crate::attributes::{EnumRepr, NamedTypeOptions};
-use proc_macro2::{Ident, Span, TokenStream};
+use crate::{
+    attributes::{EnumRepr, NamedTypeOptions},
+    utils::{Schema, TypedTokenStream},
+};
+use proc_macro2::{Ident, Span};
+use quote::quote;
 use syn::{Attribute, DataEnum, Fields, Meta};
 
 /// Generate a schema definition for a enum.
@@ -30,7 +34,7 @@ pub fn get_data_enum_schema_def(
     container_attrs: &NamedTypeOptions,
     data_enum: DataEnum,
     ident_span: Span,
-) -> Result<TokenStream, Vec<syn::Error>> {
+) -> Result<TypedTokenStream<Schema>, Vec<syn::Error>> {
     match &container_attrs.repr {
         None => {
             if data_enum.variants.iter().all(|v| Fields::Unit == v.fields) {
@@ -58,15 +62,22 @@ pub fn get_data_enum_schema_def(
 fn default_enum_variant(
     data_enum: &DataEnum,
     error_span: Span,
-) -> Result<Option<String>, Vec<syn::Error>> {
+) -> Result<TypedTokenStream<Option<String>>, Vec<syn::Error>> {
     match data_enum
         .variants
         .iter()
         .filter(|v| v.attrs.iter().any(is_default_attr))
         .collect::<Vec<_>>()
     {
-        variants if variants.is_empty() => Ok(None),
-        single if single.len() == 1 => Ok(Some(single[0].ident.to_string())),
+        variants if variants.is_empty() => Ok(TypedTokenStream::new(
+            quote! { ::std::option::Option::None },
+        )),
+        single if single.len() == 1 => {
+            let ident = single[0].ident.to_string();
+            Ok(TypedTokenStream::new(
+                quote! { ::std::option::Option::Some(#ident.to_string()) },
+            ))
+        }
         multiple => Err(vec![syn::Error::new(
             error_span,
             format!(

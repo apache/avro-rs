@@ -2102,6 +2102,8 @@ fn avro_rs_401_supported_type_variants() {
         three: &'static i32,
         four: &'a str,
         five: &'a mut f64,
+        #[avro(with)]
+        #[serde(with = "apache_avro::serde::array")]
         six: [u8; 5],
         seven: [u8],
     }

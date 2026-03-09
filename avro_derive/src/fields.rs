@@ -1,18 +1,19 @@
+use crate::RecordField;
 use crate::attributes::{FieldDefault, With};
-use proc_macro2::TokenStream;
+use crate::utils::{Schema, TypedTokenStream};
 use quote::{ToTokens, quote};
 use syn::spanned::Spanned;
 use syn::{Expr, ExprLit, Field, Lit, Type, TypeArray, TypeTuple};
 
-pub fn to_schema(field: &Field, with: With) -> Result<TokenStream, Vec<syn::Error>> {
+pub fn to_schema(field: &Field, with: With) -> Result<TypedTokenStream<Schema>, Vec<syn::Error>> {
     match with {
         With::Trait => Ok(type_to_schema_expr(&field.ty)?),
-        With::Serde(path) => {
-            Ok(quote! { #path::get_schema_in_ctxt(named_schemas, enclosing_namespace) })
-        }
+        With::Serde(path) => Ok(TypedTokenStream::<Schema>::new(
+            quote! { #path::get_schema_in_ctxt(named_schemas, enclosing_namespace) },
+        )),
         With::Expr(Expr::Closure(closure)) => {
             if closure.inputs.is_empty() {
-                Ok(quote! { (#closure)() })
+                Ok(TypedTokenStream::<Schema>::new(quote! { (#closure)() }))
             } else {
                 Err(vec![syn::Error::new(
                     field.span(),
@@ -20,7 +21,9 @@ pub fn to_schema(field: &Field, with: With) -> Result<TokenStream, Vec<syn::Erro
                 )])
             }
         }
-        With::Expr(Expr::Path(path)) => Ok(quote! { #path(named_schemas, enclosing_namespace) }),
+        With::Expr(Expr::Path(path)) => Ok(TypedTokenStream::<Schema>::new(
+            quote! { #path(named_schemas, enclosing_namespace) },
+        )),
         With::Expr(_expr) => Err(vec![syn::Error::new(
             field.span(),
             "Invalid expression, expected function or closure",
@@ -37,21 +40,24 @@ pub fn to_schema(field: &Field, with: With) -> Result<TokenStream, Vec<syn::Erro
 /// - `enclosing_namespace`: `Option<&str>`
 /// ## Returns
 /// An `Expr` that resolves to an instance of `Option<Vec<RecordField>>`.
-pub fn to_record_fields(field: &Field, with: With) -> Result<TokenStream, Vec<syn::Error>> {
+pub fn to_record_fields(
+    field: &Field,
+    with: With,
+) -> Result<TypedTokenStream<Option<Vec<RecordField>>>, Vec<syn::Error>> {
     match with {
         With::Trait => Ok(type_to_record_fields(&field.ty)?),
-        With::Serde(path) => {
-            Ok(quote! { #path::get_record_fields_in_ctxt(named_schemas, enclosing_namespace) })
-        }
+        With::Serde(path) => Ok(TypedTokenStream::<Option<Vec<RecordField>>>::new(
+            quote! { #path::get_record_fields_in_ctxt(named_schemas, enclosing_namespace) },
+        )),
         With::Expr(Expr::Closure(closure)) => {
             if closure.inputs.is_empty() {
-                Ok(quote! {
+                Ok(TypedTokenStream::<Option<Vec<RecordField>>>::new(quote! {
                     ::apache_avro::serde::get_record_fields_in_ctxt(
                         named_schemas,
                         enclosing_namespace,
                         |_, _| (#closure)(),
                     )
-                })
+                }))
             } else {
                 Err(vec![syn::Error::new(
                     field.span(),
@@ -59,9 +65,11 @@ pub fn to_record_fields(field: &Field, with: With) -> Result<TokenStream, Vec<sy
                 )])
             }
         }
-        With::Expr(Expr::Path(path)) => Ok(quote! {
-            ::apache_avro::serde::get_record_fields_in_ctxt(named_schemas, enclosing_namespace, #path)
-        }),
+        With::Expr(Expr::Path(path)) => {
+            Ok(TypedTokenStream::<Option<Vec<RecordField>>>::new(quote! {
+                ::apache_avro::serde::get_record_fields_in_ctxt(named_schemas, enclosing_namespace, #path)
+            }))
+        }
         With::Expr(_expr) => Err(vec![syn::Error::new(
             field.span(),
             "Invalid expression, expected function or closure",
@@ -69,9 +77,12 @@ pub fn to_record_fields(field: &Field, with: With) -> Result<TokenStream, Vec<sy
     }
 }
 
-pub fn to_default(field: &Field, default: FieldDefault) -> Result<TokenStream, Vec<syn::Error>> {
+pub fn to_default(
+    field: &Field,
+    default: FieldDefault,
+) -> Result<TypedTokenStream<Option<serde_json::Value>>, Vec<syn::Error>> {
     match default {
-        FieldDefault::Disabled => Ok(quote! { ::std::option::Option::None }),
+        FieldDefault::Disabled => Ok(TypedTokenStream::none()),
         FieldDefault::Trait => type_to_field_default(&field.ty),
         FieldDefault::Value(default_value) => {
             let _: serde_json::Value = serde_json::from_str(&default_value[..]).map_err(|e| {
@@ -80,9 +91,9 @@ pub fn to_default(field: &Field, default: FieldDefault) -> Result<TokenStream, V
                     format!("Invalid avro default json: \n{e}"),
                 )]
             })?;
-            Ok(quote! {
+            Ok(TypedTokenStream::<Option<serde_json::Value>>::new(quote! {
                 ::std::option::Option::Some(::serde_json::from_str(#default_value).expect("Unreachable! Checked at compile time"))
-            })
+            }))
         }
     }
 }
@@ -96,11 +107,11 @@ pub fn to_default(field: &Field, default: FieldDefault) -> Result<TokenStream, V
 /// - `enclosing_namespace`: `Option<&str>`
 /// ## Returns
 /// An `Expr` that resolves to an instance of `Schema`.
-fn type_to_schema_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>> {
+fn type_to_schema_expr(ty: &Type) -> Result<TypedTokenStream<Schema>, Vec<syn::Error>> {
     match ty {
-        Type::Slice(_) | Type::Path(_) | Type::Reference(_) => Ok(
+        Type::Slice(_) | Type::Path(_) | Type::Reference(_) => Ok(TypedTokenStream::<Schema>::new(
             quote! {<#ty as :: apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(named_schemas, enclosing_namespace)},
-        ),
+        )),
         Type::Tuple(tuple) => tuple_to_schema(tuple),
         Type::Array(array) => array_to_schema(array),
         Type::Ptr(_) => Err(vec![syn::Error::new_spanned(
@@ -130,11 +141,13 @@ fn type_to_schema_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>> {
 /// - `enclosing_namespace`: `Option<&str>`
 /// ## Returns
 /// An `Expr` that resolves to an instance of `Schema`.
-fn tuple_to_schema(tuple: &TypeTuple) -> Result<TokenStream, Vec<syn::Error>> {
+fn tuple_to_schema(tuple: &TypeTuple) -> Result<TypedTokenStream<Schema>, Vec<syn::Error>> {
     if tuple.elems.is_empty() {
-        Ok(quote! {::apache_avro::schema::Schema::Null})
+        Ok(TypedTokenStream::<Schema>::new(
+            quote! {::apache_avro::schema::Schema::Null},
+        ))
     } else if tuple.elems.len() == 1 {
-        type_to_schema_expr(&tuple.elems.iter().next().unwrap())
+        type_to_schema_expr(tuple.elems.iter().next().unwrap())
     } else {
         let mut fields = Vec::with_capacity(tuple.elems.len());
 
@@ -161,7 +174,7 @@ fn tuple_to_schema(tuple: &TypeTuple) -> Result<TokenStream, Vec<syn::Error>> {
 
         let name = format!("tuple_{}{tuple_as_valid_name}", tuple.elems.len());
 
-        Ok(quote! {
+        Ok(TypedTokenStream::<Schema>::new(quote! {
             ::apache_avro::schema::Schema::Record(::apache_avro::schema::RecordSchema::builder()
                 .name(::apache_avro::schema::Name::new_with_enclosing_namespace(#name, enclosing_namespace).expect(&format!("Unable to parse variant record name for schema {}", #name)[..]))
                 .fields(vec![
@@ -174,7 +187,7 @@ fn tuple_to_schema(tuple: &TypeTuple) -> Result<TokenStream, Vec<syn::Error>> {
                 )
                 .build()
             )
-        })
+        }))
     }
 }
 
@@ -192,7 +205,7 @@ fn tuple_to_schema(tuple: &TypeTuple) -> Result<TokenStream, Vec<syn::Error>> {
 /// - `enclosing_namespace`: `Option<&str>`
 /// ## Returns
 /// An `Expr` that resolves to an instance of `Schema`.
-fn array_to_schema(array: &TypeArray) -> Result<TokenStream, Vec<syn::Error>> {
+fn array_to_schema(array: &TypeArray) -> Result<TypedTokenStream<Schema>, Vec<syn::Error>> {
     let Expr::Lit(ExprLit {
         lit: Lit::Int(lit), ..
     }) = &array.len
@@ -206,7 +219,9 @@ fn array_to_schema(array: &TypeArray) -> Result<TokenStream, Vec<syn::Error>> {
     let len: usize = lit.base10_parse().map_err(|e| vec![e])?;
 
     if len == 0 {
-        Ok(quote! {::apache_avro::schema::Schema::Null})
+        Ok(TypedTokenStream::<Schema>::new(
+            quote! {::apache_avro::schema::Schema::Null},
+        ))
     } else if len == 1 {
         type_to_schema_expr(&array.elem)
     } else {
@@ -233,7 +248,7 @@ fn array_to_schema(array: &TypeArray) -> Result<TokenStream, Vec<syn::Error>> {
 
         let name = format!("array_{len}_{array_elem_as_valid_name}");
 
-        Ok(quote! {
+        Ok(TypedTokenStream::<Schema>::new(quote! {
             ::apache_avro::schema::Schema::Record(::apache_avro::schema::RecordSchema::builder()
                 .name(::apache_avro::schema::Name::new_with_enclosing_namespace(#name, enclosing_namespace).expect(&format!("Unable to parse variant record name for schema {}", #name)[..]))
                 .fields(vec![
@@ -246,15 +261,19 @@ fn array_to_schema(array: &TypeArray) -> Result<TokenStream, Vec<syn::Error>> {
                 )
                 .build()
             )
-        })
+        }))
     }
 }
 
-fn type_to_record_fields(ty: &Type) -> Result<TokenStream, Vec<syn::Error>> {
+fn type_to_record_fields(
+    ty: &Type,
+) -> Result<TypedTokenStream<Option<Vec<RecordField>>>, Vec<syn::Error>> {
     match ty {
-        Type::Slice(_) | Type::Path(_) | Type::Reference(_) => Ok(
-            quote! {<#ty as :: apache_avro::AvroSchemaComponent>::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)},
-        ),
+        Type::Slice(_) | Type::Path(_) | Type::Reference(_) => {
+            Ok(TypedTokenStream::<Option<Vec<RecordField>>>::new(
+                quote! {<#ty as :: apache_avro::AvroSchemaComponent>::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)},
+            ))
+        }
         Type::Array(array) => array_to_record_fields(array),
         Type::Tuple(tuple) => tuple_to_record_fields(tuple),
         Type::Ptr(_) => Err(vec![syn::Error::new_spanned(
@@ -284,11 +303,13 @@ fn type_to_record_fields(ty: &Type) -> Result<TokenStream, Vec<syn::Error>> {
 /// - `enclosing_namespace`: `Option<&str>`
 /// ## Returns
 /// An `Expr` that resolves to an instance of `Schema`.
-fn tuple_to_record_fields(tuple: &TypeTuple) -> Result<TokenStream, Vec<syn::Error>> {
+fn tuple_to_record_fields(
+    tuple: &TypeTuple,
+) -> Result<TypedTokenStream<Option<Vec<RecordField>>>, Vec<syn::Error>> {
     if tuple.elems.is_empty() {
-        Ok(quote! {::std::option::Option::None})
+        Ok(TypedTokenStream::none())
     } else if tuple.elems.len() == 1 {
-        type_to_record_fields(&tuple.elems.iter().next().unwrap())
+        type_to_record_fields(tuple.elems.iter().next().unwrap())
     } else {
         let mut fields = Vec::with_capacity(tuple.elems.len());
 
@@ -303,9 +324,9 @@ fn tuple_to_record_fields(tuple: &TypeTuple) -> Result<TokenStream, Vec<syn::Err
             });
         }
 
-        Ok(quote! {
+        Ok(TypedTokenStream::new(quote! {
             ::std::option::Option::Some(vec![#(#fields, )*])
-        })
+        }))
     }
 }
 /// Create a schema definition for an array.
@@ -322,10 +343,12 @@ fn tuple_to_record_fields(tuple: &TypeTuple) -> Result<TokenStream, Vec<syn::Err
 /// - `enclosing_namespace`: `Option<&str>`
 /// ## Returns
 /// An `Expr` that resolves to an instance of `Schema`.
-fn array_to_record_fields(array: &TypeArray) -> Result<TokenStream, Vec<syn::Error>> {
+fn array_to_record_fields(
+    array: &TypeArray,
+) -> Result<TypedTokenStream<Option<Vec<RecordField>>>, Vec<syn::Error>> {
     let Expr::Lit(ExprLit {
-                      lit: Lit::Int(lit), ..
-                  }) = &array.len
+        lit: Lit::Int(lit), ..
+    }) = &array.len
     else {
         return Err(vec![syn::Error::new(
             array.span(),
@@ -336,7 +359,9 @@ fn array_to_record_fields(array: &TypeArray) -> Result<TokenStream, Vec<syn::Err
     let len: usize = lit.base10_parse().map_err(|e| vec![e])?;
 
     if len == 0 {
-        Ok(quote! {::std::option::Option::None})
+        Ok(TypedTokenStream::<Option<_>>::new(
+            quote! {::std::option::Option::None},
+        ))
     } else if len == 1 {
         type_to_record_fields(&array.elem)
     } else {
@@ -351,22 +376,26 @@ fn array_to_record_fields(array: &TypeArray) -> Result<TokenStream, Vec<syn::Err
             }
         });
 
-        Ok(quote! {
+        Ok(TypedTokenStream::<Option<Vec<RecordField>>>::new(quote! {
             ::std::option::Option::Some(vec![#(#fields, )*])
-        })
+        }))
     }
 }
 
-fn type_to_field_default(ty: &Type) -> Result<TokenStream, Vec<syn::Error>> {
+fn type_to_field_default(
+    ty: &Type,
+) -> Result<TypedTokenStream<Option<serde_json::Value>>, Vec<syn::Error>> {
     match ty {
         Type::Slice(_) | Type::Path(_) | Type::Reference(_) => {
-            Ok(quote! {<#ty as :: apache_avro::AvroSchemaComponent>::field_default()})
+            Ok(TypedTokenStream::<Option<serde_json::Value>>::new(
+                quote! {<#ty as :: apache_avro::AvroSchemaComponent>::field_default()},
+            ))
         }
         Type::Ptr(_) => Err(vec![syn::Error::new_spanned(
             ty,
             "AvroSchema: derive does not support raw pointers",
         )]),
-        Type::Tuple(_) | Type::Array(_) => Ok(quote! { ::std::option::Option::None }),
+        Type::Tuple(_) | Type::Array(_) => Ok(TypedTokenStream::none()),
         _ => Err(vec![syn::Error::new_spanned(
             ty,
             format!(

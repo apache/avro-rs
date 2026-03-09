@@ -1,8 +1,10 @@
-use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{FieldsUnnamed, spanned::Spanned};
 
-use crate::{FieldOptions, doc_into_tokenstream, field_aliases, fields};
+use crate::{
+    FieldOptions, RecordField, Schema, TypedTokenStream, fields,
+    utils::{doc_into_tokenstream, field_aliases},
+};
 
 /// Create a `Schema::Record` from this tuple definition.
 ///
@@ -22,10 +24,10 @@ pub fn tuple_struct_variant_to_record_schema(
     unnamed: FieldsUnnamed,
     name: &str,
     extra_attributes: &[&str],
-) -> Result<TokenStream, Vec<syn::Error>> {
+) -> Result<TypedTokenStream<Schema>, Vec<syn::Error>> {
     let fields = unnamed_to_record_fields(unnamed)?;
 
-    Ok(quote! {
+    Ok(TypedTokenStream::<Schema>::new(quote! {
         ::apache_avro::schema::Schema::Record(::apache_avro::schema::RecordSchema::builder()
             .name(::apache_avro::schema::Name::new_with_enclosing_namespace(#name, enclosing_namespace).expect(&format!("Unable to parse variant record name for schema {}", #name)[..]))
             .fields(#fields)
@@ -37,7 +39,7 @@ pub fn tuple_struct_variant_to_record_schema(
             )
             .build()
         )
-    })
+    }))
 }
 
 /// Create a vector of `RecordField`s named `field_{field_index}`.
@@ -49,7 +51,9 @@ pub fn tuple_struct_variant_to_record_schema(
 /// - `enclosing_namespace`: `Option<&str>`
 /// ## Returns
 /// An `Expr` that resolves to an instance of `Vec<RecordField>`.
-pub fn unnamed_to_record_fields(unnamed: FieldsUnnamed) -> Result<TokenStream, Vec<syn::Error>> {
+pub fn unnamed_to_record_fields(
+    unnamed: FieldsUnnamed,
+) -> Result<TypedTokenStream<Vec<RecordField>>, Vec<syn::Error>> {
     let mut fields = Vec::with_capacity(unnamed.unnamed.len());
     for (index, field) in unnamed.unnamed.into_iter().enumerate() {
         let field_attrs = FieldOptions::new(&field.attrs, field.span())?;
@@ -78,9 +82,9 @@ pub fn unnamed_to_record_fields(unnamed: FieldsUnnamed) -> Result<TokenStream, V
                 .build()
         });
     }
-    Ok(quote! {
+    Ok(TypedTokenStream::new(quote! {
         vec![
             #(#fields, )*
         ]
-    })
+    }))
 }

@@ -576,7 +576,6 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
     where
         V: serde::de::Visitor<'de>,
     {
-        println!("deserialize_tuple(len: {len}): {self:?}");
         match self.schema {
             Schema::Null if len == 0 => visitor.visit_seq(UnitTupleDeserializer),
             schema if len == 1 => {

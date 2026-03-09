@@ -1,7 +1,7 @@
 use crate::attributes::{NamedTypeOptions, VariantOptions};
 use crate::named_to_record_fields;
 use crate::tuple::tuple_struct_variant_to_record_schema;
-use proc_macro2::TokenStream;
+use crate::utils::{Schema, TypedTokenStream};
 use quote::quote;
 use syn::spanned::Spanned;
 use syn::{DataEnum, Fields};
@@ -9,7 +9,7 @@ use syn::{DataEnum, Fields};
 pub fn get_data_enum_schema_def(
     container_attrs: &NamedTypeOptions,
     data_enum: DataEnum,
-) -> Result<TokenStream, Vec<syn::Error>> {
+) -> Result<TypedTokenStream<Schema>, Vec<syn::Error>> {
     let mut variant_expr = Vec::new();
     for variant in data_enum.variants {
         let variant_attrs = VariantOptions::new(&variant.attrs, variant.span())?;
@@ -27,14 +27,14 @@ pub fn get_data_enum_schema_def(
                         .or(container_attrs.rename_all_fields),
                 )?;
 
-                let schema_expr = quote! {
+                let schema_expr = TypedTokenStream::<Schema>::new(quote! {
                     ::apache_avro::schema::Schema::Record(
                         ::apache_avro::schema::RecordSchema::builder()
                             .name(::apache_avro::schema::Name::new_with_enclosing_namespace(#name, enclosing_namespace).expect(&format!("Unable to parse variant record name for schema {}", #name)[..]))
                             .fields(#fields)
                             .build()
                     )
-                };
+                });
                 variant_expr.push(schema_expr);
             }
             Fields::Unnamed(unnamed) => {
@@ -51,22 +51,22 @@ pub fn get_data_enum_schema_def(
                 variant_expr.push(schema_expr);
             }
             Fields::Unit => {
-                let schema_expr = quote! {
+                let schema_expr = TypedTokenStream::<Schema>::new(quote! {
                     ::apache_avro::schema::Schema::Record(
                         ::apache_avro::schema::RecordSchema::builder()
                             .name(::apache_avro::schema::Name::new_with_enclosing_namespace(#name, enclosing_namespace).expect(&format!("Unable to parse variant record name for schema {}", #name)[..]))
                             .build()
                     )
-                };
+                });
                 variant_expr.push(schema_expr);
             }
         }
     }
-    Ok(quote! {
+    Ok(TypedTokenStream::new(quote! {{
         let mut builder = ::apache_avro::schema::UnionSchema::builder();
 
         #(builder.variant(#variant_expr).expect("Duplicate Schema found");)*
 
         ::apache_avro::schema::Schema::Union(builder.build())
-    })
+    }}))
 }

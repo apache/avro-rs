@@ -217,7 +217,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     type SerializeStructVariant = RecordSerializer<'s, 'w, W>;
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_bool({v}): {self:?}");
         match self.schema {
             Schema::Boolean => {
                 self.writer
@@ -233,27 +232,22 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     }
 
     fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_i8({v}): {self:?}");
         self.serialize_int("i8", i32::from(v))
     }
 
     fn serialize_i16(self, v: i16) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_i16({v}): {self:?}");
         self.serialize_int("i16", i32::from(v))
     }
 
     fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_i32({v}): {self:?}");
         self.serialize_int("i32", v)
     }
 
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_i64({v}): {self:?}");
         self.serialize_long("i64", v)
     }
 
     fn serialize_i128(mut self, v: i128) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_i128({v}): {self:?}");
         match self.schema {
             Schema::Fixed(fixed) if fixed.name.name() == "i128" && fixed.size == 16 => {
                 let bytes = v.to_le_bytes();
@@ -267,22 +261,18 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     }
 
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_u8({v}): {self:?}");
         self.serialize_int("u8", i32::from(v))
     }
 
     fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_u16({v}): {self:?}");
         self.serialize_int("u16", i32::from(v))
     }
 
     fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_u32({v}): {self:?}");
         self.serialize_long("u32", i64::from(v))
     }
 
     fn serialize_u64(mut self, v: u64) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_u64({v}): {self:?}");
         match self.schema {
             Schema::Fixed(fixed) if fixed.name.name() == "u64" && fixed.size == 8 => {
                 let bytes = v.to_le_bytes();
@@ -296,7 +286,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     }
 
     fn serialize_u128(mut self, v: u128) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_u128({v}): {self:?}");
         match self.schema {
             Schema::Fixed(fixed) if fixed.name.name() == "u128" && fixed.size == 16 => {
                 let bytes = v.to_le_bytes();
@@ -310,7 +299,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     }
 
     fn serialize_f32(mut self, v: f32) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_f32({v}): {self:?}");
         match self.schema {
             Schema::Float => {
                 let bytes = v.to_le_bytes();
@@ -324,7 +312,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     }
 
     fn serialize_f64(mut self, v: f64) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_f64({v}): {self:?}");
         match self.schema {
             Schema::Double => {
                 let bytes = v.to_le_bytes();
@@ -338,7 +325,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     }
 
     fn serialize_char(mut self, v: char) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_char({v}): {self:?}");
         match self.schema {
             Schema::String => {
                 let bytes = v.to_string().into_bytes();
@@ -352,7 +338,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     }
 
     fn serialize_str(mut self, v: &str) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_str({v}): {self:?}");
         match self.schema {
             Schema::String | Schema::Uuid(UuidSchema::String) => {
                 self.write_bytes_with_len(v.as_bytes())
@@ -365,7 +350,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     }
 
     fn serialize_bytes(mut self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_bytes({v:?}): {self:?}");
         match (SER_BYTES_TYPE.get(), self.schema) {
             (BytesType::Unset | BytesType::Bytes, Schema::Bytes | Schema::BigDecimal | Schema::Decimal(DecimalSchema { inner: InnerDecimalSchema::Bytes, .. })) => {
                 self.write_bytes_with_len(v)
@@ -385,7 +369,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_none: {self:?}");
         if let Schema::Union(union) = self.schema
             && union.variants().len() == 2
             && let Some(index) = union.index().get(&SchemaKind::Null).copied()
@@ -403,7 +386,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     where
         T: ?Sized + Serialize,
     {
-        println!("serialize_some: {self:?}");
         if let Schema::Union(union) = self.schema
             && union.variants().len() == 2
             && let Some(index) = union.index().get(&SchemaKind::Null).copied()
@@ -423,7 +405,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     }
 
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_unit: {self:?}");
         match self.schema {
             Schema::Null => Ok(0),
             Schema::Union(union) => {
@@ -434,7 +415,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     }
 
     fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
-        println!("serialize_unit_struct(name: {name}): {self:?}");
         match self.schema {
             Schema::Record(record) if record.name.name() == name && record.fields.is_empty() => {
                 Ok(0)
@@ -454,9 +434,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
         variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        println!(
-            "serialize_unit_variant(name: {name}, index: {variant_index}, variant: {variant}): {self:?}"
-        );
         match self.schema {
             Schema::Enum(enum_schema) => {
                 if name.as_ptr() == SERIALIZING_SCHEMA_DEFAULT.as_ptr() {
@@ -504,7 +481,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     where
         T: ?Sized + Serialize,
     {
-        println!("serialize_newtype_struct(name: {name}): {self:?}");
         match self.schema {
             Schema::Record(record) if record.name.name() == name && record.fields.len() == 1 => {
                 let schema = &record.fields[0].schema;
@@ -530,15 +506,11 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     where
         T: ?Sized + Serialize,
     {
-        println!(
-            "serialize_newtype_variant(name: {_name}, index: {variant_index}, variant: {variant}): {self:?}"
-        );
         match self.schema {
             Schema::Union(union) => {
                 if let Some(Schema::Record(record)) = union.variants().get(variant_index as usize)
                     && record.name.name() == variant
                     && record.fields.len() == 1
-                    && record.fields[0].name == "field_0"
                     && record
                         .attributes
                         .get("org.apache.avro.rust.union_of_records")
@@ -562,7 +534,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     }
 
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        println!("serialize_seq(len: {len:?}): {self:?}");
         match self.schema {
             Schema::Array(array) => {
                 ArraySerializer::new(self.writer, array, self.config, len, None)
@@ -575,7 +546,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     }
 
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
-        println!("serialize_tuple(len: {len}): {self:?}");
         match self.schema {
             Schema::Union(union) => {
                 UnionAwareSerializer::new(self.writer, union, self.config).serialize_tuple(len)
@@ -601,7 +571,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
         name: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleStruct, Self::Error> {
-        println!("serialize_tuple_struct(name: {name}, len: {len}): {self:?}");
         match self.schema {
             Schema::Record(record) if record.name.name() == name && record.fields.len() == len => {
                 Ok(ManyTupleSerializer::new(
@@ -627,9 +596,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        println!(
-            "serialize_tuple_variant(name: {_name}, index: {variant_index}, variant: {variant}, len: {len}): {self:?}"
-        );
         match self.schema {
             Schema::Union(union) => {
                 if let Some(Schema::Record(record)) = union.variants().get(variant_index as usize)
@@ -673,7 +639,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
     }
 
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        println!("serialize_map(len: {len:?}): {self:?}");
         match self.schema {
             Schema::Map(map) => Ok(MapOrRecordSerializer::Map(MapSerializer::new(
                 self.writer,
@@ -703,10 +668,8 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
         name: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
-        println!("serialize_struct(name: {name}, len: {len}): {self:?}");
         match self.schema {
-            // For unit variants with tag,content `len` will be 1 but we expect 2.
-            Schema::Record(record) if record.name.name() == name => Ok(RecordSerializer::new(
+            Schema::Record(record) => Ok(RecordSerializer::new(
                 self.writer,
                 record,
                 self.config,
@@ -714,10 +677,7 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
             )),
             Schema::Union(union) => UnionAwareSerializer::new(self.writer, union, self.config)
                 .serialize_struct(name, len),
-            _ => Err(self.error(
-                "struct",
-                format!("Expected Schema::Record(name: {name}, fields.len() == {len})"),
-            )),
+            _ => Err(self.error("struct", "Expected Schema::Record")),
         }
     }
 
@@ -728,9 +688,6 @@ impl<'s, 'w, W: Write> Serializer for SchemaAwareSerializer<'s, 'w, W> {
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        println!(
-            "serialize_struct_variant(name: {_name}, index: {variant_index}, variant: {variant}, len: {len}): {self:?}"
-        );
         match self.schema {
             Schema::Union(union) => {
                 if let Some(Schema::Record(record)) = union.variants().get(variant_index as usize)

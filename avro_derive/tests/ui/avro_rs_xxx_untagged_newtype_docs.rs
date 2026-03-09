@@ -19,8 +19,11 @@ use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
 #[serde(untagged)]
-enum Abc {
-    A,
-    B(bool),
-    C(#[avro(doc = "This is an int")] i32, i64),
+enum D {
+    A(
+        #[avro(doc = "This is a string")]
+        String
+    )
 }
+
+pub fn main() {}

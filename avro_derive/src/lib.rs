@@ -34,11 +34,12 @@ mod case;
 mod enums;
 mod fields;
 mod tuple;
+mod utils;
 
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::Span;
 use quote::quote;
 use syn::{
-    DataStruct, DeriveInput, Fields, FieldsNamed, Generics, Ident, Type, parse_macro_input,
+    DataStruct, DeriveInput, Fields, FieldsNamed, Generics, Ident, parse_macro_input,
     spanned::Spanned,
 };
 
@@ -46,6 +47,10 @@ use crate::{
     attributes::{FieldOptions, NamedTypeOptions},
     case::RenameRule,
     tuple::unnamed_to_record_fields,
+    utils::{
+        RecordField, Schema, TypedTokenStream, aliases, doc_into_tokenstream, field_aliases,
+        preserve_optional, to_compile_errors,
+    },
 };
 
 #[proc_macro_derive(AvroSchema, attributes(avro, serde))]
@@ -57,7 +62,7 @@ pub fn proc_macro_derive_avro_schema(input: proc_macro::TokenStream) -> proc_mac
         .into()
 }
 
-fn derive_avro_schema(input: DeriveInput) -> Result<TokenStream, Vec<syn::Error>> {
+fn derive_avro_schema(input: DeriveInput) -> Result<proc_macro2::TokenStream, Vec<syn::Error>> {
     // It would be nice to parse the attributes before the `match`, but we first need to validate that `input` is not a union.
     // Otherwise a user could get errors related to the attributes and after fixing those get an error because the attributes were on a union.
     let input_span = input.span();
@@ -68,9 +73,15 @@ fn derive_avro_schema(input: DeriveInput) -> Result<TokenStream, Vec<syn::Error>
         Ok(create_trait_definition(
             input.ident,
             &input.generics,
-            quote! { <#path as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(named_schemas, enclosing_namespace) },
-            quote! { <#path as ::apache_avro::AvroSchemaComponent>::get_record_fields_in_ctxt(named_schemas, enclosing_namespace) },
-            quote! { <#path as ::apache_avro::AvroSchemaComponent>::field_default() },
+            TypedTokenStream::<Schema>::new(
+                quote! { <#path as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(named_schemas, enclosing_namespace) },
+            ),
+            TypedTokenStream::<Option<Vec<RecordField>>>::new(
+                quote! { <#path as ::apache_avro::AvroSchemaComponent>::get_record_fields_in_ctxt(named_schemas, enclosing_namespace) },
+            ),
+            TypedTokenStream::<Option<serde_json::Value>>::new(
+                quote! { <#path as ::apache_avro::AvroSchemaComponent>::field_default() },
+            ),
         ))
     } else {
         match input.data {
@@ -116,7 +127,7 @@ fn derive_avro_schema(input: DeriveInput) -> Result<TokenStream, Vec<syn::Error>
                     input.ident,
                     &input.generics,
                     inner,
-                    quote! { None },
+                    TypedTokenStream::none(),
                     named_type_options.default,
                 ))
             }
@@ -132,10 +143,10 @@ fn derive_avro_schema(input: DeriveInput) -> Result<TokenStream, Vec<syn::Error>
 fn create_trait_definition(
     ident: Ident,
     generics: &Generics,
-    get_schema_impl: TokenStream,
-    get_record_fields_impl: TokenStream,
-    field_default_impl: TokenStream,
-) -> TokenStream {
+    get_schema_impl: TypedTokenStream<Schema>,
+    get_record_fields_impl: TypedTokenStream<Option<Vec<RecordField>>>,
+    field_default_impl: TypedTokenStream<Option<serde_json::Value>>,
+) -> proc_macro2::TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     quote! {
         #[automatically_derived]
@@ -156,8 +167,11 @@ fn create_trait_definition(
 }
 
 /// Generate the code to check `named_schemas` if this schema already exist
-fn handle_named_schemas(full_schema_name: String, schema_def: TokenStream) -> TokenStream {
-    quote! {
+fn handle_named_schemas(
+    full_schema_name: String,
+    schema_def: TypedTokenStream<Schema>,
+) -> TypedTokenStream<Schema> {
+    TypedTokenStream::<Schema>::new(quote! {{
         let name = ::apache_avro::schema::Name::new_with_enclosing_namespace(#full_schema_name, enclosing_namespace).expect(concat!("Unable to parse schema name ", #full_schema_name));
         if named_schemas.contains(&name) {
             ::apache_avro::schema::Schema::Ref{name}
@@ -166,30 +180,36 @@ fn handle_named_schemas(full_schema_name: String, schema_def: TokenStream) -> To
             named_schemas.insert(name.clone());
             #schema_def
         }
-    }
+    }})
 }
 
 /// Generate a schema definition for a struct.
 fn get_struct_schema_def(
     container_attrs: &NamedTypeOptions,
     data_struct: DataStruct,
-) -> Result<(TokenStream, TokenStream), Vec<syn::Error>> {
+) -> Result<
+    (
+        TypedTokenStream<Schema>,
+        TypedTokenStream<Option<Vec<RecordField>>>,
+    ),
+    Vec<syn::Error>,
+> {
     let record_fields = match data_struct.fields {
         Fields::Named(a) => named_to_record_fields(a, container_attrs.rename_all)?,
         Fields::Unnamed(unnamed) => unnamed_to_record_fields(unnamed)?,
-        Fields::Unit => quote! { std::vec::Vec::<::apache_avro::schema::RecordField>::new() },
+        Fields::Unit => TypedTokenStream::<Vec<RecordField>>::new(
+            quote! { std::vec::Vec::<::apache_avro::schema::RecordField>::new() },
+        ),
     };
 
     let record_doc = preserve_optional(container_attrs.doc.as_ref());
     let record_aliases = aliases(&container_attrs.aliases);
-    let full_schema_name = &container_attrs.name;
 
-    let schema_def = quote! {
+    let schema_def = TypedTokenStream::<Schema>::new(quote! {
         {
             let schema_fields = #record_fields;
             let schema_field_set: ::std::collections::HashSet<_> = schema_fields.iter().map(|rf| &rf.name).collect();
             assert_eq!(schema_fields.len(), schema_field_set.len(), "Duplicate field names found: {schema_fields:?}");
-            let name = ::apache_avro::schema::Name::new(#full_schema_name).expect(&format!("Unable to parse struct name for schema {}", #full_schema_name)[..]);
             let lookup: ::std::collections::BTreeMap<String, usize> = schema_fields
                 .iter()
                 .enumerate()
@@ -204,10 +224,10 @@ fn get_struct_schema_def(
                 attributes: ::std::collections::BTreeMap::new(),
             })
         }
-    };
-    let record_fields = quote! {
+    });
+    let record_fields = TypedTokenStream::<Option<Vec<RecordField>>>::new(quote! {
         ::std::option::Option::Some(#record_fields)
-    };
+    });
 
     Ok((schema_def, record_fields))
 }
@@ -216,7 +236,13 @@ fn get_struct_schema_def(
 fn get_transparent_struct_schema_def(
     fields: Fields,
     input_span: Span,
-) -> Result<(TokenStream, TokenStream), Vec<syn::Error>> {
+) -> Result<
+    (
+        TypedTokenStream<Schema>,
+        TypedTokenStream<Option<Vec<RecordField>>>,
+    ),
+    Vec<syn::Error>,
+> {
     match fields {
         Fields::Named(fields_named) => {
             let mut found = None;
@@ -283,7 +309,7 @@ fn get_transparent_struct_schema_def(
 fn named_to_record_fields(
     named: FieldsNamed,
     rename_all: RenameRule,
-) -> Result<TokenStream, Vec<syn::Error>> {
+) -> Result<TypedTokenStream<Vec<RecordField>>, Vec<syn::Error>> {
     let mut fields = Vec::with_capacity(named.named.len());
     for field in named.named {
         let field_attrs = FieldOptions::new(&field.attrs, field.span())?;
@@ -338,7 +364,7 @@ fn named_to_record_fields(
 
     // When fields are flattened there might be more fields, but this is good for the regular case
     let minimum_length = fields.len();
-    Ok(quote! {
+    Ok(TypedTokenStream::new(quote! {
         {
             let mut fields = ::std::vec::Vec::with_capacity(#minimum_length);
             #(
@@ -346,49 +372,5 @@ fn named_to_record_fields(
             )*
             fields
         }
-    })
-}
-
-/// Stolen from serde
-fn to_compile_errors(errors: Vec<syn::Error>) -> TokenStream {
-    let compile_errors = errors.iter().map(syn::Error::to_compile_error);
-    quote!(#(#compile_errors)*)
-}
-
-fn preserve_optional(op: Option<impl quote::ToTokens>) -> TokenStream {
-    match op {
-        Some(tt) => quote! {::std::option::Option::Some(#tt.into())},
-        None => quote! {::std::option::Option::None},
-    }
-}
-
-fn doc_into_tokenstream(doc: Option<String>) -> TokenStream {
-    match doc {
-        Some(doc) => quote! {::std::option::Option::Some(#doc.to_string())},
-        None => quote! {::std::option::Option::None},
-    }
-}
-
-fn aliases(op: &[impl quote::ToTokens]) -> TokenStream {
-    let items: Vec<TokenStream> = op
-        .iter()
-        .map(|tt| quote! {#tt.try_into().expect("Alias is invalid")})
-        .collect();
-    if items.is_empty() {
-        quote! {::std::option::Option::None}
-    } else {
-        quote! {::std::option::Option::Some(vec![#(#items),*])}
-    }
-}
-
-fn field_aliases(op: &[impl quote::ToTokens]) -> TokenStream {
-    let items: Vec<TokenStream> = op
-        .iter()
-        .map(|tt| quote! {#tt.try_into().expect("Alias is invalid")})
-        .collect();
-    if items.is_empty() {
-        quote! {::std::vec::Vec::new()}
-    } else {
-        quote! {vec![#(#items),*]}
-    }
+    }))
 }

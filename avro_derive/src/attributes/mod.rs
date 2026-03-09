@@ -15,11 +15,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::case::RenameRule;
+use crate::{TypedTokenStream, case::RenameRule};
 use darling::{FromAttributes, FromMeta};
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::Span;
 use quote::quote;
-use syn::{AttrStyle, Attribute, Expr, Ident, Path, Type, spanned::Spanned};
+use syn::{AttrStyle, Attribute, Expr, Ident, Path, spanned::Spanned};
 
 mod avro;
 mod serde;
@@ -39,7 +39,6 @@ pub enum EnumRepr {
     RecordInternallyTagged { tag: String },
 }
 
-#[derive(Default)]
 pub struct NamedTypeOptions {
     pub name: String,
     pub doc: Option<String>,
@@ -47,7 +46,7 @@ pub struct NamedTypeOptions {
     pub rename_all: RenameRule,
     pub rename_all_fields: RenameRule,
     pub transparent: bool,
-    pub default: TokenStream,
+    pub default: TypedTokenStream<Option<serde_json::Value>>,
     pub repr: Option<EnumRepr>,
     pub with: Option<Path>,
 }
@@ -230,18 +229,18 @@ impl NamedTypeOptions {
         };
 
         let default = match avro.default {
-            None => quote! { ::std::option::Option::None },
+            None => TypedTokenStream::none(),
             Some(default_value) => {
                 if let Err(err) = serde_json::from_str::<serde_json::Value>(&default_value[..]) {
                     errors.push(syn::Error::new(
                         ident.span(),
                         format!("Invalid Avro `default` JSON: \n{err}"),
                     ));
-                    quote! { ::std::option::Option::None }
+                    TypedTokenStream::none()
                 } else {
-                    quote! {
+                    TypedTokenStream::<Option<serde_json::Value>>::new(quote! {
                         ::std::option::Option::Some(serde_json::from_str(#default_value).expect("Unreachable! This was checked at compile time"))
-                    }
+                    })
                 }
             }
         };
@@ -377,6 +376,7 @@ impl With {
         }
     }
 }
+
 /// How to get the default value for a value.
 #[derive(Debug, PartialEq, Default)]
 pub enum FieldDefault {
@@ -499,6 +499,56 @@ impl FieldOptions {
             flatten: serde.flatten,
             with,
         })
+    }
+
+    /// Parse and check the attributes for the anonymous field of newtype variants.
+    ///
+    /// This function is not used by `union_of_records`.
+    pub fn new_for_newtype(attributes: &[Attribute], span: Span) -> Result<Self, Vec<syn::Error>> {
+        let options = Self::new(attributes, span)?;
+        let mut errors = Vec::new();
+        if options.doc.is_some() {
+            errors.push(syn::Error::new(
+                span,
+                r#"AvroSchema: `#[avro(doc = "..")]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")`"#
+            ));
+        }
+        if matches!(options.default, FieldDefault::Value(_)) {
+            errors.push(syn::Error::new(
+                span,
+                r#"AvroSchema: `#[avro(default = "..")]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")`"#
+            ));
+        }
+        if !options.alias.is_empty() {
+            errors.push(syn::Error::new(
+                span,
+                r#"AvroSchema: `#[avro(alias = "..")]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")`"#
+            ));
+        }
+        if options.rename.is_some() {
+            errors.push(syn::Error::new(
+                span,
+                r#"AvroSchema: `#[avro(alias = "..")]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")`"#
+            ));
+        }
+        if options.skip {
+            errors.push(syn::Error::new(
+                span,
+                r#"AvroSchema: `#[avro(skip)]` is not supported for newtype variants"#,
+            ));
+        }
+        if options.flatten {
+            errors.push(syn::Error::new(
+                span,
+                r#"AvroSchema: `#[avro(flatten)]` is not supported for newtype variants"#,
+            ));
+        }
+
+        if !errors.is_empty() {
+            return Err(errors);
+        }
+
+        Ok(options)
     }
 }
 

@@ -65,7 +65,6 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> MapAccess<'de> for RecordDeseriali
     where
         K: serde::de::DeserializeSeed<'de>,
     {
-        println!("next_key_seed: {self:?}");
         let State::Key(index) = self.current_field else {
             panic!("`next_key_seed` and `next_value_seed` where called in the wrong error")
         };
@@ -85,14 +84,12 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> MapAccess<'de> for RecordDeseriali
     where
         V: serde::de::DeserializeSeed<'de>,
     {
-        println!("next_value_seed: {self:?}");
         let State::Value(index) = self.current_field else {
             panic!("`next_key_seed` and `next_value_seed` where called in the wrong error")
         };
         let schema = &self.schema.fields[index].schema;
         let v = if let Schema::Record(record) = schema
             && record.fields.len() == 1
-            && record.fields[0].name == "field_0"
             && record
                 .attributes
                 .get("org.apache.avro.rust.union_of_records")

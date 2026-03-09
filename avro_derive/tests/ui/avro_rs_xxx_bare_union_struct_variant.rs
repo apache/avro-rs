@@ -18,8 +18,9 @@
 use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
-struct Foo {
-    a: (i32, String),
+#[serde(untagged)]
+enum D {
+    A{}
 }
 
 pub fn main() {}
