@@ -41,6 +41,7 @@ use syn::{
     parse_macro_input, spanned::Spanned,
 };
 
+use crate::tuple::tuple_to_schema;
 use crate::{
     attributes::{FieldOptions, NamedTypeOptions, With},
     case::RenameRule,
@@ -364,10 +365,7 @@ fn type_to_schema_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>> {
             ty,
             "AvroSchema: derive does not support raw pointers",
         )]),
-        Type::Tuple(_) => Err(vec![syn::Error::new_spanned(
-            ty,
-            "AvroSchema: derive does not support tuples",
-        )]),
+        Type::Tuple(tuple) => tuple_to_schema(tuple),
         _ => Err(vec![syn::Error::new_spanned(
             ty,
             format!(

@@ -1,6 +1,6 @@
 use crate::attributes::{NamedTypeOptions, VariantOptions};
 use crate::named_to_record_fields;
-use crate::tuple::tuple_to_record_schema;
+use crate::tuple::tuple_struct_variant_to_record_schema;
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::spanned::Spanned;
@@ -39,13 +39,13 @@ pub fn get_data_enum_schema_def(
             }
             Fields::Unnamed(unnamed) => {
                 let schema_expr = if unnamed.unnamed.len() == 1 {
-                    tuple_to_record_schema(
+                    tuple_struct_variant_to_record_schema(
                         unnamed,
                         &name,
                         &["org.apache.avro.rust.union_of_records"],
                     )?
                 } else {
-                    tuple_to_record_schema(unnamed, &name, &[])?
+                    tuple_struct_variant_to_record_schema(unnamed, &name, &[])?
                 };
 
                 variant_expr.push(schema_expr);

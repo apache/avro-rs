@@ -1,5 +1,5 @@
 use crate::attributes::{NamedTypeOptions, VariantOptions};
-use crate::tuple::tuple_to_record_schema;
+use crate::tuple::tuple_struct_variant_to_record_schema;
 use crate::{named_to_record_fields, type_to_schema_expr};
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
@@ -50,7 +50,7 @@ pub fn get_data_enum_schema_def(
                     let schema_expr = type_to_schema_expr(&only_one.ty)?;
                     variant_expr.push(schema_expr);
                 } else if unnamed.unnamed.len() > 1 {
-                    let schema_expr = tuple_to_record_schema(unnamed, &name, &[])?;
+                    let schema_expr = tuple_struct_variant_to_record_schema(unnamed, &name, &[])?;
 
                     variant_expr.push(schema_expr);
                 }
