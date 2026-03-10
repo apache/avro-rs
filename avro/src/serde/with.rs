@@ -261,7 +261,6 @@ pub mod fixed {
 
     /// Returns `None`
     pub fn get_record_fields_in_ctxt(
-        _: usize,
         _: &mut HashSet<Name>,
         _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
@@ -524,7 +523,7 @@ pub mod slice_opt {
 /// }
 /// ```
 ///
-/// [`BigDecimal`]: bigdecimal::BigDecimal
+/// [`BigDecimal`]: ::bigdecimal::BigDecimal
 /// [`apache_avro::serde::bigdecimal_opt`]: bigdecimal_opt
 pub mod bigdecimal {
     use std::collections::HashSet;
@@ -595,7 +594,7 @@ pub mod bigdecimal {
 /// }
 /// ```
 ///
-/// [`BigDecimal`]: bigdecimal::BigDecimal
+/// [`BigDecimal`]: ::bigdecimal::BigDecimal
 /// [`apache_avro::serde::bigdecimal`]: bigdecimal
 pub mod bigdecimal_opt {
     use bigdecimal::BigDecimal;
@@ -675,6 +674,7 @@ pub mod bigdecimal_opt {
 /// ```
 ///
 /// [`apache_avro::serde::array_opt`]: array_opt
+/// [`Schema::Array`]: crate::schema::Schema::Array
 pub mod array {
     use crate::{
         AvroSchema, AvroSchemaComponent, Schema,
@@ -744,7 +744,7 @@ pub mod array {
 /// }
 /// ```
 ///
-/// [`apache_avro::serde::array`]: array
+/// [`apache_avro::serde::array`]: mod@array
 pub mod array_opt {
     use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
     use std::collections::HashSet;

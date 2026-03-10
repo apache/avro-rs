@@ -17,7 +17,7 @@
 
 use crate::Schema;
 use crate::schema::{
-    FixedSchema, Name, NamespaceRef, RecordField, RecordSchema, UnionSchema, UuidSchema,
+    FixedSchema, Name, NamespaceRef, RecordField, RecordSchema, UnionSchema, UuidSchema
 };
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -558,27 +558,6 @@ macro_rules! impl_array_schema (
 
 impl_array_schema!([T] where T: AvroSchemaComponent);
 impl_array_schema!(Vec<T> where T: AvroSchemaComponent);
-// This doesn't work as the macro doesn't allow specifying the N parameter
-// impl_array_schema!([T; N] where T: AvroSchemaComponent);
-
-impl<const N: usize, T> AvroSchemaComponent for [T; N]
-where
-    T: AvroSchemaComponent,
-{
-    fn get_schema_in_ctxt(
-        named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: NamespaceRef,
-    ) -> Schema {
-        Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace)).build()
-    }
-
-    fn get_record_fields_in_ctxt(
-        _: &mut HashSet<Name>,
-        _: NamespaceRef,
-    ) -> Option<Vec<RecordField>> {
-        None
-    }
-}
 
 impl<T> AvroSchemaComponent for HashMap<String, T>
 where
@@ -825,21 +804,13 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_401_array() -> TestResult {
-        let schema = <[u8; 55]>::get_schema();
-        assert_eq!(schema, Schema::array(Schema::Int).build());
-
-        Ok(())
-    }
-
-    #[test]
-    fn avro_rs_401_option_ref_slice_array() -> TestResult {
-        let schema = <Option<&[[u8; 55]]>>::get_schema();
+    fn avro_rs_401_option_ref_slice() -> TestResult {
+        let schema = <Option<&[u8]>>::get_schema();
         assert_eq!(
             schema,
             Schema::union(vec![
                 Schema::Null,
-                Schema::array(Schema::array(Schema::Int).build()).build()
+                Schema::array(Schema::Int).build()
             ])?
         );
 

@@ -2521,10 +2521,12 @@ fn avro_rs_476_field_default_provided() {
         #[avro(default = "[true, false, true]")]
         _o: Vec<bool>,
         #[avro(default = "[1,2,3,4,5]")]
+        #[serde(with = "apache_avro::serde::array")]
         _p: [u8; 5],
         #[avro(
             default = r#"[{"_field": true},{"_field": false},{"_field": true},{"_field": false},{"_field": true}]"#
         )]
+        #[serde(with = "apache_avro::serde::array")]
         _p_alt: [Spam; 5],
         #[avro(default = r#"{"A": "B"}"#)]
         _q: HashMap<String, String>,
