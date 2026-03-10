@@ -5096,11 +5096,10 @@ mod tests {
         )?;
 
         let Schema::Record(record) = schema else {
-            panic!("Expect Schema::Record for {schema:?}");
+            panic!("Expected Schema::Record, got {schema:?}");
         };
-        println!("{:?}", record);
         let Schema::Map(map) = &record.fields[0].schema else {
-            panic!("Expect Schema::Map for first field of {record:?}");
+            panic!("Expected Schema::Map for first field of {record:?}");
         };
         assert_eq!(map.attributes.len(), 1);
         assert_eq!(
@@ -5109,7 +5108,7 @@ mod tests {
         );
 
         let Schema::Array(array) = &record.fields[1].schema else {
-            panic!("Expect Schema::Array for second field of {record:?}");
+            panic!("Expected Schema::Array for second field of {record:?}");
         };
         assert_eq!(array.attributes.len(), 1);
         assert_eq!(
