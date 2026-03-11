@@ -49,6 +49,7 @@ use serde::{
     ser::{SerializeMap, SerializeSeq},
 };
 use serde_json::{Map, Value as JsonValue};
+use std::borrow::Cow;
 use std::fmt::Formatter;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
@@ -417,9 +418,9 @@ impl FixedSchema {
 #[derive(Debug, Clone)]
 pub struct DecimalSchema {
     /// The number of digits in the unscaled value
-    pub precision: DecimalMetadata,
+    pub precision: Precision,
     /// The number of digits to the right of the decimal point
-    pub scale: DecimalMetadata,
+    pub scale: Scale,
     /// The inner schema of the decimal (fixed or bytes)
     pub inner: InnerDecimalSchema,
 }
@@ -787,6 +788,71 @@ impl Schema {
             _ => (),
         }
         Ok(())
+    }
+
+    /// Create a name for this schema.
+    ///
+    /// The name is a valid schema name and will be unique for different
+    /// schemas.
+    ///
+    /// Requires that named schemas have unique names.
+    pub(crate) fn unique_normalized_name(&self) -> Cow<'static, str> {
+        match self {
+            Schema::Null => Cow::Borrowed("null"),
+            Schema::Boolean => Cow::Borrowed("boolean"),
+            Schema::Int => Cow::Borrowed("int"),
+            Schema::Long => Cow::Borrowed("long"),
+            Schema::Float => Cow::Borrowed("float"),
+            Schema::Double => Cow::Borrowed("double"),
+            Schema::Bytes => Cow::Borrowed("bytes"),
+            Schema::String => Cow::Borrowed("string"),
+            Schema::Array(array) => {
+                Cow::Owned(format!("array_{}", array.items.unique_normalized_name()))
+            }
+            Schema::Map(map) => Cow::Owned(format!("map_{}", map.types.unique_normalized_name())),
+            Schema::Union(union) => {
+                let mut name = format!("union_{}", union.schemas.len());
+                for schema in &union.schemas {
+                    name.push('_');
+                    name.push_str(&schema.unique_normalized_name());
+                }
+                Cow::Owned(name)
+            }
+            Schema::BigDecimal => Cow::Borrowed("big_decimal"),
+            Schema::Date => Cow::Borrowed("date"),
+            Schema::TimeMillis => Cow::Borrowed("time_millis"),
+            Schema::TimeMicros => Cow::Borrowed("time_micros"),
+            Schema::TimestampMillis => Cow::Borrowed("timestamp_millis"),
+            Schema::TimestampMicros => Cow::Borrowed("timestamp_micros"),
+            Schema::TimestampNanos => Cow::Borrowed("timestamp_nanos"),
+            Schema::LocalTimestampMillis => Cow::Borrowed("local_timestamp_millis"),
+            Schema::LocalTimestampMicros => Cow::Borrowed("local_timestamp_micros"),
+            Schema::LocalTimestampNanos => Cow::Borrowed("local_timestamp_nanos"),
+            Schema::Decimal(DecimalSchema {
+                inner: InnerDecimalSchema::Bytes,
+                precision,
+                scale,
+            }) => Cow::Owned(format!("decimal_bytes_{precision}_{scale}")),
+            Schema::Uuid(UuidSchema::Bytes) => Cow::Borrowed("uuid_bytes"),
+            Schema::Uuid(UuidSchema::String) => Cow::Borrowed("uuid_string"),
+            Schema::Record(RecordSchema { name, .. })
+            | Schema::Enum(EnumSchema { name, .. })
+            | Schema::Fixed(FixedSchema { name, .. })
+            | Schema::Decimal(DecimalSchema {
+                inner: InnerDecimalSchema::Fixed(FixedSchema { name, .. }),
+                ..
+            })
+            | Schema::Uuid(UuidSchema::Fixed(FixedSchema { name, .. }))
+            | Schema::Duration(FixedSchema { name, .. })
+            | Schema::Ref { name } => {
+                let name: String = name
+                    .to_string()
+                    .chars()
+                    .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+                    .collect();
+                Cow::Owned(format!("ref_{}_{}", name.len(), name))
+            }
+        }
     }
 }
 

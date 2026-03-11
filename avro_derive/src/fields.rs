@@ -1,9 +1,9 @@
 use crate::RecordField;
 use crate::attributes::{FieldDefault, With};
 use crate::utils::{Schema, TypedTokenStream};
-use quote::{ToTokens, quote};
+use quote::quote;
 use syn::spanned::Spanned;
-use syn::{Expr, ExprLit, Field, Lit, Type, TypeArray, TypeTuple};
+use syn::{Expr, Field, Type};
 
 pub fn to_schema(field: &Field, with: With) -> Result<TypedTokenStream<Schema>, Vec<syn::Error>> {
     match with {
@@ -109,11 +109,11 @@ pub fn to_default(
 /// An `Expr` that resolves to an instance of `Schema`.
 fn type_to_schema_expr(ty: &Type) -> Result<TypedTokenStream<Schema>, Vec<syn::Error>> {
     match ty {
-        Type::Slice(_) | Type::Path(_) | Type::Reference(_) => Ok(TypedTokenStream::<Schema>::new(
-            quote! {<#ty as :: apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(named_schemas, enclosing_namespace)},
-        )),
-        Type::Tuple(tuple) => tuple_to_schema(tuple),
-        Type::Array(array) => array_to_schema(array),
+        Type::Tuple(_) | Type::Array(_) | Type::Slice(_) | Type::Path(_) | Type::Reference(_) => {
+            Ok(TypedTokenStream::<Schema>::new(
+                quote! {<#ty as :: apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(named_schemas, enclosing_namespace)},
+            ))
+        }
         Type::Ptr(_) => Err(vec![syn::Error::new_spanned(
             ty,
             "AvroSchema: derive does not support raw pointers",
@@ -124,144 +124,6 @@ fn type_to_schema_expr(ty: &Type) -> Result<TypedTokenStream<Schema>, Vec<syn::E
                 "AvroSchema: Unexpected type encountered! Please open an issue if this kind of type should be supported: {ty:?}"
             ),
         )]),
-    }
-}
-
-/// Create a schema definition for a tuple.
-///
-/// # Mapping
-/// - `0-tuple` => `Schema::Null`,
-/// - `1-tuple` => Schema of the only element,
-/// - `n-tuple` => `Schema::Record`.
-///
-/// # `TokenStream`
-/// ## Context
-/// The token stream expects the following variables to be defined:
-/// - `named_schemas`: `&mut HashSet<Name>`
-/// - `enclosing_namespace`: `Option<&str>`
-/// ## Returns
-/// An `Expr` that resolves to an instance of `Schema`.
-fn tuple_to_schema(tuple: &TypeTuple) -> Result<TypedTokenStream<Schema>, Vec<syn::Error>> {
-    if tuple.elems.is_empty() {
-        Ok(TypedTokenStream::<Schema>::new(
-            quote! {::apache_avro::schema::Schema::Null},
-        ))
-    } else if tuple.elems.len() == 1 {
-        type_to_schema_expr(tuple.elems.iter().next().unwrap())
-    } else {
-        let mut fields = Vec::with_capacity(tuple.elems.len());
-
-        for (index, elem) in tuple.elems.iter().enumerate() {
-            let name = format!("field_{index}");
-            let field_schema_expr = type_to_schema_expr(elem)?;
-            fields.push(quote! {
-                ::apache_avro::schema::RecordField::builder()
-                    .name(#name.to_string())
-                    .schema(#field_schema_expr)
-                    .build()
-            });
-        }
-
-        // Try to create a unique name for this record, this is done in a best effort way and the
-        // name is NOT recorded in `names`.
-        // This will always start and end with a `_` as `(` and `)` are not valid characters
-        let tuple_as_valid_name = tuple
-            .to_token_stream()
-            .to_string()
-            .chars()
-            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-            .collect::<String>();
-
-        let name = format!("tuple_{}{tuple_as_valid_name}", tuple.elems.len());
-
-        Ok(TypedTokenStream::<Schema>::new(quote! {
-            ::apache_avro::schema::Schema::Record(::apache_avro::schema::RecordSchema::builder()
-                .name(::apache_avro::schema::Name::new_with_enclosing_namespace(#name, enclosing_namespace).expect(&format!("Unable to parse variant record name for schema {}", #name)[..]))
-                .fields(vec![
-                    #(#fields, )*
-                ])
-                .attributes(
-                    [
-                        ("org.apache.avro.rust.tuple".to_string(), ::serde_json::value::Value::Bool(true)),
-                    ].into()
-                )
-                .build()
-            )
-        }))
-    }
-}
-
-/// Create a schema definition for an array.
-///
-/// # Mapping
-/// - `[T; 0]` => `Schema::Null`,
-/// - `[T; 1]` => Schema of `T`,
-/// - `[T; N]` => `Schema::Record`.
-///
-/// # `TokenStream`
-/// ## Context
-/// The token stream expects the following variables to be defined:
-/// - `named_schemas`: `&mut HashSet<Name>`
-/// - `enclosing_namespace`: `Option<&str>`
-/// ## Returns
-/// An `Expr` that resolves to an instance of `Schema`.
-fn array_to_schema(array: &TypeArray) -> Result<TypedTokenStream<Schema>, Vec<syn::Error>> {
-    let Expr::Lit(ExprLit {
-        lit: Lit::Int(lit), ..
-    }) = &array.len
-    else {
-        return Err(vec![syn::Error::new(
-            array.span(),
-            "AvroSchema: Expected a integer literal for the array length",
-        )]);
-    };
-    // This should always work as the length always needs to fit in a usize
-    let len: usize = lit.base10_parse().map_err(|e| vec![e])?;
-
-    if len == 0 {
-        Ok(TypedTokenStream::<Schema>::new(
-            quote! {::apache_avro::schema::Schema::Null},
-        ))
-    } else if len == 1 {
-        type_to_schema_expr(&array.elem)
-    } else {
-        let t_schema_expr = type_to_schema_expr(&array.elem)?;
-        let fields = (0..len).map(|index| {
-            let name = format!("field_{index}");
-            quote! {
-                ::apache_avro::schema::RecordField::builder()
-                    .name(#name.to_string())
-                    .schema(#t_schema_expr)
-                    .build()
-            }
-        });
-
-        // Try to create a unique name for this record, this is done as best effort and the
-        // name is NOT recorded in `names`.
-        let array_elem_as_valid_name = array
-            .elem
-            .to_token_stream()
-            .to_string()
-            .chars()
-            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-            .collect::<String>();
-
-        let name = format!("array_{len}_{array_elem_as_valid_name}");
-
-        Ok(TypedTokenStream::<Schema>::new(quote! {
-            ::apache_avro::schema::Schema::Record(::apache_avro::schema::RecordSchema::builder()
-                .name(::apache_avro::schema::Name::new_with_enclosing_namespace(#name, enclosing_namespace).expect(&format!("Unable to parse variant record name for schema {}", #name)[..]))
-                .fields(vec![
-                    #(#fields, )*
-                ])
-                .attributes(
-                    [
-                        ("org.apache.avro.rust.tuple".to_string(), ::serde_json::value::Value::Bool(true)),
-                    ].into()
-                )
-                .build()
-            )
-        }))
     }
 }
 
@@ -269,13 +131,11 @@ fn type_to_record_fields(
     ty: &Type,
 ) -> Result<TypedTokenStream<Option<Vec<RecordField>>>, Vec<syn::Error>> {
     match ty {
-        Type::Slice(_) | Type::Path(_) | Type::Reference(_) => {
+        Type::Tuple(_) | Type::Array(_) | Type::Slice(_) | Type::Path(_) | Type::Reference(_) => {
             Ok(TypedTokenStream::<Option<Vec<RecordField>>>::new(
                 quote! {<#ty as :: apache_avro::AvroSchemaComponent>::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)},
             ))
         }
-        Type::Array(array) => array_to_record_fields(array),
-        Type::Tuple(tuple) => tuple_to_record_fields(tuple),
         Type::Ptr(_) => Err(vec![syn::Error::new_spanned(
             ty,
             "AvroSchema: derive does not support raw pointers",
@@ -289,104 +149,11 @@ fn type_to_record_fields(
     }
 }
 
-/// Create a schema definition for a tuple.
-///
-/// # Mapping
-/// - `0-tuple` => `Schema::Null`,
-/// - `1-tuple` => Schema of the only element,
-/// - `n-tuple` => `Schema::Record`.
-///
-/// # `TokenStream`
-/// ## Context
-/// The token stream expects the following variables to be defined:
-/// - `named_schemas`: `&mut HashSet<Name>`
-/// - `enclosing_namespace`: `Option<&str>`
-/// ## Returns
-/// An `Expr` that resolves to an instance of `Schema`.
-fn tuple_to_record_fields(
-    tuple: &TypeTuple,
-) -> Result<TypedTokenStream<Option<Vec<RecordField>>>, Vec<syn::Error>> {
-    if tuple.elems.is_empty() {
-        Ok(TypedTokenStream::none())
-    } else if tuple.elems.len() == 1 {
-        type_to_record_fields(tuple.elems.iter().next().unwrap())
-    } else {
-        let mut fields = Vec::with_capacity(tuple.elems.len());
-
-        for (index, elem) in tuple.elems.iter().enumerate() {
-            let name = format!("field_{index}");
-            let field_schema_expr = type_to_schema_expr(elem)?;
-            fields.push(quote! {
-                ::apache_avro::schema::RecordField::builder()
-                    .name(#name.to_string())
-                    .schema(#field_schema_expr)
-                    .build()
-            });
-        }
-
-        Ok(TypedTokenStream::new(quote! {
-            ::std::option::Option::Some(vec![#(#fields, )*])
-        }))
-    }
-}
-/// Create a schema definition for an array.
-///
-/// # Mapping
-/// - `[T; 0]` => `Schema::Null`,
-/// - `[T; 1]` => Schema of `T`,
-/// - `[T; N]` => `Schema::Record`.
-///
-/// # `TokenStream`
-/// ## Context
-/// The token stream expects the following variables to be defined:
-/// - `named_schemas`: `&mut HashSet<Name>`
-/// - `enclosing_namespace`: `Option<&str>`
-/// ## Returns
-/// An `Expr` that resolves to an instance of `Schema`.
-fn array_to_record_fields(
-    array: &TypeArray,
-) -> Result<TypedTokenStream<Option<Vec<RecordField>>>, Vec<syn::Error>> {
-    let Expr::Lit(ExprLit {
-        lit: Lit::Int(lit), ..
-    }) = &array.len
-    else {
-        return Err(vec![syn::Error::new(
-            array.span(),
-            "AvroSchema: Expected a integer literal for the array length",
-        )]);
-    };
-    // This should always work as the length always needs to fit in a usize
-    let len: usize = lit.base10_parse().map_err(|e| vec![e])?;
-
-    if len == 0 {
-        Ok(TypedTokenStream::<Option<_>>::new(
-            quote! {::std::option::Option::None},
-        ))
-    } else if len == 1 {
-        type_to_record_fields(&array.elem)
-    } else {
-        let t_schema_expr = type_to_schema_expr(&array.elem)?;
-        let fields = (0..len).map(|index| {
-            let name = format!("field_{index}");
-            quote! {
-                ::apache_avro::schema::RecordField::builder()
-                    .name(#name.to_string())
-                    .schema(#t_schema_expr)
-                    .build()
-            }
-        });
-
-        Ok(TypedTokenStream::<Option<Vec<RecordField>>>::new(quote! {
-            ::std::option::Option::Some(vec![#(#fields, )*])
-        }))
-    }
-}
-
 fn type_to_field_default(
     ty: &Type,
 ) -> Result<TypedTokenStream<Option<serde_json::Value>>, Vec<syn::Error>> {
     match ty {
-        Type::Slice(_) | Type::Path(_) | Type::Reference(_) => {
+        Type::Tuple(_) | Type::Array(_) | Type::Slice(_) | Type::Path(_) | Type::Reference(_) => {
             Ok(TypedTokenStream::<Option<serde_json::Value>>::new(
                 quote! {<#ty as :: apache_avro::AvroSchemaComponent>::field_default()},
             ))
@@ -395,7 +162,6 @@ fn type_to_field_default(
             ty,
             "AvroSchema: derive does not support raw pointers",
         )]),
-        Type::Tuple(_) | Type::Array(_) => Ok(TypedTokenStream::none()),
         _ => Err(vec![syn::Error::new_spanned(
             ty,
             format!(

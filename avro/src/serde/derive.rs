@@ -19,6 +19,7 @@ use crate::Schema;
 use crate::schema::{
     FixedSchema, Name, NamespaceRef, RecordField, RecordSchema, UnionSchema, UuidSchema,
 };
+use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
@@ -768,6 +769,218 @@ impl AvroSchemaComponent for i128 {
     }
 }
 
+/// Schema definition for `[T; N]`.
+///
+/// Schema is defined as follows:
+/// - 0-sized arrays: [`Schema::Null`]
+/// - 1-sized arrays: `T::get_schema_in_ctxt`
+/// - N-sized arrays: [`Schema::Record`] with a field for every index
+///
+/// If you need or want a [`Schema::Array`] use [`apache_avro::serde::array`] instead.
+///
+/// [`apache_avro::serde::array`]: crate::serde::array
+impl<const N: usize, T: AvroSchemaComponent> AvroSchemaComponent for [T; N] {
+    fn get_schema_in_ctxt(
+        named_schemas: &mut HashSet<Name>,
+        enclosing_namespace: NamespaceRef,
+    ) -> Schema {
+        if N == 0 {
+            Schema::Null
+        } else if N == 1 {
+            T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
+        } else {
+            let t_schema = T::get_schema_in_ctxt(named_schemas, enclosing_namespace);
+            let name = Name::new_with_enclosing_namespace(
+                format!("array_{N}_{}", t_schema.unique_normalized_name()),
+                enclosing_namespace,
+            )
+            .expect("Name is valid");
+            if named_schemas.contains(&name) {
+                Schema::Ref { name }
+            } else {
+                named_schemas.insert(name.clone());
+
+                let t_default = T::field_default();
+                // For named types this should now be a reference
+                let t_schema_potential_ref =
+                    T::get_schema_in_ctxt(named_schemas, enclosing_namespace);
+                let fields = std::iter::once(
+                    RecordField::builder()
+                        .name("field_0".to_string())
+                        .schema(t_schema)
+                        .maybe_default(t_default.clone())
+                        .build(),
+                )
+                .chain((1..N).map(|n| {
+                    RecordField::builder()
+                        .name(format!("field_{n}"))
+                        .schema(t_schema_potential_ref.clone())
+                        .maybe_default(t_default.clone())
+                        .build()
+                }))
+                .collect();
+
+                Schema::Record(RecordSchema::builder().name(name).fields(fields).build())
+            }
+        }
+    }
+
+    fn get_record_fields_in_ctxt(
+        named_schemas: &mut HashSet<Name>,
+        enclosing_namespace: NamespaceRef,
+    ) -> Option<Vec<RecordField>> {
+        if N == 0 {
+            None
+        } else if N == 1 {
+            T::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)
+        } else {
+            let t_schema = T::get_schema_in_ctxt(named_schemas, enclosing_namespace);
+            // For named types this should now be a reference
+            let t_schema_potential_ref = T::get_schema_in_ctxt(named_schemas, enclosing_namespace);
+            let t_default = T::field_default();
+            Some(
+                std::iter::once(
+                    RecordField::builder()
+                        .name("field_0".to_string())
+                        .schema(t_schema)
+                        .maybe_default(t_default.clone())
+                        .build(),
+                )
+                .chain((1..N).map(|n| {
+                    RecordField::builder()
+                        .name(format!("field_{n}"))
+                        .schema(t_schema_potential_ref.clone())
+                        .maybe_default(t_default.clone())
+                        .build()
+                }))
+                .collect(),
+            )
+        }
+    }
+
+    fn field_default() -> Option<Value> {
+        if N == 0 {
+            Some(Value::Null)
+        } else if N == 1 {
+            T::field_default()
+        } else {
+            None
+        }
+    }
+}
+
+/// Schema definition for `(T₁, T₂, …, Tₙ)`.
+///
+/// Implement for tuples of up to 16 elements.
+///
+/// Schema is defined as follows:
+/// - 1-tuple: `T::get_schema_in_ctxt`
+/// - N-tuple: [`Schema::Record`] with a field for every element
+#[cfg_attr(docsrs, doc(fake_variadic))]
+impl<T> AvroSchemaComponent for (T,)
+where
+    T: AvroSchemaComponent,
+{
+    fn get_schema_in_ctxt(
+        named_schemas: &mut HashSet<Name>,
+        enclosing_namespace: NamespaceRef,
+    ) -> Schema {
+        T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
+    }
+
+    fn get_record_fields_in_ctxt(
+        named_schemas: &mut HashSet<Name>,
+        enclosing_namespace: NamespaceRef,
+    ) -> Option<Vec<RecordField>> {
+        T::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)
+    }
+
+    fn field_default() -> Option<Value> {
+        T::field_default()
+    }
+}
+
+macro_rules! tuple_impls {
+    ($($len:expr => ($($name:ident)+))+) => {
+        $(
+            #[cfg_attr(docsrs, doc(hidden))]
+            impl<$($name),+> AvroSchemaComponent for ($($name,)+)
+            where
+                $($name: AvroSchemaComponent,)+
+            {
+                tuple_impl_body!($len => ($($name)+));
+            }
+        )+
+    };
+}
+
+macro_rules! tuple_impl_body {
+    ($len:expr => ($($name:ident)+)) => {
+        fn get_schema_in_ctxt(named_schemas: &mut HashSet<Name>, enclosing_namespace: NamespaceRef) -> Schema {
+            let schemas: [Schema; $len] = [$($name::get_schema_in_ctxt(named_schemas, enclosing_namespace), )+];
+
+            let mut name = format!("tuple_{}", $len);
+            for schema in &schemas {
+                name.push('_');
+                name.push_str(&schema.unique_normalized_name());
+            }
+
+            let name = Name::new_with_enclosing_namespace(name, enclosing_namespace).expect("Name is valid");
+            if named_schemas.contains(&name) {
+                Schema::Ref { name }
+            } else {
+                named_schemas.insert(name.clone());
+
+                let defaults: [Option<Value>; $len] = [$($name::field_default(), )+];
+
+                let fields = schemas.into_iter().zip(defaults.into_iter()).enumerate().map(|(n, (schema, default))| {
+                    RecordField::builder()
+                    .name(format!("field_{n}"))
+                    .schema(schema)
+                    .maybe_default(default)
+                    .build()
+                }).collect();
+
+                Schema::Record(RecordSchema::builder()
+                    .name(name)
+                    .fields(fields)
+                    .build()
+                )
+            }
+        }
+
+        fn get_record_fields_in_ctxt(named_schemas: &mut HashSet<Name>, enclosing_namespace: NamespaceRef) -> Option<Vec<RecordField>> {
+            let schemas: [Schema; $len] = [$($name::get_schema_in_ctxt(named_schemas, enclosing_namespace), )+];
+            let defaults: [Option<Value>; $len] = [$($name::field_default(), )+];
+            Some(schemas.into_iter().zip(defaults.into_iter()).enumerate().map(|(n, (schema, default))| {
+                RecordField::builder()
+                .name(format!("field_{n}"))
+                .schema(schema)
+                .maybe_default(default)
+                .build()
+            }).collect())
+        }
+    };
+}
+
+tuple_impls! {
+    2 => (T0 T1)
+    3 => (T0 T1 T2)
+    4 => (T0 T1 T2 T3)
+    5 => (T0 T1 T2 T3 T4)
+    6 => (T0 T1 T2 T3 T4 T5)
+    7 => (T0 T1 T2 T3 T4 T5 T6)
+    8 => (T0 T1 T2 T3 T4 T5 T6 T7)
+    9 => (T0 T1 T2 T3 T4 T5 T6 T7 T8)
+    10 => (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9)
+    11 => (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10)
+    12 => (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11)
+    13 => (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12)
+    14 => (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13)
+    15 => (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14)
+    16 => (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -775,6 +988,7 @@ mod tests {
         schema::{FixedSchema, Name},
     };
     use apache_avro_test_helper::TestResult;
+    use uuid::Uuid;
 
     #[test]
     fn avro_rs_401_str() -> TestResult {
@@ -895,5 +1109,103 @@ mod tests {
     )]
     fn avro_rs_489_option_option() {
         <Option<Option<i32>>>::get_schema();
+    }
+
+    #[test]
+    fn avro_rs_xxx_0_array() -> TestResult {
+        let schema = Schema::parse_str(r#""null""#)?;
+
+        assert_eq!(schema, <[String; 0]>::get_schema());
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_1_array() -> TestResult {
+        let schema = Schema::parse_str(r#""string""#)?;
+
+        assert_eq!(schema, <[String; 1]>::get_schema());
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_n_array() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "record",
+            "name": "array_5_string",
+            "fields": [
+                { "name": "field_0", "type": "string" },
+                { "name": "field_1", "type": "string" },
+                { "name": "field_2", "type": "string" },
+                { "name": "field_3", "type": "string" },
+                { "name": "field_4", "type": "string" }
+            ]
+        }"#,
+        )?;
+
+        assert_eq!(schema, <[String; 5]>::get_schema());
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_n_array_complex_type() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "record",
+            "name": "array_2_union_2_null_ref_4_uuid",
+            "fields": [
+                { "name": "field_0", "type": ["null", {"type": "fixed", "logicalType": "uuid", "size": 16, "name": "uuid"}], "default": null },
+                { "name": "field_1", "type": ["null", "uuid"], "default": null }
+            ]
+        }"#,
+        )?;
+
+        assert_eq!(schema, <[Option<Uuid>; 2]>::get_schema());
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_1_tuple() -> TestResult {
+        let schema = Schema::parse_str(r#""string""#)?;
+
+        assert_eq!(schema, <(String,)>::get_schema());
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_n_tuple() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "record",
+            "name": "tuple_5_string_int_long_boolean_null",
+            "fields": [
+                { "name": "field_0", "type": "string" },
+                { "name": "field_1", "type": "int" },
+                { "name": "field_2", "type": "long" },
+                { "name": "field_3", "type": "boolean" },
+                { "name": "field_4", "type": "null" }
+            ]
+        }"#,
+        )?;
+
+        assert_eq!(schema, <(String, i32, i64, bool, ())>::get_schema());
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_n_tuple_complex_type() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "record",
+            "name": "tuple_2_union_2_null_ref_4_uuid_union_2_null_ref_4_uuid",
+            "fields": [
+                { "name": "field_0", "type": ["null", {"type": "fixed", "logicalType": "uuid", "size": 16, "name": "uuid"}], "default": null },
+                { "name": "field_1", "type": ["null", "uuid"], "default": null }
+            ]
+        }"#,
+        )?;
+
+        assert_eq!(schema, <(Option<Uuid>, Option<Uuid>)>::get_schema());
+        Ok(())
     }
 }
