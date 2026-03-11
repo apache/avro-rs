@@ -1,5 +1,5 @@
-use crate::attributes::{NamedTypeOptions, VariantOptions};
-use crate::{aliases, named_to_record_fields, preserve_optional, type_to_schema_expr};
+use crate::attributes::{FieldOptions, NamedTypeOptions, VariantOptions};
+use crate::{aliases, fields, named_to_record_fields, preserve_optional};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::spanned::Spanned;
@@ -36,7 +36,8 @@ pub fn get_data_enum_schema_def(
             Fields::Unnamed(unnamed) => {
                 if unnamed.unnamed.len() == 1 {
                     let only_one = unnamed.unnamed.iter().next().expect("There is one");
-                    let schema_expr = type_to_schema_expr(&only_one.ty)?;
+                    let field_attrs = FieldOptions::new(&only_one.attrs, only_one.span())?;
+                    let schema_expr = fields::to_schema(&only_one, field_attrs.with)?;
                     field_additions.push(quote! {
                         fields.push(#schema_expr);
                     });

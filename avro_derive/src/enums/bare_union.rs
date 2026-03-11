@@ -1,6 +1,6 @@
-use crate::attributes::{NamedTypeOptions, VariantOptions};
+use crate::attributes::{FieldOptions, NamedTypeOptions, VariantOptions};
 use crate::tuple::tuple_struct_variant_to_record_schema;
-use crate::{named_to_record_fields, type_to_schema_expr};
+use crate::{fields, named_to_record_fields};
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::spanned::Spanned;
@@ -47,7 +47,8 @@ pub fn get_data_enum_schema_def(
                     )]);
                 } else if unnamed.unnamed.len() == 1 {
                     let only_one = unnamed.unnamed.iter().next().expect("There is one");
-                    let schema_expr = type_to_schema_expr(&only_one.ty)?;
+                    let field_attrs = FieldOptions::new(&only_one.attrs, only_one.span())?;
+                    let schema_expr = fields::to_schema(&only_one, field_attrs.with)?;
                     variant_expr.push(schema_expr);
                 } else if unnamed.unnamed.len() > 1 {
                     let schema_expr = tuple_struct_variant_to_record_schema(unnamed, &name, &[])?;
