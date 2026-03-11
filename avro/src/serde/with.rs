@@ -111,7 +111,6 @@ pub mod bytes {
 
     /// Returns `None`
     pub fn get_record_fields_in_ctxt(
-        _: usize,
         _: &mut HashSet<Name>,
         _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
@@ -179,7 +178,6 @@ pub mod bytes_opt {
 
     /// Returns `None`
     pub fn get_record_fields_in_ctxt(
-        _: usize,
         _: &mut HashSet<Name>,
         _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
@@ -260,10 +258,7 @@ pub mod fixed {
     }
 
     /// Returns `None`
-    pub fn get_record_fields_in_ctxt(
-        _: &mut HashSet<Name>,
-        _: NamespaceRef,
-    ) -> Option<Vec<RecordField>> {
+    pub fn get_record_fields_in_ctxt(_: NamespaceRef) -> Option<Vec<RecordField>> {
         None
     }
 
@@ -335,7 +330,6 @@ pub mod fixed_opt {
 
     /// Returns `None`
     pub fn get_record_fields_in_ctxt(
-        _: usize,
         _: &mut HashSet<Name>,
         _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
@@ -405,7 +399,6 @@ pub mod slice {
 
     /// Returns `None`
     pub fn get_record_fields_in_ctxt(
-        _: usize,
         _: &mut HashSet<Name>,
         _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
@@ -476,7 +469,6 @@ pub mod slice_opt {
 
     /// Returns `None`
     pub fn get_record_fields_in_ctxt(
-        _: usize,
         _: &mut HashSet<Name>,
         _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
@@ -534,20 +526,19 @@ pub mod bigdecimal {
     use crate::{
         Schema,
         bigdecimal::{big_decimal_as_bytes, deserialize_big_decimal},
-        schema::{Name, Namespace, RecordField},
+        schema::{Name, NamespaceRef, RecordField},
         serde::with::BytesType,
     };
 
     /// Returns [`Schema::BigDecimal`]
-    pub fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: &Namespace) -> Schema {
+    pub fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Schema {
         Schema::BigDecimal
     }
 
     /// Returns `None`
     pub fn get_record_fields_in_ctxt(
-        _: usize,
         _: &mut HashSet<Name>,
-        _: &Namespace,
+        _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
         None
     }
@@ -604,12 +595,12 @@ pub mod bigdecimal_opt {
     use crate::{
         Schema,
         bigdecimal::{big_decimal_as_bytes, deserialize_big_decimal},
-        schema::{Name, Namespace, RecordField, UnionSchema},
+        schema::{Name, NamespaceRef, RecordField, UnionSchema},
         serde::with::BytesType,
     };
 
     /// Returns `Schema::Union(Schema::Null, Schema::BigDecimal)`
-    pub fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: &Namespace) -> Schema {
+    pub fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Schema {
         Schema::Union(
             UnionSchema::new(vec![Schema::Null, Schema::BigDecimal])
                 .expect("This is a valid union"),
@@ -618,9 +609,8 @@ pub mod bigdecimal_opt {
 
     /// Returns `None`
     pub fn get_record_fields_in_ctxt(
-        _: usize,
         _: &mut HashSet<Name>,
-        _: &Namespace,
+        _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
         None
     }
@@ -678,7 +668,7 @@ pub mod bigdecimal_opt {
 pub mod array {
     use crate::{
         AvroSchema, AvroSchemaComponent, Schema,
-        schema::{Name, Namespace, RecordField},
+        schema::{Name, NamespaceRef, RecordField},
     };
     use serde::de::DeserializeOwned;
     use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
@@ -687,16 +677,15 @@ pub mod array {
     /// Returns `Schema::Array(T::get_schema())`
     pub fn get_schema_in_ctxt<T: AvroSchemaComponent>(
         _: &mut HashSet<Name>,
-        _: &Namespace,
+        _: NamespaceRef,
     ) -> Schema {
         Schema::array(T::get_schema()).build()
     }
 
     /// Returns `None`
     pub fn get_record_fields_in_ctxt(
-        _: usize,
         _: &mut HashSet<Name>,
-        _: &Namespace,
+        _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
         None
     }
@@ -751,13 +740,13 @@ pub mod array_opt {
 
     use crate::{
         AvroSchema, AvroSchemaComponent, Schema,
-        schema::{Name, Namespace, RecordField, UnionSchema},
+        schema::{Name, NamespaceRef, RecordField, UnionSchema},
     };
 
     /// Returns `Schema::Union(Schema::Null, Schema::Array(T::get_schema()))`
     pub fn get_schema_in_ctxt<T: AvroSchemaComponent>(
         _: &mut HashSet<Name>,
-        _: &Namespace,
+        _: NamespaceRef,
     ) -> Schema {
         Schema::Union(
             UnionSchema::new(vec![Schema::Null, Schema::array(T::get_schema()).build()])
@@ -767,9 +756,8 @@ pub mod array_opt {
 
     /// Returns `None`
     pub fn get_record_fields_in_ctxt(
-        _: usize,
         _: &mut HashSet<Name>,
-        _: &Namespace,
+        _: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
         None
     }

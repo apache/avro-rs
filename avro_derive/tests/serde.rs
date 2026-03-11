@@ -586,7 +586,7 @@ mod field_attributes {
             #[avro(with = apache_avro::serde::fixed::get_schema_in_ctxt::<6>)]
             #[serde(with = "apache_avro::serde::fixed")]
             fixed_field: [u8; 6],
-            #[avro(with = apache_avro::serde::fixed_opt::get_schema_in_ctxt::<7>)]
+            #[avro(with = apache_avro::serde::fixed_opt::get_schema_in_ctxt::<7>, default = false)]
             #[serde(with = "apache_avro::serde::fixed_opt")]
             fixed_field_opt: Option<[u8; 7]>,
 

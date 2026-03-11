@@ -17,7 +17,7 @@
 
 use crate::Schema;
 use crate::schema::{
-    FixedSchema, Name, NamespaceRef, RecordField, RecordSchema, UnionSchema, UuidSchema
+    FixedSchema, Name, NamespaceRef, RecordField, RecordSchema, UnionSchema, UuidSchema,
 };
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -808,10 +808,7 @@ mod tests {
         let schema = <Option<&[u8]>>::get_schema();
         assert_eq!(
             schema,
-            Schema::union(vec![
-                Schema::Null,
-                Schema::array(Schema::Int).build()
-            ])?
+            Schema::union(vec![Schema::Null, Schema::array(Schema::Int).build()])?
         );
 
         Ok(())
