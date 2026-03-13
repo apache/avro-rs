@@ -21,10 +21,13 @@ mod block;
 pub mod datum;
 pub mod single_object;
 
-use crate::{AvroResult, schema::Schema, types::Value};
+use std::{collections::HashMap, io::Read, marker::PhantomData};
+
 use block::Block;
 use bon::bon;
-use std::{collections::HashMap, io::Read};
+use serde::de::DeserializeOwned;
+
+use crate::{AvroResult, schema::Schema, types::Value, util::is_human_readable};
 
 /// Main interface for reading Avro formatted values.
 ///
@@ -68,11 +71,12 @@ impl<'a, R: Read> Reader<'a, R> {
         #[builder(start_fn)] reader: R,
         reader_schema: Option<&'a Schema>,
         schemata: Option<Vec<&'a Schema>>,
+        #[builder(default = is_human_readable())] human_readable: bool,
     ) -> AvroResult<Reader<'a, R>> {
         let schemata =
             schemata.unwrap_or_else(|| reader_schema.map(|rs| vec![rs]).unwrap_or_default());
 
-        let block = Block::new(reader, schemata)?;
+        let block = Block::new(reader, schemata, human_readable)?;
         let mut reader = Reader {
             block,
             reader_schema,
@@ -97,10 +101,18 @@ impl<'a, R: Read> Reader<'a, R> {
         self.reader_schema
     }
 
-    /// Get a reference to the user metadata
+    /// Get a reference to the user metadata.
     #[inline]
     pub fn user_metadata(&self) -> &HashMap<String, Vec<u8>> {
         &self.block.user_metadata
+    }
+
+    /// Convert this reader into an iterator that deserializes to `T`.
+    pub fn into_deser_iter<T: DeserializeOwned>(self) -> ReaderDeser<'a, R, T> {
+        ReaderDeser {
+            inner: self,
+            phantom: PhantomData,
+        }
     }
 
     #[inline]
@@ -112,6 +124,10 @@ impl<'a, R: Read> Reader<'a, R> {
         };
 
         self.block.read_next(read_schema)
+    }
+
+    fn read_next_deser<T: DeserializeOwned>(&mut self) -> AvroResult<Option<T>> {
+        self.block.read_next_deser(self.reader_schema)
     }
 }
 
@@ -133,6 +149,30 @@ impl<R: Read> Iterator for Reader<'_, R> {
     }
 }
 
+/// Wrapper around [`Reader`] where the iterator deserializes `T`.
+pub struct ReaderDeser<'a, R, T> {
+    inner: Reader<'a, R>,
+    phantom: PhantomData<T>,
+}
+
+impl<R: Read, T: DeserializeOwned> Iterator for ReaderDeser<'_, R, T> {
+    type Item = AvroResult<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Don't continue when we've errored before
+        if self.inner.errored {
+            return None;
+        }
+        match self.inner.read_next_deser::<T>() {
+            Ok(opt) => opt.map(Ok),
+            Err(e) => {
+                self.inner.errored = true;
+                Some(Err(e))
+            }
+        }
+    }
+}
+
 /// Reads the marker bytes from Avro bytes generated earlier by a `Writer`
 pub fn read_marker(bytes: &[u8]) -> [u8; 16] {
     assert!(
@@ -146,11 +186,13 @@ pub fn read_marker(bytes: &[u8]) -> [u8; 16] {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::types::Record;
+    use std::io::Cursor;
+
     use apache_avro_test_helper::TestResult;
     use pretty_assertions::assert_eq;
-    use std::io::Cursor;
+
+    use super::*;
+    use crate::types::Record;
 
     const SCHEMA: &str = r#"
     {

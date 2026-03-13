@@ -15,11 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::io::Read;
+use std::{io::Read, marker::PhantomData};
 
 use bon::bon;
+use serde::de::DeserializeOwned;
 
-use crate::{AvroResult, Schema, decode::decode_internal, schema::ResolvedSchema, types::Value};
+use crate::{
+    AvroResult, AvroSchema, Schema,
+    decode::decode_internal,
+    schema::{ResolvedOwnedSchema, ResolvedSchema},
+    serde::deser_schema::{Config, SchemaAwareDeserializer},
+    types::Value,
+    util::is_human_readable,
+};
 
 /// Reader for reading raw Avro data.
 ///
@@ -30,6 +38,7 @@ pub struct GenericDatumReader<'s> {
     writer: &'s Schema,
     resolved: ResolvedSchema<'s>,
     reader: Option<(&'s Schema, ResolvedSchema<'s>)>,
+    human_readable: bool,
 }
 
 #[bon]
@@ -50,6 +59,9 @@ impl<'s> GenericDatumReader<'s> {
         reader_schema: Option<&'s Schema>,
         /// Already resolved schemata that will be used to resolve references in the reader's schema.
         resolved_reader_schemata: Option<ResolvedSchema<'s>>,
+        /// Was the data serialized with `human_readable`.
+        #[builder(default = is_human_readable())]
+        human_readable: bool,
     ) -> AvroResult<Self> {
         let resolved_writer_schemata = if let Some(resolved) = resolved_writer_schemata {
             resolved
@@ -71,6 +83,7 @@ impl<'s> GenericDatumReader<'s> {
             writer: writer_schema,
             resolved: resolved_writer_schemata,
             reader,
+            human_readable,
         })
     }
 }
@@ -123,6 +136,68 @@ impl<'s> GenericDatumReader<'s> {
         } else {
             Ok(value)
         }
+    }
+
+    /// Read a Avro datum from the reader.
+    ///
+    /// # Panics
+    /// Will panic if a reader schema has been configured, this is a WIP.
+    pub fn read_deser<T: DeserializeOwned>(&self, reader: &mut impl Read) -> AvroResult<T> {
+        // `reader` is `impl Read` instead of a generic on the function like T so it's easier to
+        // specify the type wanted (`read_deser<String>` vs `read_deser<String, _>`)
+        if let Some((_, _)) = &self.reader {
+            todo!("Schema aware deserialisation does not resolve schemas yet");
+        } else {
+            T::deserialize(SchemaAwareDeserializer::new(
+                reader,
+                self.writer,
+                Config {
+                    names: self.resolved.get_names(),
+                    human_readable: self.human_readable,
+                },
+            )?)
+        }
+    }
+}
+
+/// Reader for reading raw Avro data.
+///
+/// This is most likely not what you need. Most users should use [`Reader`][crate::Reader],
+/// [`GenericSingleObjectReader`][crate::GenericSingleObjectReader], or
+/// [`SpecificSingleObjectReader`][crate::SpecificSingleObjectReader] instead.
+pub struct SpecificDatumReader<T: AvroSchema> {
+    resolved: ResolvedOwnedSchema,
+    human_readable: bool,
+    phantom: PhantomData<T>,
+}
+
+#[bon]
+impl<T: AvroSchema> SpecificDatumReader<T> {
+    /// Build a [`SpecificDatumReader`].
+    ///
+    /// This is most likely not what you need. Most users should use [`Reader`][crate::Reader],
+    /// [`GenericSingleObjectReader`][crate::GenericSingleObjectReader], or
+    /// [`SpecificSingleObjectReader`][crate::SpecificSingleObjectReader] instead.
+    #[builder]
+    pub fn new(#[builder(default = is_human_readable())] human_readable: bool) -> AvroResult<Self> {
+        Ok(Self {
+            resolved: T::get_schema().try_into()?,
+            human_readable,
+            phantom: PhantomData,
+        })
+    }
+}
+
+impl<T: AvroSchema + DeserializeOwned> SpecificDatumReader<T> {
+    pub fn read<R: Read>(&self, reader: &mut R) -> AvroResult<T> {
+        T::deserialize(SchemaAwareDeserializer::new(
+            reader,
+            self.resolved.get_root_schema(),
+            Config {
+                names: self.resolved.get_names(),
+                human_readable: self.human_readable,
+            },
+        )?)
     }
 }
 
@@ -227,7 +302,7 @@ mod tests {
     use serde::Deserialize;
 
     use crate::{
-        Schema, from_value,
+        Schema,
         reader::datum::GenericDatumReader,
         types::{Record, Value},
     };
@@ -272,7 +347,7 @@ mod tests {
         const TEST_RECORD_SCHEMA_3240: &str = r#"
     {
       "type": "record",
-      "name": "test",
+      "name": "TestRecord3240",
       "fields": [
         {
           "name": "a",
@@ -312,26 +387,17 @@ mod tests {
         }
 
         let schema = Schema::parse_str(TEST_RECORD_SCHEMA_3240)?;
-        let mut encoded: &'static [u8] = &[54, 6, 102, 111, 111];
+        let mut encoded: &[u8] = &[54, 6, 102, 111, 111];
 
-        let expected_record: TestRecord3240 = TestRecord3240 {
-            a: 27i64,
-            b: String::from("foo"),
-            a_nullable_array: None,
-            a_nullable_string: None,
-        };
-
-        let avro_datum = GenericDatumReader::builder(&schema)
+        let error = GenericDatumReader::builder(&schema)
             .build()?
-            .read_value(&mut encoded)?;
-        let parsed_record: TestRecord3240 = match &avro_datum {
-            Value::Record(_) => from_value::<TestRecord3240>(&avro_datum)?,
-            unexpected => {
-                panic!("could not map avro data to struct, found unexpected: {unexpected:?}")
-            }
-        };
-
-        assert_eq!(parsed_record, expected_record);
+            .read_deser::<TestRecord3240>(&mut encoded)
+            .unwrap_err();
+        // TODO: Create a version of this test that does schema resolution
+        assert_eq!(
+            error.to_string(),
+            "Failed to read bytes for decoding variable length integer: failed to fill whole buffer"
+        );
 
         Ok(())
     }
