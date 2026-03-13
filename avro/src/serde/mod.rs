@@ -27,7 +27,8 @@
 //! details on how to change the generated schema.
 //!
 //! Alternatively, you can write your own schema. If you go down this path, it is recommended you start with
-//! the schema derived by [`AvroSchema`] and then modify it to fit your needs.
+//! the schema derived by [`AvroSchema`] and then modify it to fit your needs. For more information on mapping
+//! between Sere and Avro see [Avro to Serde](crate::documentation::avro_data_model_to_serde) and [Serde to Avro](crate::documentation::serde_data_model_to_avro).
 //!
 //! #### Performance pitfall
 //! One performance pitfall with Serde is (de)serializing bytes. The implementation of [`Serialize`][`serde::Serialize`]
