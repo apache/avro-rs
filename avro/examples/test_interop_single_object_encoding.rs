@@ -74,7 +74,9 @@ fn test_write(expected: &[u8]) {
 
 fn test_read(encoded: Vec<u8>) {
     let mut encoded = &encoded[..];
-    let read_message = apache_avro::GenericSingleObjectReader::new(InteropMessage::get_schema())
+    let read_message = apache_avro::GenericSingleObjectReader::builder()
+        .schema(InteropMessage::get_schema())
+        .build()
         .expect("Resolving failed")
         .read_value(&mut encoded)
         .expect("Decoding failed");

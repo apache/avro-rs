@@ -15,20 +15,24 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use std::{
+    collections::HashMap,
+    io::{ErrorKind, Read},
+    str::FromStr,
+};
+
+use log::warn;
+use serde::de::DeserializeOwned;
+use serde_json::from_slice;
+
 use crate::{
     AvroResult, Codec, Error,
     decode::{decode, decode_internal},
     error::Details,
     schema::{Names, Schema, resolve_names, resolve_names_with_schemata},
+    serde::deser_schema::{Config, SchemaAwareDeserializer},
     types::Value,
     util,
-};
-use log::warn;
-use serde_json::from_slice;
-use std::{
-    collections::HashMap,
-    io::{ErrorKind, Read},
-    str::FromStr,
 };
 
 /// Internal Block reader.
@@ -46,10 +50,15 @@ pub(super) struct Block<'r, R> {
     schemata: Vec<&'r Schema>,
     pub(super) user_metadata: HashMap<String, Vec<u8>>,
     names_refs: Names,
+    human_readable: bool,
 }
 
 impl<'r, R: Read> Block<'r, R> {
-    pub(super) fn new(reader: R, schemata: Vec<&'r Schema>) -> AvroResult<Block<'r, R>> {
+    pub(super) fn new(
+        reader: R,
+        schemata: Vec<&'r Schema>,
+        human_readable: bool,
+    ) -> AvroResult<Block<'r, R>> {
         let mut block = Block {
             reader,
             codec: Codec::Null,
@@ -61,6 +70,7 @@ impl<'r, R: Read> Block<'r, R> {
             marker: [0; 16],
             user_metadata: Default::default(),
             names_refs: Default::default(),
+            human_readable,
         };
 
         block.read_header()?;
@@ -198,6 +208,43 @@ impl<'r, R: Read> Block<'r, R> {
 
         if b_original != 0 && b_original == block_bytes.len() {
             // from_avro_datum did not consume any bytes, so return an error to avoid an infinite loop
+            return Err(Details::ReadBlock.into());
+        }
+        self.buf_idx += b_original - block_bytes.len();
+        self.message_count -= 1;
+        Ok(Some(item))
+    }
+
+    pub(super) fn read_next_deser<T: DeserializeOwned>(
+        &mut self,
+        read_schema: Option<&Schema>,
+    ) -> AvroResult<Option<T>> {
+        if self.is_empty() {
+            self.read_block_next()?;
+            if self.is_empty() {
+                return Ok(None);
+            }
+        }
+
+        let mut block_bytes = &self.buf[self.buf_idx..];
+        let b_original = block_bytes.len();
+
+        let item = if read_schema.is_some() {
+            todo!("Schema aware deserialisation does not resolve schemas yet");
+        } else {
+            let config = Config {
+                names: &self.names_refs,
+                human_readable: self.human_readable,
+            };
+            T::deserialize(SchemaAwareDeserializer::new(
+                &mut block_bytes,
+                &self.writer_schema,
+                config,
+            )?)?
+        };
+
+        if b_original != 0 && b_original == block_bytes.len() {
+            // No bytes were read, return an error to avoid an infinite loop
             return Err(Details::ReadBlock.into());
         }
         self.buf_idx += b_original - block_bytes.len();

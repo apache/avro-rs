@@ -737,3 +737,953 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
         self.config.human_readable
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fmt::Debug;
+
+    use apache_avro_test_helper::TestResult;
+    use num_bigint::BigInt;
+    use pretty_assertions::assert_eq;
+    use serde::{
+        Deserialize, Serialize,
+        de::{DeserializeOwned, Visitor},
+    };
+    use uuid::Uuid;
+
+    use super::*;
+    use crate::{
+        AvroResult, Decimal, reader::datum::GenericDatumReader, writer::datum::GenericDatumWriter,
+    };
+
+    #[track_caller]
+    fn assert_roundtrip<T>(value: T, schema: &Schema, schemata: Vec<&Schema>) -> AvroResult<()>
+    where
+        T: Serialize + DeserializeOwned + PartialEq + Debug + Clone,
+    {
+        let buf = GenericDatumWriter::builder(schema)
+            .schemata(schemata.clone())?
+            .build()?
+            .write_ser_to_vec(&value)?;
+
+        let decoded_value: T = GenericDatumReader::builder(schema)
+            .writer_schemata(schemata)?
+            .build()?
+            .read_deser(&mut &buf[..])?;
+
+        assert_eq!(decoded_value, value);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_3955_decode_enum() -> TestResult {
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+        pub enum SourceType {
+            Sozu,
+            Haproxy,
+            HaproxyTcp,
+        }
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        struct AccessLog {
+            source: SourceType,
+        }
+
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "AccessLog",
+            "namespace": "com.clevercloud.accesslogs.common.avro",
+            "type": "record",
+            "fields": [{
+                "name": "source",
+                "type": {
+                    "type": "enum",
+                    "name": "SourceType",
+                    "items": "string",
+                    "symbols": ["SOZU", "HAPROXY", "HAPROXY_TCP"]
+                }
+            }]
+        }"#,
+        )?;
+
+        let data = AccessLog {
+            source: SourceType::Sozu,
+        };
+
+        assert_roundtrip(data, &schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_decode_enum_invalid_data() -> TestResult {
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+        pub enum SourceType {
+            Sozu,
+            Haproxy,
+            HaproxyTcp,
+        }
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        struct AccessLog {
+            source: SourceType,
+        }
+
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "AccessLog",
+            "namespace": "com.clevercloud.accesslogs.common.avro",
+            "type": "record",
+            "fields": [{
+                "name": "source",
+                "type": {
+                    "type": "enum",
+                    "name": "SourceType",
+                    "items": "string",
+                    "symbols": ["SOZU", "HAPROXY", "HAPROXY_TCP"]
+                }
+            }]
+        }"#,
+        )?;
+
+        // Contains index 3 (4th symbol)
+        let data_with_unknown_index = &[6u8];
+
+        let error = GenericDatumReader::builder(&schema)
+            .build()?
+            .read_deser::<AccessLog>(&mut &data_with_unknown_index[..])
+            .unwrap_err();
+
+        assert_eq!(error.to_string(), "Enum symbol index out of bounds: 3");
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_nested_struct() -> TestResult {
+        #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+        struct Test {
+            a: i64,
+            b: String,
+            c: Decimal,
+        }
+
+        #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+        struct TestInner {
+            a: Test,
+            b: i32,
+        }
+
+        let schemas = Schema::parse_list([
+            r#"{
+            "name": "Test",
+            "type": "record",
+            "fields": [
+                {
+                    "name": "a",
+                    "type": "long"
+                },
+                {
+                    "name": "b",
+                    "type": "string"
+                },
+                {
+                    "name": "c",
+                    "type": {
+                        "type": "bytes",
+                        "logicalType": "decimal",
+                        "precision": 4,
+                        "scale": 2
+                    }
+                }
+            ]
+        }"#,
+            r#"{
+            "name": "TestInner",
+            "type": "record",
+            "fields": [
+                {
+                    "name": "a",
+                    "type": "Test"
+                },
+                {
+                    "name": "b",
+                    "type": "int"
+                }
+            ]
+        }"#,
+        ])?;
+
+        let test = Test {
+            a: 27,
+            b: "foo".to_string(),
+            c: Decimal::from(vec![1, 24]),
+        };
+
+        assert_roundtrip(test.clone(), &schemas[0], Vec::new())?;
+
+        let test_inner = TestInner { a: test, b: 35 };
+
+        assert_roundtrip(test_inner, &schemas[1], vec![&schemas[0]])?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_external_unit_enum() -> TestResult {
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        pub enum UnitExternalEnum {
+            Val1,
+            Val2,
+        }
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        struct TestUnitExternalEnum {
+            a: UnitExternalEnum,
+        }
+
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "TestUnitExternalEnum",
+            "type": "record",
+            "fields": [{
+                "name": "a",
+                "type": {
+                    "type": "enum",
+                    "name": "UnitExternalEnum",
+                    "items": "string",
+                    "symbols": ["Val1", "Val2"]
+                }
+            }]
+        }"#,
+        )?;
+
+        let alt_schema = Schema::parse_str(
+            r#"{
+            "name": "TestUnitExternalEnum",
+            "type": "record",
+            "fields": [{
+                "name": "a",
+                "type": [
+                    {
+                        "name": "Val1",
+                        "type": "record",
+                        "fields": []
+                    },
+                    {
+                        "name": "Val2",
+                        "type": "record",
+                        "fields": []
+                    }
+                ]
+            }]
+        }"#,
+        )?;
+
+        let value = TestUnitExternalEnum {
+            a: UnitExternalEnum::Val1,
+        };
+        assert_roundtrip(value.clone(), &schema, Vec::new())?;
+        assert_roundtrip(value, &alt_schema, Vec::new())?;
+
+        let value = TestUnitExternalEnum {
+            a: UnitExternalEnum::Val2,
+        };
+        assert_roundtrip(value.clone(), &alt_schema, Vec::new())?;
+        assert_roundtrip(value, &schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_internal_unit_enum() -> TestResult {
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        #[serde(tag = "t")]
+        pub enum UnitInternalEnum {
+            Val1,
+            Val2,
+        }
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        struct TestUnitInternalEnum {
+            a: UnitInternalEnum,
+        }
+
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "TestUnitInternalEnum",
+            "type": "record",
+            "fields": [{
+                "name": "a",
+                "type": {
+                    "type": "record",
+                    "name": "UnitInternalEnum",
+                    "fields": [{
+                        "name": "t",
+                        "type": "string"
+                    }]
+                }
+            }]
+        }"#,
+        )?;
+
+        let value = TestUnitInternalEnum {
+            a: UnitInternalEnum::Val1,
+        };
+        assert_roundtrip(value, &schema, Vec::new())?;
+
+        let value = TestUnitInternalEnum {
+            a: UnitInternalEnum::Val2,
+        };
+        assert_roundtrip(value, &schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_adjacent_unit_enum() -> TestResult {
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        #[serde(tag = "t", content = "v")]
+        pub enum UnitAdjacentEnum {
+            Val1,
+            Val2,
+        }
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        struct TestUnitAdjacentEnum {
+            a: UnitAdjacentEnum,
+        }
+
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "TestUnitAdjacentEnum",
+            "type": "record",
+            "fields": [{
+                "name": "a",
+                "type": {
+                    "type": "record",
+                    "name": "UnitAdjacentEnum",
+                    "fields": [
+                        {
+                            "name": "t",
+                            "type": {
+                                "type": "enum",
+                                "name": "t",
+                                "symbols": ["Val1", "Val2"]
+                            }
+                        },
+                        {
+                            "name": "v",
+                            "default": null,
+                            "type": ["null"]
+                        }
+                    ]
+                }
+            }]
+        }"#,
+        )?;
+
+        let value = TestUnitAdjacentEnum {
+            a: UnitAdjacentEnum::Val1,
+        };
+        assert_roundtrip(value, &schema, Vec::new())?;
+
+        let value = TestUnitAdjacentEnum {
+            a: UnitAdjacentEnum::Val2,
+        };
+        assert_roundtrip(value, &schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_untagged_unit_enum() -> TestResult {
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        #[serde(untagged)]
+        pub enum UnitUntaggedEnum {
+            Val1,
+            Val2,
+        }
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        struct TestUnitUntaggedEnum {
+            a: UnitUntaggedEnum,
+        }
+
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "TestUnitUntaggedEnum",
+            "type": "record",
+            "fields": [{
+                "name": "a",
+                "type": ["null"]
+            }]
+        }"#,
+        )?;
+
+        let value1 = TestUnitUntaggedEnum {
+            a: UnitUntaggedEnum::Val1,
+        };
+        assert_roundtrip(value1.clone(), &schema, Vec::new())?;
+
+        let value2 = TestUnitUntaggedEnum {
+            a: UnitUntaggedEnum::Val2,
+        };
+        let buf = GenericDatumWriter::builder(&schema)
+            .build()?
+            .write_ser_to_vec(&value1)?;
+
+        let decoded_value: TestUnitUntaggedEnum = GenericDatumReader::builder(&schema)
+            .build()?
+            .read_deser(&mut &buf[..])?;
+
+        // Val2 cannot troundtrip. All unit variants are serialized to the same null.
+        // This also doesn't roundtrip in serde_json.
+        assert_ne!(value2, decoded_value);
+        assert_eq!(decoded_value, value1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_mixed_enum() -> TestResult {
+        #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+        struct TestNullExternalEnum {
+            a: NullExternalEnum,
+        }
+
+        #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+        enum NullExternalEnum {
+            Val1,
+            Val2(),
+            Val3(()),
+            Val4(u64),
+        }
+
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "TestNullExternalEnum",
+            "type": "record",
+            "fields": [{
+                "name": "a",
+                "type": [
+                    {
+                        "name": "Val1",
+                        "type": "record",
+                        "fields": []
+                    },
+                    {
+                        "name": "Val2",
+                        "type": "record",
+                        "fields": []
+                    },
+                    {
+                        "name": "Val3",
+                        "type": "record",
+                        "org.apache.avro.rust.union_of_records": true,
+                        "fields": [{
+                            "name": "field_0",
+                            "type": "null"
+                        }]
+                    },
+                    {
+                        "name": "Val4",
+                        "type": "record",
+                        "org.apache.avro.rust.union_of_records": true,
+                        "fields": [{
+                            "name": "field_0",
+                            "type": {
+                                "type": "fixed",
+                                "name": "u64",
+                                "size": 8
+                            }
+                        }]
+                    }
+                ]
+            }]
+        }"#,
+        )?;
+
+        let data = [
+            TestNullExternalEnum {
+                a: NullExternalEnum::Val1,
+            },
+            TestNullExternalEnum {
+                a: NullExternalEnum::Val2(),
+            },
+            TestNullExternalEnum {
+                a: NullExternalEnum::Val2(),
+            },
+            TestNullExternalEnum {
+                a: NullExternalEnum::Val3(()),
+            },
+            TestNullExternalEnum {
+                a: NullExternalEnum::Val4(123),
+            },
+        ];
+
+        for value in data {
+            assert_roundtrip(value, &schema, Vec::new())?;
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_single_value_enum() -> TestResult {
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        struct TestSingleValueExternalEnum {
+            a: SingleValueExternalEnum,
+        }
+
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        enum SingleValueExternalEnum {
+            Double(f64),
+            String(String),
+        }
+
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "TestSingleValueExternalEnum",
+            "type": "record",
+            "fields": [{
+                "name": "a",
+                "type": [
+                    {
+                        "name": "Double",
+                        "type": "record",
+                        "org.apache.avro.rust.union_of_records": true,
+                        "fields": [{
+                            "name": "field_0",
+                            "type": "double"
+                        }]
+                    },
+                    {
+                        "name": "String",
+                        "type": "record",
+                        "org.apache.avro.rust.union_of_records": true,
+                        "fields": [{
+                            "name": "field_0",
+                            "type": "string"
+                        }]
+                    }
+                ]
+            }]
+        }"#,
+        )?;
+
+        let alt_schema = Schema::parse_str(
+            r#"{
+            "name": "TestSingleValueExternalEnum",
+            "type": "record",
+            "fields": [{
+                "name": "a",
+                "type": ["double", "string"]
+            }]
+        }"#,
+        )?;
+
+        let double = TestSingleValueExternalEnum {
+            a: SingleValueExternalEnum::Double(64.0),
+        };
+        assert_roundtrip(double.clone(), &schema, Vec::new())?;
+        assert_roundtrip(double, &alt_schema, Vec::new())?;
+
+        let string = TestSingleValueExternalEnum {
+            a: SingleValueExternalEnum::String("test".to_string()),
+        };
+        assert_roundtrip(string.clone(), &schema, Vec::new())?;
+        assert_roundtrip(string, &alt_schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_struct_enum() -> TestResult {
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        struct TestStructExternalEnum {
+            a: StructExternalEnum,
+        }
+
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        enum StructExternalEnum {
+            Val1 { x: f32, y: f32 },
+            Val2 { x: f32, y: f32 },
+        }
+
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "TestStructExternalEnum",
+            "type": "record",
+            "fields": [{
+                "name": "a",
+                "type": [
+                    {
+                        "name": "Val1",
+                        "type": "record",
+                        "fields": [
+                            {
+                                "name": "x",
+                                "type": "float"
+                            },
+                            {
+                                "name": "y",
+                                "type": "float"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "Val2",
+                        "type": "record",
+                        "fields": [
+                            {
+                                "name": "x",
+                                "type": "float"
+                            },
+                            {
+                                "name": "y",
+                                "type": "float"
+                            }
+                        ]
+                    }
+                ]
+            }]
+        }"#,
+        )?;
+
+        let value1 = TestStructExternalEnum {
+            a: StructExternalEnum::Val1 { x: 1.0, y: 2.0 },
+        };
+
+        assert_roundtrip(value1, &schema, Vec::new())?;
+
+        let value2 = TestStructExternalEnum {
+            a: StructExternalEnum::Val2 { x: 2.0, y: 1.0 },
+        };
+
+        assert_roundtrip(value2, &schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_struct_flatten() -> TestResult {
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        struct S1 {
+            f1: String,
+            #[serde(flatten)]
+            inner: S2,
+        }
+
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        struct S2 {
+            f2: String,
+        }
+
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "S1",
+            "type": "record",
+            "fields": [
+                {
+                    "name": "f1",
+                    "type": "string"
+                },
+                {
+                    "name": "f2",
+                    "type": "string"
+                }
+            ]
+        }"#,
+        )?;
+
+        let value = S1 {
+            f1: "Hello".to_owned(),
+            inner: S2 {
+                f2: "World".to_owned(),
+            },
+        };
+
+        assert_roundtrip(value, &schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_tuple_enum() -> TestResult {
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        struct TestTupleExternalEnum {
+            a: TupleExternalEnum,
+        }
+
+        #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+        enum TupleExternalEnum {
+            Val1(f32, f32),
+            Val2(f32, f32, f32),
+        }
+
+        let schema = Schema::parse_str(
+            r#"{
+            "name": "TestTupleExternalEnum",
+            "type": "record",
+            "fields": [{
+                "name": "a",
+                "type": [
+                    {
+                        "name": "Val1",
+                        "type": "record",
+                        "fields": [
+                            {
+                                "name": "field_0",
+                                "type": "float"
+                            },
+                            {
+                                "name": "field_1",
+                                "type": "float"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "Val2",
+                        "type": "record",
+                        "fields": [
+                            {
+                                "name": "field_0",
+                                "type": "float"
+                            },
+                            {
+                                "name": "field_1",
+                                "type": "float"
+                            },
+                            {
+                                "name": "field_2",
+                                "type": "float"
+                            }
+                        ]
+                    }
+                ]
+            }]
+        }"#,
+        )?;
+
+        let value1 = TestTupleExternalEnum {
+            a: TupleExternalEnum::Val1(1.0, 2.0),
+        };
+
+        assert_roundtrip(value1, &schema, Vec::new())?;
+
+        let value2 = TestTupleExternalEnum {
+            a: TupleExternalEnum::Val1(2.0, 1.0),
+        };
+
+        assert_roundtrip(value2, &schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_date() -> TestResult {
+        let schema = Schema::Date;
+        assert_roundtrip(1i32, &schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_time_millis() -> TestResult {
+        let schema = Schema::TimeMillis;
+        assert_roundtrip(1i32, &schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_time_micros() -> TestResult {
+        let schema = Schema::TimeMicros;
+        assert_roundtrip(1i64, &schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_timestamp_millis() -> TestResult {
+        let schema = Schema::TimestampMillis;
+        assert_roundtrip(1i64, &schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_timestamp_micros() -> TestResult {
+        let schema = Schema::TimestampMicros;
+        assert_roundtrip(1i64, &schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_3916_timestamp_nanos() -> TestResult {
+        let schema = Schema::TimestampNanos;
+        assert_roundtrip(1i64, &schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_3853_local_timestamp_millis() -> TestResult {
+        let schema = Schema::LocalTimestampMillis;
+        assert_roundtrip(1i64, &schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_3853_local_timestamp_micros() -> TestResult {
+        let schema = Schema::LocalTimestampMicros;
+        assert_roundtrip(1i64, &schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_3916_local_timestamp_nanos() -> TestResult {
+        let schema = Schema::LocalTimestampNanos;
+        assert_roundtrip(1i64, &schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_xxx_uuid() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "fixed",
+            "logicalType": "uuid",
+            "size": 16,
+            "name": "uuid"
+        }"#,
+        )?;
+
+        let alt_schema = Schema::Uuid(UuidSchema::String);
+
+        let uuid = Uuid::parse_str("9ec535ff-3e2a-45bd-91d3-0a01321b5a49")?;
+
+        assert_roundtrip(uuid, &schema, Vec::new())?;
+
+        let buf = GenericDatumWriter::builder(&alt_schema)
+            // This needs changes in the serializer (is in the next 2 commits)
+            // .human_readable(true)
+            .build()?
+            .write_ser_to_vec(&uuid)?;
+
+        let decoded_value: Uuid = GenericDatumReader::builder(&alt_schema)
+            .human_readable(true)
+            .build()?
+            .read_deser(&mut &buf[..])?;
+
+        assert_eq!(decoded_value, uuid);
+
+        Ok(())
+    }
+
+    #[derive(Debug)]
+    struct Bytes(Vec<u8>);
+
+    impl<'de> Deserialize<'de> for Bytes {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            struct BytesVisitor;
+            impl Visitor<'_> for BytesVisitor {
+                type Value = Bytes;
+
+                fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    formatter.write_str("a byte array")
+                }
+
+                fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+                where
+                    E: serde::de::Error,
+                {
+                    Ok(Bytes(v.to_vec()))
+                }
+            }
+            deserializer.deserialize_bytes(BytesVisitor)
+        }
+    }
+
+    #[test]
+    fn avro_3892_deserialize_bytes_from_decimal() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "bytes",
+            "logicalType": "decimal",
+            "precision": 4,
+            "scale": 2
+        }"#,
+        )?;
+        let schema_union = Schema::parse_str(
+            r#"[
+            "null",
+            {
+                "type": "bytes",
+                "logicalType": "decimal",
+                "precision": 4,
+                "scale": 2
+            }
+        ]"#,
+        )?;
+
+        let expected_bytes = BigInt::from(123456789).to_signed_bytes_be();
+        let value = Decimal::from(&expected_bytes);
+        let buf = GenericDatumWriter::builder(&schema)
+            .build()?
+            .write_ser_to_vec(&value)?;
+
+        let decoded_value: Bytes = GenericDatumReader::builder(&schema)
+            .build()?
+            .read_deser(&mut &buf[..])?;
+
+        assert_eq!(decoded_value.0, expected_bytes);
+
+        let buf = GenericDatumWriter::builder(&schema_union)
+            .build()?
+            .write_ser_to_vec(&Some(value))?;
+
+        let decoded_value: Option<Bytes> = GenericDatumReader::builder(&schema_union)
+            .build()?
+            .read_deser(&mut &buf[..])?;
+
+        assert_eq!(decoded_value.unwrap().0, expected_bytes);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_deserialize_char_from_string() -> TestResult {
+        let schema = Schema::String;
+
+        assert_roundtrip('a', &schema, Vec::new())?;
+        assert_roundtrip('👹', &schema, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_414_deserialize_char_from_long_string() -> TestResult {
+        let schema = Schema::String;
+        let buf = GenericDatumWriter::builder(&schema)
+            .build()?
+            .write_ser_to_vec(&"avro")?;
+
+        let error = GenericDatumReader::builder(&schema)
+            .build()?
+            .read_deser::<char>(&mut &buf[..])
+            .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            r#"Failed to deserialize value of type char using schema String: Read more than one character: "avro""#
+        );
+
+        Ok(())
+    }
+}
