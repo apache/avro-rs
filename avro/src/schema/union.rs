@@ -74,7 +74,18 @@ impl UnionSchema {
         &self.schemas
     }
 
-    /// Returns true if the any of the variants of this `UnionSchema` is `Null`.
+    /// Get the variant at the given index.
+    pub fn get_variant(&self, index: usize) -> Result<&Schema, Error> {
+        self.schemas.get(index).ok_or_else(|| {
+            Details::GetUnionVariant {
+                index: index as i64,
+                num_variants: self.schemas.len(),
+            }
+            .into()
+        })
+    }
+
+    /// Returns true if any of the variants of this `UnionSchema` is `Null`.
     pub fn is_nullable(&self) -> bool {
         self.variant_index.contains_key(&SchemaKind::Null)
     }
