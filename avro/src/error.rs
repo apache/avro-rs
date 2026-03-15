@@ -15,11 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use std::{error::Error as _, fmt};
+
 use crate::{
-    schema::{Name, Schema, SchemaKind, UnionSchema},
+    schema::{Name, RecordSchema, Schema, SchemaKind, UnionSchema},
     types::{Value, ValueKind},
 };
-use std::{error::Error as _, fmt};
 
 /// Errors encountered by Avro.
 ///
@@ -558,22 +559,31 @@ pub enum Details {
     #[error("Failed to serialize value into Avro value: {0}")]
     SerializeValue(String),
 
-    #[error("Failed to serialize value of type {value_type} using schema {schema:?}: {value}")]
+    #[error("Failed to serialize value of type `{value_type}` using Schema::{schema:?}: {value}")]
     SerializeValueWithSchema {
         value_type: &'static str,
         value: String,
         schema: Schema,
     },
 
-    #[error("Failed to serialize field '{field_name}' for record {record_schema:?}: {error}")]
-    SerializeRecordFieldWithSchema {
-        field_name: String,
-        record_schema: Schema,
-        error: Box<Error>,
+    #[error("{position} is not a valid index for fields in {schema:?}")]
+    SerializeRecordUnknownFieldIndex {
+        position: usize,
+        schema: RecordSchema,
     },
 
-    #[error("Missing default for skipped field '{field_name}' for schema {schema:?}")]
-    MissingDefaultForSkippedField { field_name: String, schema: Schema },
+    #[error("Failed to serialize field '{field_name}' of record {record_schema:?}: {error}")]
+    SerializeRecordFieldWithSchema {
+        field_name: String,
+        record_schema: RecordSchema,
+        error: String,
+    },
+
+    #[error("Missing default for skipped field '{field_name}' of schema {schema:?}")]
+    MissingDefaultForSkippedField {
+        field_name: String,
+        schema: RecordSchema,
+    },
 
     #[error("Failed to deserialize Avro value into value: {0}")]
     DeserializeValue(String),

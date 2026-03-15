@@ -21,8 +21,9 @@ use crate::{
     encode::{encode, encode_internal, encode_to_vec},
     error::Details,
     schema::{ResolvedSchema, Schema},
-    serde::ser_schema::SchemaAwareWriteSerializer,
+    serde::ser_schema::{Config, SchemaAwareSerializer},
     types::Value,
+    util::is_human_readable,
 };
 use serde::Serialize;
 use std::{collections::HashMap, io::Write, mem::ManuallyDrop};
@@ -49,6 +50,8 @@ pub struct Writer<'a, W: Write> {
     marker: [u8; 16],
     has_header: bool,
     user_metadata: HashMap<String, Value>,
+    human_readable: bool,
+    map_array_target_block_size: Option<usize>,
 }
 
 #[bon::bon]
@@ -67,6 +70,19 @@ impl<'a, W: Write> Writer<'a, W> {
         #[builder(default = false)]
         has_header: bool,
         #[builder(default)] user_metadata: HashMap<String, Value>,
+        /// Should [`Serialize`] implementations pick a human readable represenation.
+        ///
+        /// It is recommended to set this to `false`.
+        #[builder(default = is_human_readable())]
+        human_readable: bool,
+        /// At what block size to start a new block (for arrays and maps).
+        ///
+        /// This is a minimum value, the block size will always be larger than this except for the last
+        /// block.
+        ///
+        /// When set to `None` all values will be written in a single block. This can be faster as no
+        /// intermediate buffer is used, but seeking through written data will be slower.
+        map_array_target_block_size: Option<usize>,
     ) -> AvroResult<Self> {
         let resolved_schema = if let Some(schemata) = schemata {
             ResolvedSchema::try_from(schemata)?
@@ -84,6 +100,8 @@ impl<'a, W: Write> Writer<'a, W> {
             marker,
             has_header,
             user_metadata,
+            human_readable,
+            map_array_target_block_size,
         })
     }
 }
@@ -271,13 +289,17 @@ impl<'a, W: Write> Writer<'a, W> {
     pub fn append_ser<S: Serialize>(&mut self, value: S) -> AvroResult<usize> {
         let n = self.maybe_write_header()?;
 
-        let mut serializer = SchemaAwareWriteSerializer::new(
+        let config = Config {
+            names: self.resolved_schema.get_names(),
+            target_block_size: self.map_array_target_block_size,
+            human_readable: self.human_readable,
+        };
+
+        value.serialize(SchemaAwareSerializer::new(
             &mut self.buffer,
             self.schema,
-            self.resolved_schema.get_names(),
-            None,
-        );
-        value.serialize(&mut serializer)?;
+            config,
+        )?)?;
         self.num_values += 1;
 
         if self.buffer.len() >= self.block_size {

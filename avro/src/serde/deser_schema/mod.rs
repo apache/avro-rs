@@ -1568,8 +1568,7 @@ mod tests {
         assert_roundtrip(uuid, &schema, Vec::new())?;
 
         let buf = GenericDatumWriter::builder(&alt_schema)
-            // This needs changes in the serializer (is in the next 2 commits)
-            // .human_readable(true)
+            .human_readable(true)
             .build()?
             .write_ser_to_vec(&uuid)?;
 
