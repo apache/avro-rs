@@ -24,8 +24,9 @@ use crate::{
     encode::encode_internal,
     error::Details,
     schema::{NamesRef, ResolvedSchema},
-    serde::ser_schema::SchemaAwareWriteSerializer,
+    serde::ser_schema::{Config, SchemaAwareSerializer},
     types::Value,
+    util::is_human_readable,
 };
 
 /// Writer for writing raw Avro data.
@@ -37,6 +38,8 @@ pub struct GenericDatumWriter<'s> {
     schema: &'s Schema,
     resolved: ResolvedSchema<'s>,
     validate: bool,
+    human_readable: bool,
+    target_block_size: Option<usize>,
 }
 
 #[bon]
@@ -59,6 +62,19 @@ impl<'s> GenericDatumWriter<'s> {
         /// written data unreadable.
         #[builder(default = true)]
         validate: bool,
+        /// At what block size to start a new block (for arrays and maps).
+        ///
+        /// This is a minimum value, the block size will always be larger than this except for the last
+        /// block.
+        ///
+        /// When set to `None` all values will be written in a single block. This can be faster as no
+        /// intermediate buffer is used, but seeking through written data will be slower.
+        target_block_size: Option<usize>,
+        /// Should [`Serialize`] implementations pick a human readable represenation.
+        ///
+        /// It is recommended to set this to `false`.
+        #[builder(default = is_human_readable())]
+        human_readable: bool,
     ) -> AvroResult<Self> {
         let resolved = if let Some(resolved) = resolved_schemata {
             resolved
@@ -69,6 +85,8 @@ impl<'s> GenericDatumWriter<'s> {
             schema,
             resolved,
             validate,
+            human_readable,
+            target_block_size,
         })
     }
 }
@@ -128,9 +146,12 @@ impl GenericDatumWriter<'_> {
         writer: &mut W,
         value: &T,
     ) -> AvroResult<usize> {
-        let mut serializer =
-            SchemaAwareWriteSerializer::new(writer, self.schema, self.resolved.get_names(), None);
-        value.serialize(&mut serializer)
+        let config = Config {
+            names: self.resolved.get_names(),
+            target_block_size: self.target_block_size,
+            human_readable: self.human_readable,
+        };
+        value.serialize(SchemaAwareSerializer::new(writer, self.schema, config)?)
     }
 
     /// Serialize `T` to a [`Vec`].
@@ -181,8 +202,12 @@ pub fn write_avro_datum_ref<T: Serialize, W: Write>(
     data: &T,
     writer: &mut W,
 ) -> AvroResult<usize> {
-    let mut serializer = SchemaAwareWriteSerializer::new(writer, schema, names, None);
-    data.serialize(&mut serializer)
+    let config = Config {
+        names,
+        target_block_size: None,
+        human_readable: is_human_readable(),
+    };
+    data.serialize(SchemaAwareSerializer::new(writer, schema, config)?)
 }
 
 /// Deprecated. Use [`GenericDatumWriter`] instead.
