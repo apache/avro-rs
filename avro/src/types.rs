@@ -16,7 +16,8 @@
 // under the License.
 
 //! Logic handling the intermediate representation of Avro values.
-use crate::schema::{InnerDecimalSchema, NamespaceRef, UuidSchema};
+use crate::schema::{InnerDecimalSchema, UuidSchema, ResolvedNode,
+    ResolvedRecord, ResolvedMap, ResolvedArray, ResolvedUnion};
 use crate::{
     AvroResult, Error,
     bigdecimal::{deserialize_big_decimal, serialize_big_decimal},
@@ -24,15 +25,14 @@ use crate::{
     duration::Duration,
     error::Details,
     schema::{
-        DecimalSchema, EnumSchema, FixedSchema, Name, Precision, RecordField, RecordSchema,
-        ResolvedSchema, Scale, Schema, SchemaKind, UnionSchema,
+        DecimalSchema, EnumSchema, FixedSchema, Precision, RecordSchema,
+        ResolvedSchema, Scale, Schema, SchemaKind,
     },
 };
 use bigdecimal::BigDecimal;
-use log::{debug, error};
+use log::{error};
 use serde_json::{Number, Value as JsonValue};
 use std::{
-    borrow::Borrow,
     collections::{BTreeMap, HashMap},
     fmt::Debug,
     hash::BuildHasher,
@@ -369,32 +369,36 @@ impl TryFrom<Value> for JsonValue {
 
 impl Value {
     /// Validate the value against the given [Schema](../schema/enum.Schema.html).
+    /// This is a convenience method to keep backwards compatibility intact and is slow.
+    /// This method copies the supplied schema and attempts to convert it into ResolvedSchema.
+    /// Prefer using validate_complete if able.
     ///
     /// See the [Avro specification](https://avro.apache.org/docs/++version++/specification)
     /// for the full set of rules of schema validation.
     pub fn validate(&self, schema: &Schema) -> bool {
-        self.validate_schemata(vec![schema])
+        let resolved_schema : Result<ResolvedSchema,_> = schema.clone().try_into();
+        match resolved_schema{
+           Ok(resolved) => {
+               self.validate_against_resolved(&resolved)
+           },
+           Err(error) => {
+               error!("{error:?}");
+               false
+           }
+        }
     }
 
-    pub fn validate_schemata(&self, schemata: Vec<&Schema>) -> bool {
-        let rs = ResolvedSchema::try_from(schemata.clone())
-            .expect("Schemata didn't successfully resolve");
-        let schemata_len = schemata.len();
-        schemata.iter().any(
-            |schema| match self.validate_internal(schema, rs.get_names(), None) {
-                Some(reason) => {
-                    let log_message =
-                        format!("Invalid value: {self:?} for schema: {schema:?}. Reason: {reason}");
-                    if schemata_len == 1 {
-                        error!("{log_message}");
-                    } else {
-                        debug!("{log_message}");
-                    };
-                    false
-                }
-                None => true,
-            },
-        )
+    /// Validates this value against the given ResolvedSchema.
+    pub fn validate_against_resolved(&self, schema: &ResolvedSchema) -> bool {
+        match self.validate_internal(ResolvedNode::new(schema)){
+            Some(reason) => {
+                let log_message =
+                    format!("Invalid value: {self:?} for schema: {schema:?}. Reason: {reason}");
+                error!("{log_message}");
+                false
+            }
+            None => true
+        }
     }
 
     fn accumulate(accumulator: Option<String>, other: Option<String>) -> Option<String> {
@@ -407,57 +411,42 @@ impl Value {
     }
 
     /// Validates the value against the provided schema.
-    pub(crate) fn validate_internal<S: Borrow<Schema> + Debug>(
+    pub(crate) fn validate_internal(
         &self,
-        schema: &Schema,
-        names: &HashMap<Name, S>,
-        enclosing_namespace: NamespaceRef,
+        node: ResolvedNode
     ) -> Option<String> {
-        match (self, schema) {
-            (_, Schema::Ref { name }) => {
-                let name = name.fully_qualified_name(enclosing_namespace);
-                names.get(&name).map_or_else(
-                    || {
-                        Some(format!(
-                            "Unresolved schema reference: '{:?}'. Parsed names: {:?}",
-                            name,
-                            names.keys()
-                        ))
-                    },
-                    |s| self.validate_internal(s.borrow(), names, name.namespace()),
-                )
-            }
-            (&Value::Null, &Schema::Null) => None,
-            (&Value::Boolean(_), &Schema::Boolean) => None,
-            (&Value::Int(_), &Schema::Int) => None,
-            (&Value::Int(_), &Schema::Date) => None,
-            (&Value::Int(_), &Schema::TimeMillis) => None,
-            (&Value::Int(_), &Schema::Long) => None,
-            (&Value::Long(_), &Schema::Long) => None,
-            (&Value::Long(_), &Schema::TimeMicros) => None,
-            (&Value::Long(_), &Schema::TimestampMillis) => None,
-            (&Value::Long(_), &Schema::TimestampMicros) => None,
-            (&Value::Long(_), &Schema::LocalTimestampMillis) => None,
-            (&Value::Long(_), &Schema::LocalTimestampMicros) => None,
-            (&Value::TimestampMicros(_), &Schema::TimestampMicros) => None,
-            (&Value::TimestampMillis(_), &Schema::TimestampMillis) => None,
-            (&Value::TimestampNanos(_), &Schema::TimestampNanos) => None,
-            (&Value::LocalTimestampMicros(_), &Schema::LocalTimestampMicros) => None,
-            (&Value::LocalTimestampMillis(_), &Schema::LocalTimestampMillis) => None,
-            (&Value::LocalTimestampNanos(_), &Schema::LocalTimestampNanos) => None,
-            (&Value::TimeMicros(_), &Schema::TimeMicros) => None,
-            (&Value::TimeMillis(_), &Schema::TimeMillis) => None,
-            (&Value::Date(_), &Schema::Date) => None,
-            (&Value::Decimal(_), &Schema::Decimal { .. }) => None,
-            (&Value::BigDecimal(_), &Schema::BigDecimal) => None,
-            (&Value::Duration(_), &Schema::Duration(_)) => None,
-            (&Value::Uuid(_), &Schema::Uuid(_)) => None,
-            (&Value::Float(_), &Schema::Float) => None,
-            (&Value::Float(_), &Schema::Double) => None,
-            (&Value::Double(_), &Schema::Double) => None,
-            (&Value::Bytes(_), &Schema::Bytes) => None,
-            (&Value::Bytes(_), &Schema::Decimal { .. }) => None,
-            (Value::Bytes(bytes), &Schema::Uuid(UuidSchema::Bytes)) => {
+        match (self, node) {
+            (&Value::Null, ResolvedNode::Null) => None,
+            (&Value::Boolean(_), ResolvedNode::Boolean) => None,
+            (&Value::Int(_), ResolvedNode::Int) => None,
+            (&Value::Int(_), ResolvedNode::Date) => None,
+            (&Value::Int(_), ResolvedNode::TimeMillis) => None,
+            (&Value::Int(_), ResolvedNode::Long) => None,
+            (&Value::Long(_), ResolvedNode::Long) => None,
+            (&Value::Long(_), ResolvedNode::TimeMicros) => None,
+            (&Value::Long(_), ResolvedNode::TimestampMillis) => None,
+            (&Value::Long(_), ResolvedNode::TimestampMicros) => None,
+            (&Value::Long(_), ResolvedNode::LocalTimestampMillis) => None,
+            (&Value::Long(_), ResolvedNode::LocalTimestampMicros) => None,
+            (&Value::TimestampMicros(_), ResolvedNode::TimestampMicros) => None,
+            (&Value::TimestampMillis(_), ResolvedNode::TimestampMillis) => None,
+            (&Value::TimestampNanos(_), ResolvedNode::TimestampNanos) => None,
+            (&Value::LocalTimestampMicros(_), ResolvedNode::LocalTimestampMicros) => None,
+            (&Value::LocalTimestampMillis(_), ResolvedNode::LocalTimestampMillis) => None,
+            (&Value::LocalTimestampNanos(_), ResolvedNode::LocalTimestampNanos) => None,
+            (&Value::TimeMicros(_), ResolvedNode::TimeMicros) => None,
+            (&Value::TimeMillis(_), ResolvedNode::TimeMillis) => None,
+            (&Value::Date(_), ResolvedNode::Date) => None,
+            (&Value::Decimal(_), ResolvedNode::Decimal { .. }) => None,
+            (&Value::BigDecimal(_), ResolvedNode::BigDecimal) => None,
+            (&Value::Duration(_), ResolvedNode::Duration(..)) => None,
+            (&Value::Uuid(_), ResolvedNode::Uuid(..)) => None,
+            (&Value::Float(_), ResolvedNode::Float) => None,
+            (&Value::Float(_), ResolvedNode::Double) => None,
+            (&Value::Double(_), ResolvedNode::Double) => None,
+            (&Value::Bytes(_), ResolvedNode::Bytes) => None,
+            (&Value::Bytes(_), ResolvedNode::Decimal { .. }) => None,
+            (Value::Bytes(bytes), ResolvedNode::Uuid(UuidSchema::Bytes)) => {
                 if bytes.len() != 16 {
                     Some(format!(
                         "The value's size ({}) is not the right length for a bytes UUID (16)",
@@ -467,8 +456,8 @@ impl Value {
                     None
                 }
             }
-            (&Value::String(_), &Schema::String) => None,
-            (Value::String(string), &Schema::Uuid(UuidSchema::String)) => {
+            (&Value::String(_), ResolvedNode::String) => None,
+            (Value::String(string), ResolvedNode::Uuid(UuidSchema::String)) => {
                 // Non-hyphenated is 32 characters, hyphenated is longer
                 if string.len() < 32 {
                     Some(format!(
@@ -479,8 +468,8 @@ impl Value {
                     None
                 }
             }
-            (&Value::Fixed(n, _), &Schema::Fixed(FixedSchema { size, .. })) => {
-                if n != size {
+            (&Value::Fixed(n, _), ResolvedNode::Fixed(FixedSchema { size, .. })) => {
+                if n != *size {
                     Some(format!(
                         "The value's size ({n}) is different than the schema's size ({size})"
                     ))
@@ -488,8 +477,8 @@ impl Value {
                     None
                 }
             }
-            (Value::Bytes(b), &Schema::Fixed(FixedSchema { size, .. })) => {
-                if b.len() != size {
+            (Value::Bytes(b), ResolvedNode::Fixed(FixedSchema { size, .. })) => {
+                if b.len() != *size {
                     Some(format!(
                         "The bytes' length ({}) is different than the schema's size ({})",
                         b.len(),
@@ -499,7 +488,7 @@ impl Value {
                     None
                 }
             }
-            (&Value::Fixed(n, _), &Schema::Duration(_)) => {
+            (&Value::Fixed(n, _), ResolvedNode::Duration(..)) => {
                 if n != 12 {
                     Some(format!(
                         "The value's size ('{n}') must be exactly 12 to be a Duration"
@@ -508,7 +497,7 @@ impl Value {
                     None
                 }
             }
-            (&Value::Fixed(n, _), Schema::Uuid(UuidSchema::Fixed(size, ..))) => {
+            (&Value::Fixed(n, _), ResolvedNode::Uuid(UuidSchema::Fixed(size, ..))) => {
                 if size.size != 16 {
                     Some(format!(
                         "The schema's size ('{}') must be exactly 16 to be a Uuid",
@@ -523,8 +512,8 @@ impl Value {
                 }
             }
             // TODO: check precision against n
-            (&Value::Fixed(_n, _), &Schema::Decimal { .. }) => None,
-            (Value::String(s), Schema::Enum(EnumSchema { symbols, .. })) => {
+            (&Value::Fixed(_n, _), ResolvedNode::Decimal { .. }) => None,
+            (Value::String(s), ResolvedNode::Enum(EnumSchema { symbols, .. })) => {
                 if !symbols.contains(s) {
                     Some(format!("'{s}' is not a member of the possible symbols"))
                 } else {
@@ -533,7 +522,7 @@ impl Value {
             }
             (
                 &Value::Enum(i, ref s),
-                Schema::Enum(EnumSchema {
+                ResolvedNode::Enum(EnumSchema {
                     symbols, default, ..
                 }),
             ) => symbols
@@ -550,39 +539,34 @@ impl Value {
                     None => Some(format!("No symbol at position '{i}'")),
                 }),
             // (&Value::Union(None), &Schema::Union(_)) => None,
-            (&Value::Union(i, ref value), Schema::Union(inner)) => inner
-                .variants()
+            (&Value::Union(i, ref value), ResolvedNode::Union(inner)) => inner
+                .resolve_schemas()
                 .get(i as usize)
-                .map(|schema| value.validate_internal(schema, names, enclosing_namespace))
+                .map(|node| value.validate_internal(node.clone()))
                 .unwrap_or_else(|| Some(format!("No schema in the union at position '{i}'"))),
-            (v, Schema::Union(inner)) => {
-                match inner.find_schema_with_known_schemata(v, Some(names), enclosing_namespace) {
+            (v, ResolvedNode::Union(inner)) => {
+                match inner.structural_match_on_schema(v) {
                     Some(_) => None,
                     None => Some("Could not find matching type in union".to_string()),
                 }
             }
-            (Value::Array(items), Schema::Array(inner)) => items.iter().fold(None, |acc, item| {
+            (Value::Array(items), ResolvedNode::Array(inner)) => items.iter().fold(None, |acc, item| {
                 Value::accumulate(
                     acc,
-                    item.validate_internal(&inner.items, names, enclosing_namespace),
+                    item.validate_internal(inner.resolve_items()),
                 )
             }),
-            (Value::Map(items), Schema::Map(inner)) => {
+            (Value::Map(items), ResolvedNode::Map(inner)) => {
                 items.iter().fold(None, |acc, (_, value)| {
                     Value::accumulate(
                         acc,
-                        value.validate_internal(&inner.types, names, enclosing_namespace),
+                        value.validate_internal(inner.resolve_types()),
                     )
                 })
             }
             (
                 Value::Record(record_fields),
-                Schema::Record(RecordSchema {
-                    fields,
-                    lookup,
-                    name,
-                    ..
-                }),
+                ResolvedNode::Record(ResolvedRecord{fields,lookup, name: _, ..})
             ) => {
                 let non_nullable_fields_count =
                     fields.iter().filter(|&rf| !rf.is_nullable()).count();
@@ -605,16 +589,13 @@ impl Value {
                 record_fields
                     .iter()
                     .fold(None, |acc, (field_name, record_field)| {
-                        let record_namespace = name.namespace().or(enclosing_namespace);
                         match lookup.get(field_name) {
                             Some(idx) => {
-                                let field = &fields[*idx];
+                                let resolved_field = fields.get(*idx).unwrap();
                                 Value::accumulate(
                                     acc,
                                     record_field.validate_internal(
-                                        &field.schema,
-                                        names,
-                                        record_namespace,
+                                        resolved_field.resolve_field()
                                     ),
                                 )
                             }
@@ -625,10 +606,10 @@ impl Value {
                         }
                     })
             }
-            (Value::Map(items), Schema::Record(RecordSchema { fields, .. })) => {
-                fields.iter().fold(None, |acc, field| {
-                    if let Some(item) = items.get(&field.name) {
-                        let res = item.validate_internal(&field.schema, names, enclosing_namespace);
+            (Value::Map(items), ResolvedNode::Record(resolved_record)) => {
+                resolved_record.fields.iter().fold(None, |acc, field| {
+                    if let Some(item) = items.get(field.name) {
+                        let res = item.validate_internal(field.resolve_field());
                         Value::accumulate(acc, res)
                     } else if !field.is_nullable() {
                         Value::accumulate(
@@ -649,42 +630,32 @@ impl Value {
         }
     }
 
-    /// Attempt to perform schema resolution on the value, with the given
-    /// [Schema](../schema/enum.Schema.html).
-    ///
-    /// See [Schema Resolution](https://avro.apache.org/docs/++version++/specification/#schema-resolution)
-    /// in the Avro specification for the full set of rules of schema
-    /// resolution.
-    pub fn resolve(self, schema: &Schema) -> AvroResult<Self> {
-        self.resolve_schemata(schema, Vec::with_capacity(0))
+    /// Resolve this value (self) with provided resolved schema.
+    /// This resolution techinically follows a superset of the the schema resolution
+    /// rules defined by the specification. TODO: documentation
+    pub fn resolve_against_resolved(self, resolved: ResolvedSchema) -> AvroResult<Self> {
+        self.resolve_internal(ResolvedNode::new(&resolved))
     }
 
-    /// Attempt to perform schema resolution on the value, with the given
-    /// [Schema](../schema/enum.Schema.html) and set of schemas to use for Refs resolution.
-    ///
-    /// See [Schema Resolution](https://avro.apache.org/docs/++version++/specification/#schema-resolution)
-    /// in the Avro specification for the full set of rules of schema
-    /// resolution.
-    pub fn resolve_schemata(self, schema: &Schema, schemata: Vec<&Schema>) -> AvroResult<Self> {
-        let enclosing_namespace = schema.namespace();
-        let rs = if schemata.is_empty() {
-            ResolvedSchema::try_from(schema)?
-        } else {
-            ResolvedSchema::try_from(schemata)?
-        };
-        self.resolve_internal(schema, rs.get_names(), enclosing_namespace, &None)
+    /// Resolves value against the provided schema.
+    /// This resolution follows a superset of the schema resolution rules defined by the
+    /// specification. TODO: link to docs
+    /// Provided Schema is first cloned then transformed into a ResolvedSchema, which is
+    /// slow and may fail. If succesfull, this function simply calls resolve_complete
+    /// with this new ResolvedSchema.
+    /// Prefer using resolve_complete on a given ResolvedSchema,
+    /// this function exists for convenience and to maintain backwards compatibility.
+    pub fn resolve(self, schema: &Schema)->AvroResult<Self>{
+       self.resolve_against_resolved(schema.clone().try_into()?)
     }
 
-    pub(crate) fn resolve_internal<S: Borrow<Schema> + Debug>(
+    pub(crate) fn resolve_internal(
         mut self,
-        schema: &Schema,
-        names: &HashMap<Name, S>,
-        enclosing_namespace: NamespaceRef,
-        field_default: &Option<JsonValue>,
+        node: ResolvedNode
     ) -> AvroResult<Self> {
         // Check if this schema is a union, and if the reader schema is not.
         if SchemaKind::from(&self) == SchemaKind::Union
-            && SchemaKind::from(schema) != SchemaKind::Union
+            && SchemaKind::from(&node) != SchemaKind::Union
         {
             // Pull out the Union, and attempt to resolve against it.
             let v = match self {
@@ -693,55 +664,48 @@ impl Value {
             };
             self = v;
         }
-        match schema {
-            Schema::Ref { name } => {
-                let name = name.fully_qualified_name(enclosing_namespace);
-
-                if let Some(resolved) = names.get(&name) {
-                    debug!("Resolved {name:?}");
-                    self.resolve_internal(resolved.borrow(), names, name.namespace(), field_default)
-                } else {
-                    error!("Failed to resolve schema {name:?}");
-                    Err(Details::SchemaResolutionError(name.into_owned()).into())
-                }
-            }
-            Schema::Null => self.resolve_null(),
-            Schema::Boolean => self.resolve_boolean(),
-            Schema::Int => self.resolve_int(),
-            Schema::Long => self.resolve_long(),
-            Schema::Float => self.resolve_float(),
-            Schema::Double => self.resolve_double(),
-            Schema::Bytes => self.resolve_bytes(),
-            Schema::String => self.resolve_string(),
-            Schema::Fixed(FixedSchema { size, .. }) => self.resolve_fixed(*size),
-            Schema::Union(inner) => {
-                self.resolve_union(inner, names, enclosing_namespace, field_default)
-            }
-            Schema::Enum(EnumSchema {
-                symbols, default, ..
-            }) => self.resolve_enum(symbols, default, field_default),
-            Schema::Array(inner) => self.resolve_array(&inner.items, names, enclosing_namespace),
-            Schema::Map(inner) => self.resolve_map(&inner.types, names, enclosing_namespace),
-            Schema::Record(RecordSchema { fields, .. }) => {
-                self.resolve_record(fields, names, enclosing_namespace)
-            }
-            Schema::Decimal(DecimalSchema {
+        match node {
+            ResolvedNode::Null => self.resolve_null(),
+            ResolvedNode::Boolean => self.resolve_boolean(),
+            ResolvedNode::Int => self.resolve_int(),
+            ResolvedNode::Long => self.resolve_long(),
+            ResolvedNode::Float => self.resolve_float(),
+            ResolvedNode::Double => self.resolve_double(),
+            ResolvedNode::Bytes => self.resolve_bytes(),
+            ResolvedNode::String => self.resolve_string(),
+            ResolvedNode::Fixed(FixedSchema { size, .. }) => self.resolve_fixed(*size),
+            ResolvedNode::Enum(EnumSchema {
+                symbols,
+                default,
+                ..
+            }) => self.resolve_enum(symbols, default),
+            ResolvedNode::BigDecimal => self.resolve_bigdecimal(),
+            ResolvedNode::Date => self.resolve_date(),
+            ResolvedNode::TimeMillis => self.resolve_time_millis(),
+            ResolvedNode::TimeMicros => self.resolve_time_micros(),
+            ResolvedNode::TimestampMillis => self.resolve_timestamp_millis(),
+            ResolvedNode::TimestampMicros => self.resolve_timestamp_micros(),
+            ResolvedNode::TimestampNanos => self.resolve_timestamp_nanos(),
+            ResolvedNode::LocalTimestampMillis => self.resolve_local_timestamp_millis(),
+            ResolvedNode::LocalTimestampMicros => self.resolve_local_timestamp_micros(),
+            ResolvedNode::LocalTimestampNanos => self.resolve_local_timestamp_nanos(),
+            ResolvedNode::Duration(_) => self.resolve_duration(),
+            ResolvedNode::Uuid(uuid_schema) => self.resolve_uuid(uuid_schema),
+            ResolvedNode::Decimal(DecimalSchema {
                 scale,
                 precision,
                 inner,
             }) => self.resolve_decimal(*precision, *scale, inner),
-            Schema::BigDecimal => self.resolve_bigdecimal(),
-            Schema::Date => self.resolve_date(),
-            Schema::TimeMillis => self.resolve_time_millis(),
-            Schema::TimeMicros => self.resolve_time_micros(),
-            Schema::TimestampMillis => self.resolve_timestamp_millis(),
-            Schema::TimestampMicros => self.resolve_timestamp_micros(),
-            Schema::TimestampNanos => self.resolve_timestamp_nanos(),
-            Schema::LocalTimestampMillis => self.resolve_local_timestamp_millis(),
-            Schema::LocalTimestampMicros => self.resolve_local_timestamp_micros(),
-            Schema::LocalTimestampNanos => self.resolve_local_timestamp_nanos(),
-            Schema::Duration(_) => self.resolve_duration(),
-            Schema::Uuid(inner) => self.resolve_uuid(inner),
+            ResolvedNode::Union(resolved_union) => {
+                self.resolve_union(resolved_union)
+            }
+            ResolvedNode::Array(resolved_array) => {
+                self.resolve_array(resolved_array)
+            }
+            ResolvedNode::Map(resolved_map) => self.resolve_map(resolved_map),
+            ResolvedNode::Record(resolved_record) => {
+                self.resolve_record(resolved_record)
+            }
         }
     }
 
@@ -1037,8 +1001,7 @@ impl Value {
     pub(crate) fn resolve_enum(
         self,
         symbols: &[String],
-        enum_default: &Option<String>,
-        _field_default: &Option<JsonValue>,
+        enum_default: &Option<String>
     ) -> Result<Self, Error> {
         let validate_symbol = |symbol: String, symbols: &[String]| {
             if let Some(index) = symbols.iter().position(|item| item == &symbol) {
@@ -1072,12 +1035,9 @@ impl Value {
         }
     }
 
-    fn resolve_union<S: Borrow<Schema> + Debug>(
+    fn resolve_union(
         self,
-        schema: &UnionSchema,
-        names: &HashMap<Name, S>,
-        enclosing_namespace: NamespaceRef,
-        field_default: &Option<JsonValue>,
+        resolved_union: ResolvedUnion
     ) -> Result<Self, Error> {
         let v = match self {
             // Both are unions case.
@@ -1085,127 +1045,97 @@ impl Value {
             // Reader is a union, but writer is not.
             v => v,
         };
-        let (i, inner) = schema
-            .find_schema_with_known_schemata(&v, Some(names), enclosing_namespace)
+
+        let (i, inner) = resolved_union
+            .structural_match_on_schema(&v)
             .ok_or_else(|| Details::FindUnionVariant {
-                schema: schema.clone(),
+                schema: resolved_union.get_union_schema().clone(),
                 value: v.clone(),
             })?;
 
-        Ok(Value::Union(
+        Ok( Value::Union(
             i as u32,
-            Box::new(v.resolve_internal(inner, names, enclosing_namespace, field_default)?),
-        ))
+            Box::new(v.resolve_internal(inner)?))
+        )
     }
 
-    fn resolve_array<S: Borrow<Schema> + Debug>(
+    fn resolve_array(
         self,
-        schema: &Schema,
-        names: &HashMap<Name, S>,
-        enclosing_namespace: NamespaceRef,
+        resolved_array: ResolvedArray,
     ) -> Result<Self, Error> {
+        let items_resolved = resolved_array.resolve_items();
         match self {
             Value::Array(items) => Ok(Value::Array(
                 items
                     .into_iter()
-                    .map(|item| item.resolve_internal(schema, names, enclosing_namespace, &None))
+                    .map(|item| item.resolve_internal(items_resolved.clone()))
                     .collect::<Result<_, _>>()?,
             )),
             other => Err(Details::GetArray {
-                expected: schema.into(),
+                expected: SchemaKind::Array,
                 other,
             }
             .into()),
         }
     }
 
-    fn resolve_map<S: Borrow<Schema> + Debug>(
+    fn resolve_map(
         self,
-        schema: &Schema,
-        names: &HashMap<Name, S>,
-        enclosing_namespace: NamespaceRef,
+        resolved_map: ResolvedMap,
     ) -> Result<Self, Error> {
+        let resolved_types = resolved_map.resolve_types();
         match self {
             Value::Map(items) => Ok(Value::Map(
                 items
                     .into_iter()
                     .map(|(key, value)| {
                         value
-                            .resolve_internal(schema, names, enclosing_namespace, &None)
+                            .resolve_internal(resolved_types.clone())
                             .map(|value| (key, value))
                     })
                     .collect::<Result<_, _>>()?,
             )),
             other => Err(Details::GetMap {
-                expected: schema.into(),
+                expected: SchemaKind::Map,
                 other,
             }
             .into()),
         }
     }
 
-    fn resolve_record<S: Borrow<Schema> + Debug>(
+    fn resolve_record(
         self,
-        fields: &[RecordField],
-        names: &HashMap<Name, S>,
-        enclosing_namespace: NamespaceRef,
+        resolved_record: ResolvedRecord
     ) -> Result<Self, Error> {
         let mut items = match self {
             Value::Map(items) => Ok(items),
             Value::Record(fields) => Ok(fields.into_iter().collect::<HashMap<_, _>>()),
             other => Err(Error::new(Details::GetRecord {
-                expected: fields
+                expected: resolved_record.fields
                     .iter()
-                    .map(|field| (field.name.clone(), field.schema.clone().into()))
+                    .map(|field| (field.name.clone(),
+                                SchemaKind::from(&field.resolve_field()))
+                            )
                     .collect(),
                 other,
             })),
         }?;
 
-        let new_fields = fields
+        let new_fields = resolved_record.fields
             .iter()
             .map(|field| {
-                let value = match items.remove(&field.name) {
+                let value = match items.remove(field.name) {
                     Some(value) => value,
-                    None => match field.default {
-                        Some(ref value) => match field.schema {
-                            Schema::Enum(EnumSchema {
-                                ref symbols,
-                                ref default,
-                                ..
-                            }) => Value::try_from(value.clone())?.resolve_enum(
-                                symbols,
-                                default,
-                                &field.default.clone(),
-                            )?,
-                            Schema::Union(ref union_schema) => {
-                                let first = &union_schema.variants()[0];
-                                // NOTE: this match exists only to optimize null defaults for large
-                                // backward-compatible schemas with many nullable fields
-                                match first {
-                                    Schema::Null => Value::Union(0, Box::new(Value::Null)),
-                                    _ => Value::Union(
-                                        0,
-                                        Box::new(
-                                            Value::try_from(value.clone())?.resolve_internal(
-                                                first,
-                                                names,
-                                                enclosing_namespace,
-                                                &field.default,
-                                            )?,
-                                        ),
-                                    ),
-                                }
-                            }
-                            _ => Value::try_from(value.clone())?,
-                        },
+                    None => match &field.default {
+                        Some(value) => value.clone(), // we have already checked that the defualt
+                                                      // agrees with the schema
                         None => {
                             return Err(Details::GetField(field.name.clone()).into());
                         }
                     },
                 };
                 value
-                    .resolve_internal(&field.schema, names, enclosing_namespace, &field.default)
+                    .resolve_internal(field.resolve_field())
                     .map(|value| (field.name.clone(), value))
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -1230,9 +1160,7 @@ impl Value {
 mod tests {
     use super::*;
     use crate::{
-        duration::{Days, Millis, Months},
-        error::Details,
-        to_value,
+        duration::{Days, Millis, Months}, error::Details, schema::{Name, UnionSchema, RecordField}, to_value
     };
     use apache_avro_test_helper::{
         TestResult,
@@ -1241,6 +1169,7 @@ mod tests {
     use num_bigint::BigInt;
     use pretty_assertions::assert_eq;
     use serde_json::json;
+    use std::sync::Arc;
 
     #[test]
     fn avro_3809_validate_nested_records_with_implicit_namespace() -> TestResult {
@@ -1370,7 +1299,7 @@ mod tests {
             (
                 Value::Fixed(12, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
                 Schema::Duration(FixedSchema {
-                    name: Name::try_from("TestName")?,
+                    name: Name::try_from("TestName")?.into(),
                     aliases: None,
                     doc: None,
                     size: 12,
@@ -1382,7 +1311,7 @@ mod tests {
             (
                 Value::Fixed(11, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
                 Schema::Duration(FixedSchema {
-                    name: Name::try_from("TestName")?,
+                    name: Name::try_from("TestName")?.into(),
                     aliases: None,
                     doc: None,
                     size: 12,
@@ -1394,7 +1323,7 @@ mod tests {
             (
                 Value::Record(vec![("unknown_field_name".to_string(), Value::Null)]),
                 Schema::Record(RecordSchema {
-                    name: Name::new("record_name")?,
+                    name: Name::new("record_name")?.into(),
                     aliases: None,
                     doc: None,
                     fields: vec![
@@ -1412,14 +1341,14 @@ mod tests {
             (
                 Value::Record(vec![("field_name".to_string(), Value::Null)]),
                 Schema::Record(RecordSchema {
-                    name: Name::new("record_name")?,
+                    name: Name::new("record_name")?.into(),
                     aliases: None,
                     doc: None,
                     fields: vec![
                         RecordField::builder()
                             .name("field_name".to_string())
                             .schema(Schema::Ref {
-                                name: Name::new("missing")?,
+                                name: Name::new("missing")?.into(),
                             })
                             .build(),
                     ],
@@ -1432,7 +1361,7 @@ mod tests {
         ];
 
         for (value, schema, valid, expected_err_message) in value_schema_valid.into_iter() {
-            let err_message = value.validate_internal::<Schema>(&schema, &HashMap::default(), None);
+            let err_message = value.validate_internal(ResolvedNode::new(&ResolvedSchema::try_from(schema.clone())?));
             assert_eq!(valid, err_message.is_none());
             if !valid {
                 let full_err_message = format!(
@@ -1452,7 +1381,7 @@ mod tests {
     fn validate_fixed() -> TestResult {
         let schema = Schema::Fixed(FixedSchema {
             size: 4,
-            name: Name::new("some_fixed")?,
+            name: Name::new("some_fixed")?.into(),
             aliases: None,
             doc: None,
             attributes: Default::default(),
@@ -1486,7 +1415,7 @@ mod tests {
     #[test]
     fn validate_enum() -> TestResult {
         let schema = Schema::Enum(EnumSchema {
-            name: Name::new("some_enum")?,
+            name: Name::new("some_enum")?.into(),
             aliases: None,
             doc: None,
             symbols: vec![
@@ -1533,7 +1462,7 @@ mod tests {
         );
 
         let other_schema = Schema::Enum(EnumSchema {
-            name: Name::new("some_other_enum")?,
+            name: Name::new("some_other_enum")?.into(),
             aliases: None,
             doc: None,
             symbols: vec![
@@ -1574,7 +1503,7 @@ mod tests {
         //    ]
         // }
         let schema = Schema::Record(RecordSchema {
-            name: Name::new("some_record")?,
+            name: Name::new("some_record")?.into(),
             aliases: None,
             doc: None,
             fields: vec![
@@ -1807,7 +1736,7 @@ Field with name '"b"' is not a member of the map items"#,
                     precision: 10,
                     scale: 1,
                     inner: InnerDecimalSchema::Fixed(FixedSchema {
-                        name: Name::new("decimal").unwrap(),
+                        name: Name::new("decimal").unwrap().into(),
                         aliases: None,
                         size: 20,
                         doc: None,
@@ -1911,7 +1840,7 @@ Field with name '"b"' is not a member of the map items"#,
             value
                 .clone()
                 .resolve(&Schema::Duration(FixedSchema {
-                    name: Name::try_from("TestName").expect("Name is valid"),
+                    name: Name::try_from("TestName").expect("Name is valid").into(),
                     aliases: None,
                     doc: None,
                     size: 12,
@@ -1923,7 +1852,7 @@ Field with name '"b"' is not a member of the map items"#,
         assert!(
             Value::Long(1i64)
                 .resolve(&Schema::Duration(FixedSchema {
-                    name: Name::try_from("TestName").expect("Name is valid"),
+                    name: Name::try_from("TestName").expect("Name is valid").into(),
                     aliases: None,
                     doc: None,
                     size: 12,
@@ -1952,7 +1881,7 @@ Field with name '"b"' is not a member of the map items"#,
             value
                 .clone()
                 .resolve(&Schema::Uuid(UuidSchema::Fixed(FixedSchema {
-                    name: Name::new("some_name")?,
+                    name: Name::new("some_name")?.into(),
                     aliases: None,
                     doc: None,
                     size: 16,
@@ -3062,19 +2991,16 @@ Field with name '"b"' is not a member of the map items"#,
 
         let avro_value = Value::try_from(value)?;
 
-        let schemas = Schema::parse_list([main_schema, referenced_schema])?;
+        let [rs] = ResolvedSchema::from_str_array([main_schema], vec![referenced_schema])?;
 
-        let main_schema = schemas.first().unwrap();
-        let schemata: Vec<_> = schemas.iter().skip(1).collect();
-
-        let resolve_result = avro_value.clone().resolve_schemata(main_schema, schemata);
+        let resolve_result = avro_value.clone().resolve_against_resolved(rs);
 
         assert!(
             resolve_result.is_ok(),
             "result of resolving with schemata should be ok, got: {resolve_result:?}"
         );
 
-        let resolve_result = avro_value.resolve(main_schema);
+        let resolve_result = avro_value.resolve(&Schema::parse_str(&main_schema)?);
         assert!(
             resolve_result.is_err(),
             "result of resolving without schemata should be err, got: {resolve_result:?}"
@@ -3102,15 +3028,12 @@ Field with name '"b"' is not a member of the map items"#,
 
         let avro_value = Value::try_from(value)?;
 
-        let schemata = Schema::parse_list([referenced_enum, referenced_record, main_schema])?;
+        let [rs] = ResolvedSchema::from_str_array([main_schema], vec![referenced_enum, referenced_record])?;
 
-        let main_schema = schemata.last().unwrap();
-        let other_schemata: Vec<&Schema> = schemata.iter().take(2).collect();
-
-        let resolve_result = avro_value.resolve_schemata(main_schema, other_schemata)?;
+        let resolve_result = avro_value.resolve_against_resolved(rs.clone())?;
 
         assert!(
-            resolve_result.validate_schemata(schemata.iter().collect()),
+            resolve_result.validate_against_resolved(&rs),
             "result of validation with schemata should be true"
         );
 
@@ -3155,7 +3078,7 @@ Field with name '"b"' is not a member of the map items"#,
         let value = Value::Bytes(vec![97, 98, 99]);
         assert_eq!(
             value.resolve(&Schema::Fixed(FixedSchema {
-                name: "test".try_into()?,
+                name: Arc::new("test".try_into()?),
                 aliases: None,
                 doc: None,
                 size: 3,
@@ -3168,7 +3091,7 @@ Field with name '"b"' is not a member of the map items"#,
         assert!(
             value
                 .resolve(&Schema::Fixed(FixedSchema {
-                    name: "test".try_into()?,
+                    name: Arc::new("test".try_into()?),
                     aliases: None,
                     doc: None,
                     size: 3,
@@ -3181,7 +3104,7 @@ Field with name '"b"' is not a member of the map items"#,
         assert!(
             value
                 .resolve(&Schema::Fixed(FixedSchema {
-                    name: "test".try_into()?,
+                    name: Arc::new("test".try_into()?),
                     aliases: None,
                     doc: None,
                     size: 3,

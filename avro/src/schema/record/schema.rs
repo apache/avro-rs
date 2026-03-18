@@ -19,12 +19,13 @@ use crate::schema::{Aliases, Documentation, Name, RecordField};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
+use std::sync::Arc;
 
 /// A description of a Record schema.
 #[derive(bon::Builder, Clone)]
 pub struct RecordSchema {
     /// The name of the schema
-    pub name: Name,
+    pub name: Arc<Name>,
     /// The aliases of the schema
     #[builder(default)]
     pub aliases: Aliases,
@@ -76,7 +77,7 @@ impl<S: record_schema_builder::State> RecordSchemaBuilder<S> {
         T: TryInto<Name>,
     {
         let name = name.try_into()?;
-        Ok(self.name(name))
+        Ok(self.name(name.into()))
     }
 }
 
@@ -100,9 +101,9 @@ mod tests {
     fn avro_rs_403_record_schema_builder_no_fields() -> TestResult {
         let name = Name::new("TestRecord")?;
 
-        let record_schema = RecordSchema::builder().name(name.clone()).build();
+        let record_schema = RecordSchema::builder().name(name.clone().into()).build();
 
-        assert_eq!(record_schema.name, name);
+        assert_eq!(record_schema.name, name.into());
         assert_eq!(record_schema.aliases, None);
         assert_eq!(record_schema.doc, None);
         assert_eq!(record_schema.fields.len(), 0);
@@ -117,11 +118,11 @@ mod tests {
         let name = Name::new("TestRecord")?;
 
         let record_schema = RecordSchema::builder()
-            .name(name.clone())
+            .name(name.clone().into())
             .aliases(Some(vec!["alias_1".try_into()?]))
             .build();
 
-        assert_eq!(record_schema.name, name);
+        assert_eq!(record_schema.name, name.into());
         assert_eq!(record_schema.aliases, Some(vec!["alias_1".try_into()?]));
         assert_eq!(record_schema.doc, None);
         assert_eq!(record_schema.fields.len(), 0);
@@ -136,11 +137,11 @@ mod tests {
         let name = Name::new("TestRecord")?;
 
         let record_schema = RecordSchema::builder()
-            .name(name.clone())
+            .name(name.clone().into())
             .doc(Some("some_doc".into()))
             .build();
 
-        assert_eq!(record_schema.name, name);
+        assert_eq!(record_schema.name, name.into());
         assert_eq!(record_schema.aliases, None);
         assert_eq!(record_schema.doc, Some("some_doc".into()));
         assert_eq!(record_schema.fields.len(), 0);
@@ -161,11 +162,11 @@ mod tests {
         .collect();
 
         let record_schema = RecordSchema::builder()
-            .name(name.clone())
+            .name(name.clone().into())
             .attributes(attrs.clone())
             .build();
 
-        assert_eq!(record_schema.name, name);
+        assert_eq!(record_schema.name, name.into());
         assert_eq!(record_schema.aliases, None);
         assert_eq!(record_schema.doc, None);
         assert_eq!(record_schema.fields.len(), 0);
@@ -190,7 +191,7 @@ mod tests {
         ];
 
         let record_schema = RecordSchema::builder()
-            .name(name.clone())
+            .name(name.clone().into())
             .fields(fields.clone())
             .build();
 
@@ -200,7 +201,7 @@ mod tests {
                 .cloned()
                 .collect();
 
-        assert_eq!(record_schema.name, name);
+        assert_eq!(record_schema.name, name.into());
         assert_eq!(record_schema.aliases, None);
         assert_eq!(record_schema.doc, None);
         assert_eq!(record_schema.fields, fields);
@@ -213,12 +214,12 @@ mod tests {
     #[test]
     fn avro_rs_419_name_into() -> TestResult {
         let schema = RecordSchema::builder().try_name("str_slice")?.build();
-        assert_eq!(schema.name, "str_slice".try_into()?);
+        assert_eq!(schema.name, Arc::new("str_slice".try_into()?));
 
         let schema = RecordSchema::builder()
             .try_name("String".to_string())?
             .build();
-        assert_eq!(schema.name, "String".try_into()?);
+        assert_eq!(schema.name, Arc::new("String".try_into()?));
 
         Ok(())
     }

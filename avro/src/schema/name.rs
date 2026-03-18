@@ -18,9 +18,10 @@
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{Map, Value};
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::str::FromStr;
+use std::sync::Arc;
+use std::collections::{HashSet, HashMap};
 
 use crate::{
     AvroResult, Error, Schema,
@@ -59,6 +60,10 @@ pub type NamesRef<'a> = HashMap<Name, &'a Schema>;
 pub type Namespace = Option<String>;
 /// Represents the namespace for Named Schema
 pub type NamespaceRef<'a> = Option<&'a str>;
+
+// convenience types KTODO: make these the "main" names types we use..
+pub type NameMap = HashMap<Arc<Name>, Arc<Schema>>;
+pub type NameSet = HashSet<Arc<Name>>;
 
 impl Name {
     /// Create a new `Name`.

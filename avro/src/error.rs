@@ -88,6 +88,11 @@ pub enum Details {
     #[error("Two schemas with the same fullname were given: {0:?}")]
     NameCollision(String),
 
+    /// Error for when we are redefining schemata that already exists in
+    /// a resolving context
+    #[error("Schamata with fullnames: {0:?}, already have definitions in this context.")]
+    MultipleNameCollision(Vec<String>),
+
     #[error("Not a fixed or bytes type, required for decimal schema, got: {0:?}")]
     ResolveDecimalSchema(SchemaKind),
 
@@ -598,6 +603,21 @@ pub enum Details {
     /// Error while resolving [`Schema::Ref`]
     #[error("Unresolved schema reference: {0}")]
     SchemaResolutionError(Name),
+
+    /// Error while resolving Schema::Ref with message
+    /// from resolver
+    #[error("Unresolved schema reference: {0}. Error message: {1}")]
+    SchemaResolutionErrorWithMsg(Name, String),
+
+    /// Error thrown when no schema with provided name
+    /// is found in a ResolvedContext
+    #[error("Could not find schema with name: {0} in this context")]
+    SchemaLookupError(Name),
+
+    /// Resolver did not return schemata with expected name
+    #[error("Custom resolver did not return schema definition for expected name. Expected name: {0:?}, Names
+        received from resolver: {1:?}")]
+    CustomSchemaResolverMismatch(Name, Vec<Name>),
 
     #[error("The file metadata is already flushed.")]
     FileHeaderAlreadyWritten,

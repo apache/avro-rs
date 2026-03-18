@@ -385,7 +385,7 @@ pub fn get_record_fields_in_ctxt(
             // Get the schema
             let schema = schema_fn(named_schemas, enclosing_namespace);
             // Reinsert the old value
-            named_schemas.insert(name);
+            named_schemas.insert(name.as_ref().clone());
 
             // Now check if we actually got a record and return the fields if that is the case
             let Schema::Record(record) = schema else {
@@ -401,7 +401,7 @@ pub fn get_record_fields_in_ctxt(
     // Find the first Schema::Ref that has the target name
     fn find_first_ref<'a>(schema: &'a mut Schema, target: &Name) -> Option<&'a mut Schema> {
         match schema {
-            Schema::Ref { name } if name == target => Some(schema),
+            Schema::Ref { name } if name.as_ref() == target => Some(schema),
             Schema::Array(array) => find_first_ref(&mut array.items, target),
             Schema::Map(map) => find_first_ref(&mut map.types, target),
             Schema::Union(union) => {
@@ -414,7 +414,7 @@ pub fn get_record_fields_in_ctxt(
             }
             Schema::Record(record) => {
                 assert_ne!(
-                    &record.name, target,
+                    record.name.as_ref(), target,
                     "Only expecting a Ref named {target:?}"
                 );
                 for field in &mut record.fields {
@@ -471,7 +471,7 @@ pub fn get_record_fields_in_ctxt(
             };
 
             // The schema is used, so reinsert it
-            named_schemas.insert(name.clone());
+            named_schemas.insert(name.as_ref().clone());
 
             break;
         }
@@ -640,10 +640,10 @@ impl AvroSchemaComponent for core::time::Duration {
         let name = Name::new_with_enclosing_namespace("duration", enclosing_namespace)
             .expect("Name is valid");
         if named_schemas.contains(&name) {
-            Schema::Ref { name }
+            Schema::Ref { name: name.into() }
         } else {
             let schema = Schema::Duration(FixedSchema {
-                name: name.clone(),
+                name: name.clone().into(),
                 aliases: None,
                 doc: None,
                 size: 12,
@@ -673,10 +673,10 @@ impl AvroSchemaComponent for uuid::Uuid {
         let name =
             Name::new_with_enclosing_namespace("uuid", enclosing_namespace).expect("Name is valid");
         if named_schemas.contains(&name) {
-            Schema::Ref { name }
+            Schema::Ref { name: name.into() }
         } else {
             let schema = Schema::Uuid(UuidSchema::Fixed(FixedSchema {
-                name: name.clone(),
+                name: name.clone().into(),
                 aliases: None,
                 doc: None,
                 size: 16,
@@ -704,10 +704,10 @@ impl AvroSchemaComponent for u64 {
         let name =
             Name::new_with_enclosing_namespace("u64", enclosing_namespace).expect("Name is valid");
         if named_schemas.contains(&name) {
-            Schema::Ref { name }
+            Schema::Ref { name: name.into() }
         } else {
             let schema = Schema::Fixed(FixedSchema {
-                name: name.clone(),
+                name: name.clone().into(),
                 aliases: None,
                 doc: None,
                 size: 8,
@@ -735,10 +735,10 @@ impl AvroSchemaComponent for u128 {
         let name =
             Name::new_with_enclosing_namespace("u128", enclosing_namespace).expect("Name is valid");
         if named_schemas.contains(&name) {
-            Schema::Ref { name }
+            Schema::Ref { name: name.into() }
         } else {
             let schema = Schema::Fixed(FixedSchema {
-                name: name.clone(),
+                name: name.clone().into(),
                 aliases: None,
                 doc: None,
                 size: 16,
@@ -766,10 +766,10 @@ impl AvroSchemaComponent for i128 {
         let name =
             Name::new_with_enclosing_namespace("i128", enclosing_namespace).expect("Name is valid");
         if named_schemas.contains(&name) {
-            Schema::Ref { name }
+            Schema::Ref { name: name.into() }
         } else {
             let schema = Schema::Fixed(FixedSchema {
-                name: name.clone(),
+                name: name.clone().into(),
                 aliases: None,
                 doc: None,
                 size: 16,
@@ -859,7 +859,7 @@ mod tests {
         assert_eq!(
             schema,
             Schema::Fixed(FixedSchema {
-                name: Name::new("u64")?,
+                name: Name::new("u64")?.into(),
                 aliases: None,
                 doc: None,
                 size: 8,
@@ -876,7 +876,7 @@ mod tests {
         assert_eq!(
             schema,
             Schema::Fixed(FixedSchema {
-                name: Name::new("i128")?,
+                name: Name::new("i128")?.into(),
                 aliases: None,
                 doc: None,
                 size: 16,
@@ -893,7 +893,7 @@ mod tests {
         assert_eq!(
             schema,
             Schema::Fixed(FixedSchema {
-                name: Name::new("u128")?,
+                name: Name::new("u128")?.into(),
                 aliases: None,
                 doc: None,
                 size: 16,

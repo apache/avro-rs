@@ -17,7 +17,7 @@
 
 //! Logic for serde-compatible schema-aware serialization which writes directly to a writer.
 
-use crate::schema::{DecimalSchema, InnerDecimalSchema, UuidSchema};
+use crate::schema::{DecimalSchema, InnerDecimalSchema, NameMap, UuidSchema};
 use crate::{
     bigdecimal::big_decimal_as_bytes,
     encode::{encode_int, encode_long},
@@ -604,7 +604,7 @@ impl<W: Write> ser::SerializeTupleVariant for SchemaAwareWriteSerializeTupleStru
 pub struct SchemaAwareWriteSerializer<'s, W: Write> {
     writer: &'s mut W,
     root_schema: &'s Schema,
-    names: &'s NamesRef<'s>,
+    names: &'s NameMap,
     enclosing_namespace: Namespace,
 }
 
@@ -621,7 +621,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     pub fn new(
         writer: &'s mut W,
         schema: &'s Schema,
-        names: &'s NamesRef<'s>,
+        names: &'s NameMap,
         enclosing_namespace: Namespace,
     ) -> SchemaAwareWriteSerializer<'s, W> {
         SchemaAwareWriteSerializer {
@@ -635,7 +635,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     fn get_ref_schema(&self, name: &'s Name) -> Result<&'s Schema, Error> {
         let full_name = name.fully_qualified_name(self.enclosing_namespace.as_deref());
 
-        let ref_schema = self.names.get(full_name.as_ref()).copied();
+        let ref_schema = self.names.get(full_name.as_ref()).and_then(|arc_ref| Some(arc_ref.as_ref()));
 
         ref_schema.ok_or_else(|| Details::SchemaResolutionError(full_name.as_ref().clone()).into())
     }
@@ -3314,7 +3314,7 @@ mod tests {
     #[test]
     fn avro_rs_414_serialize_char_as_fixed() -> TestResult {
         let schema = Schema::Fixed(FixedSchema {
-            name: Name::new("char")?,
+            name: Name::new("char")?.into(),
             aliases: None,
             doc: None,
             size: 4,
@@ -3365,7 +3365,7 @@ mod tests {
     #[test]
     fn avro_rs_414_serialize_emoji_char_as_fixed() -> TestResult {
         let schema = Schema::Fixed(FixedSchema {
-            name: Name::new("char")?,
+            name: Name::new("char")?.into(),
             aliases: None,
             doc: None,
             size: 4,
@@ -3388,7 +3388,7 @@ mod tests {
     #[test]
     fn avro_rs_414_serialize_char_as_fixed_wrong_name() -> TestResult {
         let schema = Schema::Fixed(FixedSchema {
-            name: Name::new("characters")?,
+            name: Name::new("characters")?.into(),
             aliases: None,
             doc: None,
             size: 4,
@@ -3410,7 +3410,7 @@ mod tests {
     #[test]
     fn avro_rs_414_serialize_char_as_fixed_wrong_size() -> TestResult {
         let schema = Schema::Fixed(FixedSchema {
-            name: Name::new("char")?,
+            name: Name::new("char")?.into(),
             aliases: None,
             doc: None,
             size: 1,
@@ -3432,7 +3432,7 @@ mod tests {
     #[test]
     fn avro_rs_414_serialize_i128_as_fixed() -> TestResult {
         let schema = Schema::Fixed(FixedSchema {
-            name: Name::new("i128")?,
+            name: Name::new("i128")?.into(),
             aliases: None,
             doc: None,
             size: 16,
@@ -3460,7 +3460,7 @@ mod tests {
     #[test]
     fn avro_rs_414_serialize_i128_as_fixed_wrong_name() -> TestResult {
         let schema = Schema::Fixed(FixedSchema {
-            name: Name::new("onehundredtwentyeight")?,
+            name: Name::new("onehundredtwentyeight")?.into(),
             aliases: None,
             doc: None,
             size: 16,
@@ -3482,7 +3482,7 @@ mod tests {
     #[test]
     fn avro_rs_414_serialize_i128_as_fixed_wrong_size() -> TestResult {
         let schema = Schema::Fixed(FixedSchema {
-            name: Name::new("i128")?,
+            name: Name::new("i128")?.into(),
             aliases: None,
             doc: None,
             size: 8,
@@ -3504,7 +3504,7 @@ mod tests {
     #[test]
     fn avro_rs_414_serialize_u128_as_fixed() -> TestResult {
         let schema = Schema::Fixed(FixedSchema {
-            name: Name::new("u128")?,
+            name: Name::new("u128")?.into(),
             aliases: None,
             doc: None,
             size: 16,
@@ -3532,7 +3532,7 @@ mod tests {
     #[test]
     fn avro_rs_414_serialize_u128_as_fixed_wrong_name() -> TestResult {
         let schema = Schema::Fixed(FixedSchema {
-            name: Name::new("onehundredtwentyeight")?,
+            name: Name::new("onehundredtwentyeight")?.into(),
             aliases: None,
             doc: None,
             size: 16,
@@ -3554,7 +3554,7 @@ mod tests {
     #[test]
     fn avro_rs_414_serialize_u128_as_fixed_wrong_size() -> TestResult {
         let schema = Schema::Fixed(FixedSchema {
-            name: Name::new("u128")?,
+            name: Name::new("u128")?.into(),
             aliases: None,
             doc: None,
             size: 8,

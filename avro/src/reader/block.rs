@@ -19,7 +19,7 @@ use crate::{
     AvroResult, Codec, Error,
     decode::{decode, decode_internal},
     error::Details,
-    schema::{Names, Schema, resolve_names, resolve_names_with_schemata},
+    schema::{ResolvedNode, ResolvedSchema, Schema, SchemaWithSymbols},
     types::Value,
     util,
 };
@@ -45,7 +45,7 @@ pub(super) struct Block<'r, R> {
     pub(super) writer_schema: Schema,
     schemata: Vec<&'r Schema>,
     pub(super) user_metadata: HashMap<String, Vec<u8>>,
-    names_refs: Names,
+    resolved_writer: ResolvedSchema
 }
 
 impl<'r, R: Read> Block<'r, R> {
@@ -60,7 +60,7 @@ impl<'r, R: Read> Block<'r, R> {
             message_count: 0,
             marker: [0; 16],
             user_metadata: Default::default(),
-            names_refs: Default::default(),
+            resolved_writer: ResolvedSchema::new_empty(),
         };
 
         block.read_header()?;
@@ -186,9 +186,7 @@ impl<'r, R: Read> Block<'r, R> {
         let b_original = block_bytes.len();
 
         let item = decode_internal(
-            &self.writer_schema,
-            &self.names_refs,
-            None,
+            ResolvedNode::new(&self.resolved_writer),
             &mut block_bytes,
         )?;
         let item = match read_schema {
@@ -205,7 +203,9 @@ impl<'r, R: Read> Block<'r, R> {
         Ok(Some(item))
     }
 
-    fn read_writer_schema(&mut self, metadata: &HashMap<String, Value>) -> AvroResult<()> {
+    fn read_writer_schema(&mut self, metadata: &HashMap<String, Value>) -> AvroResult<()> { // KTODO,
+                                                                                            // Include
+                                                                                            // atest here, mine expands this
         let json: serde_json::Value = metadata
             .get("avro.schema")
             .and_then(|bytes| {
@@ -216,22 +216,12 @@ impl<'r, R: Read> Block<'r, R> {
                 }
             })
             .ok_or(Details::GetAvroSchemaFromMap)?;
-        if !self.schemata.is_empty() {
-            let mut names = HashMap::new();
-            resolve_names_with_schemata(
-                self.schemata.iter().copied(),
-                &mut names,
-                None,
-                &HashMap::new(),
-            )?;
-            self.names_refs = names.into_iter().map(|(n, s)| (n, s.clone())).collect();
-            self.writer_schema = Schema::parse_with_names(&json, self.names_refs.clone())?;
-        } else {
-            self.writer_schema = Schema::parse(&json)?;
-            let mut names = HashMap::new();
-            resolve_names(&self.writer_schema, &mut names, None, &HashMap::new())?;
-            self.names_refs = names.into_iter().map(|(n, s)| (n, s.clone())).collect();
-        }
+        let writer_from_stream = Schema::parse(&json)?;
+        let writer_from_stream_with_symbols : SchemaWithSymbols = writer_from_stream.clone().into();
+        let schemata_with_symbols : Vec<SchemaWithSymbols> = self.schemata.iter().map(|schema|{SchemaWithSymbols::from((*schema).clone())}).collect();
+        let [writer_from_stream_resolved] = ResolvedSchema::from_with_symbols_array([writer_from_stream_with_symbols], schemata_with_symbols)?;
+        self.writer_schema = writer_from_stream;
+        self.resolved_writer = writer_from_stream_resolved;
         Ok(())
     }
 

@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use apache_avro::schema::{CompleteSchema, ResolvedSchema};
 use apache_avro::writer::datum::GenericDatumWriter;
 use apache_avro::{
     Codec, Error, Reader, Schema, Writer,
@@ -2134,20 +2135,25 @@ fn avro_rs_66_test_independent_canonical_form_primitives() -> TestResult {
     for schema_str_perm in permutations(&schema_strs) {
         let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
         let schemata = Schema::parse_list(&schema_str_perm)?;
+        let [resolved_independent_schema] = ResolvedSchema::from_schema_array([&independent_schema], schemata.iter())?;
+        let complete = CompleteSchema::from(&resolved_independent_schema);
         assert_eq!(schemata.len(), schema_strs.len());
         let test_schema = schemata
             .iter()
             .find(|a| a.name().unwrap().to_string() == *"RecWithDeps")
             .unwrap();
 
+        let [test_resolved] = ResolvedSchema::from_schema_array([test_schema], schemata.iter())?;
+        let test_complete = CompleteSchema::from(&test_resolved);
+
         assert_eq!(
-            independent_schema.independent_canonical_form(&schemata)?,
+            complete.independent_canonical_form()?,
             independent_schema.canonical_form()
         );
 
         assert_eq!(
             independent_schema.canonical_form(),
-            test_schema.independent_canonical_form(&schemata)?
+            test_complete.independent_canonical_form()?
         );
     }
     Ok(())
@@ -2253,34 +2259,36 @@ fn avro_rs_66_test_independent_canonical_form_usages() -> TestResult {
         let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
         let schemata = Schema::parse_list(&schema_str_perm)?;
         for schema in &schemata {
+            let [resolved] = ResolvedSchema::from_schema_array([schema], schemata.iter())?;
+            let complete = CompleteSchema::from(&resolved);
             match schema.name().unwrap().to_string().as_str() {
                 "RecUsage" => {
                     assert_eq!(
-                        schema.independent_canonical_form(&schemata)?,
+                        complete.independent_canonical_form()?,
                         Schema::parse_str(record_usage_independent)?.canonical_form()
                     );
                 }
                 "ArrayUsage" => {
                     assert_eq!(
-                        schema.independent_canonical_form(&schemata)?,
+                        complete.independent_canonical_form()?,
                         Schema::parse_str(array_usage_independent)?.canonical_form()
                     );
                 }
                 "UnionUsage" => {
                     assert_eq!(
-                        schema.independent_canonical_form(&schemata)?,
+                        complete.independent_canonical_form()?,
                         Schema::parse_str(union_usage_independent)?.canonical_form()
                     );
                 }
                 "MapUsage" => {
                     assert_eq!(
-                        schema.independent_canonical_form(&schemata)?,
+                        complete.independent_canonical_form()?,
                         Schema::parse_str(map_usage_independent)?.canonical_form()
                     );
                 }
                 "ns.Rec" => {
                     assert_eq!(
-                        schema.independent_canonical_form(&schemata)?,
+                        complete.independent_canonical_form()?,
                         schema.canonical_form()
                     );
                 }
@@ -2351,8 +2359,9 @@ fn avro_rs_66_test_independent_canonical_form_deep_recursion() -> TestResult {
             .iter()
             .find(|s| s.name().unwrap().to_string().as_str() == "RecUsageUsage")
             .unwrap();
+        let [resolved] = ResolvedSchema::from_schema_array([ruu], schemata.iter())?;
         assert_eq!(
-            ruu.independent_canonical_form(&schemata)?,
+            CompleteSchema::from(&resolved).independent_canonical_form()?,
             Schema::parse_str(record_usage_usage_independent)?.canonical_form()
         );
     }
@@ -2382,8 +2391,8 @@ fn avro_rs_66_test_independent_canonical_form_missing_ref() -> TestResult {
     let schema_strs = [record_primitive, record_usage];
     let schemata = Schema::parse_list(schema_strs)?;
     assert!(matches!(
-        schemata[1]
-            .independent_canonical_form(&Vec::with_capacity(0))
+        CompleteSchema::try_from(schemata[1].clone())?
+            .independent_canonical_form()
             .map_err(Error::into_details), //NOTE - we're passing in an empty schemata
         Err(Details::SchemaResolutionError(..))
     ));

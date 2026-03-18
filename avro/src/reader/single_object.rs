@@ -18,7 +18,7 @@
 use crate::decode::decode_internal;
 use crate::error::Details;
 use crate::headers::{HeaderBuilder, RabinFingerprintHeader};
-use crate::schema::ResolvedOwnedSchema;
+use crate::schema::{ResolvedNode, ResolvedSchema};
 use crate::types::Value;
 use crate::{AvroResult, AvroSchema, Schema, from_value};
 use serde::de::DeserializeOwned;
@@ -26,7 +26,7 @@ use std::io::Read;
 use std::marker::PhantomData;
 
 pub struct GenericSingleObjectReader {
-    write_schema: ResolvedOwnedSchema,
+    write_schema: ResolvedSchema,
     expected_header: Vec<u8>,
 }
 
@@ -42,7 +42,7 @@ impl GenericSingleObjectReader {
     ) -> AvroResult<GenericSingleObjectReader> {
         let expected_header = header_builder.build_header();
         Ok(GenericSingleObjectReader {
-            write_schema: ResolvedOwnedSchema::try_from(schema)?,
+            write_schema: ResolvedSchema::try_from(schema)?,
             expected_header,
         })
     }
@@ -53,9 +53,7 @@ impl GenericSingleObjectReader {
             Ok(_) => {
                 if self.expected_header == header {
                     decode_internal(
-                        self.write_schema.get_root_schema(),
-                        self.write_schema.get_names(),
-                        None,
+                        ResolvedNode::new(&self.write_schema),
                         reader,
                     )
                 } else {

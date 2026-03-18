@@ -17,8 +17,7 @@
 
 use crate::AvroResult;
 use crate::error::Details;
-use crate::schema::{Documentation, Name, Names, Parser, Schema, SchemaKind};
-use crate::types;
+use crate::schema::{Documentation, Name, Parser, Schema, parser::RecordSchemaParseLocation};
 use crate::util::MapHelper;
 use crate::validator::validate_record_field_name;
 use log::warn;
@@ -91,8 +90,12 @@ impl RecordField {
 
         validate_record_field_name(name)?;
 
-        let ty = field.get("type").ok_or(Details::GetRecordFieldTypeField)?;
-        let schema = parser.parse(ty, enclosing_record.namespace())?;
+        let _ty = field.get("type").ok_or(Details::GetRecordFieldTypeField)?;
+        let schema = parser.parse_complex(
+            field,
+            enclosing_record.namespace(),
+            RecordSchemaParseLocation::FromField,
+        )?;
 
         if let Some(logical_type) = field.get("logicalType") {
             warn!(
@@ -100,14 +103,10 @@ impl RecordField {
             );
         }
 
-        let default = field.get("default").cloned();
-        Self::resolve_default_value(
-            &schema,
-            name,
-            &enclosing_record.fullname(None),
-            parser.get_parsed_schemas(),
-            &default,
-        )?;
+        let default = field.get("default").cloned().and_then(|value|{
+            parser.field_defaults_to_resolve.push((schema.clone(), value.clone()));
+            Some(value)
+        });
 
         let aliases = field
             .get("aliases")
@@ -130,61 +129,6 @@ impl RecordField {
             custom_attributes: RecordField::get_field_custom_attributes(field),
             schema,
         })
-    }
-
-    fn resolve_default_value(
-        field_schema: &Schema,
-        field_name: &str,
-        record_name: &str,
-        names: &Names,
-        default: &Option<Value>,
-    ) -> AvroResult<()> {
-        if let Some(value) = default {
-            let avro_value = types::Value::try_from(value.clone())?;
-            match field_schema {
-                Schema::Union(union_schema) => {
-                    let schemas = &union_schema.schemas;
-                    let resolved = schemas.iter().any(|schema| {
-                        avro_value
-                            .to_owned()
-                            .resolve_internal(schema, names, schema.namespace(), &None)
-                            .is_ok()
-                    });
-
-                    if !resolved {
-                        let schema: Option<&Schema> = schemas.first();
-                        return match schema {
-                            Some(first_schema) => Err(Details::GetDefaultUnion(
-                                SchemaKind::from(first_schema),
-                                types::ValueKind::from(avro_value),
-                            )
-                            .into()),
-                            None => Err(Details::EmptyUnion.into()),
-                        };
-                    }
-                }
-                _ => {
-                    let resolved = avro_value
-                        .resolve_internal(field_schema, names, field_schema.namespace(), &None)
-                        .is_ok();
-
-                    if !resolved {
-                        let schemata = names.values().cloned().collect::<Vec<_>>();
-                        return Err(Details::GetDefaultRecordField(
-                            field_name.to_string(),
-                            record_name.to_string(),
-                            field_schema
-                                .independent_canonical_form(&schemata)
-                                .unwrap_or_else(|_| field_schema.canonical_form()),
-                            value.clone(),
-                        )
-                        .into());
-                    }
-                }
-            };
-        }
-
-        Ok(())
     }
 
     fn get_field_custom_attributes(field: &Map<String, Value>) -> BTreeMap<String, Value> {
@@ -250,7 +194,7 @@ mod tests {
             .schema(Schema::Union(UnionSchema::new(vec![
                 Schema::Null,
                 Schema::Ref {
-                    name: Name::new("LongList")?,
+                    name: Name::new("LongList")?.into(),
                 },
             ])?))
             .build();

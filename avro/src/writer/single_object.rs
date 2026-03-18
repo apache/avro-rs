@@ -20,12 +20,12 @@ use std::{io::Write, marker::PhantomData, ops::RangeInclusive};
 use serde::Serialize;
 
 use crate::encode::encode_internal;
+use crate::schema::{ResolvedNode, ResolvedSchema};
 use crate::serde::ser_schema::SchemaAwareWriteSerializer;
 use crate::{
     AvroResult, AvroSchema, Schema,
     error::Details,
     headers::{HeaderBuilder, RabinFingerprintHeader},
-    schema::ResolvedOwnedSchema,
     types::Value,
 };
 
@@ -34,7 +34,7 @@ use crate::{
 /// Writes all object bytes at once, and drains internal buffer
 pub struct GenericSingleObjectWriter {
     buffer: Vec<u8>,
-    resolved: ResolvedOwnedSchema,
+    resolved: ResolvedSchema,
 }
 
 impl GenericSingleObjectWriter {
@@ -57,7 +57,7 @@ impl GenericSingleObjectWriter {
 
         Ok(GenericSingleObjectWriter {
             buffer,
-            resolved: ResolvedOwnedSchema::try_from(schema.clone())?,
+            resolved: ResolvedSchema::try_from(schema.clone())?,
         })
     }
 
@@ -90,7 +90,7 @@ pub struct SpecificSingleObjectWriter<T>
 where
     T: AvroSchema,
 {
-    resolved: ResolvedOwnedSchema,
+    resolved: ResolvedSchema,
     header: Vec<u8>,
     _model: PhantomData<T>,
 }
@@ -102,7 +102,7 @@ where
     pub fn new() -> AvroResult<Self> {
         let schema = T::get_schema();
         let header = RabinFingerprintHeader::from_schema(&schema).build_header();
-        let resolved = ResolvedOwnedSchema::new(schema)?;
+        let resolved = ResolvedSchema::try_from(schema)?;
         // We don't use Self::new_with_header_builder as that would mean calling T::get_schema() twice
         Ok(Self {
             resolved,
@@ -113,7 +113,7 @@ where
 
     pub fn new_with_header_builder(header_builder: impl HeaderBuilder) -> AvroResult<Self> {
         let header = header_builder.build_header();
-        let resolved = ResolvedOwnedSchema::new(T::get_schema())?;
+        let resolved = ResolvedSchema::try_from(T::get_schema())?;
         Ok(Self {
             resolved,
             header,
@@ -165,7 +165,7 @@ where
 
         let mut serializer = SchemaAwareWriteSerializer::new(
             writer,
-            self.resolved.get_root_schema(),
+            &self.resolved.schema,
             self.resolved.get_names(),
             None,
         );
@@ -186,28 +186,23 @@ where
 }
 
 fn write_value_ref_owned_resolved<W: Write>(
-    resolved_schema: &ResolvedOwnedSchema,
+    resolved_schema: &ResolvedSchema,
     value: &Value,
     writer: &mut W,
 ) -> AvroResult<usize> {
-    let root_schema = resolved_schema.get_root_schema();
     if let Some(reason) = value.validate_internal(
-        root_schema,
-        resolved_schema.get_names(),
-        root_schema.namespace(),
+        ResolvedNode::new(resolved_schema)
     ) {
         return Err(Details::ValidationWithReason {
             value: value.clone(),
-            schema: root_schema.clone(),
+            schema: resolved_schema.schema.as_ref().clone(),
             reason,
         }
         .into());
     }
     encode_internal(
         value,
-        root_schema,
-        resolved_schema.get_names(),
-        root_schema.namespace(),
+        ResolvedNode::new(resolved_schema),
         writer,
     )
 }

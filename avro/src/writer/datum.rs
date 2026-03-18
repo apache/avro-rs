@@ -23,7 +23,7 @@ use crate::{
     AvroResult, Schema,
     encode::encode_internal,
     error::Details,
-    schema::{NamesRef, ResolvedSchema},
+    schema::{NameMap, ResolvedNode, ResolvedSchema},
     serde::ser_schema::SchemaAwareWriteSerializer,
     types::Value,
 };
@@ -35,7 +35,7 @@ use crate::{
 /// [`SpecificSingleObjectWriter`][crate::SpecificSingleObjectWriter] instead.
 pub struct GenericDatumWriter<'s> {
     schema: &'s Schema,
-    resolved: ResolvedSchema<'s>,
+    resolved: ResolvedSchema,
     validate: bool,
 }
 
@@ -50,7 +50,7 @@ impl<'s> GenericDatumWriter<'s> {
         /// Already resolved schemata that will be used to resolve references in the writer's schema.
         ///
         /// You can also use [`Self::schemata`] instead.
-        resolved_schemata: Option<ResolvedSchema<'s>>,
+        resolved_schemata: Option<ResolvedSchema>,
         /// Validate values against the writer schema before writing them.
         ///
         /// Defaults to `true`.
@@ -87,7 +87,7 @@ impl<'s, S: generic_datum_writer_builder::State> GenericDatumWriterBuilder<'s, S
     where
         S::ResolvedSchemata: generic_datum_writer_builder::IsUnset,
     {
-        let resolved = ResolvedSchema::new_with_schemata(schemata)?;
+        let [resolved] = ResolvedSchema::from_schema_array([self.schema], schemata)?;
         Ok(self.resolved_schemata(resolved))
     }
 }
@@ -107,12 +107,12 @@ impl GenericDatumWriter<'_> {
     pub fn write_value_ref<W: Write>(&self, writer: &mut W, value: &Value) -> AvroResult<usize> {
         if self.validate
             && value
-                .validate_internal(self.schema, self.resolved.get_names(), None)
+                .validate_internal(ResolvedNode::new(&self.resolved))
                 .is_some()
         {
             return Err(Details::Validation.into());
         }
-        encode_internal(value, self.schema, self.resolved.get_names(), None, writer)
+        encode_internal(value, ResolvedNode::new(&self.resolved), writer)
     }
 
     /// Write a value to a [`Vec`].
@@ -177,7 +177,7 @@ pub fn to_avro_datum<T: Into<Value>>(schema: &Schema, value: T) -> AvroResult<Ve
 /// [`Writer::append_ser`]: crate::Writer::append_ser
 pub fn write_avro_datum_ref<T: Serialize, W: Write>(
     schema: &Schema,
-    names: &NamesRef,
+    names: &NameMap,
     data: &T,
     writer: &mut W,
 ) -> AvroResult<usize> {
@@ -416,7 +416,7 @@ mod tests {
     fn decimal_fixed() -> TestResult {
         let size = 30;
         let fixed = FixedSchema {
-            name: Name::new("decimal")?,
+            name: Name::new("decimal")?.into(),
             aliases: None,
             doc: None,
             size,
@@ -456,7 +456,7 @@ mod tests {
     #[test]
     fn duration() -> TestResult {
         let inner = Schema::Fixed(FixedSchema {
-            name: Name::new("duration")?,
+            name: Name::new("duration")?.into(),
             aliases: None,
             doc: None,
             size: 12,
@@ -470,7 +470,7 @@ mod tests {
         logical_type_test(
             r#"{"type": {"type": "fixed", "name": "duration", "size": 12}, "logicalType": "duration"}"#,
             &Schema::Duration(FixedSchema {
-                name: Name::try_from("duration").expect("Name is valid"),
+                name: Name::try_from("duration").expect("Name is valid").into(),
                 aliases: None,
                 doc: None,
                 size: 12,

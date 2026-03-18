@@ -89,8 +89,7 @@ fn avro_rs_106_test_multiple_schemata_to_from_avro_datum_with_resolution() -> Te
 
     let value = GenericDatumReader::builder(schema_b)
         .writer_schemata(schemata.clone())?
-        .reader_schema(schema_b)
-        .reader_schemata(schemata)?
+        .reader_schema_with_schemata(schema_b,schemata)?
         .build()?
         .read_value(&mut actual.as_slice())?;
     assert_eq!(value, record);

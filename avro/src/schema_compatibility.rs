@@ -853,7 +853,7 @@ mod tests {
     #[test]
     fn test_compatible_reader_writer_pairs() {
         let uuid_fixed = FixedSchema {
-            name: Name::new("uuid_fixed").unwrap(),
+            name: Name::new("uuid_fixed").unwrap().into(),
             aliases: None,
             doc: None,
             size: 16,
@@ -1699,7 +1699,7 @@ mod tests {
             precision: 20,
             scale: 0,
             inner: InnerDecimalSchema::Fixed(FixedSchema {
-                name: Name::new("DecimalFixed")?,
+                name: Name::new("DecimalFixed")?.into(),
                 aliases: None,
                 doc: None,
                 size: 20,

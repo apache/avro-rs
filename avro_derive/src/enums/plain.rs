@@ -48,7 +48,7 @@ pub fn schema_def(
         }
         Ok(quote! {
             ::apache_avro::schema::Schema::Enum(::apache_avro::schema::EnumSchema {
-                name,
+                name: std::sync::Arc::new(name),
                 aliases: #enum_aliases,
                 doc: #doc,
                 symbols: vec![#(#symbols.to_owned()),*],

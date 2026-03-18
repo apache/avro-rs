@@ -1915,7 +1915,7 @@ fn avro_rs_397_with_generic() {
         _enclosing_namespace: NamespaceRef,
     ) -> Schema {
         Schema::Fixed(FixedSchema {
-            name: Name::new(format!("fixed_{N}")).unwrap(),
+            name: Name::new(format!("fixed_{N}")).unwrap().into(),
             aliases: None,
             doc: None,
             size: N,

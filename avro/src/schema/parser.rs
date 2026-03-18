@@ -18,8 +18,8 @@
 use crate::error::Details;
 use crate::schema::{
     Alias, Aliases, ArraySchema, DecimalMetadata, DecimalSchema, EnumSchema, FixedSchema,
-    MapSchema, Name, Names, NamespaceRef, Precision, RecordField, RecordSchema, Scale, Schema,
-    SchemaKind, UnionSchema, UuidSchema,
+    MapSchema, Name, NamespaceRef, Precision, RecordField, RecordSchema, Scale, Schema,
+    SchemaKind, UnionSchema, UuidSchema, SchemaWithSymbols
 };
 use crate::types;
 use crate::util::MapHelper;
@@ -28,88 +28,71 @@ use crate::{AvroResult, Error};
 use log::{debug, error, warn};
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::Arc;
+
+#[derive(Debug, Default)]
+pub(crate) enum RecordSchemaParseLocation {
+    /// When the parse is happening at root level
+    #[default]
+    Root,
+
+    /// When the parse is happening inside a record field
+    FromField,
+}
+
+enum ReservedSchema {
+    Reserved,
+    Completed(Arc<Schema>)
+}
+
 
 #[derive(Default)]
 pub(crate) struct Parser {
-    input_schemas: HashMap<Name, Value>,
-    /// Used to resolve cyclic references, i.e. when a
-    /// field's type is a reference to its record's type
-    resolving_schemas: Names,
-    input_order: Vec<Name>,
-    /// Used to avoid parsing the same schema twice
-    parsed_schemas: Names,
+    /// Keeps track of the names defined for this schema, as well as where it is located
+    /// in the schema tree
+    defined_names: HashMap<Arc<Name>, ReservedSchema>,
+    /// Keeps track of the names references by this schema, as well as where they are located
+    /// in the schema tree
+    referenced_names: HashSet<Arc<Name>>,
+    /// Keeps track of fields that have a defualt value we need to resolve against.
+    pub(crate) field_defaults_to_resolve: Vec<(Schema, Value)>
 }
 
 impl Parser {
-    pub(crate) fn new(
-        input_schemas: HashMap<Name, Value>,
-        input_order: Vec<Name>,
-        parsed_schemas: Names,
-    ) -> Self {
-        Self {
-            input_schemas,
-            resolving_schemas: HashMap::default(),
-            input_order,
-            parsed_schemas,
-        }
-    }
-
-    pub(crate) fn get_parsed_schemas(&mut self) -> &Names {
-        &self.parsed_schemas
-    }
-
     /// Create a `Schema` from a string representing a JSON Avro schema.
-    pub(super) fn parse_str(&mut self, input: &str) -> AvroResult<Schema> {
+    /// Consumes the parser in the process.
+    pub(super) fn parse_str(self, input: &str) -> Result<SchemaWithSymbols, Error> {
         let value = serde_json::from_str(input).map_err(Details::ParseSchemaJson)?;
         self.parse(&value, None)
     }
 
-    /// Create an array of `Schema`s from an iterator of JSON Avro schemas.
-    ///
-    /// It is allowed that the schemas have cross-dependencies; these will be resolved during parsing.
-    pub(super) fn parse_list(&mut self) -> AvroResult<Vec<Schema>> {
-        self.parse_input_schemas()?;
+    /// Create a `SchemaWithSymbols` from a `serde_json::Value` representing a JSON Avro
+    /// schema.
+    pub(super) fn parse(mut self, value: &Value, enclosing_namespace: NamespaceRef) -> AvroResult<SchemaWithSymbols>{
+        let schema = self.parse_internal(&value, enclosing_namespace)?;
+        let defined_names : HashMap<Arc<Name>, Arc<Schema>> = HashMap::from_iter(self.defined_names.drain().map(|(key, val)| {
+            match val {
+                ReservedSchema::Reserved => {panic!("reserved schema encountered that was not provided a definition")}
+                ReservedSchema::Completed(schema_ref) => (key, schema_ref)
+            }
+        }));
 
-        let mut parsed_schemas = Vec::with_capacity(self.parsed_schemas.len());
-        for name in self.input_order.drain(0..) {
-            let parsed = self
-                .parsed_schemas
-                .remove(&name)
-                .expect("One of the input schemas was unexpectedly not parsed");
-            parsed_schemas.push(parsed);
-        }
-        Ok(parsed_schemas)
+        Ok(SchemaWithSymbols{
+            field_defaults_to_resolve: self.field_defaults_to_resolve,
+            defined_names,
+            referenced_names: self.referenced_names,
+            schema: Arc::new(schema)
+        })
     }
 
-    /// Convert the input schemas to `parsed_schemas`.
-    pub(super) fn parse_input_schemas(&mut self) -> Result<(), Error> {
-        while !self.input_schemas.is_empty() {
-            let next_name = self
-                .input_schemas
-                .keys()
-                .next()
-                .expect("Input schemas unexpectedly empty")
-                .to_owned();
-            let (name, value) = self
-                .input_schemas
-                .remove_entry(&next_name)
-                .expect("Key unexpectedly missing");
-            let parsed = self.parse(&value, None)?;
-            self.parsed_schemas
-                .insert(self.get_schema_type_name(name, value), parsed);
-        }
-        Ok(())
-    }
-
-    /// Create a `Schema` from a `serde_json::Value` representing a JSON Avro schema.
-    pub(super) fn parse(
-        &mut self,
-        value: &Value,
-        enclosing_namespace: NamespaceRef,
-    ) -> AvroResult<Schema> {
+    /// Create a `Schema` from a `serde_json::Value` representing a JSON Avro
+    /// schema.
+    fn parse_internal(&mut self, value: &Value, enclosing_namespace: NamespaceRef) -> AvroResult<Schema> {
         match *value {
             Value::String(ref t) => self.parse_known_schema(t.as_str(), enclosing_namespace),
-            Value::Object(ref data) => self.parse_complex(data, enclosing_namespace),
+            Value::Object(ref data) => {
+                self.parse_complex(data, enclosing_namespace, RecordSchemaParseLocation::Root)
+            }
             Value::Array(ref data) => self.parse_union(data, enclosing_namespace),
             _ => Err(Details::ParseSchemaFromValidJson.into()),
         }
@@ -134,74 +117,15 @@ impl Parser {
         }
     }
 
-    /// Given a name, tries to retrieve the parsed schema from `parsed_schemas`.
-    ///
-    /// If a parsed schema is not found, it checks if a currently resolving
-    /// schema with that name exists.
-    /// If a resolving schema is not found, it checks if a JSON with that name exists
-    /// in `input_schemas` and then parses it (removing it from `input_schemas`)
-    /// and adds the parsed schema to `parsed_schemas`.
-    ///
-    /// This method allows schemas definitions that depend on other types to
-    /// parse their dependencies (or look them up if already parsed).
-    pub(super) fn fetch_schema_ref(
+    /// Registers that we are referencing a schema by name
+    fn fetch_schema_ref(
         &mut self,
         name: &str,
         enclosing_namespace: NamespaceRef,
     ) -> AvroResult<Schema> {
-        fn get_schema_ref(parsed: &Schema) -> Schema {
-            match parsed {
-                &Schema::Record(RecordSchema { ref name, .. })
-                | &Schema::Enum(EnumSchema { ref name, .. })
-                | &Schema::Fixed(FixedSchema { ref name, .. }) => {
-                    Schema::Ref { name: name.clone() }
-                }
-                _ => parsed.clone(),
-            }
-        }
-
-        let fully_qualified_name = Name::new_with_enclosing_namespace(name, enclosing_namespace)?;
-
-        if self.parsed_schemas.contains_key(&fully_qualified_name) {
-            return Ok(Schema::Ref {
-                name: fully_qualified_name,
-            });
-        }
-        if let Some(resolving_schema) = self.resolving_schemas.get(&fully_qualified_name) {
-            return Ok(resolving_schema.clone());
-        }
-
-        // For good error reporting we add this check
-        match fully_qualified_name.name() {
-            "record" | "enum" | "fixed" => {
-                return Err(
-                    Details::InvalidSchemaRecord(fully_qualified_name.name().to_string()).into(),
-                );
-            }
-            _ => (),
-        }
-
-        let value = self
-            .input_schemas
-            .remove(&fully_qualified_name)
-            // TODO make a better descriptive error message here that conveys that a named schema cannot be found
-            .ok_or_else(|| {
-                let full_name = fully_qualified_name.fullname(None);
-                if full_name == "bool" {
-                    Details::ParsePrimitiveSimilar(full_name, "boolean")
-                } else {
-                    Details::ParsePrimitive(full_name)
-                }
-            })?;
-
-        // parsing a full schema from inside another schema. Other full schema will not inherit namespace
-        let parsed = self.parse(&value, None)?;
-        self.parsed_schemas.insert(
-            self.get_schema_type_name(fully_qualified_name, value),
-            parsed.clone(),
-        );
-
-        Ok(get_schema_ref(&parsed))
+        let fully_qualified_name = Arc::new(Name::new_with_enclosing_namespace(name, enclosing_namespace)?);
+        self.referenced_names.insert(Arc::clone(&fully_qualified_name));
+        Ok(Schema::Ref { name: fully_qualified_name })
     }
 
     fn get_decimal_integer(
@@ -252,6 +176,7 @@ impl Parser {
         &mut self,
         complex: &Map<String, Value>,
         enclosing_namespace: NamespaceRef,
+        parse_location: RecordSchemaParseLocation,
     ) -> AvroResult<Schema> {
         // Try to parse this as a native complex type.
         fn parse_as_native_complex(
@@ -264,7 +189,7 @@ impl Parser {
                     Value::String(s) if s == "fixed" => {
                         parser.parse_fixed(complex, enclosing_namespace)
                     }
-                    _ => parser.parse(value, enclosing_namespace),
+                    _ => parser.parse_internal(value, enclosing_namespace),
                 },
                 None => Err(Details::GetLogicalTypeField.into()),
             }
@@ -460,76 +385,76 @@ impl Parser {
         }
         match complex.get("type") {
             Some(Value::String(t)) => match t.as_str() {
-                "record" => self.parse_record(complex, enclosing_namespace),
+                "record" => match parse_location {
+                    RecordSchemaParseLocation::Root => {
+                        self.parse_record(complex, enclosing_namespace)
+                    }
+                    RecordSchemaParseLocation::FromField => {
+                        self.fetch_schema_ref(t, enclosing_namespace)
+                    }
+                },
                 "enum" => self.parse_enum(complex, enclosing_namespace),
                 "array" => self.parse_array(complex, enclosing_namespace),
                 "map" => self.parse_map(complex, enclosing_namespace),
                 "fixed" => self.parse_fixed(complex, enclosing_namespace),
                 other => self.parse_known_schema(other, enclosing_namespace),
             },
-            Some(Value::Object(data)) => self.parse_complex(data, enclosing_namespace),
+            Some(Value::Object(data)) => {
+                self.parse_complex(data, enclosing_namespace, RecordSchemaParseLocation::Root)
+            }
             Some(Value::Array(variants)) => self.parse_union(variants, enclosing_namespace),
             Some(unknown) => Err(Details::GetComplexType(unknown.clone()).into()),
             None => Err(Details::GetComplexTypeField.into()),
         }
     }
 
-    fn register_resolving_schema(&mut self, name: &Name, aliases: &Aliases) {
-        let resolving_schema = Schema::Ref { name: name.clone() };
-        self.resolving_schemas
-            .insert(name.clone(), resolving_schema.clone());
+    /// checks if a fullname or its aliases have been registered with the parser yet. If so, fails
+    /// on NameCollision, else, reserves spots in the defined_names map that will be filled in when
+    /// the definition is complete.
+    fn check_and_reserve_name_and_aliases(&mut self, name: &Arc<Name>, aliases: &Aliases) -> AvroResult<()>{
+
+        if let Option::None = self.defined_names.insert(Arc::clone(name), ReservedSchema::Reserved) {
+        }else{
+            return Err(Details::NameCollision(name.fullname(Option::None)).into());
+        }
 
         let namespace = name.namespace();
 
         if let Some(aliases) = aliases {
-            aliases.iter().for_each(|alias| {
-                let alias_fullname = alias.fully_qualified_name(namespace).into_owned();
-                self.resolving_schemas
-                    .insert(alias_fullname, resolving_schema.clone());
-            });
+            for alias in aliases {
+                let alias_name : Arc<Name> = Arc::new(alias.fully_qualified_name(namespace).into_owned()); //KTODO: is this okay??
+
+                if let Option::Some(_) = self.defined_names.insert(Arc::clone(&alias_name), ReservedSchema::Reserved) {
+                    return Err(Details::NameCollision(alias_name.fullname(Option::None)).into());
+                }
+            }
         }
+
+        Ok(())
     }
 
-    fn register_parsed_schema(
-        &mut self,
-        fully_qualified_name: &Name,
-        schema: &Schema,
-        aliases: &Aliases,
-    ) {
-        // FIXME, this should be globally aware, so if there is something overwriting something
-        // else then there is an ambiguous schema definition. An appropriate error should be thrown
-        self.parsed_schemas
-            .insert(fully_qualified_name.clone(), schema.clone());
-        self.resolving_schemas.remove(fully_qualified_name);
+    /// adds the completed parsed schema into a spot previously reserved via
+    /// check_and_reserve_name_and_aliases
+    fn insert_parsed_for_reserved(&mut self, name: &Arc<Name>, aliases: &Aliases, schema: &Arc<Schema>) -> AvroResult<()>{
 
-        let namespace = fully_qualified_name.namespace();
+        if let Some(ReservedSchema::Reserved) = self.defined_names.insert(Arc::clone(name), ReservedSchema::Completed(Arc::clone(schema))) {
+        }else{
+            panic!("Attempting to write into a spot that has not been reserved!"); // TODO: IMPROVE THIS MESSAGE
+        }
+
+        let namespace = name.namespace();
 
         if let Some(aliases) = aliases {
-            aliases.iter().for_each(|alias| {
-                let alias_fullname = alias.fully_qualified_name(namespace);
-                self.resolving_schemas.remove(&alias_fullname);
-                self.parsed_schemas
-                    .insert(alias_fullname.into_owned(), schema.clone());
-            });
-        }
-    }
+            for alias in aliases {
+                let alias_name : Arc<Name> = Arc::new(alias.fully_qualified_name(namespace).into_owned()); // KTODO: same with this, is this okay??
 
-    /// Returns already parsed schema or a schema that is currently being resolved.
-    fn get_already_seen_schema(
-        &self,
-        complex: &Map<String, Value>,
-        enclosing_namespace: NamespaceRef,
-    ) -> Option<&Schema> {
-        match complex.get("type") {
-            Some(Value::String(typ)) => {
-                let name =
-                    Name::new_with_enclosing_namespace(typ.as_str(), enclosing_namespace).unwrap();
-                self.resolving_schemas
-                    .get(&name)
-                    .or_else(|| self.parsed_schemas.get(&name))
+                if let Option::None = self.defined_names.insert(Arc::clone(&alias_name), ReservedSchema::Completed(Arc::clone(schema))) {
+                    panic!("Attempting to write into a spot that has not been reserved!"); // TODO: IMPROVE THIS MESSAGE
+                }
             }
-            _ => None,
         }
+
+        Ok(())
     }
 
     /// Parse a `serde_json::Value` representing an Avro record type into a `Schema`.
@@ -540,19 +465,13 @@ impl Parser {
     ) -> AvroResult<Schema> {
         let fields_opt = complex.get("fields");
 
-        if fields_opt.is_none()
-            && let Some(seen) = self.get_already_seen_schema(complex, enclosing_namespace)
-        {
-            return Ok(seen.clone());
-        }
-
-        let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
+        let fully_qualified_name = Arc::new(Name::parse(complex, enclosing_namespace)?);
         let aliases =
             self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace());
 
         let mut lookup = BTreeMap::new();
 
-        self.register_resolving_schema(&fully_qualified_name, &aliases);
+        self.check_and_reserve_name_and_aliases(&fully_qualified_name, &aliases)?;
 
         debug!("Going to parse record schema: {:?}", &fully_qualified_name);
 
@@ -578,7 +497,7 @@ impl Parser {
         }
 
         let schema = Schema::Record(RecordSchema {
-            name: fully_qualified_name.clone(),
+            name: Arc::clone(&fully_qualified_name),
             aliases: aliases.clone(),
             doc: complex.doc(),
             fields,
@@ -586,8 +505,8 @@ impl Parser {
             attributes: self.get_custom_attributes(complex, vec!["fields"]),
         });
 
-        self.register_parsed_schema(&fully_qualified_name, &schema, &aliases);
-        Ok(schema)
+        self.insert_parsed_for_reserved(&fully_qualified_name, &aliases, &Arc::new(schema));
+        Ok(Schema::Ref{name: fully_qualified_name})
     }
 
     fn get_custom_attributes(
@@ -614,15 +533,11 @@ impl Parser {
     ) -> AvroResult<Schema> {
         let symbols_opt = complex.get("symbols");
 
-        if symbols_opt.is_none()
-            && let Some(seen) = self.get_already_seen_schema(complex, enclosing_namespace)
-        {
-            return Ok(seen.clone());
-        }
-
-        let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
+        let fully_qualified_name = Arc::new(Name::parse(complex, enclosing_namespace)?);
         let aliases =
             self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace());
+
+        self.check_and_reserve_name_and_aliases(&fully_qualified_name, &aliases)?;
 
         let symbols: Vec<String> = symbols_opt
             .and_then(|v| v.as_array())
@@ -658,7 +573,7 @@ impl Parser {
 
         if let Some(ref value) = default {
             let resolved = types::Value::from(value.clone())
-                .resolve_enum(&symbols, &Some(value.to_string()), &None)
+                .resolve_enum(&symbols, &Some(value.to_string()))
                 .is_ok();
             if !resolved {
                 return Err(Details::GetEnumDefault {
@@ -670,7 +585,7 @@ impl Parser {
         }
 
         let schema = Schema::Enum(EnumSchema {
-            name: fully_qualified_name.clone(),
+            name: Arc::clone(&fully_qualified_name),
             aliases: aliases.clone(),
             doc: complex.doc(),
             symbols,
@@ -678,9 +593,8 @@ impl Parser {
             attributes: self.get_custom_attributes(complex, vec!["symbols", "default"]),
         });
 
-        self.register_parsed_schema(&fully_qualified_name, &schema, &aliases);
-
-        Ok(schema)
+        self.insert_parsed_for_reserved(&fully_qualified_name, &aliases, &Arc::new(schema));
+        Ok(Schema::Ref { name: fully_qualified_name })
     }
 
     /// Parse a `serde_json::Value` representing a Avro array type into a `Schema`.
@@ -692,31 +606,10 @@ impl Parser {
         let items = complex
             .get("items")
             .ok_or_else(|| Details::GetArrayItemsField.into())
-            .and_then(|items| self.parse(items, enclosing_namespace))?;
-        let default = if let Some(default) = complex.get("default").cloned() {
-            if let Value::Array(_) = default {
-                let crate::types::Value::Array(array) = crate::types::Value::try_from(default)?
-                else {
-                    unreachable!("JsonValue::Array can only become a Value::Array")
-                };
-                // Check that the default type matches the schema type
-                if let Some(value) = array.iter().find(|v| {
-                    v.validate_internal(&items, &self.parsed_schemas, enclosing_namespace)
-                        .is_some()
-                }) {
-                    return Err(Details::ArrayDefaultWrongInnerType(items, value.clone()).into());
-                }
-                Some(array)
-            } else {
-                return Err(Details::ArrayDefaultWrongType(default).into());
-            }
-        } else {
-            None
-        };
+            .and_then(|items| self.parse_internal(items, enclosing_namespace))?;
         Ok(Schema::Array(ArraySchema {
             items: Box::new(items),
-            default,
-            attributes: self.get_custom_attributes(complex, vec!["items", "default"]),
+            attributes: self.get_custom_attributes(complex, vec!["items"]),
         }))
     }
 
@@ -729,32 +622,11 @@ impl Parser {
         let types = complex
             .get("values")
             .ok_or_else(|| Details::GetMapValuesField.into())
-            .and_then(|types| self.parse(types, enclosing_namespace))?;
-
-        let default = if let Some(default) = complex.get("default").cloned() {
-            if let Value::Object(_) = default {
-                let crate::types::Value::Map(map) = crate::types::Value::try_from(default)? else {
-                    unreachable!("JsonValue::Object can only become a Value::Map")
-                };
-                // Check that the default type matches the schema type
-                if let Some(value) = map.values().find(|v| {
-                    v.validate_internal(&types, &self.parsed_schemas, enclosing_namespace)
-                        .is_some()
-                }) {
-                    return Err(Details::MapDefaultWrongInnerType(types, value.clone()).into());
-                }
-                Some(map)
-            } else {
-                return Err(Details::MapDefaultWrongType(default).into());
-            }
-        } else {
-            None
-        };
+            .and_then(|types| self.parse_internal(types, enclosing_namespace))?;
 
         Ok(Schema::Map(MapSchema {
             types: Box::new(types),
-            default,
-            attributes: self.get_custom_attributes(complex, vec!["values", "default"]),
+            attributes: self.get_custom_attributes(complex, vec!["values"]),
         }))
     }
 
@@ -766,7 +638,7 @@ impl Parser {
     ) -> AvroResult<Schema> {
         items
             .iter()
-            .map(|v| self.parse(v, enclosing_namespace))
+            .map(|v| self.parse_internal(v, enclosing_namespace))
             .collect::<Result<Vec<_>, _>>()
             .and_then(|schemas| {
                 if schemas.is_empty() {
@@ -793,11 +665,6 @@ impl Parser {
         enclosing_namespace: NamespaceRef,
     ) -> AvroResult<Schema> {
         let size_opt = complex.get("size");
-        if size_opt.is_none()
-            && let Some(seen) = self.get_already_seen_schema(complex, enclosing_namespace)
-        {
-            return Ok(seen.clone());
-        }
 
         let doc = complex.get("doc").and_then(|v| match &v {
             &Value::String(docstr) => Some(docstr.clone()),
@@ -811,21 +678,23 @@ impl Parser {
             None => Err(Details::GetFixedSizeField),
         }?;
 
-        let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
+        let fully_qualified_name = Arc::new(Name::parse(complex, enclosing_namespace)?);
         let aliases =
             self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace());
 
+        self.check_and_reserve_name_and_aliases(&fully_qualified_name, &aliases)?;
+
         let schema = Schema::Fixed(FixedSchema {
-            name: fully_qualified_name.clone(),
+            name: Arc::clone(&fully_qualified_name),
             aliases: aliases.clone(),
             doc,
             size: size as usize,
             attributes: self.get_custom_attributes(complex, vec!["size"]),
         });
 
-        self.register_parsed_schema(&fully_qualified_name, &schema, &aliases);
+        self.insert_parsed_for_reserved(&fully_qualified_name, &aliases, &Arc::new(schema));
 
-        Ok(schema)
+        Ok(Schema::Ref{name: fully_qualified_name})
     }
 
     // A type alias may be specified either as a fully namespace-qualified, or relative

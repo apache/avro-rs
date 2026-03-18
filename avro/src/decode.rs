@@ -15,19 +15,18 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::schema::{InnerDecimalSchema, NamespaceRef, UuidSchema};
+use crate::schema::{InnerDecimalSchema, UuidSchema};
 use crate::{
     AvroResult, Error,
     bigdecimal::deserialize_big_decimal,
     decimal::Decimal,
     duration::Duration,
     error::Details,
-    schema::{DecimalSchema, EnumSchema, FixedSchema, Name, RecordSchema, ResolvedSchema, Schema},
+    schema::{DecimalSchema, EnumSchema, FixedSchema, ResolvedSchema, Schema, ResolvedNode, ResolvedRecord},
     types::Value,
     util::{safe_len, zag_i32, zag_i64},
 };
 use std::{
-    borrow::Borrow,
     collections::HashMap,
     io::{ErrorKind, Read},
 };
@@ -69,20 +68,26 @@ fn decode_seq_len<R: Read>(reader: &mut R) -> AvroResult<usize> {
 }
 
 /// Decode a `Value` from avro format given its `Schema`.
+/// This function will always convert the supplied schema into a ResolvedSchema which
+/// may cuase performance concerns. Consider using decode_complete.
 pub fn decode<R: Read>(schema: &Schema, reader: &mut R) -> AvroResult<Value> {
-    let rs = ResolvedSchema::try_from(schema)?;
-    decode_internal(schema, rs.get_names(), None, reader)
+    let resolved : ResolvedSchema = schema.clone().try_into()?;
+    decode_complete(&resolved, reader)
 }
 
-pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
-    schema: &Schema,
-    names: &HashMap<Name, S>,
-    enclosing_namespace: NamespaceRef,
-    reader: &mut R,
+
+/// Decode a `Value` from avro format given its `Schema`.
+pub fn decode_complete<R: Read>(resolved_schema: &ResolvedSchema, reader: &mut R) -> AvroResult<Value> {
+    decode_internal(ResolvedNode::new(&resolved_schema), reader)
+}
+
+pub(crate) fn decode_internal<R: Read>(
+    node: ResolvedNode,
+    reader: &mut R
 ) -> AvroResult<Value> {
-    match schema {
-        Schema::Null => Ok(Value::Null),
-        Schema::Boolean => {
+    match node {
+        ResolvedNode::Null => Ok(Value::Null),
+        ResolvedNode::Boolean => {
             let mut buf = [0u8; 1];
             match reader.read_exact(&mut buf[..]) {
                 Ok(_) => match buf[0] {
@@ -99,34 +104,32 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                 }
             }
         }
-        Schema::Decimal(DecimalSchema { inner, .. }) => match inner {
+        ResolvedNode::Decimal(DecimalSchema { inner, .. }) => match inner {
             InnerDecimalSchema::Fixed(fixed) => {
                 match decode_internal(
-                    &Schema::Fixed(fixed.copy_only_size()),
-                    names,
-                    enclosing_namespace,
-                    reader,
+                    ResolvedNode::Fixed(&fixed.copy_only_size()),
+                    reader
                 )? {
                     Value::Fixed(_, bytes) => Ok(Value::Decimal(Decimal::from(bytes))),
                     value => Err(Details::FixedValue(value).into()),
                 }
             }
             InnerDecimalSchema::Bytes => {
-                match decode_internal(&Schema::Bytes, names, enclosing_namespace, reader)? {
+                match decode_internal(ResolvedNode::Bytes, reader)? {
                     Value::Bytes(bytes) => Ok(Value::Decimal(Decimal::from(bytes))),
                     value => Err(Details::BytesValue(value).into()),
                 }
             }
         },
-        Schema::BigDecimal => {
-            match decode_internal(&Schema::Bytes, names, enclosing_namespace, reader)? {
+        ResolvedNode::BigDecimal => {
+            match decode_internal(ResolvedNode::Bytes, reader)? {
                 Value::Bytes(bytes) => deserialize_big_decimal(&bytes).map(Value::BigDecimal),
                 value => Err(Details::BytesValue(value).into()),
             }
         }
-        Schema::Uuid(UuidSchema::String) => {
+        ResolvedNode::Uuid(UuidSchema::String) => {
             let Value::String(string) =
-                decode_internal(&Schema::String, names, enclosing_namespace, reader)?
+                decode_internal(ResolvedNode::String, reader)?
             else {
                 // decoding a String can also return a Null, indicating EOF
                 return Err(Error::new(Details::ReadBytes(std::io::Error::from(
@@ -136,9 +139,9 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
             let uuid = Uuid::parse_str(&string).map_err(Details::ConvertStrToUuid)?;
             Ok(Value::Uuid(uuid))
         }
-        Schema::Uuid(UuidSchema::Bytes) => {
+        ResolvedNode::Uuid(UuidSchema::Bytes) => {
             let Value::Bytes(bytes) =
-                decode_internal(&Schema::Bytes, names, enclosing_namespace, reader)?
+                decode_internal(ResolvedNode::Bytes, reader)?
             else {
                 unreachable!(
                     "decode_internal(Schema::Bytes) can only return a Value::Bytes or an error"
@@ -147,12 +150,10 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
             let uuid = Uuid::from_slice(&bytes).map_err(Details::ConvertSliceToUuid)?;
             Ok(Value::Uuid(uuid))
         }
-        Schema::Uuid(UuidSchema::Fixed(fixed)) => {
+        ResolvedNode::Uuid(UuidSchema::Fixed(fixed)) => {
             let Value::Fixed(n, bytes) = decode_internal(
-                &Schema::Fixed(fixed.copy_only_size()),
-                names,
-                enclosing_namespace,
-                reader,
+                ResolvedNode::Fixed(&fixed.copy_only_size()),
+                reader
             )?
             else {
                 unreachable!(
@@ -165,18 +166,18 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
             let uuid = Uuid::from_slice(&bytes).map_err(Details::ConvertSliceToUuid)?;
             Ok(Value::Uuid(uuid))
         }
-        Schema::Int => decode_int(reader),
-        Schema::Date => zag_i32(reader).map(Value::Date),
-        Schema::TimeMillis => zag_i32(reader).map(Value::TimeMillis),
-        Schema::Long => decode_long(reader),
-        Schema::TimeMicros => zag_i64(reader).map(Value::TimeMicros),
-        Schema::TimestampMillis => zag_i64(reader).map(Value::TimestampMillis),
-        Schema::TimestampMicros => zag_i64(reader).map(Value::TimestampMicros),
-        Schema::TimestampNanos => zag_i64(reader).map(Value::TimestampNanos),
-        Schema::LocalTimestampMillis => zag_i64(reader).map(Value::LocalTimestampMillis),
-        Schema::LocalTimestampMicros => zag_i64(reader).map(Value::LocalTimestampMicros),
-        Schema::LocalTimestampNanos => zag_i64(reader).map(Value::LocalTimestampNanos),
-        Schema::Duration(fixed_schema) => {
+        ResolvedNode::Int => decode_int(reader),
+        ResolvedNode::Date => zag_i32(reader).map(Value::Date),
+        ResolvedNode::TimeMillis => zag_i32(reader).map(Value::TimeMillis),
+        ResolvedNode::Long => decode_long(reader),
+        ResolvedNode::TimeMicros => zag_i64(reader).map(Value::TimeMicros),
+        ResolvedNode::TimestampMillis => zag_i64(reader).map(Value::TimestampMillis),
+        ResolvedNode::TimestampMicros => zag_i64(reader).map(Value::TimestampMicros),
+        ResolvedNode::TimestampNanos => zag_i64(reader).map(Value::TimestampNanos),
+        ResolvedNode::LocalTimestampMillis => zag_i64(reader).map(Value::LocalTimestampMillis),
+        ResolvedNode::LocalTimestampMicros => zag_i64(reader).map(Value::LocalTimestampMicros),
+        ResolvedNode::LocalTimestampNanos => zag_i64(reader).map(Value::LocalTimestampNanos),
+        ResolvedNode::Duration(fixed_schema) => {
             if fixed_schema.size == 12 {
                 let mut buf = [0u8; 12];
                 reader.read_exact(&mut buf).map_err(Details::ReadDuration)?;
@@ -189,27 +190,27 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                 .into())
             }
         }
-        Schema::Float => {
+        ResolvedNode::Float => {
             let mut buf = [0u8; std::mem::size_of::<f32>()];
             reader
                 .read_exact(&mut buf[..])
                 .map_err(Details::ReadFloat)?;
             Ok(Value::Float(f32::from_le_bytes(buf)))
         }
-        Schema::Double => {
+        ResolvedNode::Double => {
             let mut buf = [0u8; std::mem::size_of::<f64>()];
             reader
                 .read_exact(&mut buf[..])
                 .map_err(Details::ReadDouble)?;
             Ok(Value::Double(f64::from_le_bytes(buf)))
         }
-        Schema::Bytes => {
+        ResolvedNode::Bytes => {
             let len = decode_len(reader)?;
             let mut buf = vec![0u8; len];
             reader.read_exact(&mut buf).map_err(Details::ReadBytes)?;
             Ok(Value::Bytes(buf))
         }
-        Schema::String => {
+        ResolvedNode::String => {
             let len = decode_len(reader)?;
             let mut buf = vec![0u8; len];
             match reader.read_exact(&mut buf) {
@@ -225,14 +226,14 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                 }
             }
         }
-        Schema::Fixed(FixedSchema { size, .. }) => {
+        ResolvedNode::Fixed(FixedSchema { size, .. }) => {
             let mut buf = vec![0u8; *size];
             reader
                 .read_exact(&mut buf)
                 .map_err(|e| Details::ReadFixed(e, *size))?;
             Ok(Value::Fixed(*size, buf))
         }
-        Schema::Array(inner) => {
+        ResolvedNode::Array(inner) => {
             let mut items = Vec::new();
 
             loop {
@@ -244,17 +245,15 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                 items.reserve(len);
                 for _ in 0..len {
                     items.push(decode_internal(
-                        &inner.items,
-                        names,
-                        enclosing_namespace,
-                        reader,
+                        inner.resolve_items(),
+                        reader
                     )?);
                 }
             }
 
             Ok(Value::Array(items))
         }
-        Schema::Map(inner) => {
+        ResolvedNode::Map(inner) => {
             let mut items = HashMap::new();
 
             loop {
@@ -265,10 +264,10 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
 
                 items.reserve(len);
                 for _ in 0..len {
-                    match decode_internal(&Schema::String, names, enclosing_namespace, reader)? {
+                    match decode_internal(ResolvedNode::String, reader)? {
                         Value::String(key) => {
                             let value =
-                                decode_internal(&inner.types, names, enclosing_namespace, reader)?;
+                                decode_internal(inner.resolve_types(), reader)?;
                             items.insert(key, value);
                         }
                         value => return Err(Details::MapKeyType(value.into()).into()),
@@ -278,16 +277,16 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
 
             Ok(Value::Map(items))
         }
-        Schema::Union(inner) => match zag_i64(reader).map_err(Error::into_details) {
+        ResolvedNode::Union(inner) => match zag_i64(reader).map_err(Error::into_details) {
             Ok(index) => {
-                let variants = inner.variants();
+                let variants = inner.resolve_schemas();
                 let variant = variants
                     .get(usize::try_from(index).map_err(|e| Details::ConvertI64ToUsize(e, index))?)
                     .ok_or(Details::GetUnionVariant {
                         index,
                         num_variants: variants.len(),
                     })?;
-                let value = decode_internal(variant, names, enclosing_namespace, reader)?;
+                let value = decode_internal(variant.clone(), reader)?;
                 Ok(Value::Union(index as u32, Box::new(value)))
             }
             Err(Details::ReadVariableIntegerBytes(io_err)) => {
@@ -299,8 +298,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
             }
             Err(io_err) => Err(Error::new(io_err)),
         },
-        Schema::Record(RecordSchema { name, fields, .. }) => {
-            let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
+        ResolvedNode::Record(ResolvedRecord {fields, .. }) => {
             // Benchmarks indicate ~10% improvement using this method.
             let mut items = Vec::with_capacity(fields.len());
             for field in fields {
@@ -308,16 +306,14 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                 items.push((
                     field.name.clone(),
                     decode_internal(
-                        &field.schema,
-                        names,
-                        fully_qualified_name.namespace(),
+                        field.resolve_field(),
                         reader,
                     )?,
                 ));
             }
             Ok(Value::Record(items))
         }
-        Schema::Enum(EnumSchema { symbols, .. }) => {
+        ResolvedNode::Enum(EnumSchema { symbols, .. }) => {
             Ok(if let Value::Int(raw_index) = decode_int(reader)? {
                 let index = usize::try_from(raw_index)
                     .map_err(|e| Details::ConvertI32ToUsize(e, raw_index))?;
@@ -334,19 +330,6 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
             } else {
                 return Err(Details::GetEnumUnknownIndexValue.into());
             })
-        }
-        Schema::Ref { name } => {
-            let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
-            if let Some(resolved) = names.get(&fully_qualified_name) {
-                decode_internal(
-                    resolved.borrow(),
-                    names,
-                    fully_qualified_name.namespace(),
-                    reader,
-                )
-            } else {
-                Err(Details::SchemaResolutionError(fully_qualified_name.into_owned()).into())
-            }
         }
     }
 }
@@ -368,6 +351,7 @@ mod tests {
     use apache_avro_test_helper::TestResult;
     use pretty_assertions::assert_eq;
     use std::collections::HashMap;
+    use std::sync::Arc;
     use uuid::Uuid;
 
     #[test]
@@ -417,7 +401,7 @@ mod tests {
         let schema = Schema::Decimal(DecimalSchema {
             inner: InnerDecimalSchema::Fixed(
                 FixedSchema::builder()
-                    .name(Name::new("decimal")?)
+                    .name(Name::new("decimal")?.into())
                     .size(2)
                     .build(),
             ),
@@ -444,7 +428,7 @@ mod tests {
         let schema = Schema::Decimal(DecimalSchema {
             inner: InnerDecimalSchema::Fixed(FixedSchema {
                 size: 13,
-                name: Name::new("decimal")?,
+                name: Name::new("decimal")?.into(),
                 aliases: None,
                 doc: None,
                 attributes: Default::default(),
@@ -887,7 +871,7 @@ mod tests {
 
         let fixed = FixedSchema {
             size: 16,
-            name: "uuid".try_into()?,
+            name: Arc::new("uuid".try_into()?),
             aliases: None,
             doc: None,
             attributes: Default::default(),

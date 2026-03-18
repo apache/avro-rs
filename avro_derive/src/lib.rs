@@ -138,7 +138,7 @@ fn handle_named_schemas(full_schema_name: String, schema_def: TokenStream) -> To
     quote! {
         let name = ::apache_avro::schema::Name::new_with_enclosing_namespace(#full_schema_name, enclosing_namespace).expect(concat!("Unable to parse schema name ", #full_schema_name));
         if named_schemas.contains(&name) {
-            ::apache_avro::schema::Schema::Ref{name}
+            ::apache_avro::schema::Schema::Ref{name: std::sync::Arc::new(name)}
         } else {
             let enclosing_namespace = name.namespace();
             named_schemas.insert(name.clone());
@@ -259,7 +259,7 @@ fn get_struct_schema_def(
                 .map(|(position, field)| (field.name.to_owned(), position))
                 .collect();
             ::apache_avro::schema::Schema::Record(::apache_avro::schema::RecordSchema {
-                name,
+                name: std::sync::Arc::new(name),
                 aliases: #record_aliases,
                 doc: #record_doc,
                 fields: schema_fields,

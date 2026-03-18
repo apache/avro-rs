@@ -19,7 +19,7 @@ use std::io::Read;
 
 use bon::bon;
 
-use crate::{AvroResult, Schema, decode::decode_internal, schema::ResolvedSchema, types::Value};
+use crate::{AvroResult, Schema, decode::decode_internal, schema::{ResolvedNode, ResolvedSchema}, types::Value};
 
 /// Reader for reading raw Avro data.
 ///
@@ -28,8 +28,8 @@ use crate::{AvroResult, Schema, decode::decode_internal, schema::ResolvedSchema,
 /// [`SpecificSingleObjectReader`][crate::SpecificSingleObjectReader] instead.
 pub struct GenericDatumReader<'s> {
     writer: &'s Schema,
-    resolved: ResolvedSchema<'s>,
-    reader: Option<(&'s Schema, ResolvedSchema<'s>)>,
+    resolved: ResolvedSchema,
+    reader: Option<(&'s Schema, ResolvedSchema)>,
 }
 
 #[bon]
@@ -45,11 +45,11 @@ impl<'s> GenericDatumReader<'s> {
         #[builder(start_fn)]
         writer_schema: &'s Schema,
         /// Already resolved schemata that will be used to resolve references in the writer's schema.
-        resolved_writer_schemata: Option<ResolvedSchema<'s>>,
+        resolved_writer_schemata: Option<ResolvedSchema>,
         /// The schema that will be used to resolve the value to conform the the new schema.
         reader_schema: Option<&'s Schema>,
         /// Already resolved schemata that will be used to resolve references in the reader's schema.
-        resolved_reader_schemata: Option<ResolvedSchema<'s>>,
+        resolved_reader_schemata: Option<ResolvedSchema>,
     ) -> AvroResult<Self> {
         let resolved_writer_schemata = if let Some(resolved) = resolved_writer_schemata {
             resolved
@@ -89,7 +89,7 @@ impl<'s, S: generic_datum_reader_builder::State> GenericDatumReaderBuilder<'s, S
     where
         S::ResolvedWriterSchemata: generic_datum_reader_builder::IsUnset,
     {
-        let resolved = ResolvedSchema::new_with_schemata(schemata)?;
+        let [resolved] = ResolvedSchema::from_schema_array([self.writer_schema], schemata)?;
         Ok(self.resolved_writer_schemata(resolved))
     }
 
@@ -99,27 +99,49 @@ impl<'s, S: generic_datum_reader_builder::State> GenericDatumReaderBuilder<'s, S
     /// If you already have a [`ResolvedSchema`], use that function instead.
     ///
     /// This function can only be called after the reader schema is set.
-    pub fn reader_schemata(
+    pub fn reader_schema_with_schemata(
         self,
+        schema: &'s Schema,
         schemata: Vec<&'s Schema>,
     ) -> AvroResult<
-        GenericDatumReaderBuilder<'s, generic_datum_reader_builder::SetResolvedReaderSchemata<S>>,
+        GenericDatumReaderBuilder<'s, generic_datum_reader_builder::SetResolvedReaderSchemata<generic_datum_reader_builder::SetReaderSchema<S>>>,
     >
     where
         S::ResolvedReaderSchemata: generic_datum_reader_builder::IsUnset,
-        S::ReaderSchema: generic_datum_reader_builder::IsSet,
+        S::ReaderSchema: generic_datum_reader_builder::IsUnset,
     {
-        let resolved = ResolvedSchema::new_with_schemata(schemata)?;
-        Ok(self.resolved_reader_schemata(resolved))
+        let [resolved] = ResolvedSchema::from_schema_array([schema],schemata)?;
+        Ok(self.reader_schema(schema).resolved_reader_schemata(resolved))
     }
+    pub fn maybe_reader_schema_with_schemata(
+    self,
+    schema: Option<&'s Schema>,
+    schemata: Vec<&'s Schema>,
+) -> AvroResult<
+        GenericDatumReaderBuilder<'s, generic_datum_reader_builder::SetResolvedReaderSchemata<generic_datum_reader_builder::SetReaderSchema<S>>>,
+    >
+    where
+        S::ResolvedReaderSchemata: generic_datum_reader_builder::IsUnset,
+        S::ReaderSchema: generic_datum_reader_builder::IsUnset,
+    {
+        if let Some(schema) = schema {
+            let [resolved] = ResolvedSchema::from_schema_array([schema], schemata)?;
+            Ok(self.reader_schema(schema).resolved_reader_schemata(resolved))
+        } else {
+            Ok(self
+                .maybe_reader_schema(None)
+                .maybe_resolved_reader_schemata(None))
+        }
+    }
+
 }
 
 impl<'s> GenericDatumReader<'s> {
     /// Read a Avro datum from the reader.
     pub fn read_value<R: Read>(&self, reader: &mut R) -> AvroResult<Value> {
-        let value = decode_internal(self.writer, self.resolved.get_names(), None, reader)?;
-        if let Some((reader, resolved)) = &self.reader {
-            value.resolve_internal(reader, resolved.get_names(), None, &None)
+        let value = decode_internal(ResolvedNode::new(&self.resolved), reader)?;
+        if let Some((_reader, resolved)) = &self.reader {
+            value.resolve_internal(ResolvedNode::new(resolved))
         } else {
             Ok(value)
         }
@@ -215,8 +237,7 @@ pub fn from_avro_datum_reader_schemata<R: Read>(
 ) -> AvroResult<Value> {
     GenericDatumReader::builder(writer_schema)
         .writer_schemata(writer_schemata)?
-        .maybe_reader_schema(reader_schema)
-        .reader_schemata(reader_schemata)?
+        .maybe_reader_schema_with_schemata(reader_schema, reader_schemata)?
         .build()?
         .read_value(reader)
 }

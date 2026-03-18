@@ -32,13 +32,11 @@ impl Schema {
     #[builder(finish_fn = build)]
     pub fn map(
         #[builder(start_fn)] types: Schema,
-        default: Option<HashMap<String, Value>>,
         attributes: Option<BTreeMap<String, JsonValue>>,
     ) -> Self {
         let attributes = attributes.unwrap_or_default();
         Schema::Map(MapSchema {
             types: Box::new(types),
-            default,
             attributes,
         })
     }
@@ -48,13 +46,11 @@ impl Schema {
     #[builder(finish_fn = build)]
     pub fn array(
         #[builder(start_fn)] items: Schema,
-        default: Option<Vec<Value>>,
         attributes: Option<BTreeMap<String, JsonValue>>,
     ) -> Self {
         let attributes = attributes.unwrap_or_default();
         Schema::Array(ArraySchema {
             items: Box::new(items),
-            default,
             attributes,
         })
     }
@@ -73,7 +69,7 @@ impl Schema {
         let attributes = attributes.unwrap_or_default();
         let symbols = symbols.into_iter().map(Into::into).collect();
         Schema::Enum(EnumSchema {
-            name,
+            name: name.into(),
             symbols,
             aliases,
             doc,
@@ -94,7 +90,7 @@ impl Schema {
     ) -> Self {
         let attributes = attributes.unwrap_or_default();
         Schema::Fixed(FixedSchema {
-            name,
+            name: name.into(),
             size,
             aliases,
             doc,
@@ -115,7 +111,7 @@ impl Schema {
         let fields = fields.unwrap_or_default();
         let attributes = attributes.unwrap_or_default();
         let record_schema = RecordSchema::builder()
-            .name(name)
+            .name(name.into())
             .fields(fields)
             .aliases(aliases)
             .doc(doc)
@@ -147,7 +143,7 @@ mod tests {
         let schema = Schema::r#enum(name.clone(), symbols.clone()).build();
 
         if let Schema::Enum(enum_schema) = schema {
-            assert_eq!(enum_schema.name, name);
+            assert_eq!(enum_schema.name, name.into());
             assert_eq!(enum_schema.symbols, symbols);
             assert_eq!(enum_schema.aliases, None);
             assert_eq!(enum_schema.doc, None);
@@ -178,7 +174,7 @@ mod tests {
             .build();
 
         if let Schema::Enum(enum_schema) = schema {
-            assert_eq!(enum_schema.name, name);
+            assert_eq!(enum_schema.name, name.into());
             assert_eq!(enum_schema.symbols, symbols);
             assert_eq!(enum_schema.aliases, Some(aliases));
             assert_eq!(enum_schema.doc, Some(doc.into()));
@@ -199,7 +195,7 @@ mod tests {
         let schema = Schema::fixed(name.clone(), size).build();
 
         if let Schema::Fixed(fixed_schema) = schema {
-            assert_eq!(fixed_schema.name, name);
+            assert_eq!(fixed_schema.name, name.into());
             assert_eq!(fixed_schema.size, size);
             assert_eq!(fixed_schema.aliases, None);
             assert_eq!(fixed_schema.doc, None);
@@ -227,7 +223,7 @@ mod tests {
             .build();
 
         if let Schema::Fixed(fixed_schema) = schema {
-            assert_eq!(fixed_schema.name, name);
+            assert_eq!(fixed_schema.name, name.into());
             assert_eq!(fixed_schema.size, size);
             assert_eq!(fixed_schema.aliases, Some(aliases));
             assert_eq!(fixed_schema.doc, Some(doc.into()));
@@ -246,7 +242,7 @@ mod tests {
         let schema = Schema::record(name.clone()).build();
 
         if let Schema::Record(record_schema) = schema {
-            assert_eq!(record_schema.name, name);
+            assert_eq!(record_schema.name, name.into());
             assert_eq!(record_schema.fields, vec![]);
             assert_eq!(record_schema.aliases, None);
             assert_eq!(record_schema.doc, None);
@@ -285,7 +281,7 @@ mod tests {
             .build();
 
         if let Schema::Record(fixed_schema) = schema {
-            assert_eq!(fixed_schema.name, name);
+            assert_eq!(fixed_schema.name, name.into());
             assert_eq!(fixed_schema.fields, fields);
             assert_eq!(fixed_schema.aliases, Some(aliases));
             assert_eq!(fixed_schema.doc, Some(doc.into()));
