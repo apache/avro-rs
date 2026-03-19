@@ -297,13 +297,13 @@ pub trait AvroSchema {
 ///         // Create the fully qualified name for your type given the enclosing namespace
 ///         let name = Name::new_with_enclosing_namespace("Foo", enclosing_namespace).expect("Name is valid");
 ///         if named_schemas.contains(&name) {
-///             Schema::Ref { name }
+///             Schema::Ref { name: name.into() }
 ///         } else {
 ///             let enclosing_namespace = name.namespace();
 ///             // Do this before you start creating the schema, as otherwise recursive types will cause infinite recursion.
 ///             named_schemas.insert(name.clone());
 ///             let schema = Schema::Record(RecordSchema::builder()
-///                 .name(name.clone())
+///                 .name(name.clone().into())
 ///                 .fields(Self::get_record_fields_in_ctxt(named_schemas, enclosing_namespace).expect("Impossible!"))
 ///                 .build()
 ///             );

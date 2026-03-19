@@ -87,7 +87,7 @@ impl<'s, S: generic_datum_writer_builder::State> GenericDatumWriterBuilder<'s, S
     where
         S::ResolvedSchemata: generic_datum_writer_builder::IsUnset,
     {
-        let [resolved] = ResolvedSchema::from_schema_array([self.schema], schemata)?;
+        let [resolved] = ResolvedSchema::resolve().additional(schemata)?.build_array([self.schema])?;
         Ok(self.resolved_schemata(resolved))
     }
 }
@@ -425,7 +425,7 @@ mod tests {
         let inner = InnerDecimalSchema::Fixed(fixed.clone());
         let value = vec![0u8; size];
         logical_type_test(
-            r#"{"type": {"type": "fixed", "size": 30, "name": "decimal"}, "logicalType": "decimal", "precision": 20, "scale": 5}"#,
+            r#"{"type": "fixed", "size": 30, "name": "decimal", "logicalType": "decimal", "precision": 20, "scale": 5}"#,
             &Schema::Decimal(DecimalSchema {
                 precision: 20,
                 scale: 5,
@@ -468,7 +468,7 @@ mod tests {
             Millis::new(1024),
         ));
         logical_type_test(
-            r#"{"type": {"type": "fixed", "name": "duration", "size": 12}, "logicalType": "duration"}"#,
+            r#"{"type": "fixed", "name": "duration", "size": 12, "logicalType": "duration"}"#,
             &Schema::Duration(FixedSchema {
                 name: Name::try_from("duration").expect("Name is valid").into(),
                 aliases: None,

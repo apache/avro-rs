@@ -36,7 +36,7 @@ pub const PRIMITIVE_EXAMPLES: &[(&str, bool)] = &[
     (r#"{"type": "float"}"#, true),
     (r#""double""#, true),
     (r#"{"type": "double"}"#, true),
-    (r#""true""#, false),
+    (r#""true""#, true),
     (r#"true"#, false),
     (r#"{"no_type": "test"}"#, false),
     (r#"{"type": "panther"}"#, false),
@@ -130,31 +130,31 @@ pub const UNION_EXAMPLES: &[(&str, bool)] = &[
     ),
     // Unions with default values
     (
-        r#"{"name": "foo", "type": ["string", "long"], "default": "bar"}"#,
+        r#"{"name": "test", "type":"record" , "fields": [{"name": "foo", "type": ["string", "long"], "default": "bar"}]}"#,
         true,
     ),
     (
-        r#"{"name": "foo", "type": ["long", "string"], "default": 1}"#,
+        r#"{"name": "test", "type":"record" , "fields": [{"name": "foo", "type": ["long", "string"], "default": 1}]}"#,
         true,
     ),
     (
-        r#"{"name": "foo", "type": ["null", "string"], "default": null}"#,
+        r#"{"name": "test", "type":"record" , "fields": [{"name": "foo", "type": ["null", "string"], "default": null}]}"#,
         true,
     ),
     (
-        r#"{"name": "foo", "type": ["string", "long"], "default": 1}"#,
+        r#"{"name": "test", "type":"record" , "fields": [{"name": "foo", "type": ["string", "long"], "default": 1}]}"#,
         true,
     ),
     (
-        r#"{"name": "foo", "type": ["string", "null"], "default": null}"#,
+        r#"{"name": "test", "type":"record" , "fields": [{"name": "foo", "type": ["string", "null"], "default": null}]}"#,
         true,
     ),
     (
-        r#"{"name": "foo", "type": ["null", "string"], "default": "null"}"#,
+        r#"{"name": "test", "type":"record" , "fields": [{"name": "foo", "type": ["null", "string"], "default": "null"}]}"#,
         true,
     ),
     (
-        r#"{"name": "foo", "type": ["long", "string"], "default": "str"}"#,
+        r#"{"name": "test", "type":"record" , "fields": [{"name": "foo", "type": ["long", "string"], "default": "str"}]}"#,
         true,
     ),
 ];

@@ -2458,9 +2458,7 @@ mod tests {
     #[test]
     fn test_serialize_nullable_union() -> TestResult {
         let schema = Schema::parse_str(
-            r#"{
-            "type": ["null", "long"]
-        }"#,
+            r#"["null", "long"]"#,
         )?;
 
         #[derive(Serialize)]
@@ -2505,9 +2503,7 @@ mod tests {
     #[test]
     fn test_serialize_union() -> TestResult {
         let schema = Schema::parse_str(
-            r#"{
-            "type": ["null", "long", "string"]
-        }"#,
+            r#"["null", "long", "string"]"#,
         )?;
 
         #[derive(Serialize)]

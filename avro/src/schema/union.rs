@@ -486,7 +486,7 @@ mod tests {
         );
 
         // KTODO, this test does not refactor in a nice way like the others...
-        let [rs] = ResolvedSchema::from_schema_array_only([&Schema::Union(union)])?;
+        let [rs] = ResolvedSchema::resolve().build_array([&Schema::Union(union)])?;
         let rn = ResolvedNode::new(&rs);
         let resolved_union = match rn {
             ResolvedNode::Union(res) => res,
@@ -507,7 +507,7 @@ mod tests {
         let value = Value::Int(42);
 
         // KTODO, this test does not refactor in a nice way like the others...
-        let [rs] = ResolvedSchema::from_schema_array_only([&Schema::Union(union)])?;
+        let [rs] = ResolvedSchema::resolve().build_array([&Schema::Union(union)])?;
         let rn = ResolvedNode::new(&rs);
         let resolved_union = match rn {
             ResolvedNode::Union(res) => res,
@@ -538,7 +538,7 @@ mod tests {
         let union = UnionSchema::new(vec![uuid.clone(), Schema::Null])?;
         let value = Value::Fixed(16, vec![0; 16]);
 
-        let [union_rs] = ResolvedSchema::from_schema_array_only([&Schema::Union(union)])?;
+        let [union_rs] = ResolvedSchema::resolve().build_array([&Schema::Union(union)])?;
         let union_rs = ResolvedNode::new(&union_rs);
 
         let resolved_union = match union_rs {

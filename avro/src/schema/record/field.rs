@@ -17,7 +17,7 @@
 
 use crate::AvroResult;
 use crate::error::Details;
-use crate::schema::{Documentation, Name, Parser, Schema, parser::RecordSchemaParseLocation};
+use crate::schema::{Documentation, Name, Parser, Schema, DefaultToResolve};
 use crate::util::MapHelper;
 use crate::validator::validate_record_field_name;
 use log::warn;
@@ -90,11 +90,10 @@ impl RecordField {
 
         validate_record_field_name(name)?;
 
-        let _ty = field.get("type").ok_or(Details::GetRecordFieldTypeField)?;
-        let schema = parser.parse_complex(
-            field,
-            enclosing_record.namespace(),
-            RecordSchemaParseLocation::FromField,
+        let ty = field.get("type").ok_or(Details::GetRecordFieldTypeField)?;
+        let schema = parser.parse_schema(
+            ty,
+            enclosing_record.namespace()
         )?;
 
         if let Some(logical_type) = field.get("logicalType") {
@@ -104,7 +103,11 @@ impl RecordField {
         }
 
         let default = field.get("default").cloned().and_then(|value|{
-            parser.field_defaults_to_resolve.push((schema.clone(), value.clone()));
+            parser.field_defaults_to_resolve.push(DefaultToResolve {
+                field_name: name.to_string(),
+                record_name: enclosing_record.fully_qualified_name(Option::None).to_string(),
+                schema: schema.clone(),
+                json: value.clone() });
             Some(value)
         });
 

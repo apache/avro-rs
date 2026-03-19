@@ -45,20 +45,18 @@ fn test_avro_3683_multiple_schemata_to_from_avro_datum() -> TestResult {
         Value::Record(vec![(String::from("field_a"), Value::Float(1.0))]),
     )]);
 
-    let schemata: Vec<Schema> = Schema::parse_list([SCHEMA_A_STR, SCHEMA_B_STR])?;
-    let schemata: Vec<&Schema> = schemata.iter().collect();
+    let schema_a = Schema::parse_str(SCHEMA_A_STR)?;
+    let schema_b = Schema::parse_str(SCHEMA_B_STR)?;
 
-    // this is the Schema we want to use for write/read
-    let schema_b = schemata[1];
     let expected: Vec<u8> = vec![0, 0, 128, 63];
-    let actual = GenericDatumWriter::builder(schema_b)
-        .schemata(schemata.clone())?
+    let actual = GenericDatumWriter::builder(&schema_b)
+        .schemata(vec![&schema_a])?
         .build()?
         .write_value_to_vec(record.clone())?;
     assert_eq!(actual, expected);
 
-    let value = GenericDatumReader::builder(schema_b)
-        .writer_schemata(schemata)?
+    let value = GenericDatumReader::builder(&schema_b)
+        .writer_schemata(vec![&schema_a])?
         .build()?
         .read_value(&mut actual.as_slice())?;
     assert_eq!(value, record);
@@ -75,21 +73,19 @@ fn avro_rs_106_test_multiple_schemata_to_from_avro_datum_with_resolution() -> Te
         Value::Record(vec![(String::from("field_a"), Value::Float(1.0))]),
     )]);
 
-    let schemata: Vec<Schema> = Schema::parse_list([SCHEMA_A_STR, SCHEMA_B_STR])?;
-    let schemata: Vec<&Schema> = schemata.iter().collect();
+    let schema_a = Schema::parse_str(SCHEMA_A_STR)?;
+    let schema_b = Schema::parse_str(SCHEMA_B_STR)?;
 
-    // this is the Schema we want to use for write/read
-    let schema_b = schemata[1];
     let expected: Vec<u8> = vec![0, 0, 128, 63];
-    let actual = GenericDatumWriter::builder(schema_b)
-        .schemata(schemata.clone())?
+    let actual = GenericDatumWriter::builder(&schema_b)
+        .schemata(vec![&schema_a])?
         .build()?
         .write_value_to_vec(record.clone())?;
     assert_eq!(actual, expected);
 
-    let value = GenericDatumReader::builder(schema_b)
-        .writer_schemata(schemata.clone())?
-        .reader_schema_with_schemata(schema_b,schemata)?
+    let value = GenericDatumReader::builder(&schema_b)
+        .writer_schemata(vec![&schema_a])?
+        .reader_schema_with_schemata(&schema_b,vec![&schema_a])?
         .build()?
         .read_value(&mut actual.as_slice())?;
     assert_eq!(value, record);
@@ -106,21 +102,19 @@ fn test_avro_3683_multiple_schemata_writer_reader() -> TestResult {
         Value::Record(vec![(String::from("field_a"), Value::Float(1.0))]),
     )]);
 
-    let schemata: Vec<Schema> = Schema::parse_list([SCHEMA_A_STR, SCHEMA_B_STR])?;
-    let schemata: Vec<&Schema> = schemata.iter().collect();
+    let schema_a = Schema::parse_str(SCHEMA_A_STR)?;
+    let schema_b = Schema::parse_str(SCHEMA_B_STR)?;
 
-    // this is the Schema we want to use for write/read
-    let schema_b = schemata[1];
     let mut output: Vec<u8> = Vec::new();
 
-    let mut writer = Writer::with_schemata(schema_b, schemata.clone(), &mut output, Codec::Null)?;
+    let mut writer = Writer::with_schemata(&schema_b, vec![&schema_a], &mut output, Codec::Null)?;
     writer.append_value(record.clone())?;
     writer.flush()?;
     drop(writer); //drop the writer so that `output` is no more referenced mutably
 
     let reader = Reader::builder(output.as_slice())
-        .reader_schema(schema_b)
-        .schemata(schemata)
+        .reader_schema(&schema_b)
+        .schemata(vec![&schema_a])
         .build()?;
     let value = reader.into_iter().next().unwrap()?;
     assert_eq!(value, record);

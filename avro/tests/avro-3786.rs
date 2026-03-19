@@ -754,9 +754,7 @@ fn deserialize_union_with_record_with_enum_defined_inline_reader_has_different_i
                                         "null",
                                         {
                                             "type": "array",
-                                            "items": {
-                                                "type": "Baz"
-                                            }
+                                            "items": "Baz"
                                         }
                                     ]
                                 },
@@ -846,9 +844,7 @@ fn deserialize_union_with_record_with_enum_defined_inline_reader_has_different_i
                                         "null",
                                         {
                                             "type": "array",
-                                            "items": {
-                                                "type": "Baz"
-                                            }
+                                            "items": "Baz"
                                         }
                                     ]
                                 },

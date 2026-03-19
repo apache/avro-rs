@@ -17,10 +17,9 @@
 
 use crate::error::Details;
 use crate::schema::{
-    Alias, Aliases, ArraySchema, DecimalMetadata, DecimalSchema, EnumSchema, FixedSchema,
-    MapSchema, Name, NamespaceRef, Precision, RecordField, RecordSchema, Scale, Schema,
-    SchemaKind, UnionSchema, UuidSchema, SchemaWithSymbols
+    self, Alias, Aliases, ArraySchema, DecimalMetadata, DecimalSchema, DefaultToResolve, EnumSchema, FixedSchema, MapSchema, Name, NamespaceRef, Precision, RecordField, RecordSchema, Scale, Schema, SchemaKind, SchemaWithSymbols, UnionSchema, UuidSchema
 };
+use crate::serde::fixed;
 use crate::types;
 use crate::util::MapHelper;
 use crate::validator::validate_enum_symbol_name;
@@ -29,16 +28,6 @@ use log::{debug, error, warn};
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
-
-#[derive(Debug, Default)]
-pub(crate) enum RecordSchemaParseLocation {
-    /// When the parse is happening at root level
-    #[default]
-    Root,
-
-    /// When the parse is happening inside a record field
-    FromField,
-}
 
 enum ReservedSchema {
     Reserved,
@@ -55,7 +44,7 @@ pub(crate) struct Parser {
     /// in the schema tree
     referenced_names: HashSet<Arc<Name>>,
     /// Keeps track of fields that have a defualt value we need to resolve against.
-    pub(crate) field_defaults_to_resolve: Vec<(Schema, Value)>
+    pub(crate) field_defaults_to_resolve: Vec<DefaultToResolve>
 }
 
 impl Parser {
@@ -69,29 +58,31 @@ impl Parser {
     /// Create a `SchemaWithSymbols` from a `serde_json::Value` representing a JSON Avro
     /// schema.
     pub(super) fn parse(mut self, value: &Value, enclosing_namespace: NamespaceRef) -> AvroResult<SchemaWithSymbols>{
-        let schema = self.parse_internal(&value, enclosing_namespace)?;
+        let schema = self.parse_schema(&value, enclosing_namespace)?;
         let defined_names : HashMap<Arc<Name>, Arc<Schema>> = HashMap::from_iter(self.defined_names.drain().map(|(key, val)| {
             match val {
-                ReservedSchema::Reserved => {panic!("reserved schema encountered that was not provided a definition")}
+                ReservedSchema::Reserved => {panic!("reserved schema encountered that was not provided a definition")} // KTODO: clean this message up!!
                 ReservedSchema::Completed(schema_ref) => (key, schema_ref)
             }
         }));
 
+        let referenced_names : HashSet<Arc<Name>> = self.referenced_names.drain().filter(|name|{!defined_names.contains_key(name)}).collect();
+
         Ok(SchemaWithSymbols{
-            field_defaults_to_resolve: self.field_defaults_to_resolve,
+            field_defaults_to_resolve: self.field_defaults_to_resolve.into(),
             defined_names,
-            referenced_names: self.referenced_names,
-            schema: Arc::new(schema)
+            referenced_names,
+            stub: Arc::new(schema)
         })
     }
 
     /// Create a `Schema` from a `serde_json::Value` representing a JSON Avro
     /// schema.
-    fn parse_internal(&mut self, value: &Value, enclosing_namespace: NamespaceRef) -> AvroResult<Schema> {
+    pub(crate) fn parse_schema(&mut self, value: &Value, enclosing_namespace: NamespaceRef) -> AvroResult<Schema> {
         match *value {
             Value::String(ref t) => self.parse_known_schema(t.as_str(), enclosing_namespace),
             Value::Object(ref data) => {
-                self.parse_complex(data, enclosing_namespace, RecordSchemaParseLocation::Root)
+                self.parse_json_object_as_schema(data, enclosing_namespace)
             }
             Value::Array(ref data) => self.parse_union(data, enclosing_namespace),
             _ => Err(Details::ParseSchemaFromValidJson.into()),
@@ -172,11 +163,10 @@ impl Parser {
     ///
     /// Avro supports "recursive" definition of types.
     /// e.g: `{"type": {"type": "string"}}`
-    pub(super) fn parse_complex(
+    pub(super) fn parse_json_object_as_schema(
         &mut self,
         complex: &Map<String, Value>,
         enclosing_namespace: NamespaceRef,
-        parse_location: RecordSchemaParseLocation,
     ) -> AvroResult<Schema> {
         // Try to parse this as a native complex type.
         fn parse_as_native_complex(
@@ -189,7 +179,7 @@ impl Parser {
                     Value::String(s) if s == "fixed" => {
                         parser.parse_fixed(complex, enclosing_namespace)
                     }
-                    _ => parser.parse_internal(value, enclosing_namespace),
+                    _ => parser.parse_schema(value, enclosing_namespace),
                 },
                 None => Err(Details::GetLogicalTypeField.into()),
             }
@@ -205,10 +195,10 @@ impl Parser {
             logical_type: &str,
             schema: Schema,
             supported_schema_kinds: &[SchemaKind],
-            convert: F,
+            mut convert: F,
         ) -> AvroResult<Schema>
         where
-            F: Fn(Schema) -> AvroResult<Schema>,
+            F: FnMut(Schema) -> AvroResult<Schema>,
         {
             let kind = SchemaKind::from(schema.clone());
             if supported_schema_kinds.contains(&kind) {
@@ -230,14 +220,35 @@ impl Parser {
                         &[SchemaKind::Fixed, SchemaKind::Bytes],
                         |inner| -> AvroResult<Schema> {
                             match self.parse_precision_and_scale(complex) {
-                                Ok((precision, scale)) => Ok(Schema::Decimal(DecimalSchema {
-                                    precision,
-                                    scale,
-                                    inner: inner.try_into()?,
-                                })),
+                                Ok((precision, scale)) => {
+                                    match inner{
+                                        Schema::Fixed(inner) => {
+                                            let schema = Schema::Decimal(DecimalSchema {
+                                                precision,
+                                                scale,
+                                                inner: schema::InnerDecimalSchema::Fixed(inner.clone()),
+                                            });
+                                            let _ = self.insert_parsed_for_reserved(&inner.name, &inner.aliases, &Arc::new(schema))?;
+                                            Ok(Schema::Ref{name: Arc::clone(&inner.name)})
+                                        },
+                                        Schema::Bytes => {
+                                            Ok(Schema::Decimal(DecimalSchema {
+                                                precision,
+                                                scale,
+                                                inner: schema::InnerDecimalSchema::Bytes,
+                                            }))
+                                        }
+                                        _ => Err(Details::ResolveDecimalSchema(inner.into()).into())
+                                    }
+                                },
                                 Err(err) => {
                                     warn!("Ignoring invalid decimal logical type: {err}");
-                                    Ok(inner)
+                                    if let Schema::Fixed(ref fixed_inner) = inner {
+                                        let _ = self.insert_parsed_for_reserved(&fixed_inner.name, &fixed_inner.aliases, &Arc::new(inner.clone()))?;
+                                        Ok(Schema::Ref{name: Arc::clone(&fixed_inner.name)})
+                                    }else{
+                                        Ok(inner)
+                                    }
                                 }
                             }
                         },
@@ -259,13 +270,17 @@ impl Parser {
                         |schema| match schema {
                             Schema::String => Ok(Schema::Uuid(UuidSchema::String)),
                             Schema::Fixed(fixed @ FixedSchema { size: 16, .. }) => {
-                                Ok(Schema::Uuid(UuidSchema::Fixed(fixed)))
+                                let schema = Schema::Uuid(UuidSchema::Fixed(fixed.clone()));
+                                let _ = self.insert_parsed_for_reserved(&fixed.name, &fixed.aliases, &Arc::new(schema))?;
+                                Ok(Schema::Ref{name: Arc::clone(&fixed.name)})
                             }
-                            Schema::Fixed(FixedSchema { size, .. }) => {
+                            Schema::Fixed(ref fixed) => {
                                 warn!(
-                                    "Ignoring uuid logical type for a Fixed schema because its size ({size:?}) is not 16! Schema: {schema:?}"
+                                    "Ignoring uuid logical type for a Fixed schema because its size ({:?}) is not 16! Schema: {schema:?}",
+                                    fixed.size
                                 );
-                                Ok(schema)
+                                let _ = self.insert_parsed_for_reserved(&fixed.name, &fixed.aliases, &Arc::new(schema.clone()))?;
+                                Ok(Schema::Ref{name: Arc::clone(&fixed.name)})
                             }
                             Schema::Bytes => Ok(Schema::Uuid(UuidSchema::Bytes)),
                             _ => {
@@ -355,13 +370,17 @@ impl Parser {
                         |schema| -> AvroResult<Schema> {
                             match schema {
                                 Schema::Fixed(fixed @ FixedSchema { size: 12, .. }) => {
-                                    Ok(Schema::Duration(fixed))
+                                    let schema = Schema::Duration(fixed.clone());
+                                    let _ = self.insert_parsed_for_reserved(&fixed.name, &fixed.aliases, &Arc::new(schema))?;
+                                    Ok(Schema::Ref{name: Arc::clone(&fixed.name)})
                                 }
-                                Schema::Fixed(FixedSchema { size, .. }) => {
+                                Schema::Fixed(ref fixed) => {
                                     warn!(
-                                        "Ignoring duration logical type on fixed type because size ({size}) is not 12! Schema: {schema:?}"
+                                        "Ignoring duration logical type on fixed type because size ({}) is not 12! Schema: {schema:?}",
+                                        fixed.size
                                     );
-                                    Ok(schema)
+                                    let _ = self.insert_parsed_for_reserved(&fixed.name, &fixed.aliases, &Arc::new(schema.clone()))?;
+                                    Ok(Schema::Ref{name: Arc::clone(&fixed.name)})
                                 }
                                 _ => {
                                     warn!(
@@ -383,28 +402,36 @@ impl Parser {
             Some(value) => return Err(Details::GetLogicalTypeFieldType(value.clone()).into()),
             _ => {}
         }
-        match complex.get("type") {
-            Some(Value::String(t)) => match t.as_str() {
-                "record" => match parse_location {
-                    RecordSchemaParseLocation::Root => {
-                        self.parse_record(complex, enclosing_namespace)
-                    }
-                    RecordSchemaParseLocation::FromField => {
-                        self.fetch_schema_ref(t, enclosing_namespace)
-                    }
-                },
-                "enum" => self.parse_enum(complex, enclosing_namespace),
-                "array" => self.parse_array(complex, enclosing_namespace),
-                "map" => self.parse_map(complex, enclosing_namespace),
-                "fixed" => self.parse_fixed(complex, enclosing_namespace),
-                other => self.parse_known_schema(other, enclosing_namespace),
-            },
-            Some(Value::Object(data)) => {
-                self.parse_complex(data, enclosing_namespace, RecordSchemaParseLocation::Root)
+
+        match complex.get("type"){
+            Some(Value::String(t))=> { match t.as_str() {
+                    "null" => Ok(Schema::Null),
+                    "boolean" => Ok(Schema::Boolean),
+                    "int" => Ok(Schema::Int),
+                    "long" => Ok(Schema::Long),
+                    "double" => Ok(Schema::Double),
+                    "float" => Ok(Schema::Float),
+                    "bytes" => Ok(Schema::Bytes),
+                    "string" => Ok(Schema::String),
+                    "record" => self.parse_record(complex, enclosing_namespace),
+                    "enum" => self.parse_enum(complex, enclosing_namespace),
+                    "array" => self.parse_array(complex, enclosing_namespace),
+                    "map" => self.parse_map(complex, enclosing_namespace),
+                    "fixed" => {
+                        let fixed = self.parse_fixed(complex, enclosing_namespace)?;
+                        match fixed {
+                            Schema::Fixed(ref fixed_internal) => {
+                                let _ = self.insert_parsed_for_reserved(&fixed_internal.name, &fixed_internal.aliases, &Arc::new(fixed.clone()))?;
+                                Ok(Schema::Ref{name: Arc::clone(&fixed_internal.name)})
+                            },
+                            _ => panic!("Internal error, parse_fixed did not return a schema variant of Schema::Fixed!")
+                        }
+                    },
+                    _ => Err(Details::JsonSchemaTypeNotAllowed { value: serde_json::Value::String(t.clone()) }.into())
+                }
             }
-            Some(Value::Array(variants)) => self.parse_union(variants, enclosing_namespace),
-            Some(unknown) => Err(Details::GetComplexType(unknown.clone()).into()),
-            None => Err(Details::GetComplexTypeField.into()),
+            Some(value) => {Err(Details::JsonSchemaTypeNotAllowed { value: value.clone() }.into())}
+            None => {Err(Details::GetComplexTypeField.into())}
         }
     }
 
@@ -505,7 +532,7 @@ impl Parser {
             attributes: self.get_custom_attributes(complex, vec!["fields"]),
         });
 
-        self.insert_parsed_for_reserved(&fully_qualified_name, &aliases, &Arc::new(schema));
+        let _ = self.insert_parsed_for_reserved(&fully_qualified_name, &aliases, &Arc::new(schema))?;
         Ok(Schema::Ref{name: fully_qualified_name})
     }
 
@@ -606,7 +633,7 @@ impl Parser {
         let items = complex
             .get("items")
             .ok_or_else(|| Details::GetArrayItemsField.into())
-            .and_then(|items| self.parse_internal(items, enclosing_namespace))?;
+            .and_then(|items| self.parse_schema(items, enclosing_namespace))?;
         Ok(Schema::Array(ArraySchema {
             items: Box::new(items),
             attributes: self.get_custom_attributes(complex, vec!["items"]),
@@ -622,7 +649,7 @@ impl Parser {
         let types = complex
             .get("values")
             .ok_or_else(|| Details::GetMapValuesField.into())
-            .and_then(|types| self.parse_internal(types, enclosing_namespace))?;
+            .and_then(|types| self.parse_schema(types, enclosing_namespace))?;
 
         Ok(Schema::Map(MapSchema {
             types: Box::new(types),
@@ -638,7 +665,7 @@ impl Parser {
     ) -> AvroResult<Schema> {
         items
             .iter()
-            .map(|v| self.parse_internal(v, enclosing_namespace))
+            .map(|v| self.parse_schema(v, enclosing_namespace))
             .collect::<Result<Vec<_>, _>>()
             .and_then(|schemas| {
                 if schemas.is_empty() {
@@ -692,9 +719,12 @@ impl Parser {
             attributes: self.get_custom_attributes(complex, vec!["size"]),
         });
 
-        self.insert_parsed_for_reserved(&fully_qualified_name, &aliases, &Arc::new(schema));
+        // note that we do NOT add the fixed we just created into the named spot we created in the
+        // symbol table. This is becuase if this fixed is being used by a logical type, we want the
+        // name to refer to that type, so it's up to the caller of this function to decide what
+        // schema to place in this reserved spot!
 
-        Ok(Schema::Ref{name: fully_qualified_name})
+        Ok(schema)
     }
 
     // A type alias may be specified either as a fully namespace-qualified, or relative
