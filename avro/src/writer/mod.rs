@@ -1160,7 +1160,7 @@ mod tests {
             Err(e) => {
                 assert_eq!(
                     e.to_string(),
-                    r#"Failed to serialize field 'time' for record Record(RecordSchema { name: Name { name: "Conference", .. }, fields: [RecordField { name: "name", schema: String, .. }, RecordField { name: "date", aliases: ["time2", "time"], schema: Union(UnionSchema { schemas: [Null, Long] }), .. }], .. }): Failed to serialize value of type f64 using schema Union(UnionSchema { schemas: [Null, Long] }): 12345678.9. Cause: Cannot find a Double schema in [Null, Long]"#
+                    r#"Failed to serialize field 'date' of record RecordSchema { name: Name { name: "Conference", .. }, fields: [RecordField { name: "name", schema: String, .. }, RecordField { name: "date", aliases: ["time2", "time"], schema: Union(UnionSchema { schemas: [Null, Long] }), .. }], .. }: Failed to serialize value of type `f64`: Expected Schema::Double"#
                 );
             }
         }

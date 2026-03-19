@@ -69,16 +69,21 @@ pub(crate) fn deserialize_big_decimal(mut bytes: &[u8]) -> AvroResult<BigDecimal
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{Codec, Reader, Schema, Writer, error::Error, from_value, types::Record};
-    use apache_avro_test_helper::TestResult;
-    use bigdecimal::{One, Zero};
-    use pretty_assertions::assert_eq;
     use std::{
         fs::File,
         io::BufReader,
         ops::{Div, Mul},
         str::FromStr,
+    };
+
+    use apache_avro_test_helper::TestResult;
+    use bigdecimal::{One, Zero};
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+    use crate::{
+        Codec, Reader, Schema, Writer, error::Error, reader::datum::GenericDatumReader,
+        types::Record, writer::datum::GenericDatumWriter,
     };
 
     #[test]
@@ -193,6 +198,43 @@ mod tests {
         let schema_str = r#"
         {
           "type": "record",
+          "name": "Test",
+          "fields": [
+            {
+              "name": "big_decimal",
+              "type": "string"
+            }
+          ]
+        }
+        "#;
+        let schema = Schema::parse_str(schema_str)?;
+
+        let test = Test::default();
+
+        let serialized = GenericDatumWriter::builder(&schema)
+            .build()?
+            .write_ser_to_vec(&test)?;
+        let value: Test = GenericDatumReader::builder(&schema)
+            .build()?
+            .read_deser(&mut &serialized[..])?;
+
+        assert_eq!(value, test);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_338_deserialize_serde_way_with_bigdecimal() -> TestResult {
+        #[derive(Clone, PartialEq, Eq, Debug, Default, serde::Deserialize, serde::Serialize)]
+        #[serde(rename = "test")]
+        struct Test {
+            #[serde(with = "crate::serde::bigdecimal")]
+            big_decimal: BigDecimal,
+        }
+
+        let schema_str = r#"
+        {
+          "type": "record",
           "name": "test",
           "fields": [
             {
@@ -216,11 +258,11 @@ mod tests {
         let wrote_data = writer.into_inner()?;
 
         // read record
-        let mut reader = Reader::new(&wrote_data[..])?;
+        let mut reader = Reader::new(&wrote_data[..])?.into_deser_iter();
 
         let value = reader.next().unwrap()?;
 
-        assert_eq!(test, from_value::<Test>(&value)?);
+        assert_eq!(test, value);
 
         Ok(())
     }
