@@ -15,15 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::writer::datum::GenericDatumWriter;
+use std::{
+    collections::HashMap,
+    io::{Cursor, Read},
+};
+
 use apache_avro::{
     Codec, Error, Reader, Schema, Writer,
     error::Details,
-    from_value,
     reader::datum::GenericDatumReader,
     schema::{EnumSchema, FixedSchema, Name, RecordField, RecordSchema},
     to_value,
     types::{Record, Value},
+    writer::datum::GenericDatumWriter,
 };
 use apache_avro_test_helper::{
     TestResult,
@@ -31,10 +35,6 @@ use apache_avro_test_helper::{
     init,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    io::{Cursor, Read},
-};
 
 #[test]
 fn test_correct_recursive_extraction() -> TestResult {
@@ -837,7 +837,7 @@ fn avro_old_issue_47() -> TestResult {
     let schema_str = r#"
     {
       "type": "record",
-      "name": "my_record",
+      "name": "MyRecord",
       "fields": [
         {"name": "a", "type": "long"},
         {"name": "b", "type": "string"}
@@ -858,15 +858,13 @@ fn avro_old_issue_47() -> TestResult {
         a: 1,
     };
 
-    let ser_value = to_value(record.clone())?;
     let serialized_bytes = GenericDatumWriter::builder(&schema)
         .build()?
-        .write_value_to_vec(ser_value)?;
+        .write_ser_to_vec(&record)?;
 
-    let de_value = GenericDatumReader::builder(&schema)
+    let deserialized_record: MyRecord = GenericDatumReader::builder(&schema)
         .build()?
-        .read_value(&mut &*serialized_bytes)?;
-    let deserialized_record = from_value::<MyRecord>(&de_value)?;
+        .read_deser(&mut &serialized_bytes[..])?;
 
     assert_eq!(record, deserialized_record);
     Ok(())

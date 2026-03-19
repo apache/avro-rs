@@ -93,15 +93,14 @@ impl Drop for BorrowedGuard {
 ///
 /// [`apache_avro::serde::bytes_opt`]: bytes_opt
 pub mod bytes {
-    use super::BytesType;
     use std::collections::HashSet;
 
     use serde::{Deserializer, Serializer};
 
-    use crate::schema::NamespaceRef;
+    use super::BytesType;
     use crate::{
         Schema,
-        schema::{Name, RecordField},
+        schema::{Name, NamespaceRef, RecordField},
     };
 
     /// Returns [`Schema::Bytes`]
@@ -160,14 +159,14 @@ pub mod bytes {
 ///
 /// [`apache_avro::serde::bytes`]: bytes
 pub mod bytes_opt {
-    use super::BytesType;
-    use serde::{Deserializer, Serializer};
     use std::{borrow::Borrow, collections::HashSet};
 
-    use crate::schema::NamespaceRef;
+    use serde::{Deserializer, Serializer};
+
+    use super::BytesType;
     use crate::{
         Schema,
-        schema::{Name, RecordField, UnionSchema},
+        schema::{Name, NamespaceRef, RecordField, UnionSchema},
     };
 
     /// Returns `Schema::Union(Schema::Null, Schema::Bytes)`
@@ -231,13 +230,12 @@ pub mod bytes_opt {
 pub mod fixed {
     use std::collections::HashSet;
 
-    use super::BytesType;
     use serde::{Deserializer, Serializer};
 
-    use crate::schema::NamespaceRef;
+    use super::BytesType;
     use crate::{
         Schema,
-        schema::{FixedSchema, Name, RecordField},
+        schema::{FixedSchema, Name, NamespaceRef, RecordField},
     };
 
     /// Returns `Schema::Fixed(N)` named `serde_avro_fixed_{N}`
@@ -310,14 +308,14 @@ pub mod fixed {
 ///
 /// [`apache_avro::serde::fixed`]: fixed
 pub mod fixed_opt {
-    use super::BytesType;
-    use serde::{Deserializer, Serializer};
     use std::{borrow::Borrow, collections::HashSet};
 
-    use crate::schema::NamespaceRef;
+    use serde::{Deserializer, Serializer};
+
+    use super::BytesType;
     use crate::{
         Schema,
-        schema::{Name, RecordField, UnionSchema},
+        schema::{Name, NamespaceRef, RecordField, UnionSchema},
     };
 
     /// Returns `Schema::Union(Schema::Null, Schema::Fixed(N))` where the fixed schema is named `serde_avro_fixed_{N}`
@@ -388,15 +386,14 @@ pub mod fixed_opt {
 /// [`Value::Fixed`]: crate::types::Value::Fixed
 /// [`apache_avro::serde::slice_opt`]: slice_opt
 pub mod slice {
-    use super::BytesType;
     use std::collections::HashSet;
 
     use serde::{Deserializer, Serializer};
 
-    use crate::schema::NamespaceRef;
+    use super::BytesType;
     use crate::{
         Schema,
-        schema::{Name, RecordField},
+        schema::{Name, NamespaceRef, RecordField},
     };
 
     /// Returns [`Schema::Bytes`]
@@ -458,14 +455,14 @@ pub mod slice {
 /// [`Value::Fixed`]: crate::types::Value::Fixed
 /// [`apache_avro::serde::slice`]: mod@slice
 pub mod slice_opt {
-    use super::BytesType;
-    use serde::{Deserializer, Serializer};
     use std::{borrow::Borrow, collections::HashSet};
 
-    use crate::schema::NamespaceRef;
+    use serde::{Deserializer, Serializer};
+
+    use super::BytesType;
     use crate::{
         Schema,
-        schema::{Name, RecordField, UnionSchema},
+        schema::{Name, NamespaceRef, RecordField, UnionSchema},
     };
 
     /// Returns `Schema::Union(Schema::Null, Schema::Bytes)`
@@ -503,10 +500,325 @@ pub mod slice_opt {
     }
 }
 
+/// (De)serialize [`BigDecimal`] as a [`Schema::BigDecimal`] instead of a [`Schema::String`].
+///
+/// This module is intended to be used through the Serde `with` attribute.
+///
+/// Use [`apache_avro::serde::bigdecimal_opt`] for optional big decimals values.
+///
+/// When used with different serialization formats, this will write bytes.
+///
+/// See usage with below example:
+/// ```
+/// # use apache_avro::AvroSchema;
+/// # use serde::{Deserialize, Serialize};
+/// #[derive(AvroSchema, Serialize, Deserialize)]
+/// struct StructWithBigDecimal<'a> {
+///     #[avro(with)]
+///     #[serde(with = "apache_avro::serde::bigdecimal")]
+///     decimal: BigDecimal,
+/// }
+/// ```
+///
+/// [`BigDecimal`]: ::bigdecimal::BigDecimal
+/// [`Schema::BigDecimal`]: crate::Schema::BigDecimal
+/// [`Schema::String`]: crate::Schema::String
+/// [`apache_avro::serde::bigdecimal_opt`]: bigdecimal_opt
+pub mod bigdecimal {
+    use std::collections::HashSet;
+
+    use bigdecimal::BigDecimal;
+    use serde::{Deserializer, Serializer, de::Error as _, ser::Error as _};
+
+    use crate::{
+        Schema,
+        bigdecimal::{big_decimal_as_bytes, deserialize_big_decimal},
+        schema::{Name, NamespaceRef, RecordField},
+        serde::with::BytesType,
+    };
+
+    /// Returns [`Schema::BigDecimal`]
+    pub fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Schema {
+        Schema::BigDecimal
+    }
+
+    /// Returns `None`
+    pub fn get_record_fields_in_ctxt(
+        _: &mut HashSet<Name>,
+        _: NamespaceRef,
+    ) -> Option<Vec<RecordField>> {
+        None
+    }
+
+    pub fn serialize<S>(decimal: &BigDecimal, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let _guard = super::BytesTypeGuard::set(BytesType::Bytes);
+        let decimal_bytes = big_decimal_as_bytes(decimal).map_err(S::Error::custom)?;
+        serde_bytes::serialize(&decimal_bytes, serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<BigDecimal, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let _bytes_guard = super::BytesTypeGuard::set(BytesType::Bytes);
+        let _guard = super::BorrowedGuard::set(true);
+        // We don't use &'de [u8] here as the deserializer doesn't support that
+        let bytes: Vec<u8> = serde_bytes::deserialize(deserializer)?;
+
+        deserialize_big_decimal(&bytes).map_err(D::Error::custom)
+    }
+}
+
+/// (De)serialize [`Option<BigDecimal>`] as a `Schema::Union(Schema::Null, Schema::BigDecimal)` instead of a `Schema::Union(Schema::Null, Schema::String)`.
+///
+/// This module is intended to be used through the Serde `with` attribute.
+///
+/// Use [`apache_avro::serde::bigdecimal`] for non-optional big decimals values.
+///
+/// When used with different serialization formats, this will write bytes.
+///
+/// See usage with below example:
+/// ```
+/// # use apache_avro::AvroSchema;
+/// # use serde::{Deserialize, Serialize};
+/// #[derive(AvroSchema, Serialize, Deserialize)]
+/// struct StructWithBigDecimal<'a> {
+///     #[avro(with)]
+///     #[serde(with = "apache_avro::serde::bigdecimal_opt")]
+///     decimal: Option<BigDecimal>,
+/// }
+/// ```
+///
+/// [`Option<BigDecimal>`]: ::bigdecimal::BigDecimal
+/// [`apache_avro::serde::bigdecimal`]: bigdecimal
+pub mod bigdecimal_opt {
+    use std::collections::HashSet;
+
+    use bigdecimal::BigDecimal;
+    use serde::{Deserializer, Serializer, de::Error as _, ser::Error as _};
+
+    use crate::{
+        Schema,
+        bigdecimal::{big_decimal_as_bytes, deserialize_big_decimal},
+        schema::{Name, NamespaceRef, RecordField, UnionSchema},
+        serde::with::BytesType,
+    };
+
+    /// Returns `Schema::Union(Schema::Null, Schema::BigDecimal)`
+    pub fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Schema {
+        Schema::Union(
+            UnionSchema::new(vec![Schema::Null, Schema::BigDecimal])
+                .expect("This is a valid union"),
+        )
+    }
+
+    /// Returns `None`
+    pub fn get_record_fields_in_ctxt(
+        _: &mut HashSet<Name>,
+        _: NamespaceRef,
+    ) -> Option<Vec<RecordField>> {
+        None
+    }
+
+    pub fn serialize<S>(decimal: &Option<BigDecimal>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let _guard = super::BytesTypeGuard::set(BytesType::Bytes);
+        if let Some(decimal) = decimal {
+            let decimal_bytes = big_decimal_as_bytes(decimal).map_err(S::Error::custom)?;
+            serde_bytes::serialize(&Some(decimal_bytes), serializer)
+        } else {
+            serde_bytes::serialize(&None::<Vec<u8>>, serializer)
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<BigDecimal>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let _bytes_guard = super::BytesTypeGuard::set(BytesType::Bytes);
+        let _guard = super::BorrowedGuard::set(true);
+        let bytes: Option<Vec<u8>> = serde_bytes::deserialize(deserializer)?;
+        if let Some(bytes) = bytes {
+            deserialize_big_decimal(&bytes)
+                .map(Some)
+                .map_err(D::Error::custom)
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+/// (De)serialize an Rust array (`[T; N]`) as an Avro [`Schema::Array`].
+///
+/// This module is intended to be used through the Serde `with` attribute.
+///
+/// Use [`apache_avro::serde::array_opt`] for optional array values.
+///
+/// See usage with below example:
+/// ```
+/// # use apache_avro::AvroSchema;
+/// # use serde::{Deserialize, Serialize};
+/// #[derive(AvroSchema, Serialize, Deserialize)]
+/// struct StructWithBytes<'a> {
+///     #[avro(with = apache_avro::serde::array::get_schema_in_ctxt::<i32>)]
+///     #[serde(with = "apache_avro::serde::array")]
+///     array: [i32; 10],
+/// }
+/// ```
+///
+/// [`apache_avro::serde::array_opt`]: array_opt
+/// [`Schema::Array`]: crate::schema::Schema::Array
+pub mod array {
+    use std::collections::HashSet;
+
+    use serde::{
+        Deserialize, Deserializer, Serialize, Serializer,
+        de::{DeserializeOwned, Error as _},
+    };
+
+    use crate::{
+        AvroSchemaComponent, Schema,
+        schema::{Name, NamespaceRef, RecordField},
+    };
+
+    /// Returns `Schema::Array(T::get_schema_in_ctxt())`
+    pub fn get_schema_in_ctxt<T: AvroSchemaComponent>(
+        named_schemas: &mut HashSet<Name>,
+        enclosing_namespace: NamespaceRef,
+    ) -> Schema {
+        Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace)).build()
+    }
+
+    /// Returns `None`
+    pub fn get_record_fields_in_ctxt(
+        _: &mut HashSet<Name>,
+        _: NamespaceRef,
+    ) -> Option<Vec<RecordField>> {
+        None
+    }
+
+    pub fn serialize<const N: usize, S, T>(value: &[T; N], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: Serialize,
+    {
+        value.as_slice().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, const N: usize, D, T>(deserializer: D) -> Result<[T; N], D::Error>
+    where
+        D: Deserializer<'de>,
+        T: DeserializeOwned,
+    {
+        let bytes = <Vec<T> as Deserialize>::deserialize(deserializer)?;
+        bytes.try_into().map_err(|v: Vec<T>| {
+            D::Error::custom(format!(
+                "Deserialized array has length {} which does not match array length of {N}",
+                v.len()
+            ))
+        })
+    }
+}
+
+/// (De)serialize an optional Rust array (`Option<[T; N]>`) as an Avro `Schema::Union([Schema::Null, Schema::Array])`.
+///
+/// This module is intended to be used through the Serde `with` attribute.
+///
+/// Use [`apache_avro::serde::array`] for non-optional array values.
+///
+/// When used with different serialization formats, this is equivalent to [`serde_bytes`].
+///
+/// See usage with below example:
+/// ```
+/// # use apache_avro::AvroSchema;
+/// # use serde::{Deserialize, Serialize};
+/// #[derive(AvroSchema, Serialize, Deserialize)]
+/// struct StructWithBytes<'a> {
+///     #[avro(with = apache_avro::serde::array_opt::get_schema_in_ctxt::<i32>)]
+///     #[serde(with = "apache_avro::serde::array_opt")]
+///     array: Option<[i32; 10]>,
+/// }
+/// ```
+///
+/// [`apache_avro::serde::array`]: mod@array
+pub mod array_opt {
+    use std::collections::HashSet;
+
+    use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
+
+    use crate::{
+        AvroSchemaComponent, Schema,
+        schema::{Name, NamespaceRef, RecordField, UnionSchema},
+    };
+
+    /// Returns `Schema::Union(Schema::Null, Schema::Array(T::get_schema_in_ctxt()))`
+    pub fn get_schema_in_ctxt<T: AvroSchemaComponent>(
+        named_schemas: &mut HashSet<Name>,
+        enclosing_namespace: NamespaceRef,
+    ) -> Schema {
+        Schema::Union(
+            UnionSchema::new(vec![
+                Schema::Null,
+                Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace)).build(),
+            ])
+            .expect("This is a valid union"),
+        )
+    }
+
+    /// Returns `None`
+    pub fn get_record_fields_in_ctxt(
+        _: &mut HashSet<Name>,
+        _: NamespaceRef,
+    ) -> Option<Vec<RecordField>> {
+        None
+    }
+
+    pub fn serialize<const N: usize, S, T>(
+        value: &Option<[T; N]>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: Serialize,
+    {
+        if let Some(array) = value {
+            Some(array.as_slice()).serialize(serializer)
+        } else {
+            None::<Vec<T>>.serialize(serializer)
+        }
+    }
+
+    pub fn deserialize<'de, const N: usize, D, T>(
+        deserializer: D,
+    ) -> Result<Option<[T; N]>, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: Deserialize<'de>,
+    {
+        let bytes = <Option<Vec<T>> as Deserialize>::deserialize(deserializer)?;
+        if let Some(bytes) = bytes {
+            Ok(Some(bytes.try_into().map_err(|v: Vec<T>| {
+                D::Error::custom(format!(
+                    "Deserialized array has length {} which does not match array length of {N}",
+                    v.len()
+                ))
+            })?))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{Schema, from_value, to_value, types::Value};
     use serde::{Deserialize, Serialize};
+
+    use crate::{Schema, from_value, to_value, types::Value};
 
     #[test]
     fn avro_3631_validate_schema_for_struct_with_byte_types() {

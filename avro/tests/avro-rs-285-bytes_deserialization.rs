@@ -15,10 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use apache_avro::Reader;
 use apache_avro_test_helper::TestResult;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename = "SimpleRecord")]
 struct ExampleByteArray {
     #[serde(with = "apache_avro::serde::bytes_opt")]
     data_bytes: Option<Vec<u8>>,
@@ -26,6 +28,7 @@ struct ExampleByteArray {
 }
 
 #[derive(Deserialize, Serialize)]
+#[serde(rename = "SimpleRecord")]
 struct ExampleByteArrayFiltered {
     description: Option<String>,
 }
@@ -70,10 +73,9 @@ fn avro_rs_285_bytes_deserialization_round_trip() -> TestResult {
     let avro_data = writer.into_inner()?;
 
     // deserialize Avro binary data back into ExampleByteArray structs
-    let reader = apache_avro::Reader::new(&avro_data[..])?;
-    let deserialized_records: Vec<ExampleByteArray> = reader
-        .map(|value| apache_avro::from_value::<ExampleByteArray>(&value.unwrap()).unwrap())
-        .collect();
+    let deserialized_records = Reader::new(&avro_data[..])?
+        .into_deser_iter()
+        .collect::<Result<Vec<ExampleByteArray>, _>>()?;
 
     assert_eq!(records, deserialized_records);
     Ok(())
@@ -118,10 +120,9 @@ fn avro_rs_285_bytes_deserialization_filtered_round_trip() -> TestResult {
     let avro_data = writer.into_inner()?;
 
     // deserialize Avro binary data back into ExampleByteArrayFiltered structs
-    let reader = apache_avro::Reader::new(&avro_data[..])?;
-    let deserialized_records: Vec<ExampleByteArrayFiltered> = reader
-        .map(|value| apache_avro::from_value::<ExampleByteArrayFiltered>(&value.unwrap()).unwrap())
-        .collect();
+    let deserialized_records = Reader::new(&avro_data[..])?
+        .into_deser_iter()
+        .collect::<Result<Vec<ExampleByteArrayFiltered>, _>>()?;
 
     assert_eq!(records.len(), deserialized_records.len());
 
