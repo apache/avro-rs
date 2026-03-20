@@ -510,10 +510,10 @@ pub mod slice_opt {
 ///
 /// See usage with below example:
 /// ```
-/// # use apache_avro::AvroSchema;
+/// # use apache_avro::{AvroSchema, BigDecimal};
 /// # use serde::{Deserialize, Serialize};
 /// #[derive(AvroSchema, Serialize, Deserialize)]
-/// struct StructWithBigDecimal<'a> {
+/// struct StructWithBigDecimal {
 ///     #[avro(with)]
 ///     #[serde(with = "apache_avro::serde::bigdecimal")]
 ///     decimal: BigDecimal,
@@ -582,10 +582,10 @@ pub mod bigdecimal {
 ///
 /// See usage with below example:
 /// ```
-/// # use apache_avro::AvroSchema;
+/// # use apache_avro::{AvroSchema, BigDecimal};
 /// # use serde::{Deserialize, Serialize};
 /// #[derive(AvroSchema, Serialize, Deserialize)]
-/// struct StructWithBigDecimal<'a> {
+/// struct StructWithBigDecimal {
 ///     #[avro(with)]
 ///     #[serde(with = "apache_avro::serde::bigdecimal_opt")]
 ///     decimal: Option<BigDecimal>,
@@ -664,7 +664,7 @@ pub mod bigdecimal_opt {
 /// # use apache_avro::AvroSchema;
 /// # use serde::{Deserialize, Serialize};
 /// #[derive(AvroSchema, Serialize, Deserialize)]
-/// struct StructWithBytes<'a> {
+/// struct StructWithArray {
 ///     #[avro(with = apache_avro::serde::array::get_schema_in_ctxt::<i32>)]
 ///     #[serde(with = "apache_avro::serde::array")]
 ///     array: [i32; 10],
@@ -738,7 +738,7 @@ pub mod array {
 /// # use apache_avro::AvroSchema;
 /// # use serde::{Deserialize, Serialize};
 /// #[derive(AvroSchema, Serialize, Deserialize)]
-/// struct StructWithBytes<'a> {
+/// struct StructWithArray {
 ///     #[avro(with = apache_avro::serde::array_opt::get_schema_in_ctxt::<i32>)]
 ///     #[serde(with = "apache_avro::serde::array_opt")]
 ///     array: Option<[i32; 10]>,

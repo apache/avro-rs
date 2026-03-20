@@ -340,6 +340,12 @@ impl FieldOptions {
             return Err(errors);
         }
 
+        // TODO: Implement a better way to do this (maybe if user specifies `#[avro(with)]` also use that for the default)
+        // Disable getting the field default, if the schema is not retrieved from the field type
+        if with != With::Trait && avro.default == FieldDefault::Trait {
+            avro.default = FieldDefault::Disabled;
+        }
+
         let doc = avro.doc.or_else(|| extract_rustdoc(attributes));
 
         Ok(Self {
