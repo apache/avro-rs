@@ -1094,7 +1094,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_std_time_duration() -> TestResult {
+    fn avro_rs_512_std_time_duration() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "type": "record",
@@ -1122,7 +1122,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_0_array() -> TestResult {
+    fn avro_rs_512_0_array() -> TestResult {
         assert_eq!(Schema::Null, <[String; 0]>::get_schema());
         assert_eq!(Schema::Null, <[(); 0]>::get_schema());
         assert_eq!(Schema::Null, <[bool; 0]>::get_schema());
@@ -1130,7 +1130,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_1_array() -> TestResult {
+    fn avro_rs_512_1_array() -> TestResult {
         assert_eq!(Schema::String, <[String; 1]>::get_schema());
         assert_eq!(Schema::Null, <[(); 1]>::get_schema());
         assert_eq!(Schema::Boolean, <[bool; 1]>::get_schema());
@@ -1138,7 +1138,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_n_array() -> TestResult {
+    fn avro_rs_512_n_array() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "type": "record",
@@ -1158,7 +1158,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_n_array_complex_type() -> TestResult {
+    fn avro_rs_512_n_array_complex_type() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "type": "record",
@@ -1175,7 +1175,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_1_tuple() -> TestResult {
+    fn avro_rs_512_1_tuple() -> TestResult {
         assert_eq!(Schema::String, <(String,)>::get_schema());
         assert_eq!(Schema::Null, <((),)>::get_schema());
         assert_eq!(Schema::Boolean, <(bool,)>::get_schema());
@@ -1183,7 +1183,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_n_tuple() -> TestResult {
+    fn avro_rs_512_n_tuple() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "type": "record",
@@ -1203,7 +1203,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rx_xxx_n_tuple_complex_type() -> TestResult {
+    fn avro_rs_512_n_tuple_complex_type() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "type": "record",
