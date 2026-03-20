@@ -817,7 +817,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_decode_enum_invalid_data() -> TestResult {
+    fn avro_rs_512_decode_enum_invalid_data() -> TestResult {
         #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
         #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
         pub enum SourceType {
@@ -861,7 +861,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_nested_struct() -> TestResult {
+    fn avro_rs_512_nested_struct() -> TestResult {
         #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
         struct Test {
             a: i64,
@@ -931,7 +931,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_external_unit_enum() -> TestResult {
+    fn avro_rs_512_external_unit_enum() -> TestResult {
         #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
         pub enum UnitExternalEnum {
             Val1,
@@ -996,7 +996,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_internal_unit_enum() -> TestResult {
+    fn avro_rs_512_internal_unit_enum() -> TestResult {
         #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
         #[serde(tag = "t")]
         pub enum UnitInternalEnum {
@@ -1040,7 +1040,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_adjacent_unit_enum() -> TestResult {
+    fn avro_rs_512_adjacent_unit_enum() -> TestResult {
         #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
         #[serde(tag = "t", content = "v")]
         pub enum UnitAdjacentEnum {
@@ -1095,7 +1095,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_untagged_unit_enum() -> TestResult {
+    fn avro_rs_512_untagged_unit_enum() -> TestResult {
         #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
         #[serde(untagged)]
         pub enum UnitUntaggedEnum {
@@ -1143,7 +1143,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_mixed_enum() -> TestResult {
+    fn avro_rs_512_mixed_enum() -> TestResult {
         #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
         struct TestNullExternalEnum {
             a: NullExternalEnum,
@@ -1227,7 +1227,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_single_value_enum() -> TestResult {
+    fn avro_rs_512_single_value_enum() -> TestResult {
         #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
         struct TestSingleValueExternalEnum {
             a: SingleValueExternalEnum,
@@ -1296,7 +1296,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_struct_enum() -> TestResult {
+    fn avro_rs_512_struct_enum() -> TestResult {
         #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
         struct TestStructExternalEnum {
             a: StructExternalEnum,
@@ -1364,7 +1364,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_struct_flatten() -> TestResult {
+    fn avro_rs_512_struct_flatten() -> TestResult {
         #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
         struct S1 {
             f1: String,
@@ -1407,7 +1407,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_tuple_enum() -> TestResult {
+    fn avro_rs_512_tuple_enum() -> TestResult {
         #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
         struct TestTupleExternalEnum {
             a: TupleExternalEnum,
@@ -1479,7 +1479,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_date() -> TestResult {
+    fn avro_rs_512_date() -> TestResult {
         let schema = Schema::Date;
         assert_roundtrip(1i32, &schema, Vec::new())?;
 
@@ -1487,7 +1487,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_time_millis() -> TestResult {
+    fn avro_rs_512_time_millis() -> TestResult {
         let schema = Schema::TimeMillis;
         assert_roundtrip(1i32, &schema, Vec::new())?;
 
@@ -1495,7 +1495,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_time_micros() -> TestResult {
+    fn avro_rs_512_time_micros() -> TestResult {
         let schema = Schema::TimeMicros;
         assert_roundtrip(1i64, &schema, Vec::new())?;
 
@@ -1503,7 +1503,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_timestamp_millis() -> TestResult {
+    fn avro_rs_512_timestamp_millis() -> TestResult {
         let schema = Schema::TimestampMillis;
         assert_roundtrip(1i64, &schema, Vec::new())?;
 
@@ -1511,7 +1511,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_timestamp_micros() -> TestResult {
+    fn avro_rs_512_timestamp_micros() -> TestResult {
         let schema = Schema::TimestampMicros;
         assert_roundtrip(1i64, &schema, Vec::new())?;
 
@@ -1551,7 +1551,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_xxx_uuid() -> TestResult {
+    fn avro_rs_512_uuid() -> TestResult {
         let schema = Schema::parse_str(
             r#"{
             "type": "fixed",
