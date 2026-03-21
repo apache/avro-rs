@@ -230,7 +230,8 @@ impl<'r, R: Read> Block<'r, R> {
         let b_original = block_bytes.len();
 
         let item = if read_schema.is_some() {
-            todo!("Schema aware deserialisation does not resolve schemas yet");
+            // TODO: Implement SchemaAwareResolvingDeserializer
+            panic!("Schema aware deserialisation does not resolve schemas yet");
         } else {
             let config = Config {
                 names: &self.names_refs,

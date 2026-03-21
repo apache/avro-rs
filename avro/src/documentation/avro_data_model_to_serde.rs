@@ -21,7 +21,7 @@
 //! how the different data models are mapped. When mapping from Rust types to an Avro schema,
 //! see [the documentation for the reverse](super::serde_data_model_to_avro).
 //!
-//! Only the the mapping as defined here is supported. Any other behavior might change in a minor version.
+//! Only the mapping as defined here is supported. Any other behavior might change in a minor version.
 //!
 //! ## Primitive Types
 //! - `null`: `()`
@@ -38,11 +38,11 @@
 //! - `records`: A struct with the same name and fields or a tuple with the same fields.
 //!     - Extra fields can be added to the struct if they are marked with `#[serde(skip)]`
 //! - `enums`: A enum with the same name and unit variants for every symbol
-//!     - The index of the symbol most match the index of the variant
+//!     - The index of the symbol must match the index of the variant
 //! - `arrays`: [`Vec`] (or any type that uses [`Serialize::serialize_seq`](serde::Serialize), [`Deserialize::deserialize_seq`](serde::Deserialize))
 //!     - `[T; N]` is (de)serialized as a tuple by Serde, to (de)serialize them as an `array` use [`apache_avro::serde::array`]
 //! - `maps`: [`HashMap<String, _>`](std::collections::HashMap) (or any type that uses [`Serialize::serialize_map`](serde::Serialize), [`Deserialize::deserialize_map`](serde::Deserialize))
-//! - `unions`: A enum with a variant for each variant
+//! - `unions`: An enum with a variant for each union variant
 //!     - The index of the union variant must match the enum variant
 //!     - A `null` can be a unit variant or a newtype variant with a unit type
 //!     - All other variants must be newtype variants, struct variants, or tuple variants.

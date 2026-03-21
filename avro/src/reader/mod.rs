@@ -69,6 +69,10 @@ impl<'a, R: Read> Reader<'a, R> {
     #[builder(finish_fn = build)]
     pub fn builder(
         #[builder(start_fn)] reader: R,
+        /// The schema the written data needs to be adapted to.
+        ///
+        /// This is currently not compatible with [`ReaderDeser`] and will panic during reading if the
+        /// writer schema is not the same as the reader schema.
         reader_schema: Option<&'a Schema>,
         schemata: Option<Vec<&'a Schema>>,
         #[builder(default = is_human_readable())] human_readable: bool,
@@ -127,6 +131,12 @@ impl<'a, R: Read> Reader<'a, R> {
     }
 
     fn read_next_deser<T: DeserializeOwned>(&mut self) -> AvroResult<Option<T>> {
+        // TODO: Implement SchemaAwareResolvingDeserializer
+        assert!(
+            !self.should_resolve_schema,
+            "Schema aware deserialisation does not resolve schemas yet"
+        );
+
         self.block.read_next_deser(self.reader_schema)
     }
 }

@@ -60,7 +60,7 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> MapDeserializer<'s, 'r, R, S> {
             let _bytes = zag_i64(reader)?;
         }
         if remaining == 0 {
-            // If the block size is zero the array is finished
+            // If the block size is zero the map is finished
             Ok(None)
         } else {
             Ok(Some(remaining.unsigned_abs()))

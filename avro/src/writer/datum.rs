@@ -70,7 +70,7 @@ impl<'s> GenericDatumWriter<'s> {
         /// When set to `None` all values will be written in a single block. This can be faster as no
         /// intermediate buffer is used, but seeking through written data will be slower.
         target_block_size: Option<usize>,
-        /// Should [`Serialize`] implementations pick a human readable represenation.
+        /// Should [`Serialize`] implementations pick a human readable representation.
         ///
         /// It is recommended to set this to `false`.
         #[builder(default = is_human_readable())]

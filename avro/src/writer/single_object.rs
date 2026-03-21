@@ -104,7 +104,7 @@ where
         with = |header_builder: impl HeaderBuilder| header_builder.build_header(),
     )]
     header: Vec<u8>,
-    /// Should [`Serialize`] implementations pick a human readable represenation.
+    /// Should [`Serialize`] implementations pick a human readable representation.
     ///
     /// It is recommended to set this to `false`.
     #[builder(default = is_human_readable())]

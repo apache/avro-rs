@@ -132,7 +132,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> RecordSerializer<'s, 'w, W, S> {
                         &field.schema,
                         self.config,
                     )?)
-                    .map_err(|e| self.field_error(self.field_position, e))?;
+                    .map_err(|e| self.field_error(position, e))?;
                 if self.cache.insert(position, bytes).is_some() {
                     Err(Details::FieldNameDuplicate(field.name.clone()).into())
                 } else {
@@ -224,7 +224,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> SerializeMap for RecordSerializer<'s, 
     {
         self.serialize_next_field(
             self.map_position
-                .expect("serialze_value called without calling serialize_key"),
+                .expect("serialize_value called without calling serialize_key"),
             value,
         )
     }

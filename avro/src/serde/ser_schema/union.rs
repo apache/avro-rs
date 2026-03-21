@@ -189,7 +189,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
 
     fn serialize_u64(mut self, v: u64) -> Result<Self::Ok, Self::Error> {
         match self.union.find_named_schema("u64", self.config.names)? {
-            Some((index, Schema::Fixed(FixedSchema { size: 16, .. }))) => {
+            Some((index, Schema::Fixed(FixedSchema { size: 8, .. }))) => {
                 let mut bytes_written = zig_i32(index as i32, &mut *self.writer)?;
                 bytes_written += self.write_array(v.to_le_bytes())?;
                 Ok(bytes_written)

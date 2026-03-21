@@ -841,6 +841,7 @@ impl Schema {
             | Schema::Ref { name } => {
                 let name: String = name
                     .to_string()
+                    .replace('_', "__")
                     .chars()
                     .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
                     .collect();
@@ -5178,6 +5179,31 @@ mod tests {
             array.attributes.get("default"),
             Some(&serde_json::Value::Null)
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_unique_normalized_name_must_be_unique() -> TestResult {
+        let one = Schema::Ref {
+            name: "a.b.c".parse()?,
+        };
+        let two = Schema::Ref {
+            name: "a_b_c".parse()?,
+        };
+        let three = Schema::Ref {
+            name: "a__b__c".parse()?,
+        };
+        let four = Schema::Ref {
+            name: "a._b._c".parse()?,
+        };
+
+        assert_ne!(one, two);
+        assert_ne!(one, three);
+        assert_ne!(one, four);
+        assert_ne!(two, three);
+        assert_ne!(two, four);
+        assert_ne!(three, four);
 
         Ok(())
     }
