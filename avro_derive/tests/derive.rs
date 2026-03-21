@@ -15,24 +15,26 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{
-    AvroSchema, AvroSchemaComponent, Reader, Schema, Writer, from_value,
-    schema::{Alias, EnumSchema, FixedSchema, Name, RecordSchema},
-};
-use proptest::prelude::*;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
     sync::Mutex,
     time::Duration,
 };
+
+use apache_avro::{
+    AvroSchema, AvroSchemaComponent, Schema, Writer,
+    reader::datum::GenericDatumReader,
+    schema::{Alias, EnumSchema, FixedSchema, Name, NamespaceRef, RecordSchema},
+    writer::datum::GenericDatumWriter,
+};
+use pretty_assertions::assert_eq;
+use proptest::prelude::*;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use uuid::Uuid;
 
-use apache_avro::schema::NamespaceRef;
-use pretty_assertions::assert_eq;
-
 /// Takes in a type that implements the right combination of traits and runs it through a Serde Cycle and asserts the result is the same
+#[track_caller]
 fn serde_assert<T>(obj: T)
 where
     T: std::fmt::Debug + Serialize + DeserializeOwned + AvroSchema + Clone + PartialEq,
@@ -40,6 +42,7 @@ where
     assert_eq!(obj, serde(obj.clone()));
 }
 
+#[track_caller]
 fn serde<T>(obj: T) -> T
 where
     T: Serialize + DeserializeOwned + AvroSchema,
@@ -47,37 +50,31 @@ where
     de(ser(obj))
 }
 
+#[track_caller]
 fn ser<T>(obj: T) -> Vec<u8>
 where
     T: Serialize + AvroSchema,
 {
     let schema = T::get_schema();
-    let mut writer = Writer::new(&schema, Vec::new()).unwrap();
-    if let Err(e) = writer.append_ser(obj) {
-        panic!("{e:?}");
-    }
-    writer.into_inner().unwrap()
+    GenericDatumWriter::builder(&schema)
+        .build()
+        .unwrap()
+        .write_ser_to_vec(&obj)
+        .unwrap()
 }
 
+#[track_caller]
 fn de<T>(encoded: Vec<u8>) -> T
 where
     T: DeserializeOwned + AvroSchema,
 {
     assert!(!encoded.is_empty());
     let schema = T::get_schema();
-    let mut reader = Reader::builder(&encoded[..])
-        .reader_schema(&schema)
+    GenericDatumReader::builder(&schema)
         .build()
-        .unwrap();
-    if let Some(res) = reader.next() {
-        match res {
-            Ok(value) => {
-                return from_value::<T>(&value).unwrap();
-            }
-            Err(e) => panic!("{e:?}"),
-        }
-    }
-    unreachable!()
+        .unwrap()
+        .read_deser(&mut &encoded[..])
+        .unwrap()
 }
 
 #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
@@ -800,6 +797,8 @@ fn test_cons_generic() {
 
 #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
 struct TestSimpleArray {
+    #[avro(with = apache_avro::serde::array::get_schema_in_ctxt::<i32>)]
+    #[serde(with = "apache_avro::serde::array")]
     a: [i32; 4],
 }
 
@@ -828,7 +827,9 @@ fn test_simple_array(a: [i32; 4]) {
 }}
 
 #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
-struct TestComplexArray<T: AvroSchemaComponent> {
+struct TestComplexArray<T: AvroSchemaComponent + Serialize + DeserializeOwned> {
+    #[avro(with = apache_avro::serde::array::get_schema_in_ctxt::<T>)]
+    #[serde(with = "apache_avro::serde::array")]
     a: [T; 2],
 }
 
@@ -882,6 +883,8 @@ fn test_complex_array() {
 #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
 struct Testu8 {
     a: Vec<u8>,
+    #[avro(with = apache_avro::serde::array::get_schema_in_ctxt::<u8>)]
+    #[serde(with = "apache_avro::serde::array")]
     b: [u8; 2],
 }
 
@@ -1863,8 +1866,9 @@ fn avro_rs_397_with() {
     }
 
     mod module {
-        use super::*;
         use apache_avro::schema::NamespaceRef;
+
+        use super::*;
         pub fn get_schema_in_ctxt(
             _named_schemas: &mut HashSet<Name>,
             _enclosing_namespace: NamespaceRef,
@@ -2063,6 +2067,8 @@ fn avro_rs_401_supported_type_variants() {
         three: &'static i32,
         four: &'a str,
         five: &'a mut f64,
+        #[avro(with = apache_avro::serde::array::get_schema_in_ctxt::<u8>)]
+        #[serde(with = "apache_avro::serde::array")]
         six: [u8; 5],
         seven: [u8],
     }
@@ -2390,7 +2396,11 @@ fn avro_rs_476_field_default() {
         _m: char,
         _n: Box<Spam>,
         _o: Vec<bool>,
+        #[serde(with = "apache_avro::serde::array")]
+        #[avro(with = apache_avro::serde::array::get_schema_in_ctxt::<u8>)]
         _p: [u8; 5],
+        #[serde(with = "apache_avro::serde::array")]
+        #[avro(with = apache_avro::serde::array::get_schema_in_ctxt::<Bar>)]
         _p_alt: [Bar; 5],
         _q: HashMap<String, String>,
         _r: Option<f64>,
@@ -2406,7 +2416,7 @@ fn avro_rs_476_field_default() {
     let schema = Foo::get_schema();
     assert_eq!(
         serde_json::to_string(&schema).unwrap(),
-        r#"{"type":"record","name":"Foo","fields":[{"name":"_a","type":"boolean"},{"name":"_b","type":"int"},{"name":"_c","type":"int"},{"name":"_d","type":"int"},{"name":"_e","type":"long"},{"name":"_f","type":"int"},{"name":"_g","type":"int"},{"name":"_h","type":"long"},{"name":"_i","type":"float"},{"name":"_j","type":"double"},{"name":"_k","type":"string"},{"name":"_l","type":"string"},{"name":"_m","type":"string"},{"name":"_n","type":{"type":"record","name":"Spam","fields":[{"name":"_field","type":"boolean"}]},"default":{"_field":true}},{"name":"_o","type":{"type":"array","items":"boolean"}},{"name":"_p","type":{"type":"array","items":"int"}},{"name":"_p_alt","type":{"type":"array","items":{"type":"record","name":"Bar","fields":[{"name":"_field","type":"Bar"}]}}},{"name":"_q","type":{"type":"map","values":"string"}},{"name":"_r","type":["null","double"],"default":null},{"name":"_s","type":{"type":"fixed","name":"duration","size":12,"logicalType":"duration"}},{"name":"_t","type":{"type":"fixed","name":"uuid","size":16,"logicalType":"uuid"}},{"name":"_u","type":{"type":"fixed","name":"u64","size":8}},{"name":"_v","type":{"type":"fixed","name":"u128","size":16}},{"name":"_w","type":{"type":"fixed","name":"i128","size":16}},{"name":"_x","type":"Bar"},{"name":"_z","type":"Spam","default":{"_field":true}}]}"#
+        r#"{"type":"record","name":"Foo","fields":[{"name":"_a","type":"boolean"},{"name":"_b","type":"int"},{"name":"_c","type":"int"},{"name":"_d","type":"int"},{"name":"_e","type":"long"},{"name":"_f","type":"int"},{"name":"_g","type":"int"},{"name":"_h","type":"long"},{"name":"_i","type":"float"},{"name":"_j","type":"double"},{"name":"_k","type":"string"},{"name":"_l","type":"string"},{"name":"_m","type":"string"},{"name":"_n","type":{"type":"record","name":"Spam","fields":[{"name":"_field","type":"boolean"}]},"default":{"_field":true}},{"name":"_o","type":{"type":"array","items":"boolean"}},{"name":"_p","type":{"type":"array","items":"int"}},{"name":"_p_alt","type":{"type":"array","items":{"type":"record","name":"Bar","fields":[{"name":"_field","type":"Bar"}]}}},{"name":"_q","type":{"type":"map","values":"string"}},{"name":"_r","type":["null","double"],"default":null},{"name":"_s","type":{"type":"record","name":"Duration","fields":[{"name":"secs","type":{"type":"fixed","name":"u64","size":8}},{"name":"nanos","type":"long"}]}},{"name":"_t","type":{"type":"fixed","name":"uuid","size":16,"logicalType":"uuid"}},{"name":"_u","type":"u64"},{"name":"_v","type":{"type":"fixed","name":"u128","size":16}},{"name":"_w","type":{"type":"fixed","name":"i128","size":16}},{"name":"_x","type":"Bar"},{"name":"_z","type":"Spam","default":{"_field":true}}]}"#
     );
 }
 
@@ -2479,8 +2489,11 @@ fn avro_rs_476_field_default_provided() {
         _n: Box<Spam>,
         #[avro(default = "[true, false, true]")]
         _o: Vec<bool>,
-        #[avro(default = "[1,2,3,4,5]")]
+        #[serde(with = "apache_avro::serde::array")]
+        #[avro(default = "[1,2,3,4,5]", with = apache_avro::serde::array::get_schema_in_ctxt::<u8>)]
         _p: [u8; 5],
+        #[avro(with = apache_avro::serde::array::get_schema_in_ctxt::<Spam>)]
+        #[serde(with = "apache_avro::serde::array")]
         #[avro(
             default = r#"[{"_field": true},{"_field": false},{"_field": true},{"_field": false},{"_field": true}]"#
         )]
@@ -2514,7 +2527,7 @@ fn avro_rs_476_field_default_provided() {
     let schema = Foo::get_schema();
     assert_eq!(
         serde_json::to_string(&schema).unwrap(),
-        r#"{"type":"record","name":"Foo","fields":[{"name":"_a","type":"boolean","default":true},{"name":"_b","type":"int","default":42},{"name":"_c","type":"int","default":42},{"name":"_d","type":"int","default":42},{"name":"_e","type":"long","default":42},{"name":"_f","type":"int","default":42},{"name":"_g","type":"int","default":42},{"name":"_h","type":"long","default":42},{"name":"_i","type":"float","default":42.0},{"name":"_j","type":"double","default":42.0},{"name":"_k","type":"string","default":"String"},{"name":"_l","type":"string","default":"str"},{"name":"_m","type":"string","default":"Z"},{"name":"_n","type":{"type":"record","name":"Spam","fields":[{"name":"_field","type":"boolean"}]},"default":{"_field":false}},{"name":"_o","type":{"type":"array","items":"boolean"},"default":[true,false,true]},{"name":"_p","type":{"type":"array","items":"int"},"default":[1,2,3,4,5]},{"name":"_p_alt","type":{"type":"array","items":"Spam"},"default":[{"_field":true},{"_field":false},{"_field":true},{"_field":false},{"_field":true}]},{"name":"_q","type":{"type":"map","values":"string"},"default":{"A":"B"}},{"name":"_r","type":["null","double"],"default":42.0},{"name":"_s","type":{"type":"fixed","name":"duration","size":12,"logicalType":"duration"},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_t","type":{"type":"fixed","name":"uuid","size":16,"logicalType":"uuid"},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_u","type":{"type":"fixed","name":"u64","size":8},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_v","type":{"type":"fixed","name":"u128","size":16},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_w","type":{"type":"fixed","name":"i128","size":16},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_x","type":"Spam","default":{"_field":false}}]}"#
+        r#"{"type":"record","name":"Foo","fields":[{"name":"_a","type":"boolean","default":true},{"name":"_b","type":"int","default":42},{"name":"_c","type":"int","default":42},{"name":"_d","type":"int","default":42},{"name":"_e","type":"long","default":42},{"name":"_f","type":"int","default":42},{"name":"_g","type":"int","default":42},{"name":"_h","type":"long","default":42},{"name":"_i","type":"float","default":42.0},{"name":"_j","type":"double","default":42.0},{"name":"_k","type":"string","default":"String"},{"name":"_l","type":"string","default":"str"},{"name":"_m","type":"string","default":"Z"},{"name":"_n","type":{"type":"record","name":"Spam","fields":[{"name":"_field","type":"boolean"}]},"default":{"_field":false}},{"name":"_o","type":{"type":"array","items":"boolean"},"default":[true,false,true]},{"name":"_p","type":{"type":"array","items":"int"},"default":[1,2,3,4,5]},{"name":"_p_alt","type":{"type":"array","items":"Spam"},"default":[{"_field":true},{"_field":false},{"_field":true},{"_field":false},{"_field":true}]},{"name":"_q","type":{"type":"map","values":"string"},"default":{"A":"B"}},{"name":"_r","type":["null","double"],"default":42.0},{"name":"_s","type":{"type":"record","name":"Duration","fields":[{"name":"secs","type":{"type":"fixed","name":"u64","size":8}},{"name":"nanos","type":"long"}]},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_t","type":{"type":"fixed","name":"uuid","size":16,"logicalType":"uuid"},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_u","type":"u64","default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_v","type":{"type":"fixed","name":"u128","size":16},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_w","type":{"type":"fixed","name":"i128","size":16},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_x","type":"Spam","default":{"_field":false}}]}"#
     );
 }
 

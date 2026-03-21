@@ -15,16 +15,23 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::error::Details;
-use crate::schema::{
-    DecimalSchema, InnerDecimalSchema, Name, NamespaceRef, Schema, SchemaKind, UuidSchema,
+use std::{
+    borrow::Borrow,
+    collections::{BTreeMap, HashMap},
+    fmt::{Debug, Formatter},
 };
-use crate::types;
-use crate::{AvroResult, Error};
-use std::borrow::Borrow;
-use std::collections::{BTreeMap, HashMap};
-use std::fmt::{Debug, Formatter};
+
 use strum::IntoDiscriminant;
+
+use crate::{
+    AvroResult, Error,
+    error::Details,
+    schema::{
+        DecimalSchema, FixedSchema, InnerDecimalSchema, Name, NamespaceRef, RecordSchema, Schema,
+        SchemaKind, UuidSchema,
+    },
+    types,
+};
 
 /// A description of a Union schema
 #[derive(Clone)]
@@ -74,7 +81,116 @@ impl UnionSchema {
         &self.schemas
     }
 
-    /// Returns true if the any of the variants of this `UnionSchema` is `Null`.
+    /// Get the variant at the given index.
+    pub fn get_variant(&self, index: usize) -> Result<&Schema, Error> {
+        self.schemas.get(index).ok_or_else(|| {
+            Details::GetUnionVariant {
+                index: index as i64,
+                num_variants: self.schemas.len(),
+            }
+            .into()
+        })
+    }
+
+    /// Get the index of the provided [`SchemaKind`].
+    ///
+    /// The schema must not be a logical type, as only the base type are saved in the lookup index.
+    pub(crate) fn index_of_schema_kind(&self, kind: SchemaKind) -> Option<usize> {
+        self.variant_index.get(&kind).copied()
+    }
+
+    /// Get the index and schema for the provided name.
+    ///
+    /// Will use `names` to resolve references.
+    pub(crate) fn find_named_schema<'s>(
+        &'s self,
+        name: &str,
+        names: &'s HashMap<Name, impl Borrow<Schema>>,
+    ) -> Result<Option<(usize, &'s Schema)>, Error> {
+        for index in self.named_index.iter().copied() {
+            let schema = &self.schemas[index];
+            if let Some(schema_name) = schema.name()
+                && schema_name.name() == name
+            {
+                let schema = if let Schema::Ref { name } = schema {
+                    names
+                        .get(name)
+                        .ok_or_else(|| Details::SchemaResolutionError(name.clone()))?
+                        .borrow()
+                } else {
+                    schema
+                };
+                return Ok(Some((index, schema)));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Find a [`Schema::Fixed`] with the given size.
+    ///
+    /// Will use `names` to resolve references.
+    pub(crate) fn find_fixed_of_size_n<'s>(
+        &'s self,
+        size: usize,
+        names: &'s HashMap<Name, impl Borrow<Schema>>,
+    ) -> Result<Option<(usize, &'s FixedSchema)>, Error> {
+        for index in self.named_index.iter().copied() {
+            let schema = &self.schemas[index];
+            let schema = if let Schema::Ref { name } = schema {
+                names
+                    .get(name)
+                    .ok_or_else(|| Details::SchemaResolutionError(name.clone()))?
+                    .borrow()
+            } else {
+                schema
+            };
+            match schema {
+                Schema::Fixed(fixed)
+                | Schema::Uuid(UuidSchema::Fixed(fixed))
+                | Schema::Decimal(DecimalSchema {
+                    inner: InnerDecimalSchema::Fixed(fixed),
+                    ..
+                })
+                | Schema::Duration(fixed)
+                    if fixed.size == size =>
+                {
+                    return Ok(Some((index, fixed)));
+                }
+                _ => {}
+            }
+        }
+        Ok(None)
+    }
+
+    /// Find a [`Schema::Record`] with `n` fields.
+    ///
+    /// Will use `names` to resolve references.
+    pub(crate) fn find_record_with_n_fields<'s>(
+        &'s self,
+        n_fields: usize,
+        names: &'s HashMap<Name, impl Borrow<Schema>>,
+    ) -> Result<Option<(usize, &'s RecordSchema)>, Error> {
+        for index in self.named_index.iter().copied() {
+            let schema = &self.schemas[index];
+            let schema = if let Schema::Ref { name } = schema {
+                names
+                    .get(name)
+                    .ok_or_else(|| Details::SchemaResolutionError(name.clone()))?
+                    .borrow()
+            } else {
+                schema
+            };
+            match schema {
+                Schema::Record(record) if record.fields.len() == n_fields => {
+                    return Ok(Some((index, record)));
+                }
+                _ => {}
+            }
+        }
+        Ok(None)
+    }
+
+    /// Returns true if any of the variants of this `UnionSchema` is `Null`.
     pub fn is_nullable(&self) -> bool {
         self.variant_index.contains_key(&SchemaKind::Null)
     }

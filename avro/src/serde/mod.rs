@@ -27,7 +27,8 @@
 //! details on how to change the generated schema.
 //!
 //! Alternatively, you can write your own schema. If you go down this path, it is recommended you start with
-//! the schema derived by [`AvroSchema`] and then modify it to fit your needs.
+//! the schema derived by [`AvroSchema`] and then modify it to fit your needs. For more information on mapping
+//! between Serde and Avro see [Avro to Serde](crate::documentation::avro_data_model_to_serde) and [Serde to Avro](crate::documentation::serde_data_model_to_avro).
 //!
 //! #### Performance pitfall
 //! One performance pitfall with Serde is (de)serializing bytes. The implementation of [`Serialize`][`serde::Serialize`]
@@ -109,6 +110,7 @@
 
 mod de;
 mod derive;
+pub(crate) mod deser_schema;
 mod ser;
 pub(crate) mod ser_schema;
 mod util;
@@ -117,7 +119,10 @@ mod with;
 pub use de::from_value;
 pub use derive::{AvroSchema, AvroSchemaComponent};
 pub use ser::to_value;
-pub use with::{bytes, bytes_opt, fixed, fixed_opt, slice, slice_opt};
+pub use with::{
+    array, array_opt, bigdecimal, bigdecimal_opt, bytes, bytes_opt, fixed, fixed_opt, slice,
+    slice_opt,
+};
 
 #[doc(hidden)]
 pub use derive::get_record_fields_in_ctxt;

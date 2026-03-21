@@ -15,11 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use std::{error::Error as _, fmt};
+
 use crate::{
-    schema::{Name, Schema, SchemaKind, UnionSchema},
+    schema::{Name, RecordSchema, Schema, SchemaKind, UnionSchema},
     types::{Value, ValueKind},
 };
-use std::{error::Error as _, fmt};
 
 /// Errors encountered by Avro.
 ///
@@ -156,8 +157,9 @@ pub enum Details {
     #[error("Union index {index} out of bounds: {num_variants}")]
     GetUnionVariant { index: i64, num_variants: usize },
 
-    #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
-    #[error("Enum symbol index out of bounds: {num_variants}")]
+    #[error(
+        "Enum symbol index out of bounds: got {index} but there are only {num_variants} variants"
+    )]
     EnumSymbolIndex { index: usize, num_variants: usize },
 
     #[error("Enum symbol not found {0}")]
@@ -553,31 +555,50 @@ pub enum Details {
     #[error("Decoded integer out of range for i32: {1}: {0}")]
     ZagI32(#[source] std::num::TryFromIntError, i64),
 
-    #[error("unable to read block")]
+    #[error("Did not read any bytes, block is corrupt")]
     ReadBlock,
 
     #[error("Failed to serialize value into Avro value: {0}")]
     SerializeValue(String),
 
-    #[error("Failed to serialize value of type {value_type} using schema {schema:?}: {value}")]
+    #[error("Failed to serialize value of type `{value_type}` using Schema::{schema:?}: {value}")]
     SerializeValueWithSchema {
         value_type: &'static str,
         value: String,
         schema: Schema,
     },
 
-    #[error("Failed to serialize field '{field_name}' for record {record_schema:?}: {error}")]
-    SerializeRecordFieldWithSchema {
-        field_name: String,
-        record_schema: Schema,
-        error: Box<Error>,
+    #[error("{position} is not a valid index for fields in {schema:?}")]
+    SerializeRecordUnknownFieldIndex {
+        position: usize,
+        schema: RecordSchema,
     },
 
-    #[error("Missing default for skipped field '{field_name}' for schema {schema:?}")]
-    MissingDefaultForSkippedField { field_name: String, schema: Schema },
+    #[error("Failed to serialize field '{field_name}' of record {record_schema:?}: {error}")]
+    SerializeRecordFieldWithSchema {
+        field_name: String,
+        record_schema: RecordSchema,
+        error: String,
+    },
+
+    #[error("Missing default for skipped field '{field_name}' of schema {schema:?}")]
+    MissingDefaultForSkippedField {
+        field_name: String,
+        schema: RecordSchema,
+    },
 
     #[error("Failed to deserialize Avro value into value: {0}")]
     DeserializeValue(String),
+
+    #[error("Failed to deserialize value of type {value_type} using schema {schema:?}: {value}")]
+    DeserializeSchemaAware {
+        value_type: &'static str,
+        value: String,
+        schema: Schema,
+    },
+
+    #[error("Only expected `deserialize_identifier` to be called but `{0}` was called")]
+    DeserializeIdentifier(&'static str),
 
     #[error("Failed to write buffer bytes during flush: {0}")]
     WriteBytes(#[source] std::io::Error),
@@ -642,6 +663,14 @@ pub enum Details {
         "The implementation of `SchemaNameValidator` is incorrect! It returned an out-of-bounds index or provided a regex that did not capture a group named `name`"
     )]
     InvalidSchemaNameValidatorImplementation,
+
+    #[error(
+        "Not all tuple fields were serialized, expected to serialize element at position {position} of a {total_elements}-tuple but `SerializeTuple::end()` was called"
+    )]
+    SerializeTupleMissingElements {
+        position: usize,
+        total_elements: usize,
+    },
 }
 
 #[derive(thiserror::Error, PartialEq)]
