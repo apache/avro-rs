@@ -18,10 +18,18 @@
 use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
-#[serde(tag = "bar", content = "spam")]
-enum Foo {
-    One,
-    Two,
+#[avro(repr = "record_internally_tagged")]
+#[serde(tag = "type")]
+enum Abc {
+    A,
+    B(bool),
+    D {},
+    E {
+        is_it_true: bool,
+    },
+    F {
+        #[avro(doc = "This is X")]
+        x: f64,
+        y: f32,
+    },
 }
-
-pub fn main() {}

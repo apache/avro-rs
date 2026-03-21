@@ -195,6 +195,30 @@ impl UnionSchema {
         self.variant_index.contains_key(&SchemaKind::Null)
     }
 
+    /// Find the first variant that is (partially) compatible with the provided schema.
+    ///
+    /// Partial in this context means that actual compatibility can only be established by reading
+    /// the data.
+    pub(crate) fn find_compatible_variant<S: Borrow<Schema>>(
+        &self,
+        writer_schema: &Schema,
+        union_schemata: &HashMap<Name, S>,
+        writer_schemata: &HashMap<Name, S>,
+    ) -> Option<usize> {
+        // We reuse the same checker so that its cache of checked schema can be reused.
+        let mut checker = Checker::new(writer_schemata, union_schemata);
+
+        // We can't do a fast path, because the specification specifically says:
+        // "The first schema in the reader’s union that matches the writer’s schema is recursively resolved against it."
+        // So we have to check every schema in turn
+        for (index, schema) in self.schemas.iter().enumerate() {
+            if checker.full_match_schemas(writer_schema, schema).is_ok() {
+                return Some(index);
+            }
+        }
+        None
+    }
+
     /// Optionally returns a reference to the schema matched by this value, as well as its position
     /// within this union.
     ///

@@ -597,6 +597,16 @@ pub enum Details {
         schema: Schema,
     },
 
+    #[error(
+        "Failed to deserialize value of type {value_type} using schema {writer_schema:?} amd resolving to schema {reader_schema:?}: {value}"
+    )]
+    DeserializeValueWithResolvingSchema {
+        value_type: &'static str,
+        value: String,
+        writer_schema: Schema,
+        reader_schema: Schema,
+    },
+
     #[error("Only expected `deserialize_identifier` to be called but `{0}` was called")]
     DeserializeIdentifier(&'static str),
 
@@ -731,6 +741,10 @@ pub enum CompatibilityError {
         "Incompatible schemata! Unknown type for '{0}'. Make sure that the type is a valid one"
     )]
     Inconclusive(String),
+
+    /// Error while resolving [`Schema::Ref`]
+    #[error("Unresolved schema reference: {0}")]
+    SchemaResolutionError(Name),
 }
 
 impl serde::ser::Error for Details {

@@ -57,6 +57,7 @@
 //! # Ok::<(), Error>(())
 //! ```
 //!
+use crate::schema::Name;
 use crate::{
     error::CompatibilityError,
     schema::{
@@ -64,13 +65,8 @@ use crate::{
         Schema, UuidSchema,
     },
 };
-use std::{
-    collections::{HashMap, hash_map::DefaultHasher},
-    hash::Hasher,
-    iter::once,
-    ops::BitAndAssign,
-    ptr,
-};
+use std::borrow::Borrow;
+use std::{collections::HashMap, iter::once, ops::BitAndAssign};
 
 /// Check if two schemas can be resolved.
 ///
@@ -85,7 +81,22 @@ impl SchemaCompatibility {
         writers_schema: &Schema,
         readers_schema: &Schema,
     ) -> Result<Compatibility, CompatibilityError> {
-        let mut c = Checker::new();
+        let empty_schemata: HashMap<_, Schema> = HashMap::new();
+        Self::can_read_with_schemata(
+            writers_schema,
+            readers_schema,
+            &empty_schemata,
+            &empty_schemata,
+        )
+    }
+
+    pub fn can_read_with_schemata<S: Borrow<Schema>>(
+        writers_schema: &Schema,
+        readers_schema: &Schema,
+        writer_schemata: &HashMap<Name, S>,
+        reader_schemata: &HashMap<Name, S>,
+    ) -> Result<Compatibility, CompatibilityError> {
+        let mut c = Checker::new(&writer_schemata, &reader_schemata);
         c.can_read(writers_schema, readers_schema)
     }
 
@@ -94,9 +105,29 @@ impl SchemaCompatibility {
         schema_a: &Schema,
         schema_b: &Schema,
     ) -> Result<Compatibility, CompatibilityError> {
-        let mut c = SchemaCompatibility::can_read(schema_a, schema_b)?;
-        c &= SchemaCompatibility::can_read(schema_b, schema_a)?;
-        Ok(c)
+        let empty_schemata: HashMap<_, Schema> = HashMap::new();
+        Self::mutal_read_with_schemata(schema_a, schema_b, &empty_schemata, &empty_schemata)
+    }
+
+    pub fn mutal_read_with_schemata<S: Borrow<Schema>>(
+        schema_a: &Schema,
+        schema_b: &Schema,
+        schema_a_schemata: &HashMap<Name, S>,
+        schema_b_schemata: &HashMap<Name, S>,
+    ) -> Result<Compatibility, CompatibilityError> {
+        let mut compatibility = SchemaCompatibility::can_read_with_schemata(
+            schema_a,
+            schema_b,
+            schema_a_schemata,
+            schema_b_schemata,
+        )?;
+        compatibility &= SchemaCompatibility::can_read_with_schemata(
+            schema_b,
+            schema_a,
+            schema_b_schemata,
+            schema_a_schemata,
+        )?;
+        Ok(compatibility)
     }
 }
 
@@ -127,15 +158,22 @@ impl BitAndAssign for Compatibility {
     }
 }
 
-struct Checker {
-    recursion: HashMap<(u64, u64), Compatibility>,
+pub(crate) struct Checker<'s, S: Borrow<Schema>> {
+    recursion: HashMap<(usize, usize), Compatibility>,
+    writer_schemata: &'s HashMap<Name, S>,
+    reader_schemata: &'s HashMap<Name, S>,
 }
 
-impl Checker {
+impl<'s, S: Borrow<Schema>> Checker<'s, S> {
     /// Create a new checker, with recursion set to an empty set.
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(
+        writer_schemata: &'s HashMap<Name, S>,
+        reader_schemata: &'s HashMap<Name, S>,
+    ) -> Self {
         Self {
             recursion: HashMap::new(),
+            writer_schemata,
+            reader_schemata,
         }
     }
 
@@ -148,26 +186,26 @@ impl Checker {
         // Hash both reader and writer based on their pointer value. This is a fast way to see if
         // we get the exact same schemas multiple times (because of recursive types)
         let key = (
-            Self::pointer_hash(writers_schema),
-            Self::pointer_hash(readers_schema),
+            Self::ref_to_addr(writers_schema),
+            Self::ref_to_addr(readers_schema),
         );
 
-        // If we already saw this pairing, return the previous value
-        if let Some(c) = self.recursion.get(&key).copied() {
-            Ok(c)
+        // `HashMap::entry` cannot be used as that does a mutable borrow of the map and `inner_full_match_schemas`
+        // does a mutable borrow of `self`.
+        if let Some(compatibility) = self.recursion.get(&key).copied() {
+            // If we already saw this pairing, return the previous value
+            Ok(compatibility)
         } else {
-            let c = self.inner_full_match_schemas(writers_schema, readers_schema)?;
+            let compatibility = self.inner_full_match_schemas(writers_schema, readers_schema)?;
             // Insert the new value
-            self.recursion.insert(key, c);
-            Ok(c)
+            self.recursion.insert(key, compatibility);
+            Ok(compatibility)
         }
     }
 
-    /// Hash a schema based only on its pointer value.
-    fn pointer_hash(schema: &Schema) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        ptr::hash(schema, &mut hasher);
-        hasher.finish()
+    /// Get the address of the reference.
+    fn ref_to_addr(schema: &Schema) -> usize {
+        (schema as *const Schema).addr()
     }
 
     /// The actual implementation of "`full_match_schemas()`" but without the recursion protection.
@@ -192,14 +230,18 @@ impl Checker {
 
         // Logical types are downgraded to their actual type
         match (writers_schema, readers_schema) {
-            (Schema::Ref { name: w_name }, Schema::Ref { name: r_name }) => {
-                if r_name == w_name {
-                    Ok(Compatibility::Full)
+            (Schema::Ref { name: w_name }, _) => {
+                if let Some(schema) = self.writer_schemata.get(w_name) {
+                    self.inner_full_match_schemas(schema.borrow(), readers_schema)
                 } else {
-                    Err(CompatibilityError::NameMismatch {
-                        writer_name: w_name.fullname(None),
-                        reader_name: r_name.fullname(None),
-                    })
+                    Err(CompatibilityError::SchemaResolutionError(w_name.clone()))
+                }
+            }
+            (_, Schema::Ref { name: r_name }) => {
+                if let Some(schema) = self.reader_schemata.get(r_name) {
+                    self.inner_full_match_schemas(writers_schema, schema.borrow())
+                } else {
+                    Err(CompatibilityError::SchemaResolutionError(r_name.clone()))
                 }
             }
             (Schema::Union(writer), Schema::Union(reader)) => {
@@ -1656,7 +1698,11 @@ mod tests {
         ];
 
         let schemas = Schema::parse_list(schema_strs).unwrap();
-        SchemaCompatibility::can_read(&schemas[1], &schemas[1])?;
+        let names: HashMap<_, _> = schemas
+            .iter()
+            .filter_map(|s| s.name().map(|n| (n.clone(), s)))
+            .collect();
+        SchemaCompatibility::can_read_with_schemata(&schemas[1], &schemas[1], &names, &names)?;
 
         Ok(())
     }

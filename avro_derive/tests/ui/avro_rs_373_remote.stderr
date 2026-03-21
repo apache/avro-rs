@@ -1,4 +1,4 @@
-error: AvroSchema derive does not support the Serde `remote` attribute
+error: AvroSchema: `#[serde(remote = "..")]` is not supported
   --> tests/ui/avro_rs_373_remote.rs:27:1
    |
 27 | / #[serde(remote = "Foo")]

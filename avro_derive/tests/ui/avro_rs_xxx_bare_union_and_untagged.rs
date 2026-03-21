@@ -18,12 +18,24 @@
 use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
-#[serde(rename_all_fields = "UPPERCASE")]
-enum Foo {
-    Bar {
-        a: String,
-        b: i32,
-    }
+#[avro(repr = "bare_union")]
+enum A {
+    A
+}
+
+#[derive(AvroSchema)]
+#[avro(repr = "bare_union")]
+#[serde(untagged)]
+enum B {
+    A,
+    B,
+}
+
+#[derive(AvroSchema)]
+#[avro(repr = "bare_union")]
+#[serde(untagged)]
+enum C {
+    A(),
 }
 
 pub fn main() {}

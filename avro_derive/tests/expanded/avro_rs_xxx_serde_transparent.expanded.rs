@@ -1,5 +1,4 @@
 use apache_avro::AvroSchema;
-#[avro(namespace = "namespace.testing")]
 struct A {
     a: i32,
     b: String,
@@ -12,10 +11,10 @@ impl ::apache_avro::AvroSchemaComponent for A {
     ) -> ::apache_avro::schema::Schema {
         {
             let name = ::apache_avro::schema::Name::new_with_enclosing_namespace(
-                    "namespace.testing.A",
+                    "A",
                     enclosing_namespace,
                 )
-                .expect("Unable to parse schema name namespace.testing.A");
+                .expect("Unable to parse schema name A");
             if named_schemas.contains(&name) {
                 ::apache_avro::schema::Schema::Ref {
                     name,
@@ -142,6 +141,60 @@ impl ::apache_avro::AvroSchemaComponent for A {
                 );
             fields
         })
+    }
+    fn field_default() -> ::std::option::Option<::serde_json::Value> {
+        ::std::option::Option::None
+    }
+}
+#[serde(transparent)]
+struct B {
+    a: A,
+}
+#[automatically_derived]
+impl ::apache_avro::AvroSchemaComponent for B {
+    fn get_schema_in_ctxt(
+        named_schemas: &mut ::std::collections::HashSet<::apache_avro::schema::Name>,
+        enclosing_namespace: ::apache_avro::schema::NamespaceRef,
+    ) -> ::apache_avro::schema::Schema {
+        <A as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
+            named_schemas,
+            enclosing_namespace,
+        )
+    }
+    fn get_record_fields_in_ctxt(
+        named_schemas: &mut ::std::collections::HashSet<::apache_avro::schema::Name>,
+        enclosing_namespace: ::apache_avro::schema::NamespaceRef,
+    ) -> ::std::option::Option<::std::vec::Vec<::apache_avro::schema::RecordField>> {
+        <A as ::apache_avro::AvroSchemaComponent>::get_record_fields_in_ctxt(
+            named_schemas,
+            enclosing_namespace,
+        )
+    }
+    fn field_default() -> ::std::option::Option<::serde_json::Value> {
+        ::std::option::Option::None
+    }
+}
+#[serde(transparent)]
+struct C(A);
+#[automatically_derived]
+impl ::apache_avro::AvroSchemaComponent for C {
+    fn get_schema_in_ctxt(
+        named_schemas: &mut ::std::collections::HashSet<::apache_avro::schema::Name>,
+        enclosing_namespace: ::apache_avro::schema::NamespaceRef,
+    ) -> ::apache_avro::schema::Schema {
+        <A as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
+            named_schemas,
+            enclosing_namespace,
+        )
+    }
+    fn get_record_fields_in_ctxt(
+        named_schemas: &mut ::std::collections::HashSet<::apache_avro::schema::Name>,
+        enclosing_namespace: ::apache_avro::schema::NamespaceRef,
+    ) -> ::std::option::Option<::std::vec::Vec<::apache_avro::schema::RecordField>> {
+        <A as ::apache_avro::AvroSchemaComponent>::get_record_fields_in_ctxt(
+            named_schemas,
+            enclosing_namespace,
+        )
     }
     fn field_default() -> ::std::option::Option<::serde_json::Value> {
         ::std::option::Option::None

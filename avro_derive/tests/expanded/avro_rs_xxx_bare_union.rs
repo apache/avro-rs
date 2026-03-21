@@ -18,10 +18,9 @@
 use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
-#[serde(tag = "bar")]
-enum Foo {
-    One,
-    Two,
+#[serde(untagged)]
+enum Abc {
+    A,
+    B(bool),
+    C(#[avro(doc = "This is an int")] i32, i64),
 }
-
-pub fn main() {}

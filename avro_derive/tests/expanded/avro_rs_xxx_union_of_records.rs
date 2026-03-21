@@ -18,11 +18,17 @@
 use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
-enum NonBasic {
-    A(i32),
-    B,
-    C,
-    D
+#[avro(repr = "union_of_records")]
+enum Abc {
+    A,
+    B(bool),
+    D {},
+    E {
+        is_it_true: bool,
+    },
+    F {
+        #[avro(doc = "This is X")]
+        x: f64,
+        y: f32,
+    },
 }
-
-fn main() {}

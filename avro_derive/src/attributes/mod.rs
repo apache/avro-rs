@@ -15,23 +15,133 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::case::RenameRule;
+use crate::{TypedTokenStream, case::RenameRule};
 use darling::{FromAttributes, FromMeta};
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::Span;
 use quote::quote;
 use syn::{AttrStyle, Attribute, Expr, Ident, Path, spanned::Spanned};
 
 mod avro;
 mod serde;
 
-#[derive(Default)]
+/// What kind of schema to use for an enum.
+#[derive(Debug, PartialEq)]
+pub enum EnumRepr {
+    /// Create a `Schema::Enum`, only works for plain enums.
+    Enum,
+    /// Untagged
+    BareUnion,
+    /// Externally tagged
+    UnionOfRecords,
+    /// Adjacently tagged (`#[serde(tag = "type", content = "value")]`)
+    RecordTagContent { tag: String, content: String },
+    /// Internally tagged (`#[serde(tag = "type")]`)
+    RecordInternallyTagged { tag: String },
+}
+
+impl EnumRepr {
+    fn from_avro_and_serde(
+        avro: Option<avro::EnumRepr>,
+        tag: Option<String>,
+        content: Option<String>,
+        untagged: bool,
+        span: Span,
+    ) -> Result<Option<Self>, Vec<syn::Error>> {
+        let mut errors = Vec::new();
+
+        #[expect(clippy::manual_map, reason = "Intent is clearer this way")]
+        let repr = if let Some(repr) = avro {
+            match repr {
+                avro::EnumRepr::Enum => {
+                    if tag.is_some() || content.is_some() || untagged {
+                        errors.push(syn::Error::new(
+                            span,
+                            r#"AvroSchema: `#[avro(repr = "enum")]` is incompatible with `#[serde(tag = "..")]`, `#[serde(content = "..")]`, and `#[serde(untagged)]`"#,
+                        ));
+                        None
+                    } else {
+                        Some(EnumRepr::Enum)
+                    }
+                }
+                avro::EnumRepr::BareUnion => {
+                    if tag.is_some() || content.is_some() {
+                        errors.push(syn::Error::new(
+                            span,
+                            r#"AvroSchema: `#[avro(repr = "bare_union")]` is incompatible with `#[serde(tag = "..")]` and `#[serde(content = "..")]`"#,
+                        ));
+                        None
+                    } else {
+                        Some(EnumRepr::BareUnion)
+                    }
+                }
+                avro::EnumRepr::UnionOfRecords => {
+                    if tag.is_some() || content.is_some() || untagged {
+                        errors.push(syn::Error::new(
+                            span,
+                            r#"AvroSchema: `#[avro(repr = "union_of_records")]` is incompatible with `#[serde(tag = "..")]`, `#[serde(content = "..")]`, and `#[serde(untagged)]`"#,
+                        ));
+                        None
+                    } else {
+                        Some(EnumRepr::UnionOfRecords)
+                    }
+                }
+                avro::EnumRepr::RecordTagContent => {
+                    if let Some(tag) = tag
+                        && let Some(content) = content
+                    {
+                        Some(EnumRepr::RecordTagContent { tag, content })
+                    } else {
+                        errors.push(syn::Error::new(
+                            span,
+                            r#"AvroSchema: `#[avro(repr = "record_tag_content")]` requires `#[serde(tag = "..", content = "..")]`"#,
+                        ));
+                        None
+                    }
+                }
+                avro::EnumRepr::RecordInternallyTagged => {
+                    if let Some(tag) = tag
+                        && content.is_none()
+                    {
+                        Some(EnumRepr::RecordInternallyTagged { tag })
+                    } else {
+                        errors.push(syn::Error::new(
+                            span,
+                            r#"AvroSchema: `#[avro(repr = "record_internally_tagged")]` requires `#[serde(tag = "..")]` and is incompatible with `#[serde(content = "..")]`"#,
+                        ));
+                        None
+                    }
+                }
+            }
+        } else if let Some(content) = content
+            && let Some(tag) = tag
+        {
+            Some(EnumRepr::RecordTagContent { tag, content })
+        } else if untagged {
+            Some(EnumRepr::BareUnion)
+        } else if let Some(tag) = tag {
+            Some(EnumRepr::RecordInternallyTagged { tag })
+        } else {
+            None
+        };
+
+        if errors.is_empty() {
+            Ok(repr)
+        } else {
+            Err(errors)
+        }
+    }
+}
+
 pub struct NamedTypeOptions {
     pub name: String,
     pub doc: Option<String>,
     pub aliases: Vec<String>,
     pub rename_all: RenameRule,
+    pub rename_all_fields: RenameRule,
     pub transparent: bool,
-    pub default: TokenStream,
+    pub default: TypedTokenStream<Option<serde_json::Value>>,
+    pub repr: Option<EnumRepr>,
+    pub with: Option<Path>,
 }
 
 impl NamedTypeOptions {
@@ -52,27 +162,34 @@ impl NamedTypeOptions {
         let mut errors = Vec::new();
 
         // Check for any Serde attributes that are hard errors
-        if serde.tag.is_some()
-            || serde.content.is_some()
-            || serde.untagged
-            || serde.variant_identifier
-            || serde.field_identifier
-        {
+        if serde.variant_identifier || serde.field_identifier {
             errors.push(syn::Error::new(
                 span,
-                "AvroSchema derive does not support changing the tagging Serde generates (`tag`, `content`, `untagged`, `variant_identifier`, `field_identifier`)",
+                r#"AvroSchema: `#[serde(variant_identifier)]` and `#[serde(field_identifier)]` are not supported"#,
             ));
         }
         if serde.remote.is_some() {
             errors.push(syn::Error::new(
                 span,
-                "AvroSchema derive does not support the Serde `remote` attribute",
+                r#"AvroSchema: `#[serde(remote = "..")]` is not supported"#,
             ));
         }
         if serde.rename_all.deserialize != serde.rename_all.serialize {
             errors.push(syn::Error::new(
                 span,
-                r#"AvroSchema derive does not support different rename rules for serializing and deserializing (`rename_all(serialize = "..", deserialize = "..")`)"#
+                r#"AvroSchema: rename rules for serializing and deserializing must match (`rename_all(serialize = "..", deserialize = "..")`)"#
+            ));
+        }
+        if serde.rename_all_fields.deserialize != serde.rename_all_fields.serialize {
+            errors.push(syn::Error::new(
+                span,
+                r#"AvroSchema: rename rules for serializing and deserializing must match (`rename_all_fields(serialize = "..", deserialize = "..")`)"#
+            ));
+        }
+        if serde.from != serde.into && serde.try_from != serde.into {
+            errors.push(syn::Error::new(
+                span,
+                r#"AvroSchema: `#[serde({try_,}from = "..")]` must match `#[serde(into = "..")]`"#,
             ));
         }
 
@@ -80,13 +197,13 @@ impl NamedTypeOptions {
         if avro.name.is_some() && avro.name != serde.rename {
             errors.push(syn::Error::new(
                 span,
-                r#"#[avro(name = "..")] must match #[serde(rename = "..")], it's also deprecated. Please use only `#[serde(rename = "..")]`"#,
+                r#"AvroSchema: #[avro(name = "..")] must match #[serde(rename = "..")], it's also deprecated. Please use only `#[serde(rename = "..")]`"#,
             ));
         }
         if avro.rename_all != RenameRule::None && serde.rename_all.serialize != avro.rename_all {
             errors.push(syn::Error::new(
                 span,
-                r#"#[avro(rename_all = "..")] must match #[serde(rename_all = "..")], it's also deprecated. Please use only `#[serde(rename_all = "..")]`"#,
+                r#"AvroSchema: #[avro(rename_all = "..")] must match #[serde(rename_all = "..")], it's also deprecated. Please use only `#[serde(rename_all = "..")]`"#,
             ));
         }
         if serde.transparent
@@ -97,13 +214,80 @@ impl NamedTypeOptions {
                 || !avro.alias.is_empty()
                 || avro.rename_all != RenameRule::None
                 || serde.rename_all.serialize != RenameRule::None
-                || serde.rename_all.deserialize != RenameRule::None)
+                || serde.rename_all.deserialize != RenameRule::None
+                || serde.untagged
+                || serde.tag.is_some()
+                || serde.content.is_some()
+                || serde.into.is_some()
+                || serde.from.is_some()
+                || serde.try_from.is_some())
         {
             errors.push(syn::Error::new(
                 span,
-                "AvroSchema: #[serde(transparent)] is incompatible with all other attributes",
+                "AvroSchema: `#[serde(transparent)]` is incompatible with all other attributes",
             ));
         }
+        if serde.into.is_some()
+            && (serde.rename.is_some()
+                || avro.name.is_some()
+                || avro.namespace.is_some()
+                || avro.doc.is_some()
+                || !avro.alias.is_empty()
+                || avro.rename_all != RenameRule::None
+                || serde.rename_all.serialize != RenameRule::None
+                || serde.rename_all.deserialize != RenameRule::None
+                || serde.untagged
+                || serde.tag.is_some()
+                || serde.content.is_some())
+        {
+            errors.push(syn::Error::new(
+                span,
+                r#"AvroSchema: `#[serde({try_,}from = ".."", into = "..")]` are incompatible with all other attributes"#,
+            ));
+        }
+
+        let repr = match EnumRepr::from_avro_and_serde(
+            avro.repr,
+            serde.tag,
+            serde.content,
+            serde.untagged,
+            span,
+        ) {
+            Ok(repr) => repr,
+            Err(err) => {
+                errors.extend(err);
+                None
+            }
+        };
+
+        let default = match avro.default {
+            None => TypedTokenStream::none(),
+            Some(default_value) => {
+                if let Err(err) = serde_json::from_str::<serde_json::Value>(&default_value[..]) {
+                    errors.push(syn::Error::new(
+                        ident.span(),
+                        format!("Invalid Avro `default` JSON: \n{err}"),
+                    ));
+                    TypedTokenStream::none()
+                } else {
+                    TypedTokenStream::<Option<serde_json::Value>>::new(quote! {
+                        ::std::option::Option::Some(serde_json::from_str(#default_value).expect("Unreachable! This was checked at compile time"))
+                    })
+                }
+            }
+        };
+
+        let with = match serde.into.as_deref().map(Path::from_string) {
+            Some(Ok(path)) => Some(path),
+            Some(Err(err)) => {
+                errors.push(syn::Error::new(
+                    span,
+                    format!(r#"AvroSchema: Expected a path for `#[serde(into = "..")]`: {err:?}"#),
+                ));
+                None
+            }
+            None => None,
+        };
 
         if !errors.is_empty() {
             return Err(errors);
@@ -118,35 +302,23 @@ impl NamedTypeOptions {
 
         let doc = avro.doc.or_else(|| extract_rustdoc(attributes));
 
-        let default = match avro.default {
-            None => quote! { None },
-            Some(default_value) => {
-                let _: serde_json::Value =
-                    serde_json::from_str(&default_value[..]).map_err(|e| {
-                        vec![syn::Error::new(
-                            ident.span(),
-                            format!("Invalid Avro `default` JSON: \n{e}"),
-                        )]
-                    })?;
-                quote! {
-                    Some(::serde_json::from_str(#default_value).expect(format!("Invalid JSON: {:?}", #default_value).as_str()))
-                }
-            }
-        };
-
         Ok(Self {
             name: full_schema_name,
             doc,
             aliases: avro.alias,
             rename_all: serde.rename_all.serialize,
+            rename_all_fields: serde.rename_all_fields.serialize,
             transparent: serde.transparent,
             default,
+            repr,
+            with,
         })
     }
 }
 
 pub struct VariantOptions {
     pub rename: Option<String>,
+    pub rename_all: RenameRule,
 }
 
 impl VariantOptions {
@@ -165,7 +337,13 @@ impl VariantOptions {
         if serde.other || serde.untagged {
             errors.push(syn::Error::new(
                 span,
-                "AvroSchema derive does not support changing the tagging Serde generates (`other`, `untagged`)",
+                r#"AvroSchema: `#[serde(other)]` and `#[serde(untagged)]` are not supported"#,
+            ));
+        }
+        if serde.rename_all.deserialize != serde.rename_all.serialize {
+            errors.push(syn::Error::new(
+                span,
+                r#"AvroSchema: rename rules for serializing and deserializing must match (`rename_all(serialize = "..", deserialize = "..")`)"#
             ));
         }
 
@@ -173,7 +351,7 @@ impl VariantOptions {
         if avro.rename.is_some() && serde.rename != avro.rename {
             errors.push(syn::Error::new(
                 span,
-                r#"`#[avro(rename = "..")]` must match `#[serde(rename = "..")]`, it's also deprecated. Please use only `#[serde(rename = "..")]`"#
+                r#"AvroSchema: `#[avro(rename = "..")]` must match `#[serde(rename = "..")]`, it's also deprecated. Please use only `#[serde(rename = "..")]`"#
             ));
         }
 
@@ -183,6 +361,7 @@ impl VariantOptions {
 
         Ok(Self {
             rename: serde.rename,
+            rename_all: serde.rename_all.serialize,
         })
     }
 }
@@ -221,7 +400,7 @@ impl With {
                 } else {
                     Err(syn::Error::new(
                         span,
-                        r#"`#[avro(with)]` requires `#[serde(with = "some_module")]` or provide a function to call `#[avro(with = some_fn)]`"#,
+                        r#"AvroSchema: `#[avro(with)]` requires `#[serde(with = "some_module")]` or provide a function to call `#[avro(with = some_fn)]`"#,
                     ))
                 }
             }
@@ -229,6 +408,7 @@ impl With {
         }
     }
 }
+
 /// How to get the default value for a value.
 #[derive(Debug, PartialEq, Default)]
 pub enum FieldDefault {
@@ -239,6 +419,8 @@ pub enum FieldDefault {
     Disabled,
     /// Use this JSON value.
     Value(String),
+    /// Use `module::get_schema_in_ctxt` where the module is defined by Serde's `with` attribute.
+    Serde(Path),
 }
 
 impl FromMeta for FieldDefault {
@@ -288,7 +470,7 @@ impl FieldOptions {
         if serde.getter.is_some() {
             errors.push(syn::Error::new(
                 span,
-                "AvroSchema derive does not support the Serde `getter` attribute",
+                r#"AvroSchema: `#[serde(getter = "..")]` is not supported"#,
             ));
         }
 
@@ -296,26 +478,26 @@ impl FieldOptions {
         if avro.skip && !(serde.skip || (serde.skip_serializing && serde.skip_deserializing)) {
             errors.push(syn::Error::new(
                 span,
-                "`#[avro(skip)]` requires `#[serde(skip)]`, it's also deprecated. Please use only `#[serde(skip)]`"
+                "AvroSchema: `#[avro(skip)]` requires `#[serde(skip)]`, it's also deprecated. Please use only `#[serde(skip)]`"
             ));
         }
         if avro.flatten && !serde.flatten {
             errors.push(syn::Error::new(
                 span,
-                "`#[avro(flatten)]` requires `#[serde(flatten)]`, it's also deprecated. Please use only `#[serde(flatten)]`"
+                "AvroSchema: `#[avro(flatten)]` requires `#[serde(flatten)]`, it's also deprecated. Please use only `#[serde(flatten)]`"
             ));
         }
         // TODO: rename and alias checking can be relaxed with a more complex check, would require the field name
         if avro.rename.is_some() && serde.rename != avro.rename {
             errors.push(syn::Error::new(
                 span,
-                r#"`#[avro(rename = "..")]` must match `#[serde(rename = "..")]`, it's also deprecated. Please use only `#[serde(rename = "..")]`"#
+                r#"AvroSchema: `#[avro(rename = "..")]` must match `#[serde(rename = "..")]`, it's also deprecated. Please use only `#[serde(rename = "..")]`"#
             ));
         }
         if !avro.alias.is_empty() && serde.alias != avro.alias {
             errors.push(syn::Error::new(
                 span,
-                r#"`#[avro(alias = "..")]` must match `#[serde(alias = "..")]`, it's also deprecated. Please use only `#[serde(alias = "..")]`"#
+                r#"AvroSchema: `#[avro(alias = "..")]` must match `#[serde(alias = "..")]`, it's also deprecated. Please use only `#[serde(alias = "..")]`"#
             ));
         }
         if ((serde.skip_serializing && !serde.skip_deserializing)
@@ -324,7 +506,7 @@ impl FieldOptions {
         {
             errors.push(syn::Error::new(
                 span,
-                "`#[serde(skip_serializing)]` and `#[serde(skip_serializing_if)]` are incompatible with `#[avro(default = false)]`"
+                "AvroSchema: `#[serde(skip_serializing)]` and `#[serde(skip_serializing_if)]` are incompatible with `#[avro(default = false)]`"
             ));
         }
         let with = match With::from_avro_and_serde(&avro.with, &serde.with, span) {
@@ -334,6 +516,14 @@ impl FieldOptions {
                 // This won't actually be used, but it does simplify the code
                 With::Trait
             }
+        };
+
+        let default = if let With::Serde(path) = &with
+            && avro.default == FieldDefault::Trait
+        {
+            FieldDefault::Serde(path.clone())
+        } else {
+            avro.default
         };
 
         if !errors.is_empty() {
@@ -350,13 +540,63 @@ impl FieldOptions {
 
         Ok(Self {
             doc,
-            default: avro.default,
+            default,
             alias: serde.alias,
             rename: serde.rename,
             skip: serde.skip || (serde.skip_serializing && serde.skip_deserializing),
             flatten: serde.flatten,
             with,
         })
+    }
+
+    /// Parse and check the attributes for the anonymous field of newtype variants.
+    ///
+    /// This function is not used by `union_of_records`.
+    pub fn new_for_newtype(attributes: &[Attribute], span: Span) -> Result<Self, Vec<syn::Error>> {
+        let options = Self::new(attributes, span)?;
+        let mut errors = Vec::new();
+        if options.doc.is_some() {
+            errors.push(syn::Error::new(
+                span,
+                r#"AvroSchema: `#[avro(doc = "..")]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")`"#
+            ));
+        }
+        if matches!(options.default, FieldDefault::Value(_)) {
+            errors.push(syn::Error::new(
+                span,
+                r#"AvroSchema: `#[avro(default = "..")]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")`"#
+            ));
+        }
+        if !options.alias.is_empty() {
+            errors.push(syn::Error::new(
+                span,
+                r#"AvroSchema: `#[avro(alias = "..")]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")`"#
+            ));
+        }
+        if options.rename.is_some() {
+            errors.push(syn::Error::new(
+                span,
+                r#"AvroSchema: `#[avro(alias = "..")]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")`"#
+            ));
+        }
+        if options.skip {
+            errors.push(syn::Error::new(
+                span,
+                r#"AvroSchema: `#[avro(skip)]` is not supported for newtype variants"#,
+            ));
+        }
+        if options.flatten {
+            errors.push(syn::Error::new(
+                span,
+                r#"AvroSchema: `#[avro(flatten)]` is not supported for newtype variants"#,
+            ));
+        }
+
+        if !errors.is_empty() {
+            return Err(errors);
+        }
+
+        Ok(options)
     }
 }
 

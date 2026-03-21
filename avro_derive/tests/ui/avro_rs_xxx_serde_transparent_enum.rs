@@ -18,6 +18,9 @@
 use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
-struct B(i32, String);
+#[serde(transparent)]
+enum D {
+    A(A)
+}
 
-fn main() {}
+pub fn main() {}
