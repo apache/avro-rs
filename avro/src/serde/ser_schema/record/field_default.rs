@@ -20,7 +20,7 @@ use serde_json::Value;
 
 use crate::{
     Schema,
-    schema::{SchemaKind, UnionSchema, UuidSchema},
+    schema::{DecimalSchema, InnerDecimalSchema, SchemaKind, UnionSchema, UuidSchema},
     serde::ser_schema::SERIALIZING_SCHEMA_DEFAULT,
 };
 
@@ -53,7 +53,17 @@ impl<'v, 's> SchemaAwareRecordFieldDefault<'v, 's> {
         match (value, schema) {
             (Value::Null, Schema::Null)
             | (Value::Bool(_), Schema::Boolean)
-            | (Value::String(_), Schema::Bytes | Schema::String) => true,
+            | (
+                Value::String(_),
+                Schema::Bytes
+                | Schema::String
+                | Schema::Decimal(DecimalSchema {
+                    inner: InnerDecimalSchema::Bytes,
+                    ..
+                })
+                | Schema::BigDecimal
+                | Schema::Uuid(UuidSchema::Bytes | UuidSchema::String),
+            ) => true,
             (Value::Number(n), Schema::Int | Schema::Date | Schema::TimeMillis) if n.is_i64() => {
                 let long = n.as_i64().unwrap();
                 i32::try_from(long).is_ok()
@@ -69,8 +79,17 @@ impl<'v, 's> SchemaAwareRecordFieldDefault<'v, 's> {
                 | Schema::LocalTimestampMicros
                 | Schema::LocalTimestampNanos,
             ) if n.is_i64() => true,
-            (Value::Number(n), Schema::Float | Schema::Double) if n.is_f64() => true,
-            (Value::String(s), Schema::Fixed(fixed)) => s.len() == fixed.size,
+            (Value::Number(n), Schema::Float | Schema::Double) if n.as_f64().is_some() => true,
+            (
+                Value::String(s),
+                Schema::Fixed(fixed)
+                | Schema::Decimal(DecimalSchema {
+                    inner: InnerDecimalSchema::Fixed(fixed),
+                    ..
+                })
+                | Schema::Uuid(UuidSchema::Fixed(fixed))
+                | Schema::Duration(fixed),
+            ) => s.len() == fixed.size,
             (Value::String(s), Schema::Enum(enum_schema)) => enum_schema.symbols.contains(s),
             (Value::Object(o), Schema::Record(record)) => record.fields.iter().all(|field| {
                 if let Some(value) = o.get(&field.name) {
@@ -123,13 +142,11 @@ impl<'v, 's> Serialize for SchemaAwareRecordFieldDefault<'v, 's> {
                 let long = n.as_i64().unwrap();
                 serializer.serialize_i64(long)
             }
-            (Value::Number(n), Schema::Float) if n.is_f64() => {
-                let float = n.as_f64().unwrap();
-                serializer.serialize_f32(float as f32)
+            (Value::Number(n), Schema::Float) if n.as_f64().is_some() => {
+                serializer.serialize_f32(n.as_f64().unwrap() as f32)
             }
-            (Value::Number(n), Schema::Double) if n.is_f64() => {
-                let double = n.as_f64().unwrap();
-                serializer.serialize_f64(double)
+            (Value::Number(n), Schema::Double) if n.as_f64().is_some() => {
+                serializer.serialize_f64(n.as_f64().unwrap())
             }
             (
                 Value::String(s),
@@ -163,11 +180,12 @@ impl<'v, 's> Serialize for SchemaAwareRecordFieldDefault<'v, 's> {
                 )
             }
             // This abuses the support for flattened fields, which are also serialized as a map.
-            (Value::Object(o), Schema::Record(record)) => serializer.collect_map(
-                o.iter()
-                    .enumerate()
-                    .map(|(i, (k, v))| (k, Self::new(v, &record.fields[i].schema))),
-            ),
+            (Value::Object(o), Schema::Record(record)) => {
+                serializer.collect_map(record.fields.iter().filter_map(|field| {
+                    o.get(&field.name)
+                        .map(|value| (&field.name, Self::new(value, &field.schema)))
+                }))
+            }
             (Value::Object(o), Schema::Map(map)) => {
                 serializer.collect_map(o.iter().map(|(k, v)| (k, Self::new(v, &map.types))))
             }

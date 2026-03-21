@@ -157,7 +157,9 @@ pub enum Details {
     #[error("Union index {index} out of bounds: {num_variants}")]
     GetUnionVariant { index: i64, num_variants: usize },
 
-    #[error("Enum symbol index out of bounds: {num_variants}")]
+    #[error(
+        "Enum symbol index out of bounds: got {index} but there are only {num_variants} variants"
+    )]
     EnumSymbolIndex { index: usize, num_variants: usize },
 
     #[error("Enum symbol not found {0}")]
@@ -553,7 +555,7 @@ pub enum Details {
     #[error("Decoded integer out of range for i32: {1}: {0}")]
     ZagI32(#[source] std::num::TryFromIntError, i64),
 
-    #[error("unable to read block")]
+    #[error("Did not read any bytes, block is corrupt")]
     ReadBlock,
 
     #[error("Failed to serialize value into Avro value: {0}")]
@@ -661,6 +663,14 @@ pub enum Details {
         "The implementation of `SchemaNameValidator` is incorrect! It returned an out-of-bounds index or provided a regex that did not capture a group named `name`"
     )]
     InvalidSchemaNameValidatorImplementation,
+
+    #[error(
+        "Not all tuple fields were serialized, expected to serialize element at position {position} of a {total_elements}-tuple but `SerializeTuple::end()` was called"
+    )]
+    SerializeTupleMissingElements {
+        position: usize,
+        total_elements: usize,
+    },
 }
 
 #[derive(thiserror::Error, PartialEq)]

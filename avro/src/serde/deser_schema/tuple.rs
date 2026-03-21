@@ -121,6 +121,6 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> SeqAccess<'de>
     }
 
     fn size_hint(&self) -> Option<usize> {
-        todo!()
+        Some(self.schema.fields.len() - self.current_field)
     }
 }

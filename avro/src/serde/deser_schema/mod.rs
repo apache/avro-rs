@@ -422,7 +422,7 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
             Schema::Fixed(fixed) if fixed.size == 16 && fixed.name.name() == "u128" => {
                 visitor.visit_u128(u128::from_le_bytes(self.read_array()?))
             }
-            Schema::Union(union) => self.with_union(union)?.deserialize_i128(visitor),
+            Schema::Union(union) => self.with_union(union)?.deserialize_u128(visitor),
             _ => Err(self.error("u128", r#"Expected Schema::Fixed(name: "u128", size: 16)"#)),
         }
     }
@@ -743,17 +743,17 @@ mod tests {
     use std::fmt::Debug;
 
     use apache_avro_test_helper::TestResult;
+    use bigdecimal::BigDecimal;
     use num_bigint::BigInt;
     use pretty_assertions::assert_eq;
-    use serde::{
-        Deserialize, Serialize,
-        de::{DeserializeOwned, Visitor},
-    };
+    use serde::{Deserialize, Serialize, de::DeserializeOwned};
+    use serde_bytes::ByteBuf;
     use uuid::Uuid;
 
     use super::*;
     use crate::{
-        AvroResult, Decimal, reader::datum::GenericDatumReader, writer::datum::GenericDatumWriter,
+        AvroResult, AvroSchema, Decimal, reader::datum::GenericDatumReader,
+        writer::datum::GenericDatumWriter,
     };
 
     #[track_caller]
@@ -855,7 +855,10 @@ mod tests {
             .read_deser::<AccessLog>(&mut &data_with_unknown_index[..])
             .unwrap_err();
 
-        assert_eq!(error.to_string(), "Enum symbol index out of bounds: 3");
+        assert_eq!(
+            error.to_string(),
+            "Enum symbol index out of bounds: got 3 but there are only 3 variants"
+        );
 
         Ok(())
     }
@@ -1479,9 +1482,166 @@ mod tests {
     }
 
     #[test]
+    fn avro_rs_512_bool() -> TestResult {
+        let schema = Schema::Boolean;
+        assert_roundtrip(true, &schema, Vec::new())?;
+        assert_roundtrip(false, &Schema::union(vec![schema.clone()])?, Vec::new())?;
+        assert_roundtrip(true, &schema, Vec::new())?;
+        assert_roundtrip(false, &Schema::union(vec![schema])?, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_i8() -> TestResult {
+        let schema = Schema::Int;
+        assert_roundtrip(1i8, &schema, Vec::new())?;
+        assert_roundtrip(1i8, &Schema::union(vec![schema])?, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_i16() -> TestResult {
+        let schema = Schema::Int;
+        assert_roundtrip(1i16, &schema, Vec::new())?;
+        assert_roundtrip(1i16, &Schema::union(vec![schema])?, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_i32() -> TestResult {
+        let schema = Schema::Int;
+        assert_roundtrip(1i32, &schema, Vec::new())?;
+        assert_roundtrip(1i32, &Schema::union(vec![schema])?, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_i64() -> TestResult {
+        let schema = Schema::Long;
+        assert_roundtrip(1i64, &schema, Vec::new())?;
+        assert_roundtrip(1i64, &Schema::union(vec![schema])?, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_i128() -> TestResult {
+        let schema = i128::get_schema();
+        assert_roundtrip(1i128, &schema, Vec::new())?;
+        assert_roundtrip(1i128, &Schema::union(vec![schema])?, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_u8() -> TestResult {
+        let schema = Schema::Int;
+        assert_roundtrip(1u8, &schema, Vec::new())?;
+        assert_roundtrip(1u8, &Schema::union(vec![schema])?, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_u16() -> TestResult {
+        let schema = Schema::Int;
+        assert_roundtrip(1u16, &schema, Vec::new())?;
+        assert_roundtrip(1u16, &Schema::union(vec![schema])?, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_u32() -> TestResult {
+        let schema = Schema::Long;
+        assert_roundtrip(1u32, &schema, Vec::new())?;
+        assert_roundtrip(1u32, &Schema::union(vec![schema])?, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_u64() -> TestResult {
+        let schema = u64::get_schema();
+        assert_roundtrip(1u64, &schema, Vec::new())?;
+        assert_roundtrip(1u64, &Schema::union(vec![schema])?, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_u128() -> TestResult {
+        let schema = u128::get_schema();
+        assert_roundtrip(1u128, &schema, Vec::new())?;
+        assert_roundtrip(1u128, &Schema::union(vec![schema])?, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_f32() -> TestResult {
+        let schema = Schema::Float;
+        assert_roundtrip(1.0f32, &schema, Vec::new())?;
+        assert_roundtrip(1.0f32, &Schema::union(vec![schema])?, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_f64() -> TestResult {
+        let schema = Schema::Double;
+        assert_roundtrip(1.0f64, &schema, Vec::new())?;
+        assert_roundtrip(1.0f64, &Schema::union(vec![schema])?, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_string() -> TestResult {
+        let schema = Schema::String;
+        assert_roundtrip(String::from("avro"), &schema, Vec::new())?;
+        assert_roundtrip(
+            String::from("avro"),
+            &Schema::union(vec![schema])?,
+            Vec::new(),
+        )?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_bytes() -> TestResult {
+        let schema = Schema::Bytes;
+
+        let bytes = ByteBuf::from(vec![b'a', b'v', b'r', b'o']);
+        assert_roundtrip(bytes.clone(), &schema, Vec::new())?;
+        assert_roundtrip(bytes.clone(), &Schema::union(vec![schema])?, Vec::new())?;
+
+        let schema = Schema::fixed("four".parse()?, 4).build();
+        assert_roundtrip(bytes.clone(), &schema, Vec::new())?;
+        assert_roundtrip(bytes.clone(), &Schema::union(vec![schema])?, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_unit() -> TestResult {
+        let schema = Schema::Null;
+        assert_roundtrip((), &schema, Vec::new())?;
+        assert_roundtrip((), &Schema::union(vec![schema])?, Vec::new())?;
+
+        Ok(())
+    }
+
+    #[test]
     fn avro_rs_512_date() -> TestResult {
         let schema = Schema::Date;
         assert_roundtrip(1i32, &schema, Vec::new())?;
+        assert_roundtrip(1i32, &Schema::union(vec![schema])?, Vec::new())?;
 
         Ok(())
     }
@@ -1490,6 +1650,7 @@ mod tests {
     fn avro_rs_512_time_millis() -> TestResult {
         let schema = Schema::TimeMillis;
         assert_roundtrip(1i32, &schema, Vec::new())?;
+        assert_roundtrip(1i32, &Schema::union(vec![schema])?, Vec::new())?;
 
         Ok(())
     }
@@ -1498,6 +1659,7 @@ mod tests {
     fn avro_rs_512_time_micros() -> TestResult {
         let schema = Schema::TimeMicros;
         assert_roundtrip(1i64, &schema, Vec::new())?;
+        assert_roundtrip(1i64, &Schema::union(vec![schema])?, Vec::new())?;
 
         Ok(())
     }
@@ -1506,6 +1668,7 @@ mod tests {
     fn avro_rs_512_timestamp_millis() -> TestResult {
         let schema = Schema::TimestampMillis;
         assert_roundtrip(1i64, &schema, Vec::new())?;
+        assert_roundtrip(1i64, &Schema::union(vec![schema])?, Vec::new())?;
 
         Ok(())
     }
@@ -1514,6 +1677,7 @@ mod tests {
     fn avro_rs_512_timestamp_micros() -> TestResult {
         let schema = Schema::TimestampMicros;
         assert_roundtrip(1i64, &schema, Vec::new())?;
+        assert_roundtrip(1i64, &Schema::union(vec![schema])?, Vec::new())?;
 
         Ok(())
     }
@@ -1522,6 +1686,7 @@ mod tests {
     fn avro_3916_timestamp_nanos() -> TestResult {
         let schema = Schema::TimestampNanos;
         assert_roundtrip(1i64, &schema, Vec::new())?;
+        assert_roundtrip(1i64, &Schema::union(vec![schema])?, Vec::new())?;
 
         Ok(())
     }
@@ -1530,6 +1695,7 @@ mod tests {
     fn avro_3853_local_timestamp_millis() -> TestResult {
         let schema = Schema::LocalTimestampMillis;
         assert_roundtrip(1i64, &schema, Vec::new())?;
+        assert_roundtrip(1i64, &Schema::union(vec![schema])?, Vec::new())?;
 
         Ok(())
     }
@@ -1538,6 +1704,7 @@ mod tests {
     fn avro_3853_local_timestamp_micros() -> TestResult {
         let schema = Schema::LocalTimestampMicros;
         assert_roundtrip(1i64, &schema, Vec::new())?;
+        assert_roundtrip(1i64, &Schema::union(vec![schema])?, Vec::new())?;
 
         Ok(())
     }
@@ -1546,6 +1713,7 @@ mod tests {
     fn avro_3916_local_timestamp_nanos() -> TestResult {
         let schema = Schema::LocalTimestampNanos;
         assert_roundtrip(1i64, &schema, Vec::new())?;
+        assert_roundtrip(1i64, &Schema::union(vec![schema])?, Vec::new())?;
 
         Ok(())
     }
@@ -1566,6 +1734,7 @@ mod tests {
         let uuid = Uuid::parse_str("9ec535ff-3e2a-45bd-91d3-0a01321b5a49")?;
 
         assert_roundtrip(uuid, &schema, Vec::new())?;
+        assert_roundtrip(uuid, &Schema::union(vec![schema])?, Vec::new())?;
 
         let buf = GenericDatumWriter::builder(&alt_schema)
             .human_readable(true)
@@ -1582,33 +1751,6 @@ mod tests {
         Ok(())
     }
 
-    #[derive(Debug)]
-    struct Bytes(Vec<u8>);
-
-    impl<'de> Deserialize<'de> for Bytes {
-        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de>,
-        {
-            struct BytesVisitor;
-            impl Visitor<'_> for BytesVisitor {
-                type Value = Bytes;
-
-                fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                    formatter.write_str("a byte array")
-                }
-
-                fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
-                where
-                    E: serde::de::Error,
-                {
-                    Ok(Bytes(v.to_vec()))
-                }
-            }
-            deserializer.deserialize_bytes(BytesVisitor)
-        }
-    }
-
     #[test]
     fn avro_3892_deserialize_bytes_from_decimal() -> TestResult {
         let schema = Schema::parse_str(
@@ -1619,7 +1761,7 @@ mod tests {
             "scale": 2
         }"#,
         )?;
-        let schema_union = Schema::parse_str(
+        let schema_option = Schema::parse_str(
             r#"[
             "null",
             {
@@ -1633,25 +1775,11 @@ mod tests {
 
         let expected_bytes = BigInt::from(123456789).to_signed_bytes_be();
         let value = Decimal::from(&expected_bytes);
-        let buf = GenericDatumWriter::builder(&schema)
-            .build()?
-            .write_ser_to_vec(&value)?;
 
-        let decoded_value: Bytes = GenericDatumReader::builder(&schema)
-            .build()?
-            .read_deser(&mut &buf[..])?;
-
-        assert_eq!(decoded_value.0, expected_bytes);
-
-        let buf = GenericDatumWriter::builder(&schema_union)
-            .build()?
-            .write_ser_to_vec(&Some(value))?;
-
-        let decoded_value: Option<Bytes> = GenericDatumReader::builder(&schema_union)
-            .build()?
-            .read_deser(&mut &buf[..])?;
-
-        assert_eq!(decoded_value.unwrap().0, expected_bytes);
+        assert_roundtrip(value.clone(), &schema, Vec::new())?;
+        assert_roundtrip(value.clone(), &Schema::union(vec![schema])?, Vec::new())?;
+        assert_roundtrip(Some(value), &schema_option, Vec::new())?;
+        assert_roundtrip(None::<BigDecimal>, &schema_option, Vec::new())?;
 
         Ok(())
     }
@@ -1662,6 +1790,8 @@ mod tests {
 
         assert_roundtrip('a', &schema, Vec::new())?;
         assert_roundtrip('👹', &schema, Vec::new())?;
+        assert_roundtrip('a', &Schema::union(vec![schema.clone()])?, Vec::new())?;
+        assert_roundtrip('👹', &Schema::union(vec![schema])?, Vec::new())?;
 
         Ok(())
     }

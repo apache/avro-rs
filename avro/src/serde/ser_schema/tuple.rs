@@ -153,8 +153,15 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> SerializeTuple for ManyTupleSerializer
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        assert_eq!(self.field_position, self.schema.fields.len());
-        Ok(self.bytes_written)
+        if self.field_position != self.schema.fields.len() {
+            Err(Details::SerializeTupleMissingElements {
+                position: self.field_position,
+                total_elements: self.schema.fields.len(),
+            }
+            .into())
+        } else {
+            Ok(self.bytes_written)
+        }
     }
 }
 

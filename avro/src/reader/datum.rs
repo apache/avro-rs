@@ -146,7 +146,8 @@ impl<'s> GenericDatumReader<'s> {
         // `reader` is `impl Read` instead of a generic on the function like T so it's easier to
         // specify the type wanted (`read_deser<String>` vs `read_deser<String, _>`)
         if let Some((_, _)) = &self.reader {
-            todo!("Schema aware deserialisation does not resolve schemas yet");
+            // TODO: Implement SchemaAwareResolvingDeserializer
+            panic!("Schema aware deserialisation does not resolve schemas yet");
         } else {
             T::deserialize(SchemaAwareDeserializer::new(
                 reader,

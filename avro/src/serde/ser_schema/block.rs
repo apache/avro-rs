@@ -315,7 +315,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> SerializeSeq for BufferedBlockSerializ
         T: ?Sized + Serialize,
     {
         value.serialize(SchemaAwareSerializer::new(
-            self.writer,
+            &mut self.buffer,
             self.schema,
             self.config,
         )?)?;
@@ -341,7 +341,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> SerializeMap for BufferedBlockSerializ
         T: ?Sized + Serialize,
     {
         key.serialize(SchemaAwareSerializer::new(
-            self.writer,
+            &mut self.writer,
             &Schema::String,
             self.config,
         )?)?;

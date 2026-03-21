@@ -70,7 +70,7 @@ impl<'a, W: Write> Writer<'a, W> {
         #[builder(default = false)]
         has_header: bool,
         #[builder(default)] user_metadata: HashMap<String, Value>,
-        /// Should [`Serialize`] implementations pick a human readable represenation.
+        /// Should [`Serialize`] implementations pick a human readable representation.
         ///
         /// It is recommended to set this to `false`.
         #[builder(default = is_human_readable())]
