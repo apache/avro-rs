@@ -10,7 +10,7 @@ warning: `#[avro(rename_all = "..")]` is deprecated
    |
    = help: Use `#[serde(rename_all = "..")]` instead
 
-error: #[avro(rename_all = "..")] must match #[serde(rename_all = "..")], it's also deprecated. Please use only `#[serde(rename_all = "..")]`
+error: AvroSchema: #[avro(rename_all = "..")] must match #[serde(rename_all = "..")], it's also deprecated. Please use only `#[serde(rename_all = "..")]`
   --> tests/ui/avro_rs_373_rename_all.rs:21:1
    |
 21 | / #[avro(rename_all = "snake_case")]

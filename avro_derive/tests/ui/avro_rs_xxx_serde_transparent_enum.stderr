@@ -1,0 +1,8 @@
+error: AvroSchema: `#[serde(transparent)]` is only supported on structs
+  --> tests/ui/avro_rs_xxx_serde_transparent_enum.rs:21:1
+   |
+21 | / #[serde(transparent)]
+22 | | enum D {
+23 | |     A(A)
+24 | | }
+   | |_^

@@ -18,6 +18,9 @@
 use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
-struct AbsoluteUnit;
+#[serde(untagged)]
+enum D {
+    A{}
+}
 
-fn main() {}
+pub fn main() {}

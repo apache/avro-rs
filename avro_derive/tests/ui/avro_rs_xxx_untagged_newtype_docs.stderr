@@ -1,0 +1,6 @@
+error: AvroSchema: `#[avro(doc = "..")]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")`
+  --> tests/ui/avro_rs_xxx_untagged_newtype_docs.rs:24:9
+   |
+24 | /         #[avro(doc = "This is a string")]
+25 | |         String
+   | |______________^

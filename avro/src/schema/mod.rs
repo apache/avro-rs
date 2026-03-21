@@ -414,9 +414,9 @@ impl FixedSchema {
 #[derive(Debug, Clone)]
 pub struct DecimalSchema {
     /// The number of digits in the unscaled value
-    pub precision: DecimalMetadata,
+    pub precision: Precision,
     /// The number of digits to the right of the decimal point
-    pub scale: DecimalMetadata,
+    pub scale: Scale,
     /// The inner schema of the decimal (fixed or bytes)
     pub inner: InnerDecimalSchema,
 }
@@ -4926,7 +4926,6 @@ mod tests {
             _ => panic!("Expected ArraySchema. got: {}", &schema1),
         }
         let canonical_form1 = schema1.canonical_form();
-        println!("Canonical Form 1: {}", &canonical_form1);
         let schema2 = Schema::parse_str(&canonical_form1)?;
         let canonical_form2 = schema2.canonical_form();
 

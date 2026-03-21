@@ -10,7 +10,7 @@ warning: `#[avro(name = "...")]` is deprecated.
    |
    = help: Use `#[serde(rename = "...")]` instead.
 
-error: #[avro(name = "..")] must match #[serde(rename = "..")], it's also deprecated. Please use only `#[serde(rename = "..")]`
+error: AvroSchema: #[avro(name = "..")] must match #[serde(rename = "..")], it's also deprecated. Please use only `#[serde(rename = "..")]`
   --> tests/ui/avro_rs_373_name.rs:21:1
    |
 21 | / #[avro(name = "Something")]

@@ -1,0 +1,5 @@
+error: AvroSchema: Struct variants are not supported for untagged structs
+  --> tests/ui/avro_rs_xxx_bare_union_struct_variant.rs:23:6
+   |
+23 |     A{}
+   |      ^^
