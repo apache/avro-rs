@@ -628,27 +628,30 @@ impl AvroSchemaComponent for core::time::Duration {
         } else {
             named_schemas.insert(name.clone());
             Schema::record(name)
-                .fields(vec![
-                    // Secs is an u64
-                    RecordField::builder()
-                        .name("secs")
-                        .schema(u64::get_schema_in_ctxt(named_schemas, enclosing_namespace))
-                        .build(),
-                    // Nanos is an u32
-                    RecordField::builder()
-                        .name("nanos")
-                        .schema(Schema::Long)
-                        .build(),
-                ])
+                .fields(
+                    Self::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)
+                        .expect("Unreachable!"),
+                )
                 .build()
         }
     }
 
     fn get_record_fields_in_ctxt(
-        _: &mut HashSet<Name>,
-        _: NamespaceRef,
+        named_schemas: &mut HashSet<Name>,
+        enclosing_namespace: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
-        None
+        Some(vec![
+            // Secs is an u64
+            RecordField::builder()
+                .name("secs")
+                .schema(u64::get_schema_in_ctxt(named_schemas, enclosing_namespace))
+                .build(),
+            // Nanos is an u32
+            RecordField::builder()
+                .name("nanos")
+                .schema(Schema::Long)
+                .build(),
+        ])
     }
 }
 

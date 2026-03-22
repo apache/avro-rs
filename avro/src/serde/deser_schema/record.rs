@@ -66,6 +66,11 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> MapAccess<'de> for RecordDeseriali
         V: DeserializeSeed<'de>,
     {
         let schema = &self.schema.fields[self.current_field].schema;
+        let schema = if let Schema::Ref { name } = schema {
+            self.config.get_schema(name)?
+        } else {
+            schema
+        };
         let value = if let Schema::Record(record) = schema
             && record.fields.len() == 1
             && record

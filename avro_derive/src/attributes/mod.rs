@@ -318,6 +318,21 @@ impl FieldOptions {
                 r#"`#[avro(alias = "..")]` must match `#[serde(alias = "..")]`, it's also deprecated. Please use only `#[serde(alias = "..")]`"#
             ));
         }
+
+        let with = match With::from_avro_and_serde(&avro.with, serde.with.as_ref(), span) {
+            Ok(with) => with,
+            Err(error) => {
+                errors.push(error);
+                // This won't actually be used, but it does simplify the code
+                With::Trait
+            }
+        };
+        // TODO: Implement a better way to do this (maybe if user specifies `#[avro(with)]` also use that for the default)
+        // Disable getting the field default, if the schema is not retrieved from the field type
+        if with != With::Trait && avro.default == FieldDefault::Trait {
+            avro.default = FieldDefault::Disabled;
+        }
+
         if ((serde.skip_serializing && !serde.skip_deserializing)
             || serde.skip_serializing_if.is_some())
             && avro.default == FieldDefault::Disabled
@@ -327,23 +342,9 @@ impl FieldOptions {
                 "`#[serde(skip_serializing)]` and `#[serde(skip_serializing_if)]` are incompatible with `#[avro(default = false)]`"
             ));
         }
-        let with = match With::from_avro_and_serde(&avro.with, serde.with.as_ref(), span) {
-            Ok(with) => with,
-            Err(error) => {
-                errors.push(error);
-                // This won't actually be used, but it does simplify the code
-                With::Trait
-            }
-        };
 
         if !errors.is_empty() {
             return Err(errors);
-        }
-
-        // TODO: Implement a better way to do this (maybe if user specifies `#[avro(with)]` also use that for the default)
-        // Disable getting the field default, if the schema is not retrieved from the field type
-        if with != With::Trait && avro.default == FieldDefault::Trait {
-            avro.default = FieldDefault::Disabled;
         }
 
         let doc = avro.doc.or_else(|| extract_rustdoc(attributes));

@@ -17,24 +17,42 @@
 
 use std::{borrow::Borrow, io::Read};
 
-use serde::de::{DeserializeSeed, MapAccess};
+use serde::de::{DeserializeSeed, MapAccess, SeqAccess};
 
-use crate::{
-    Error, Schema,
-    schema::MapSchema,
-    serde::deser_schema::{Config, SchemaAwareDeserializer},
-    util::{zag_i32, zag_i64},
-};
+use super::{Config, SchemaAwareDeserializer};
+use crate::schema::MapSchema;
+use crate::{Error, Schema, schema::ArraySchema, util::zag_i64};
 
-pub struct MapDeserializer<'s, 'r, R: Read, S: Borrow<Schema>> {
+/// Deserialize sequences from an Avro array.
+pub struct BlockDeserializer<'s, 'r, R: Read, S: Borrow<Schema>> {
     reader: &'r mut R,
     schema: &'s Schema,
     config: Config<'s, S>,
-    remaining: Option<u32>,
+    /// Track where we are in reading the array
+    remaining: Option<u64>,
 }
 
-impl<'s, 'r, R: Read, S: Borrow<Schema>> MapDeserializer<'s, 'r, R, S> {
-    pub fn new(
+impl<'s, 'r, R: Read, S: Borrow<Schema>> BlockDeserializer<'s, 'r, R, S> {
+    pub fn array(
+        reader: &'r mut R,
+        schema: &'s ArraySchema,
+        config: Config<'s, S>,
+    ) -> Result<Self, Error> {
+        let schema = if let Schema::Ref { name } = schema.items.as_ref() {
+            config.get_schema(name)?
+        } else {
+            &schema.items
+        };
+        let remaining = Self::read_block_header(reader)?;
+        Ok(Self {
+            reader,
+            schema,
+            config,
+            remaining,
+        })
+    }
+
+    pub fn map(
         reader: &'r mut R,
         schema: &'s MapSchema,
         config: Config<'s, S>,
@@ -46,21 +64,21 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> MapDeserializer<'s, 'r, R, S> {
         };
         let remaining = Self::read_block_header(reader)?;
         Ok(Self {
-            schema,
             reader,
+            schema,
             config,
             remaining,
         })
     }
 
-    fn read_block_header(reader: &mut R) -> Result<Option<u32>, Error> {
-        let remaining = zag_i32(reader)?;
+    fn read_block_header(reader: &mut R) -> Result<Option<u64>, Error> {
+        let remaining = zag_i64(reader)?;
         if remaining < 0 {
             // If the block size is negative the next number is the size of the block in bytes
             let _bytes = zag_i64(reader)?;
         }
         if remaining == 0 {
-            // If the block size is zero the map is finished
+            // If the block size is zero the array/map is finished
             Ok(None)
         } else {
             Ok(Some(remaining.unsigned_abs()))
@@ -68,7 +86,40 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> MapDeserializer<'s, 'r, R, S> {
     }
 }
 
-impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> MapAccess<'de> for MapDeserializer<'s, 'r, R, S> {
+/// Deserialize as an array
+impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> SeqAccess<'de> for BlockDeserializer<'s, 'r, R, S> {
+    type Error = Error;
+
+    fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
+    where
+        T: DeserializeSeed<'de>,
+    {
+        if let Some(mut remaining) = self.remaining {
+            let value = seed.deserialize(SchemaAwareDeserializer::new(
+                self.reader,
+                self.schema,
+                self.config,
+            )?)?;
+            remaining -= 1;
+            if remaining == 0 {
+                self.remaining = Self::read_block_header(self.reader)?;
+            } else {
+                self.remaining = Some(remaining);
+            }
+            Ok(Some(value))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn size_hint(&self) -> Option<usize> {
+        self.remaining
+            .map(|x| usize::try_from(x).unwrap_or(usize::MAX))
+    }
+}
+
+/// Deserialize as a map
+impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> MapAccess<'de> for BlockDeserializer<'s, 'r, R, S> {
     type Error = Error;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>

@@ -676,10 +676,7 @@ pub mod bigdecimal_opt {
 pub mod array {
     use std::collections::HashSet;
 
-    use serde::{
-        Deserialize, Deserializer, Serialize, Serializer,
-        de::{DeserializeOwned, Error as _},
-    };
+    use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
 
     use crate::{
         AvroSchemaComponent, Schema,
