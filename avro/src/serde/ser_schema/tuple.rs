@@ -142,7 +142,15 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> SerializeTuple for ManyTupleSerializer
     where
         T: ?Sized + Serialize,
     {
-        let schema = &self.schema.fields[self.field_position].schema;
+        let schema = &self
+            .schema
+            .fields
+            .get(self.field_position)
+            .ok_or_else(|| Details::SerializeRecordUnknownFieldIndex {
+                position: self.field_position,
+                schema: self.schema.clone(),
+            })?
+            .schema;
         self.bytes_written += value.serialize(SchemaAwareSerializer::new(
             self.writer,
             schema,

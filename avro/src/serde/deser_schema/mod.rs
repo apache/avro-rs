@@ -27,16 +27,14 @@ use crate::{
     util::{zag_i32, zag_i64},
 };
 
-mod array;
+mod block;
 mod enums;
 mod identifier;
-mod map;
 mod record;
 mod tuple;
 
-use array::ArrayDeserializer;
+use block::BlockDeserializer;
 use enums::PlainEnumDeserializer;
-use map::MapDeserializer;
 use record::RecordDeserializer;
 use tuple::{ManyTupleDeserializer, OneTupleDeserializer};
 
@@ -602,7 +600,7 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
     {
         match self.schema {
             Schema::Array(array) => {
-                visitor.visit_seq(ArrayDeserializer::new(self.reader, array, self.config)?)
+                visitor.visit_seq(BlockDeserializer::array(self.reader, array, self.config)?)
             }
             Schema::Union(union) => self.with_union(union)?.deserialize_seq(visitor),
             _ => Err(self.error("seq", "Expected Schema::Array")),
@@ -661,7 +659,7 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
     {
         match self.schema {
             Schema::Map(map) => {
-                visitor.visit_map(MapDeserializer::new(self.reader, map, self.config)?)
+                visitor.visit_map(BlockDeserializer::map(self.reader, map, self.config)?)
             }
             Schema::Record(record) => {
                 // Needed for flattened structs which are (de)serialized as maps

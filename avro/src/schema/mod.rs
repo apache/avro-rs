@@ -5204,7 +5204,10 @@ mod tests {
         assert_ne!(one.unique_normalized_name(), four.unique_normalized_name());
         assert_ne!(two.unique_normalized_name(), three.unique_normalized_name());
         assert_ne!(two.unique_normalized_name(), four.unique_normalized_name());
-        assert_ne!(three.unique_normalized_name(), four.unique_normalized_name());
+        assert_ne!(
+            three.unique_normalized_name(),
+            four.unique_normalized_name()
+        );
 
         Ok(())
     }

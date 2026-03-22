@@ -249,7 +249,7 @@ struct BufferedBlockSerializer<'s, 'w, W: Write, S: Borrow<Schema>> {
     schema: &'s Schema,
     config: Config<'s, S>,
     bytes_written: usize,
-    items_in_buffer: usize,
+    items_in_buffer: i32,
     target_block_size: usize,
 }
 
@@ -276,7 +276,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> BufferedBlockSerializer<'s, 'w, W, S> 
     fn write_block(&mut self) -> Result<(), Error> {
         // Write the header, the negative item count indicates that the next value is the size of the
         // block in bytes
-        self.bytes_written += encode_int(0 - (self.items_in_buffer as i32), &mut *self.writer)?;
+        self.bytes_written += encode_int(0 - self.items_in_buffer, &mut *self.writer)?;
         self.bytes_written += encode_int(self.buffer.len() as i32, &mut *self.writer)?;
 
         // Write the actual data
