@@ -25,10 +25,9 @@ use serde::{
 use super::{Config, SchemaAwareSerializer};
 use crate::{
     Error, Schema,
-    encode::encode_int,
     error::Details,
     schema::{ArraySchema, MapSchema},
-    util::zig_i32,
+    util::zig_i64,
 };
 
 #[expect(
@@ -176,7 +175,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> DirectBlockSerializer<'s, 'w, W, S> {
         if len != 0 {
             // .end() always writes the zero block, so we only write the size for arrays
             // that have at least one element
-            bytes_written += zig_i32(len as i32, &mut *writer)?;
+            bytes_written += zig_i64(len as i64, &mut *writer)?;
         }
         Ok(Self {
             writer,
@@ -187,7 +186,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> DirectBlockSerializer<'s, 'w, W, S> {
     }
 
     fn end(self) -> Result<usize, Error> {
-        // Write the zero directly instead of through zig_i32 which does a lot of extra work
+        // Write the zero directly instead of through zig_i64 which does a lot of extra work
         self.writer.write_all(&[0]).map_err(Details::WriteBytes)?;
 
         Ok(self.bytes_written + 1)
@@ -249,7 +248,7 @@ struct BufferedBlockSerializer<'s, 'w, W: Write, S: Borrow<Schema>> {
     schema: &'s Schema,
     config: Config<'s, S>,
     bytes_written: usize,
-    items_in_buffer: i32,
+    items_in_buffer: i64,
     target_block_size: usize,
 }
 
@@ -276,8 +275,8 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> BufferedBlockSerializer<'s, 'w, W, S> 
     fn write_block(&mut self) -> Result<(), Error> {
         // Write the header, the negative item count indicates that the next value is the size of the
         // block in bytes
-        self.bytes_written += encode_int(0 - self.items_in_buffer, &mut *self.writer)?;
-        self.bytes_written += encode_int(self.buffer.len() as i32, &mut *self.writer)?;
+        self.bytes_written += zig_i64(0 - self.items_in_buffer, &mut *self.writer)?;
+        self.bytes_written += zig_i64(self.buffer.len() as i64, &mut *self.writer)?;
 
         // Write the actual data
         self.writer
@@ -299,7 +298,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> BufferedBlockSerializer<'s, 'w, W, S> 
         }
         debug_assert_eq!(self.buffer.len(), 0, "Buffer must be empty at this point");
 
-        // Write the zero directly instead of through zig_i32 which does a lot of extra work
+        // Write the zero directly instead of through zig_i64 which does a lot of extra work
         self.writer.write_all(&[0]).map_err(Details::WriteBytes)?;
 
         Ok(self.bytes_written + 1)
