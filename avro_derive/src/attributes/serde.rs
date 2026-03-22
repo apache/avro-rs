@@ -92,8 +92,8 @@ pub struct ContainerAttributes {
     #[darling(default)]
     pub rename_all: RenameAll,
     /// Rename all the fields of the struct variants in this enum.
-    #[darling(default, rename = "rename_all_fields")]
-    pub _rename_all_fields: RenameAll,
+    #[darling(default)]
+    pub rename_all_fields: RenameAll,
     /// Error when encountering unknown fields when deserialising.
     #[darling(default, rename = "deny_unknown_fields")]
     pub _deny_unknown_fields: bool,
@@ -117,20 +117,20 @@ pub struct ContainerAttributes {
     pub _default: Option<SerdeDefault>,
     /// This type is the serde implementation for a "remote" type.
     ///
-    /// This makes the (de)serialisation use/return a different type.
-    pub remote: Option<String>,
+    /// Inverse of `#[serde(from = "..", into = "..")].
+    pub _remote: Option<String>,
     /// Directly use the inner type for (de)serialisation.
     #[darling(default)]
     pub transparent: bool,
     /// Deserialize using the given type and then convert to this type with `From`.
-    #[darling(default, rename = "from")]
-    pub _from: Option<String>,
+    #[darling(default)]
+    pub from: Option<String>,
     /// Deserialize using the given type and then convert to this type with `TryFrom`.
-    #[darling(default, rename = "try_from")]
-    pub _try_from: Option<String>,
+    #[darling(default)]
+    pub try_from: Option<String>,
     /// Convert this type to the given type using `Into` and then serialize using the given type.
-    #[darling(default, rename = "into")]
-    pub _into: Option<String>,
+    #[darling(default)]
+    pub into: Option<String>,
     /// Use the Serde API at this path.
     #[darling(default, rename = "crate")]
     pub _crate: Option<String>,
@@ -154,18 +154,18 @@ pub struct VariantAttributes {
     pub rename: Option<String>,
     /// Aliases for this variant, only used during deserialisation.
     #[darling(multiple, rename = "alias")]
-    pub _alias: Vec<String>,
-    #[darling(default, rename = "rename_all")]
-    pub _rename_all: RenameAll,
+    pub alias: Vec<String>,
+    #[darling(default)]
+    pub rename_all: RenameAll,
     /// Do not serialize or deserialize this variant.
     #[darling(default, rename = "skip")]
-    pub _skip: bool,
+    pub skip: bool,
     /// Do not serialize this variant.
     #[darling(default, rename = "skip_serializing")]
-    pub _skip_serializing: bool,
+    pub skip_serializing: bool,
     /// Do not deserialize this variant.
     #[darling(default, rename = "skip_deserializing")]
-    pub _skip_deserializing: bool,
+    pub skip_deserializing: bool,
     /// Use this function for serializing.
     #[darling(rename = "serialize_with")]
     pub _serialize_with: Option<String>,
@@ -174,7 +174,7 @@ pub struct VariantAttributes {
     pub _deserialize_with: Option<String>,
     /// Use this module for (de)serializing.
     #[darling(rename = "with")]
-    pub _with: Option<String>,
+    pub with: Option<String>,
     /// Put trait bounds on the implementations.
     #[darling(rename = "bound")]
     pub _bound: Option<String>,

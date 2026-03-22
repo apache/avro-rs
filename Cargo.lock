@@ -103,6 +103,7 @@ dependencies = [
  "darling",
  "macrotest",
  "pretty_assertions",
+ "prettyplease",
  "proc-macro2",
  "proptest",
  "quote",

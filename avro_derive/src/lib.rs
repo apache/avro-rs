@@ -127,7 +127,7 @@ fn create_trait_definition(
             }
 
             fn field_default() -> ::std::option::Option<::serde_json::Value> {
-                ::std::option::Option::#field_default_impl
+                #field_default_impl
             }
         }
     }
@@ -153,7 +153,8 @@ fn get_struct_schema_def(
     data_struct: DataStruct,
     ident_span: Span,
 ) -> Result<(TokenStream, TokenStream), Vec<syn::Error>> {
-    let mut record_field_exprs = vec![];
+    let mut errors = Vec::new();
+    let mut record_field_exprs = Vec::new();
     match data_struct.fields {
         Fields::Named(a) => {
             for field in a.named {
@@ -165,7 +166,13 @@ fn get_struct_schema_def(
                 if let Some(raw_name) = name.strip_prefix("r#") {
                     name = raw_name.to_string();
                 }
-                let field_attrs = FieldOptions::new(&field.attrs, field.span())?;
+                let field_attrs = match FieldOptions::new(&field.attrs, field.span()) {
+                    Ok(field_attrs) => field_attrs,
+                    Err(errs) => {
+                        errors.extend(errs);
+                        continue;
+                    }
+                };
                 let doc = preserve_optional(field_attrs.doc);
                 match (field_attrs.rename, container_attrs.rename_all) {
                     (Some(rename), _) => {
@@ -182,7 +189,13 @@ fn get_struct_schema_def(
                     // Inline the fields of the child record at runtime, as we don't have access to
                     // the schema here.
                     let get_record_fields =
-                        get_field_get_record_fields_expr(&field, field_attrs.with)?;
+                        match get_field_get_record_fields_expr(&field, field_attrs.with) {
+                            Ok(get_record_fields) => get_record_fields,
+                            Err(err) => {
+                                errors.push(err);
+                                continue;
+                            }
+                        };
                     record_field_exprs.push(quote! {
                         if let Some(flattened_fields) = #get_record_fields {
                             schema_fields.extend(flattened_fields);
@@ -194,24 +207,21 @@ fn get_struct_schema_def(
                     // Don't add this field as it's been replaced by the child record fields
                     continue;
                 }
-                let default_value = match field_attrs.default {
-                    FieldDefault::Disabled => quote! { ::std::option::Option::None },
-                    FieldDefault::Trait => type_to_field_default_expr(&field.ty)?,
-                    FieldDefault::Value(default_value) => {
-                        let _: serde_json::Value = serde_json::from_str(&default_value[..])
-                            .map_err(|e| {
-                                vec![syn::Error::new(
-                                    field.ident.span(),
-                                    format!("Invalid avro default json: \n{e}"),
-                                )]
-                            })?;
-                        quote! {
-                            ::std::option::Option::Some(::serde_json::from_str(#default_value).expect("Unreachable! This parsed at compile time!"))
-                        }
+                let default_value = match field_attrs.default.to_expr(&field) {
+                    Ok(default_value) => default_value,
+                    Err(err) => {
+                        errors.push(err);
+                        continue;
                     }
                 };
                 let aliases = field_aliases(&field_attrs.alias);
-                let schema_expr = get_field_schema_expr(&field, field_attrs.with)?;
+                let schema_expr = match get_field_schema_expr(&field, field_attrs.with) {
+                    Ok(schema_expr) => schema_expr,
+                    Err(errs) => {
+                        errors.extend(errs);
+                        continue;
+                    }
+                };
                 record_field_exprs.push(quote! {
                     schema_fields.push(::apache_avro::schema::RecordField {
                         name: #name.to_string(),
@@ -225,17 +235,21 @@ fn get_struct_schema_def(
             }
         }
         Fields::Unnamed(_) => {
-            return Err(vec![syn::Error::new(
+            errors.push(syn::Error::new(
                 ident_span,
                 "AvroSchema derive does not work for tuple structs",
-            )]);
+            ));
         }
         Fields::Unit => {
-            return Err(vec![syn::Error::new(
+            errors.push(syn::Error::new(
                 ident_span,
                 "AvroSchema derive does not work for unit structs",
-            )]);
+            ));
         }
+    }
+
+    if !errors.is_empty() {
+        return Err(errors);
     }
 
     let record_doc = preserve_optional(container_attrs.doc.as_ref());
@@ -284,30 +298,54 @@ fn get_transparent_struct_schema_def(
 ) -> Result<(TokenStream, TokenStream), Vec<syn::Error>> {
     match fields {
         Fields::Named(fields_named) => {
+            let mut errors = Vec::new();
             let mut found = None;
             for field in fields_named.named {
-                let attrs = FieldOptions::new(&field.attrs, field.span())?;
+                let attrs = match FieldOptions::new(&field.attrs, field.span()) {
+                    Ok(attrs) => attrs,
+                    Err(errs) => {
+                        errors.extend(errs);
+                        continue;
+                    }
+                };
                 if attrs.skip {
                     continue;
                 }
+                let span = field.span();
                 if found.replace((field, attrs)).is_some() {
-                    return Err(vec![syn::Error::new(
-                        input_span,
+                    errors.push(syn::Error::new(
+                        span,
                         "AvroSchema: #[serde(transparent)] is only allowed on structs with one unskipped field",
-                    )]);
+                    ));
                 }
             }
 
             if let Some((field, attrs)) = found {
-                Ok((
-                    get_field_schema_expr(&field, attrs.with.clone())?,
-                    get_field_get_record_fields_expr(&field, attrs.with)?,
-                ))
+                let schema_expr = match get_field_schema_expr(&field, attrs.with.clone()) {
+                    Ok(schema_expr) => schema_expr,
+                    Err(err) => {
+                        errors.push(err);
+                        TokenStream::default()
+                    }
+                };
+                let fields_expr = match get_field_get_record_fields_expr(&field, attrs.with) {
+                    Ok(fields_expr) => fields_expr,
+                    Err(err) => {
+                        errors.push(err);
+                        TokenStream::default()
+                    }
+                };
+                if !errors.is_empty() {
+                    Err(errors)
+                } else {
+                    Ok((schema_expr, fields_expr))
+                }
             } else {
-                Err(vec![syn::Error::new(
+                errors.push(syn::Error::new(
                     input_span,
                     "AvroSchema: #[serde(transparent)] is only allowed on structs with one unskipped field",
-                )])
+                ));
+                Err(errors)
             }
         }
         Fields::Unnamed(_) => Err(vec![syn::Error::new(
@@ -321,7 +359,7 @@ fn get_transparent_struct_schema_def(
     }
 }
 
-fn get_field_schema_expr(field: &Field, with: With) -> Result<TokenStream, Vec<syn::Error>> {
+fn get_field_schema_expr(field: &Field, with: With) -> Result<TokenStream, syn::Error> {
     match with {
         With::Trait => Ok(type_to_schema_expr(&field.ty)?),
         With::Serde(path) => {
@@ -331,24 +369,21 @@ fn get_field_schema_expr(field: &Field, with: With) -> Result<TokenStream, Vec<s
             if closure.inputs.is_empty() {
                 Ok(quote! { (#closure)() })
             } else {
-                Err(vec![syn::Error::new(
+                Err(syn::Error::new(
                     field.span(),
                     "Expected closure with 0 parameters",
-                )])
+                ))
             }
         }
         With::Expr(Expr::Path(path)) => Ok(quote! { #path(named_schemas, enclosing_namespace) }),
-        With::Expr(_expr) => Err(vec![syn::Error::new(
+        With::Expr(_expr) => Err(syn::Error::new(
             field.span(),
             "Invalid expression, expected function or closure",
-        )]),
+        )),
     }
 }
 
-fn get_field_get_record_fields_expr(
-    field: &Field,
-    with: With,
-) -> Result<TokenStream, Vec<syn::Error>> {
+fn get_field_get_record_fields_expr(field: &Field, with: With) -> Result<TokenStream, syn::Error> {
     match with {
         With::Trait => Ok(type_to_get_record_fields_expr(&field.ty)?),
         With::Serde(path) => {
@@ -364,86 +399,86 @@ fn get_field_get_record_fields_expr(
                     )
                 })
             } else {
-                Err(vec![syn::Error::new(
+                Err(syn::Error::new(
                     field.span(),
                     "Expected closure with 0 parameters",
-                )])
+                ))
             }
         }
         With::Expr(Expr::Path(path)) => Ok(quote! {
             ::apache_avro::serde::get_record_fields_in_ctxt(named_schemas, enclosing_namespace, #path)
         }),
-        With::Expr(_expr) => Err(vec![syn::Error::new(
+        With::Expr(_expr) => Err(syn::Error::new(
             field.span(),
             "Invalid expression, expected function or closure",
-        )]),
+        )),
     }
 }
 
 /// Takes in the Tokens of a type and returns the tokens of an expression with return type `Schema`
-fn type_to_schema_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>> {
+fn type_to_schema_expr(ty: &Type) -> Result<TokenStream, syn::Error> {
     match ty {
         Type::Array(_) | Type::Slice(_) | Type::Path(_) | Type::Reference(_) => Ok(
             quote! {<#ty as :: apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(named_schemas, enclosing_namespace)},
         ),
-        Type::Ptr(_) => Err(vec![syn::Error::new_spanned(
+        Type::Ptr(_) => Err(syn::Error::new_spanned(
             ty,
             "AvroSchema: derive does not support raw pointers",
-        )]),
-        Type::Tuple(_) => Err(vec![syn::Error::new_spanned(
+        )),
+        Type::Tuple(_) => Err(syn::Error::new_spanned(
             ty,
             "AvroSchema: derive does not support tuples",
-        )]),
-        _ => Err(vec![syn::Error::new_spanned(
+        )),
+        _ => Err(syn::Error::new_spanned(
             ty,
             format!(
                 "AvroSchema: Unexpected type encountered! Please open an issue if this kind of type should be supported: {ty:?}"
             ),
-        )]),
+        )),
     }
 }
 
-fn type_to_get_record_fields_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>> {
+fn type_to_get_record_fields_expr(ty: &Type) -> Result<TokenStream, syn::Error> {
     match ty {
         Type::Array(_) | Type::Slice(_) | Type::Path(_) | Type::Reference(_) => Ok(
             quote! {<#ty as :: apache_avro::AvroSchemaComponent>::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)},
         ),
-        Type::Ptr(_) => Err(vec![syn::Error::new_spanned(
+        Type::Ptr(_) => Err(syn::Error::new_spanned(
             ty,
             "AvroSchema: derive does not support raw pointers",
-        )]),
-        Type::Tuple(_) => Err(vec![syn::Error::new_spanned(
+        )),
+        Type::Tuple(_) => Err(syn::Error::new_spanned(
             ty,
             "AvroSchema: derive does not support tuples",
-        )]),
-        _ => Err(vec![syn::Error::new_spanned(
+        )),
+        _ => Err(syn::Error::new_spanned(
             ty,
             format!(
                 "AvroSchema: Unexpected type encountered! Please open an issue if this kind of type should be supported: {ty:?}"
             ),
-        )]),
+        )),
     }
 }
 
-fn type_to_field_default_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>> {
+fn type_to_field_default_expr(ty: &Type) -> Result<TokenStream, syn::Error> {
     match ty {
         Type::Array(_) | Type::Slice(_) | Type::Path(_) | Type::Reference(_) => {
             Ok(quote! {<#ty as :: apache_avro::AvroSchemaComponent>::field_default()})
         }
-        Type::Ptr(_) => Err(vec![syn::Error::new_spanned(
+        Type::Ptr(_) => Err(syn::Error::new_spanned(
             ty,
             "AvroSchema: derive does not support raw pointers",
-        )]),
-        Type::Tuple(_) => Err(vec![syn::Error::new_spanned(
+        )),
+        Type::Tuple(_) => Err(syn::Error::new_spanned(
             ty,
             "AvroSchema: derive does not support tuples",
-        )]),
-        _ => Err(vec![syn::Error::new_spanned(
+        )),
+        _ => Err(syn::Error::new_spanned(
             ty,
             format!(
                 "AvroSchema: Unexpected type encountered! Please open an issue if this kind of type should be supported: {ty:?}"
             ),
-        )]),
+        )),
     }
 }
 
@@ -496,4 +531,20 @@ mod tests {
         assert_eq!(type_to_schema_expr(&syn::parse2::<Type>(quote!{Vec<T>}).unwrap()).unwrap().to_string(), quote!{<Vec<T> as :: apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(named_schemas, enclosing_namespace)}.to_string());
         assert_eq!(type_to_schema_expr(&syn::parse2::<Type>(quote!{AnyType}).unwrap()).unwrap().to_string(), quote!{<AnyType as :: apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(named_schemas, enclosing_namespace)}.to_string());
     }
+
+    // #[test]
+    // fn cassss() {
+    //     let stream = quote! {
+    //     #[avro(default = r#"{"_field": true}"#)]
+    //         struct Spam {
+    //             _field: bool,
+    //         }
+    //     };
+    //     let result = syn::parse2::<DeriveInput>(stream).unwrap();
+    //     let output = derive_avro_schema(result).unwrap();
+    //     println!("{}", output.to_string());
+    //     let pretty = prettyplease::unparse(&syn::parse2(output).unwrap());
+    //     println!("{}", pretty);
+    //     panic!();
+    // }
 }
