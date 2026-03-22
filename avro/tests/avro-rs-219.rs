@@ -38,6 +38,5 @@ fn avro_rs_219_failing_deserialization_due_to_bigdecimal_dependency() {
     }"#;
 
     let result = serde_json::from_str::<S3>(test);
-    println!("result : {result:#?}");
     result.unwrap();
 }
