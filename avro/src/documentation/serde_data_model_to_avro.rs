@@ -42,9 +42,9 @@
 //! - **option** => [`Schema::Union([Schema::Null, _])`](crate::schema::Schema::Union)
 //! - **unit** => [`Schema::Null`]
 //! - **unit struct** => [`Schema::Record`] with the unqualified name equal to the name of the struct and zero fields
-//! - **unit variant** => See [Enums](##Enums)
+//! - **unit variant** => See [Enums](#enums)
 //! - **newtype struct** => [`Schema::Record`] with the unqualified name equal to the name of the struct and one field
-//! - **newtype variant** => See [Enums](##Enums)
+//! - **newtype variant** => See [Enums](#enums)
 //! - **seq** => [`Schema::Array`]
 //! - **tuple**
 //!     - For tuples with one element, the schema will be the schema of the only element
@@ -55,11 +55,11 @@
 //! - **tuple_struct** => [`Schema::Record`] with the unqualified name equal to the name of the struct and as many fields as there are elements
 //!     - **Note:** Tuple structs with 0 or 1 elements will also be (de)serialized as a [`Schema::Record`]. This
 //!       is different from normal tuples`.
-//! - **tuple_variant** => See [Enums](##Enums)
+//! - **tuple_variant** => See [Enums](#enums)
 //! - **map** => [`Schema::Map`]
 //!     - **Note:** the key type of the map will be (de)serialized as a [`Schema::String`]
 //! - **struct** => [`Schema::Record`]
-//! - **struct_variant** => See [Enums](##Enums)
+//! - **struct_variant** => See [Enums](#enums)
 //!
 //! ## Enums
 //!

@@ -75,7 +75,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> UnionSerializer<'s, 'w, W, S> {
             Err(self.error(
                 original_ty,
                 "Expected Schema::Int | Schema::Date | Schema::TimeMillis in variants",
-            ))?
+            ))
         }
     }
 
@@ -141,7 +141,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
             bytes_written += self.write_array([u8::from(v)])?;
             Ok(bytes_written)
         } else {
-            Err(self.error("bool", "Expected Schema::Boolean in variants"))?
+            Err(self.error("bool", "Expected Schema::Boolean in variants"))
         }
     }
 
@@ -221,7 +221,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
             bytes_written += self.write_array(v.to_le_bytes())?;
             Ok(bytes_written)
         } else {
-            Err(self.error("f32", "Expected Schema::Float in variants"))?
+            Err(self.error("f32", "Expected Schema::Float in variants"))
         }
     }
 
@@ -231,7 +231,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
             bytes_written += self.write_array(v.to_le_bytes())?;
             Ok(bytes_written)
         } else {
-            Err(self.error("f64", "Expected Schema::Double in variants"))?
+            Err(self.error("f64", "Expected Schema::Double in variants"))
         }
     }
 
@@ -241,7 +241,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
             bytes_written += self.write_bytes_with_len(v.to_string().as_bytes())?;
             Ok(bytes_written)
         } else {
-            Err(self.error("char", "Expected Schema::String in variants"))?
+            Err(self.error("char", "Expected Schema::String in variants"))
         }
     }
 
@@ -251,7 +251,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
             bytes_written += self.write_bytes_with_len(v.as_bytes())?;
             Ok(bytes_written)
         } else {
-            Err(self.error("str", "Expected Schema::String in variants"))?
+            Err(self.error("str", "Expected Schema::String in variants"))
         }
     }
 
@@ -348,7 +348,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
         match self.union.find_named_schema(name, self.config.names)? {
-            Some((index, Schema::Enum(schema))) if schema.symbols[variant_index as usize] == variant => {
+            Some((index, Schema::Enum(schema))) if schema.symbols.get(variant_index as usize) == Some(&variant.to_string()) => {
                 let mut bytes_written = zig_i32(index as i32, &mut *self.writer)?;
                 bytes_written += zig_i32(variant_index as i32, &mut *self.writer)?;
                 Ok(bytes_written)
