@@ -5199,12 +5199,12 @@ mod tests {
             name: "a._b._c".parse()?,
         };
 
-        assert_ne!(one, two);
-        assert_ne!(one, three);
-        assert_ne!(one, four);
-        assert_ne!(two, three);
-        assert_ne!(two, four);
-        assert_ne!(three, four);
+        assert_ne!(one.unique_normalized_name(), two.unique_normalized_name());
+        assert_ne!(one.unique_normalized_name(), three.unique_normalized_name());
+        assert_ne!(one.unique_normalized_name(), four.unique_normalized_name());
+        assert_ne!(two.unique_normalized_name(), three.unique_normalized_name());
+        assert_ne!(two.unique_normalized_name(), four.unique_normalized_name());
+        assert_ne!(three.unique_normalized_name(), four.unique_normalized_name());
 
         Ok(())
     }

@@ -30,24 +30,24 @@
 //! - `long`: [`i64`] (or [`u32`])
 //! - `float`: [`f32`]
 //! - `double`: [`f64`]
-//! - `bytes`: [`Vec<u8>`](std::vec::Vec) (or any type that uses [`Serialize::serialize_bytes`](serde::Serialize), [`Deserialize::deserialize_bytes`](serde::Deserialize), [`Deserialize::deserialize_byte_buf`](serde::Deserialize))
+//! - `bytes`: [`Vec<u8>`](std::vec::Vec) (or any type that uses [`Serializer::serialize_bytes`](serde::Serializer), [`Deserializer::deserialize_bytes`](serde::Deserializer), [`Deserializer::deserialize_byte_buf`](serde::Deserializer))
 //!     - It is required to use [`apache_avro::serde::bytes`] as otherwise Serde will (de)serialize a `Vec` as an array of integers instead.
-//! - `string`: [`String`] (or any type that uses [`Serialize::serialize_str`](serde::Serialize), [`Deserialize::deserialize_str`](serde::Deserialize), [`Deserialize::deserialize_string`](serde::Deserialize))
+//! - `string`: [`String`] (or any type that uses [`Serializer::serialize_str`](serde::Serializer), [`Deserializer::deserialize_str`](serde::Deserializer), [`Deserializer::deserialize_string`](serde::Deserializer))
 //!
 //! ## Complex Types
 //! - `records`: A struct with the same name and fields or a tuple with the same fields.
 //!     - Extra fields can be added to the struct if they are marked with `#[serde(skip)]`
 //! - `enums`: A enum with the same name and unit variants for every symbol
 //!     - The index of the symbol must match the index of the variant
-//! - `arrays`: [`Vec`] (or any type that uses [`Serialize::serialize_seq`](serde::Serialize), [`Deserialize::deserialize_seq`](serde::Deserialize))
+//! - `arrays`: [`Vec`] (or any type that uses [`Serializer::serialize_seq`](serde::Serializer), [`Deserializer::deserialize_seq`](serde::Deserializer))
 //!     - `[T; N]` is (de)serialized as a tuple by Serde, to (de)serialize them as an `array` use [`apache_avro::serde::array`]
-//! - `maps`: [`HashMap<String, _>`](std::collections::HashMap) (or any type that uses [`Serialize::serialize_map`](serde::Serialize), [`Deserialize::deserialize_map`](serde::Deserialize))
+//! - `maps`: [`HashMap<String, _>`](std::collections::HashMap) (or any type that uses [`Serializer::serialize_map`](serde::Serializer), [`Deserializer::deserialize_map`](serde::Deserializer))
 //! - `unions`: An enum with a variant for each union variant
 //!     - The index of the union variant must match the enum variant
 //!     - A `null` can be a unit variant or a newtype variant with a unit type
 //!     - All other variants must be newtype variants, struct variants, or tuple variants.
-//! - `fixed`: [`Vec<u8>`](std::vec::Vec) (or any type that uses [`Serialize::serialize_bytes`](serde::Serialize), [`Deserialize::deserialize_bytes`](serde::Deserialize), [`Deserialize::deserialize_byte_buf`](serde::Deserialize))
-//!     - It is required to use [`apache_avro::serde::bytes`] as otherwise Serde will (de)serialize a `Vec` as an array of integers instead.
+//! - `fixed`: [`Vec<u8>`](std::vec::Vec) (or any type that uses [`Serializer::serialize_bytes`](serde::Serializer), [`Deserializer::deserialize_bytes`](serde::Deserializer), [`Deserializer::deserialize_byte_buf`](serde::Deserializer))
+//!     - It is required to use [`apache_avro::serde::fixed`] as otherwise Serde will (de)serialize a `Vec` as an array of integers instead.
 //!
 //! [`apache_avro::serde::array`]: crate::serde::array
 //! [`apache_avro::serde::bytes`]: crate::serde::bytes

@@ -713,7 +713,7 @@ pub mod array {
     pub fn deserialize<'de, const N: usize, D, T>(deserializer: D) -> Result<[T; N], D::Error>
     where
         D: Deserializer<'de>,
-        T: DeserializeOwned,
+        T: Deserialize<'de>,
     {
         let bytes = <Vec<T> as Deserialize>::deserialize(deserializer)?;
         bytes.try_into().map_err(|v: Vec<T>| {

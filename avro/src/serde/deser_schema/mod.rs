@@ -136,7 +136,8 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
     /// This will resolve the read schema if it is a reference.
     fn with_union(self, schema: &'s UnionSchema) -> Result<Self, Error> {
         let index = zag_i32(self.reader)?;
-        let variant = schema.get_variant(index as usize)?;
+        let index = usize::try_from(index).map_err(|e| Details::ConvertI32ToUsize(e, index))?;
+        let variant = schema.get_variant(index)?;
         self.with_different_schema(variant)
     }
 
