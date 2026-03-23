@@ -46,4 +46,4 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
           components: clippy
-      - run: cargo clippy --all-features --all-targets
+      - run: cargo clippy --all-features --all-targets --workspace -- -Dclippy::cargo -Aclippy::multiple_crate_versions

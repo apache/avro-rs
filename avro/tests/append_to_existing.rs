@@ -46,10 +46,8 @@ fn avro_3630_append_to_an_existing_file() -> TestResult {
     let new_bytes = writer.into_inner().expect("Cannot get the new bytes");
 
     let reader = Reader::new(&*new_bytes).expect("Cannot read the new bytes");
-    let mut i = 1;
-    for value in reader {
+    for (i, value) in (1..).zip(reader) {
         check(&value, i);
-        i += 1
     }
 
     Ok(())

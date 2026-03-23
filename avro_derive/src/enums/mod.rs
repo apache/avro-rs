@@ -24,7 +24,7 @@ use syn::{Attribute, DataEnum, Fields, Meta};
 /// Generate a schema definition for a enum.
 pub fn get_data_enum_schema_def(
     container_attrs: &NamedTypeOptions,
-    data_enum: DataEnum,
+    data_enum: &DataEnum,
     ident_span: Span,
 ) -> Result<TokenStream, Vec<syn::Error>> {
     if data_enum.variants.iter().all(|v| Fields::Unit == v.fields) {

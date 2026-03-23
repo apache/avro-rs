@@ -53,6 +53,14 @@ fn test_logger() -> &'static TestLogger {
     })
 }
 
+/// Clears all log messages stored in the thread-local storage.
+///
+/// # Panics
+/// This function will panic if:
+/// - The thread-local `LOG_MESSAGES` is already borrowed and cannot
+///   be mutably borrowed.
+///
+/// The panic includes a debug representation of the error encountered.
 pub fn clear_log_messages() {
     LOG_MESSAGES.with(|msgs| match msgs.try_borrow_mut() {
         Ok(mut log_messages) => log_messages.clear(),
@@ -60,6 +68,32 @@ pub fn clear_log_messages() {
     });
 }
 
+/// Asserts that a specific log message has not been logged.
+///
+/// This function checks the most recently logged message from a thread-local
+/// storage and ensures that it does not match the provided `unexpected_message`.
+/// If the message does match, the function will panic with an appropriate error
+/// message indicating the unexpected log entry.
+///
+/// # Arguments
+/// - `unexpected_message`: A string slice that represents the log message
+///   that is not expected to be logged. If this message matches the last
+///   logged message, the function will panic.
+///
+/// # Panics
+/// - This function will panic if the `unexpected_message` matches the most
+///   recently logged message.
+///
+/// # Example
+/// ```ignore
+/// // Assume LOG_MESSAGES is set up to capture log messages.
+/// log_message("Unexpected Error");
+/// assert_not_logged("Unexpected Error");
+/// // This will panic with the message:
+/// // "The following log message should not have been logged: 'Unexpected Error'"
+///
+/// assert_not_logged("Non-existent Message");
+/// // This will pass without issue since the message was not logged.
 #[track_caller]
 pub fn assert_not_logged(unexpected_message: &str) {
     LOG_MESSAGES.with(|msgs| match msgs.borrow().last() {
@@ -70,6 +104,43 @@ pub fn assert_not_logged(unexpected_message: &str) {
     });
 }
 
+/// Asserts that the specified log message has been logged and removes it from
+/// the stored log messages.
+///
+/// # Parameters
+/// - `expected_message`: A string slice that holds the log message to be asserted.
+///
+/// # Panics
+/// This function will panic if the `expected_message` has not been logged. The
+/// panic message will indicate the missing log message.
+///
+/// # Behavior
+/// - The function verifies if the `expected_message` exists in the log messages
+///   stored using the thread-local storage (`LOG_MESSAGES`).
+/// - If the message is found, it is removed from the log messages and the function
+///   completes successfully.
+/// - If the message is not found, a panic is triggered with an explanatory message.
+///
+/// # Usage
+/// This function is typically used in unit tests or scenarios where it is important
+/// to ensure specific messages are logged during execution.
+///
+/// # Example
+/// ```ignore
+/// // Assuming LOG_MESSAGES is set up and some log messages have been recorded:
+/// assert_logged("Expected log entry");
+/// ```
+///
+/// # Notes
+/// - The function uses the `#[track_caller]` attribute to improve debugging by
+///   providing more accurate information about the location of the panic in the
+///   source code.
+/// - The `LOG_MESSAGES` must be a thread-local data structure that supports
+///   borrowing and mutating of a collection of string messages.
+///
+/// # Thread Safety
+/// This function relies on thread-local variables to manage logs for each thread
+/// independently.
 #[track_caller]
 pub fn assert_logged(expected_message: &str) {
     let mut deleted = false;
@@ -81,19 +152,20 @@ pub fn assert_logged(expected_message: &str) {
             } else {
                 true
             }
-        })
+        });
     });
 
-    if !deleted {
-        panic!("Expected log message has not been logged: '{expected_message}'");
-    }
+    assert!(
+        deleted,
+        "Expected log message has not been logged: '{expected_message}'"
+    );
 }
 
 pub(crate) fn install() {
     log::set_logger(test_logger())
-        .map(|_| log::set_max_level(LevelFilter::Trace))
+        .map(|()| log::set_max_level(LevelFilter::Trace))
         .map_err(|err| {
             eprintln!("Failed to set the custom logger: {err:?}");
         })
-        .unwrap();
+        .expect("Failed to set the custom TestLogger");
 }
