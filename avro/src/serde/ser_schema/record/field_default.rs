@@ -155,8 +155,7 @@ impl<'v, 's> Serialize for SchemaAwareRecordFieldDefault<'v, 's> {
                 | Schema::Uuid(UuidSchema::Bytes | UuidSchema::Fixed(_))
                 | Schema::BigDecimal
                 | Schema::Decimal(_)
-                | Schema::Duration(_)
-                | Schema::Date,
+                | Schema::Duration(_),
             ) => serializer.serialize_bytes(s.as_bytes()),
             (Value::String(s), Schema::String | Schema::Uuid(UuidSchema::String)) => {
                 serializer.serialize_str(s)

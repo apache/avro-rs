@@ -54,7 +54,7 @@
 //!       [`Schema::Array`] use [`apache_avro::serde::array`].
 //! - **tuple_struct** => [`Schema::Record`] with the unqualified name equal to the name of the struct and as many fields as there are elements
 //!     - **Note:** Tuple structs with 0 or 1 elements will also be (de)serialized as a [`Schema::Record`]. This
-//!       is different from normal tuples`.
+//!       is different from normal tuples.
 //! - **tuple_variant** => See [Enums](#enums)
 //! - **map** => [`Schema::Map`]
 //!     - **Note:** the key type of the map will be (de)serialized as a [`Schema::String`]
