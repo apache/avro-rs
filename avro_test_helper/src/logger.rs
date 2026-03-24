@@ -62,10 +62,7 @@ fn test_logger() -> &'static TestLogger {
 ///
 /// The panic includes a debug representation of the error encountered.
 pub fn clear_log_messages() {
-    LOG_MESSAGES.with(|msgs| match msgs.try_borrow_mut() {
-        Ok(mut log_messages) => log_messages.clear(),
-        Err(err) => panic!("Failed to clear log messages: {err:?}"),
-    });
+    LOG_MESSAGES.with_borrow_mut(Vec::clear);
 }
 
 /// Asserts that a specific log message has not been logged.
