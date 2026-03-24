@@ -65,8 +65,10 @@ pub fn clear_log_messages() {
 ///
 /// # Example
 /// ```should_panic
-/// log::error("Something went wrong");
-/// log::error("Unexpected Error");
+/// use apache_avro_test_helper::logger::assert_not_logged;
+///
+/// log::error!("Something went wrong");
+/// log::error!("Unexpected Error");
 ///
 /// // This will not panic as it is not an exact match
 /// assert_not_logged("No Unexpected Error");
@@ -95,9 +97,11 @@ pub fn assert_not_logged(unexpected_message: &str) {
 ///
 /// # Example
 /// ```should_panic
-/// log::error("Something went wrong");
-/// log::info("Something happened");
-/// log::error("Something went wrong");
+/// use apache_avro_test_helper::logger::assert_logged;
+///
+/// log::error!("Something went wrong");
+/// log::info!("Something happened");
+/// log::error!("Something went wrong");
 ///
 /// // This will not panic as the message was logged
 /// assert_logged("Something went wrong");
