@@ -79,11 +79,12 @@ pub fn clear_log_messages() {
 /// ```
 #[track_caller]
 pub fn assert_not_logged(unexpected_message: &str) {
-    LOG_MESSAGES.with_borrow(|msgs| match msgs.last() {
-        Some(last_log) if last_log == unexpected_message => {
-            panic!("The following log message should not have been logged: '{unexpected_message}'")
-        }
-        _ => (),
+    LOG_MESSAGES.with_borrow(|msgs| {
+        let is_logged = msgs.iter().any(|msg| msg == unexpected_message);
+        assert!(
+            !is_logged,
+            "The following log message should not have been logged: '{unexpected_message}'"
+        );
     });
 }
 
@@ -110,8 +111,8 @@ pub fn assert_not_logged(unexpected_message: &str) {
 #[track_caller]
 pub fn assert_logged(expected_message: &str) {
     let mut deleted = false;
-    LOG_MESSAGES.with(|msgs| {
-        msgs.borrow_mut().retain(|msg| {
+    LOG_MESSAGES.with_borrow_mut(|msgs| {
+        msgs.retain(|msg| {
             if msg == expected_message {
                 deleted = true;
                 false
