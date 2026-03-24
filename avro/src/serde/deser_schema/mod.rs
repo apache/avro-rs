@@ -528,7 +528,8 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
             && union.is_nullable()
         {
             let index = zag_i32(self.reader)?;
-            let schema = union.get_variant(index as usize)?;
+            let index = usize::try_from(index).map_err(|e| Details::ConvertI32ToUsize(e, index))?;
+            let schema = union.get_variant(index)?;
             if let Schema::Null = schema {
                 visitor.visit_none()
             } else {
@@ -641,7 +642,7 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
     {
         match self.schema {
             Schema::Record(record) if record.name.name() == name && record.fields.len() == len => {
-                visitor.visit_map(RecordDeserializer::new(self.reader, record, self.config))
+                visitor.visit_seq(ManyTupleDeserializer::new(self.reader, record, self.config))
             }
             Schema::Union(union) => self
                 .with_union(union)?
@@ -1472,7 +1473,7 @@ mod tests {
         assert_roundtrip(value1, &schema, Vec::new())?;
 
         let value2 = TestTupleExternalEnum {
-            a: TupleExternalEnum::Val1(2.0, 1.0),
+            a: TupleExternalEnum::Val2(3.0, 2.0, 1.0),
         };
 
         assert_roundtrip(value2, &schema, Vec::new())?;

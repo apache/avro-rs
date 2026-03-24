@@ -64,13 +64,13 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> SeqAccess<'de>
         if self.field_read {
             Ok(None)
         } else {
-            self.field_read = true;
-            seed.deserialize(SchemaAwareDeserializer::new(
+            let val = seed.deserialize(SchemaAwareDeserializer::new(
                 self.reader,
                 self.schema,
                 self.config,
-            )?)
-            .map(Some)
+            )?)?;
+            self.field_read = true;
+            Ok(Some(val))
         }
     }
 
@@ -108,13 +108,13 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> SeqAccess<'de>
     {
         if self.current_field < self.schema.fields.len() {
             let schema = &self.schema.fields[self.current_field].schema;
-            self.current_field += 1;
-            seed.deserialize(SchemaAwareDeserializer::new(
+            let val = seed.deserialize(SchemaAwareDeserializer::new(
                 self.reader,
                 schema,
                 self.config,
-            )?)
-            .map(Some)
+            )?)?;
+            self.current_field += 1;
+            Ok(Some(val))
         } else {
             Ok(None)
         }
