@@ -60,3 +60,5 @@ clippy.doc_markdown = "warn"
 #clippy.missing_errors_doc = "warn"
 #clippy.missing_panics_doc = "warn"
 rust.unexpected_cfgs = { level = "warn", check-cfg = ['cfg(nightly)'] }
+clippy.cargo = { level = "warn", priority = -1 }
+clippy.multiple_crate_versions = "allow"

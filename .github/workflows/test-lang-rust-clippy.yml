@@ -19,9 +19,9 @@ name: Rust Clippy Check
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 permissions:
   contents: read
@@ -39,11 +39,11 @@ jobs:
     strategy:
       matrix:
         rust:
-          - 'stable'
+          - "stable"
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
           components: clippy
-      - run: cargo clippy --all-features --all-targets --workspace -- -Dclippy::cargo -Aclippy::multiple_crate_versions
+      - run: cargo clippy --all-features --all-targets --workspace
