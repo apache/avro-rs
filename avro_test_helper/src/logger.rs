@@ -109,21 +109,20 @@ pub fn assert_not_logged(unexpected_message: &str) {
 /// // This will not panic as the message was logged
 /// assert_logged("Something happened");
 ///
-/// // This will panic as the first call removed the matching log messages
+/// // This will not panic as the first call removed only the first matching log message
+/// assert_logged("Something went wrong");
+///
+/// // This will panic as all matching log messages have been removed
 /// assert_logged("Something went wrong");
 /// ```
 #[track_caller]
 pub fn assert_logged(expected_message: &str) {
     let mut deleted = false;
     LOG_MESSAGES.with_borrow_mut(|msgs| {
-        msgs.retain(|msg| {
-            if msg == expected_message {
-                deleted = true;
-                false
-            } else {
-                true
-            }
-        });
+        if let Some(pos) = msgs.iter().position(|msg| msg == expected_message) {
+            msgs.remove(pos);
+            deleted = true;
+        }
     });
 
     assert!(
