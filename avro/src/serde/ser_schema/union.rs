@@ -35,6 +35,10 @@ use crate::{
     util::{zig_i32, zig_i64},
 };
 
+/// Serializer that finds the right union variant for the type being serialized.
+///
+/// `serialize_*_variant`, `serialize_some`, and `serialize_none` will all return an error as nested
+/// unions are invalid in the Avro specification.
 pub struct UnionSerializer<'s, 'w, W: Write, S: Borrow<Schema>> {
     writer: &'w mut W,
     union: &'s UnionSchema,
@@ -343,18 +347,11 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
 
     fn serialize_unit_variant(
         self,
-        name: &'static str,
-        variant_index: u32,
-        variant: &'static str,
+        _: &'static str,
+        _: u32,
+        _: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        match self.union.find_named_schema(name, self.config.names)? {
-            Some((index, Schema::Enum(schema))) if schema.symbols.get(variant_index as usize) == Some(&variant.to_string()) => {
-                let mut bytes_written = zig_i32(index as i32, &mut *self.writer)?;
-                bytes_written += zig_i32(variant_index as i32, &mut *self.writer)?;
-                Ok(bytes_written)
-            }
-            _ => Err(self.error("unit variant", format!("Expected Schema::Enum(name: {name}, symbols[{variant_index}] == {variant}) in variants"))),
-        }
+        Err(self.error("unit variant", "Nested unions are not supported"))
     }
 
     fn serialize_newtype_struct<T>(
