@@ -107,11 +107,20 @@ impl UnionSchema {
         name: &str,
         names: &'s HashMap<Name, impl Borrow<Schema>>,
     ) -> Result<Option<(usize, &'s Schema)>, Error> {
-        for index in self.named_index.iter().copied() {
-            let schema = &self.schemas[index];
+        for (index, schema) in self.schemas.iter().enumerate() {
             if let Some(schema_name) = schema.name()
                 && schema_name.name() == name
             {
+                let schema = if let Schema::Ref { name } = schema {
+                    names
+                        .get(name)
+                        .ok_or_else(|| Details::SchemaResolutionError(name.clone()))?
+                        .borrow()
+                } else {
+                    schema
+                };
+                return Ok(Some((index, schema)));
+            } else if schema.to_string() == name {
                 let schema = if let Schema::Ref { name } = schema {
                     names
                         .get(name)
