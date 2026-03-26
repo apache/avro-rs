@@ -35,10 +35,9 @@ mod tuple;
 
 use block::BlockDeserializer;
 use enums::PlainEnumDeserializer;
+use enums::UnionEnumDeserializer;
 use record::RecordDeserializer;
 use tuple::{ManyTupleDeserializer, OneTupleDeserializer};
-
-use crate::serde::deser_schema::enums::UnionEnumDeserializer;
 
 /// Configure the deserializer.
 #[derive(Debug)]
@@ -127,6 +126,12 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
             schema
         };
         Ok(self)
+    }
+
+    fn with_nullable_union_three_plus_variants(
+        self,
+    ) -> ThreePlusVariantUnionDeserializer<'s, 'r, R, S> {
+        ThreePlusVariantUnionDeserializer::new(self)
     }
 
     /// Read the union and create a new deserializer with the existing reader and config.
@@ -524,7 +529,6 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
         V: Visitor<'de>,
     {
         if let Schema::Union(union) = self.schema
-            && union.variants().len() == 2
             && union.is_nullable()
         {
             let index = zag_i32(self.reader)?;
@@ -533,7 +537,14 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
             if let Schema::Null = schema {
                 visitor.visit_none()
             } else {
-                visitor.visit_some(self.with_different_schema(schema)?)
+                if union.variants().len() == 2 {
+                    visitor.visit_some(self.with_different_schema(schema)?)
+                } else {
+                    visitor.visit_some(
+                        self.with_different_schema(schema)?
+                            .with_nullable_union_three_plus_variants(),
+                    )
+                }
             }
         } else {
             Err(self.error("option", "Expected Schema::Union([Schema::Null, _])"))
@@ -709,7 +720,15 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
                 visitor.visit_enum(PlainEnumDeserializer::new(self.reader, schema))
             }
             Schema::Union(union) => {
-                visitor.visit_enum(UnionEnumDeserializer::new(self.reader, union, self.config))
+                let index = zag_i32(self.reader)?;
+                let index =
+                    usize::try_from(index).map_err(|e| Details::ConvertI32ToUsize(e, index))?;
+                let schema = union.get_variant(index)?;
+                visitor.visit_enum(UnionEnumDeserializer::new(
+                    self.reader,
+                    schema,
+                    self.config,
+                )?)
             }
             _ => Err(self.error("enum", "Expected Schema::Enum | Schema::Union")),
         }
@@ -735,6 +754,88 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
 
     fn is_human_readable(&self) -> bool {
         self.config.human_readable
+    }
+}
+
+struct ThreePlusVariantUnionDeserializer<'s, 'r, R: Read, S: Borrow<Schema>> {
+    inner: SchemaAwareDeserializer<'s, 'r, R, S>,
+}
+
+impl<'s, 'r, R: Read, S: Borrow<Schema>> ThreePlusVariantUnionDeserializer<'s, 'r, R, S> {
+    fn new(inner: SchemaAwareDeserializer<'s, 'r, R, S>) -> Self {
+        Self { inner }
+    }
+}
+
+macro_rules! forward_to_inner_deserializer {
+    ($( $method:ident($($arg:ident: $arg_ty:ty),*); )*) => {
+        $(
+            fn $method<V>(self, $($arg: $arg_ty,)* visitor: V) -> Result<V::Value, Self::Error>
+            where
+                V: Visitor<'de>,
+            {
+                self.inner.$method($($arg,)* visitor)
+            }
+        )*
+    };
+}
+
+impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
+    for ThreePlusVariantUnionDeserializer<'s, 'r, R, S>
+{
+    type Error = Error;
+
+    fn deserialize_enum<V>(
+        self,
+        _name: &'static str,
+        _variants: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        visitor.visit_enum(UnionEnumDeserializer::new(
+            self.inner.reader,
+            self.inner.schema,
+            self.inner.config,
+        )?)
+    }
+
+    fn is_human_readable(&self) -> bool {
+        self.inner.config.human_readable
+    }
+
+    forward_to_inner_deserializer! {
+        deserialize_any();
+        deserialize_bool();
+        deserialize_i8();
+        deserialize_i16();
+        deserialize_i32();
+        deserialize_i64();
+        deserialize_i128();
+        deserialize_u8();
+        deserialize_u16();
+        deserialize_u32();
+        deserialize_u64();
+        deserialize_u128();
+        deserialize_f32();
+        deserialize_f64();
+        deserialize_char();
+        deserialize_str();
+        deserialize_string();
+        deserialize_bytes();
+        deserialize_byte_buf();
+        deserialize_option();
+        deserialize_unit();
+        deserialize_seq();
+        deserialize_map();
+        deserialize_identifier();
+        deserialize_ignored_any();
+        deserialize_unit_struct(name: &'static str);
+        deserialize_newtype_struct(name: &'static str);
+        deserialize_tuple(len: usize);
+        deserialize_tuple_struct(name: &'static str, len: usize);
+        deserialize_struct(name: &'static str, fields: &'static [&'static str]);
     }
 }
 

@@ -15,18 +15,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::{borrow::Borrow, io::Read};
-
 use serde::{
     Deserializer,
     de::{DeserializeSeed, EnumAccess, Unexpected, VariantAccess, Visitor},
 };
+use std::{borrow::{Borrow, Cow}, io::Read};
 
 use super::{Config, DESERIALIZE_ANY, SchemaAwareDeserializer, identifier::IdentifierDeserializer};
 use crate::{
     Error, Schema,
     error::Details,
-    schema::{EnumSchema, UnionSchema},
+    schema::EnumSchema,
     util::zag_i32,
 };
 
@@ -100,17 +99,21 @@ impl<'de, 's, 'r, R: Read> VariantAccess<'de> for PlainEnumDeserializer<'s, 'r, 
 
 pub struct UnionEnumDeserializer<'s, 'r, R: Read, S: Borrow<Schema>> {
     reader: &'r mut R,
-    variants: &'s [Schema],
+    schema: &'s Schema,
     config: Config<'s, S>,
 }
 
 impl<'s, 'r, R: Read, S: Borrow<Schema>> UnionEnumDeserializer<'s, 'r, R, S> {
-    pub fn new(reader: &'r mut R, schema: &'s UnionSchema, config: Config<'s, S>) -> Self {
-        Self {
+    pub fn new(
+        reader: &'r mut R,
+        schema: &'s Schema,
+        config: Config<'s, S>,
+    ) -> Result<Self, Error> {
+        Ok(Self {
             reader,
-            variants: schema.variants(),
+            schema,
             config,
-        }
+        })
     }
 }
 
@@ -124,20 +127,16 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> EnumAccess<'de>
     where
         V: DeserializeSeed<'de>,
     {
-        let index = zag_i32(self.reader)?;
-        let index = usize::try_from(index).map_err(|e| Details::ConvertI32ToUsize(e, index))?;
-        let schema = self.variants.get(index).ok_or(Details::GetUnionVariant {
-            index: index as i64,
-            num_variants: self.variants.len(),
-        })?;
-
+        let name = match self.schema.name() {
+            Some(name) => Cow::Borrowed(name.name()),
+            None => Cow::Owned(self.schema.to_string()),
+        };
         Ok((
-            seed.deserialize(IdentifierDeserializer::index(index as u32))?,
-            UnionVariantAccess::new(schema, self.reader, self.config)?,
+            seed.deserialize(IdentifierDeserializer::string(&name))?,
+            UnionVariantAccess::new(self.schema, self.reader, self.config)?,
         ))
     }
 }
-
 pub struct UnionVariantAccess<'s, 'r, R: Read, S: Borrow<Schema>> {
     schema: &'s Schema,
     reader: &'r mut R,

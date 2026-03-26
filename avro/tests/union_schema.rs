@@ -117,7 +117,7 @@ static SCHEMA_D_STR: &str = r#"{
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 enum UnionNoneAB {
-    None,
+    Null,
     A(A),
     B(B),
 }
@@ -140,7 +140,7 @@ fn test_avro_3901_union_schema_round_trip_null_at_start() -> TestResult {
     assert_roundtrip(&input, &schemata[2], &schemata)?;
 
     let input = D {
-        field_union: UnionNoneAB::None,
+        field_union: UnionNoneAB::Null,
         field_d: "fooyy".to_string(),
     };
     assert_roundtrip(&input, &schemata[2], &schemata)?;
@@ -166,7 +166,7 @@ static SCHEMA_E_STR: &str = r#"{
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 enum UnionANoneB {
     A(A),
-    None,
+    Null,
     B(B),
 }
 
@@ -188,7 +188,7 @@ fn test_avro_3901_union_schema_round_trip_with_out_of_order_null() -> TestResult
     assert_roundtrip(&input, &schemata[2], &schemata)?;
 
     let input = E {
-        field_union: UnionANoneB::None,
+        field_union: UnionANoneB::Null,
         field_e: "barme2".to_string(),
     };
     assert_roundtrip(&input, &schemata[2], &schemata)?;
@@ -215,7 +215,7 @@ static SCHEMA_F_STR: &str = r#"{
 enum UnionABNone {
     A(A),
     B(B),
-    None,
+    Null,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -242,7 +242,7 @@ fn test_avro_3901_union_schema_round_trip_with_end_null() -> TestResult {
     assert_roundtrip(&input, &schemata[2], &schemata)?;
 
     let input = F {
-        field_union: UnionABNone::None,
+        field_union: UnionABNone::Null,
         field_f: "aoee2".to_string(),
     };
     assert_roundtrip(&input, &schemata[2], &schemata)?;
