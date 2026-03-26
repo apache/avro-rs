@@ -381,29 +381,15 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
 
     fn serialize_newtype_variant<T>(
         self,
-        _name: &'static str,
-        _variant_index: u32,
-        variant: &'static str,
-        value: &T,
+        _: &'static str,
+        _: u32,
+        _: &'static str,
+        _: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
         T: ?Sized + Serialize,
     {
-        match self.union.find_named_schema(variant, self.config.names)? {
-            Some((index, schema)) => {
-                let mut bytes_written = zig_i32(index as i32, &mut *self.writer)?;
-                bytes_written += value.serialize(SchemaAwareSerializer::new(
-                    self.writer,
-                    schema,
-                    self.config,
-                )?)?;
-                Ok(bytes_written)
-            }
-            _ => Err(self.error(
-                "newtype variant",
-                format!("Expected Schema with name: {variant} in variants"),
-            )),
-        }
+        Err(self.error("newtype variant", "Nested unions are not supported"))
     }
 
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
