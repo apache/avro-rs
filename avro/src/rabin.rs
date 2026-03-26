@@ -17,8 +17,7 @@
 
 //! Implementation of the Rabin fingerprint algorithm
 use digest::{
-    FixedOutput, FixedOutputReset, HashMarker, Output, Reset, Update, consts::U8,
-    core_api::OutputSizeUser, generic_array::GenericArray,
+    FixedOutput, FixedOutputReset, HashMarker, Output, OutputSizeUser, Reset, Update, consts::U8,
 };
 use std::sync::OnceLock;
 
@@ -103,8 +102,8 @@ impl Update for Rabin {
 }
 
 impl FixedOutput for Rabin {
-    fn finalize_into(self, out: &mut GenericArray<u8, Self::OutputSize>) {
-        out.copy_from_slice(&self.result.to_le_bytes());
+    fn finalize_into(self, out: &mut Output<Self>) {
+        out.copy_from_slice(&self.result.to_le_bytes())
     }
 }
 
