@@ -78,6 +78,7 @@ pub struct SchemaAwareDeserializer<'s, 'r, R: Read, S: Borrow<Schema>> {
     /// This schema is guaranteed to not be a [`Schema::Ref`].
     schema: &'s Schema,
     config: Config<'s, S>,
+    branch_index: Option<usize>,
 }
 
 impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
@@ -95,12 +96,14 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
                 reader,
                 schema,
                 config,
+                branch_index: None,
             })
         } else {
             Ok(Self {
                 reader,
                 schema,
                 config,
+                branch_index: None,
             })
         }
     }
@@ -128,18 +131,22 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
         Ok(self)
     }
 
-    fn with_nullable_union_three_plus_variants(
-        self,
-    ) -> ThreePlusVariantUnionDeserializer<'s, 'r, R, S> {
-        ThreePlusVariantUnionDeserializer::new(self)
+    fn with_branch_index(mut self, branch_index: usize) -> Self {
+        self.branch_index = Some(branch_index);
+        self
     }
 
     /// Read the union and create a new deserializer with the existing reader and config.
     ///
     /// This will resolve the read schema if it is a reference.
     fn with_union(self, schema: &'s UnionSchema) -> Result<Self, Error> {
-        let index = zag_i32(self.reader)?;
-        let index = usize::try_from(index).map_err(|e| Details::ConvertI32ToUsize(e, index))?;
+        let index = match self.branch_index {
+            Some(index) => index,
+            None => {
+                let index = zag_i32(self.reader)?;
+                usize::try_from(index).map_err(|e| Details::ConvertI32ToUsize(e, index))?
+            }
+        };
         let variant = schema.get_variant(index)?;
         self.with_different_schema(variant)
     }
@@ -540,10 +547,7 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
                 if union.variants().len() == 2 {
                     visitor.visit_some(self.with_different_schema(schema)?)
                 } else {
-                    visitor.visit_some(
-                        self.with_different_schema(schema)?
-                            .with_nullable_union_three_plus_variants(),
-                    )
+                    visitor.visit_some(self.with_branch_index(index))
                 }
             }
         } else {
@@ -719,17 +723,12 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
             Schema::Enum(schema) => {
                 visitor.visit_enum(PlainEnumDeserializer::new(self.reader, schema))
             }
-            Schema::Union(union) => {
-                let index = zag_i32(self.reader)?;
-                let index =
-                    usize::try_from(index).map_err(|e| Details::ConvertI32ToUsize(e, index))?;
-                let schema = union.get_variant(index)?;
-                visitor.visit_enum(UnionEnumDeserializer::new(
-                    self.reader,
-                    schema,
-                    self.config,
-                )?)
-            }
+            Schema::Union(union) => visitor.visit_enum(UnionEnumDeserializer::new(
+                self.reader,
+                union,
+                self.config,
+                self.branch_index,
+            )),
             _ => Err(self.error("enum", "Expected Schema::Enum | Schema::Union")),
         }
     }
@@ -754,88 +753,6 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
 
     fn is_human_readable(&self) -> bool {
         self.config.human_readable
-    }
-}
-
-struct ThreePlusVariantUnionDeserializer<'s, 'r, R: Read, S: Borrow<Schema>> {
-    inner: SchemaAwareDeserializer<'s, 'r, R, S>,
-}
-
-impl<'s, 'r, R: Read, S: Borrow<Schema>> ThreePlusVariantUnionDeserializer<'s, 'r, R, S> {
-    fn new(inner: SchemaAwareDeserializer<'s, 'r, R, S>) -> Self {
-        Self { inner }
-    }
-}
-
-macro_rules! forward_to_inner_deserializer {
-    ($( $method:ident($($arg:ident: $arg_ty:ty),*); )*) => {
-        $(
-            fn $method<V>(self, $($arg: $arg_ty,)* visitor: V) -> Result<V::Value, Self::Error>
-            where
-                V: Visitor<'de>,
-            {
-                self.inner.$method($($arg,)* visitor)
-            }
-        )*
-    };
-}
-
-impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
-    for ThreePlusVariantUnionDeserializer<'s, 'r, R, S>
-{
-    type Error = Error;
-
-    fn deserialize_enum<V>(
-        self,
-        _name: &'static str,
-        _variants: &'static [&'static str],
-        visitor: V,
-    ) -> Result<V::Value, Self::Error>
-    where
-        V: Visitor<'de>,
-    {
-        visitor.visit_enum(UnionEnumDeserializer::new(
-            self.inner.reader,
-            self.inner.schema,
-            self.inner.config,
-        )?)
-    }
-
-    fn is_human_readable(&self) -> bool {
-        self.inner.config.human_readable
-    }
-
-    forward_to_inner_deserializer! {
-        deserialize_any();
-        deserialize_bool();
-        deserialize_i8();
-        deserialize_i16();
-        deserialize_i32();
-        deserialize_i64();
-        deserialize_i128();
-        deserialize_u8();
-        deserialize_u16();
-        deserialize_u32();
-        deserialize_u64();
-        deserialize_u128();
-        deserialize_f32();
-        deserialize_f64();
-        deserialize_char();
-        deserialize_str();
-        deserialize_string();
-        deserialize_bytes();
-        deserialize_byte_buf();
-        deserialize_option();
-        deserialize_unit();
-        deserialize_seq();
-        deserialize_map();
-        deserialize_identifier();
-        deserialize_ignored_any();
-        deserialize_unit_struct(name: &'static str);
-        deserialize_newtype_struct(name: &'static str);
-        deserialize_tuple(len: usize);
-        deserialize_tuple_struct(name: &'static str, len: usize);
-        deserialize_struct(name: &'static str, fields: &'static [&'static str]);
     }
 }
 
