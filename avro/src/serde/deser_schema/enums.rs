@@ -15,17 +15,18 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use std::{borrow::Borrow, io::Read};
+
 use serde::{
     Deserializer,
     de::{DeserializeSeed, EnumAccess, Unexpected, VariantAccess, Visitor},
 };
-use std::{borrow::{Borrow, Cow}, io::Read};
 
 use super::{Config, DESERIALIZE_ANY, SchemaAwareDeserializer, identifier::IdentifierDeserializer};
 use crate::{
     Error, Schema,
     error::Details,
-    schema::EnumSchema,
+    schema::{EnumSchema, UnionSchema},
     util::zag_i32,
 };
 
@@ -99,21 +100,31 @@ impl<'de, 's, 'r, R: Read> VariantAccess<'de> for PlainEnumDeserializer<'s, 'r, 
 
 pub struct UnionEnumDeserializer<'s, 'r, R: Read, S: Borrow<Schema>> {
     reader: &'r mut R,
-    schema: &'s Schema,
+    variants: &'s [Schema],
     config: Config<'s, S>,
+    branch_index: Option<usize>,
 }
 
 impl<'s, 'r, R: Read, S: Borrow<Schema>> UnionEnumDeserializer<'s, 'r, R, S> {
     pub fn new(
         reader: &'r mut R,
-        schema: &'s Schema,
+        schema: &'s UnionSchema,
         config: Config<'s, S>,
-    ) -> Result<Self, Error> {
-        Ok(Self {
+        branch_index: Option<usize>,
+    ) -> Self {
+        Self {
             reader,
-            schema,
+            variants: schema.variants(),
             config,
-        })
+            branch_index,
+        }
+    }
+
+    fn get_variant_index(&self, branch_index: usize) -> usize {
+        match self.branch_index {
+            Some(null_index) if branch_index >= null_index => branch_index - 1,
+            _ => branch_index,
+        }
     }
 }
 
@@ -127,13 +138,21 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> EnumAccess<'de>
     where
         V: DeserializeSeed<'de>,
     {
-        let name = match self.schema.name() {
-            Some(name) => Cow::Borrowed(name.name()),
-            None => Cow::Owned(self.schema.to_string()),
+        let index = match self.branch_index {
+            Some(index) => index,
+            None => {
+                let index = zag_i32(self.reader)?;
+                usize::try_from(index).map_err(|e| Details::ConvertI32ToUsize(e, index))?
+            }
         };
+        let schema = self.variants.get(index).ok_or(Details::GetUnionVariant {
+            index: index as i64,
+            num_variants: self.variants.len(),
+        })?;
+        let variant_index = self.get_variant_index(index);
         Ok((
-            seed.deserialize(IdentifierDeserializer::string(&name))?,
-            UnionVariantAccess::new(self.schema, self.reader, self.config)?,
+            seed.deserialize(IdentifierDeserializer::index(variant_index as u32))?,
+            UnionVariantAccess::new(schema, self.reader, self.config)?,
         ))
     }
 }
