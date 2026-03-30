@@ -602,7 +602,6 @@ pub const LOCAL_TIMESTAMPMICROS_LOGICAL_TYPE: &[(&str, bool)] = &[
     ),
 ];
 
-#[inline]
 pub fn examples() -> &'static Vec<(&'static str, bool)> {
     static EXAMPLES_ONCE: OnceLock<Vec<(&'static str, bool)>> = OnceLock::new();
     EXAMPLES_ONCE.get_or_init(|| {
@@ -630,7 +629,6 @@ pub fn examples() -> &'static Vec<(&'static str, bool)> {
     })
 }
 
-#[inline]
 pub fn valid_examples() -> &'static Vec<(&'static str, bool)> {
     static VALID_EXAMPLES_ONCE: OnceLock<Vec<(&'static str, bool)>> = OnceLock::new();
     VALID_EXAMPLES_ONCE.get_or_init(|| examples().iter().copied().filter(|s| s.1).collect())

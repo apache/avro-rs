@@ -26,7 +26,6 @@ struct TestLogger {
 }
 
 impl Log for TestLogger {
-    #[inline]
     fn enabled(&self, _metadata: &Metadata) -> bool {
         true
     }
