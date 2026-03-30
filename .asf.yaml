@@ -36,6 +36,12 @@ github:
   protected_tags:
     - "rel/*"
     - "v*.*.*"
+  pull_requests:
+    # enable updating head branches of pull requests
+    allow_update_branch: true
+    allow_auto_merge: true
+    # auto-delete head branches after being merged
+    del_branch_on_merge: true
 
 #publish:
 #  whoami: asf-site
