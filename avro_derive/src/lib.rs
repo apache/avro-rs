@@ -51,7 +51,7 @@ use crate::{
 pub fn proc_macro_derive_avro_schema(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     derive_avro_schema(input)
-        .unwrap_or_else(|errs| to_compile_errors(errs.as_slice()))
+        .unwrap_or_else(to_compile_errors)
         .into()
 }
 
@@ -448,8 +448,8 @@ fn type_to_field_default_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>>
 }
 
 /// Stolen from serde
-fn to_compile_errors(errors: &[syn::Error]) -> proc_macro2::TokenStream {
-    let compile_errors = errors.iter().map(syn::Error::to_compile_error);
+fn to_compile_errors(errors: impl AsRef<[syn::Error]>) -> proc_macro2::TokenStream {
+    let compile_errors = errors.as_ref().iter().map(syn::Error::to_compile_error);
     quote!(#(#compile_errors)*)
 }
 
