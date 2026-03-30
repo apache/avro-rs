@@ -82,7 +82,7 @@ apache-avro-derive = { default-features = false, version = "0.22.0", path = "../
 apache-avro-test-helper = { default-features = false, version = "0.22.0", path = "../avro_test_helper" }
 criterion = { default-features = false, version = "0.8.2" }
 hex-literal = { default-features = false, version = "1.1.0" }
-md-5 = { default-features = false, version = "0.10.6" }
+md-5 = { default-features = false, version = "0.11.0" }
 pretty_assertions = { workspace = true }
 sha2 = { default-features = false, version = "0.10.9" }
 paste = { default-features = false, version = "1.0.15" }
