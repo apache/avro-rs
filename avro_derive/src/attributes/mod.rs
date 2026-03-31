@@ -202,7 +202,7 @@ pub enum With {
 impl With {
     fn from_avro_and_serde(
         avro: &avro::With,
-        serde: &Option<String>,
+        serde: Option<&String>,
         span: Span,
     ) -> Result<Self, syn::Error> {
         match &avro {
@@ -327,7 +327,7 @@ impl FieldOptions {
                 "`#[serde(skip_serializing)]` and `#[serde(skip_serializing_if)]` are incompatible with `#[avro(default = false)]`"
             ));
         }
-        let with = match With::from_avro_and_serde(&avro.with, &serde.with, span) {
+        let with = match With::from_avro_and_serde(&avro.with, serde.with.as_ref(), span) {
             Ok(with) => with,
             Err(error) => {
                 errors.push(error);
@@ -389,7 +389,7 @@ fn darling_to_syn(e: darling::Error) -> Vec<syn::Error> {
 fn warn(span: Span, message: &str, help: &str) {
     proc_macro::Diagnostic::spanned(span.unwrap(), proc_macro::Level::Warning, message)
         .help(help)
-        .emit()
+        .emit();
 }
 
 #[cfg(not(nightly))]

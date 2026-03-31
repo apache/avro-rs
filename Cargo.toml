@@ -60,3 +60,12 @@ clippy.doc_markdown = "warn"
 #clippy.missing_errors_doc = "warn"
 #clippy.missing_panics_doc = "warn"
 rust.unexpected_cfgs = { level = "warn", check-cfg = ['cfg(nightly)'] }
+clippy.cargo = { level = "warn", priority = -1 }
+clippy.multiple_crate_versions = "allow"
+# clippy.needless_raw_string_hashes = "warn"
+# clippy.missing_panics_doc = "warn"
+# clippy.semicolon_if_nothing_returned = "warn"
+# clippy.manual_assert = "warn"
+# clippy.enum_glob_use = "warn"
+# clippy.needless_pass_by_value = "warn"
+# clippy.single_match_else = "warn"

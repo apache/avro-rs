@@ -37,7 +37,7 @@ pub const PRIMITIVE_EXAMPLES: &[(&str, bool)] = &[
     (r#""double""#, true),
     (r#"{"type": "double"}"#, true),
     (r#""true""#, false),
-    (r#"true"#, false),
+    ("true", false),
     (r#"{"no_type": "test"}"#, false),
     (r#"{"type": "panther"}"#, false),
 ];

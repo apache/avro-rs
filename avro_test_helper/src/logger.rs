@@ -26,7 +26,6 @@ struct TestLogger {
 }
 
 impl Log for TestLogger {
-    #[inline]
     fn enabled(&self, _metadata: &Metadata) -> bool {
         true
     }
@@ -53,47 +52,85 @@ fn test_logger() -> &'static TestLogger {
     })
 }
 
+/// Clears all log messages of this thread.
 pub fn clear_log_messages() {
-    LOG_MESSAGES.with(|msgs| match msgs.try_borrow_mut() {
-        Ok(mut log_messages) => log_messages.clear(),
-        Err(err) => panic!("Failed to clear log messages: {err:?}"),
-    });
+    LOG_MESSAGES.with_borrow_mut(Vec::clear);
 }
 
+/// Asserts that the message is not in the log for this thread.
+///
+/// # Panics
+/// Will panic if the provided message is an exact match for any message in the log.
+///
+/// # Example
+/// ```should_panic
+/// # use apache_avro_test_helper::logger::assert_not_logged;
+/// #
+/// log::error!("Unexpected Error");
+///
+/// // This will not panic as it is not an exact match
+/// assert_not_logged("No Unexpected Error");
+///
+/// // This will panic
+/// assert_not_logged("Unexpected Error");
+/// ```
 #[track_caller]
 pub fn assert_not_logged(unexpected_message: &str) {
-    LOG_MESSAGES.with(|msgs| match msgs.borrow().last() {
-        Some(last_log) if last_log == unexpected_message => {
-            panic!("The following log message should not have been logged: '{unexpected_message}'")
-        }
-        _ => (),
+    LOG_MESSAGES.with_borrow(|msgs| {
+        let is_logged = msgs.iter().any(|msg| msg == unexpected_message);
+        assert!(
+            !is_logged,
+            "The following log message should not have been logged: '{unexpected_message}'"
+        );
     });
 }
 
+/// Asserts that the message has been logged and removes it from the log of this thread.
+///
+/// # Panics
+/// Will panic if the message does not appear in the log.
+///
+/// # Example
+/// ```should_panic
+/// # use apache_avro_test_helper::logger::assert_logged;
+/// #
+/// log::error!("Something went wrong");
+/// log::info!("Something happened");
+/// log::error!("Something went wrong");
+///
+/// // This will not panic as the message was logged
+/// assert_logged("Something went wrong");
+///
+/// // This will not panic as the message was logged
+/// assert_logged("Something happened");
+///
+/// // This will not panic as the first call removed only the first matching log message
+/// assert_logged("Something went wrong");
+///
+/// // This will panic as all matching log messages have been removed
+/// assert_logged("Something went wrong");
+/// ```
 #[track_caller]
 pub fn assert_logged(expected_message: &str) {
     let mut deleted = false;
-    LOG_MESSAGES.with(|msgs| {
-        msgs.borrow_mut().retain(|msg| {
-            if msg == expected_message {
-                deleted = true;
-                false
-            } else {
-                true
-            }
-        })
+    LOG_MESSAGES.with_borrow_mut(|msgs| {
+        if let Some(pos) = msgs.iter().position(|msg| msg == expected_message) {
+            msgs.remove(pos);
+            deleted = true;
+        }
     });
 
-    if !deleted {
-        panic!("Expected log message has not been logged: '{expected_message}'");
-    }
+    assert!(
+        deleted,
+        "Expected log message has not been logged: '{expected_message}'"
+    );
 }
 
 pub(crate) fn install() {
     log::set_logger(test_logger())
-        .map(|_| log::set_max_level(LevelFilter::Trace))
+        .map(|()| log::set_max_level(LevelFilter::Trace))
         .map_err(|err| {
             eprintln!("Failed to set the custom logger: {err:?}");
         })
-        .unwrap();
+        .expect("Failed to set the custom TestLogger");
 }

@@ -26,13 +26,13 @@ use syn::{DataEnum, Fields};
 
 pub fn schema_def(
     container_attrs: &NamedTypeOptions,
-    data_enum: DataEnum,
+    data_enum: &DataEnum,
     ident_span: Span,
 ) -> Result<TokenStream, Vec<syn::Error>> {
     let doc = preserve_optional(container_attrs.doc.as_ref());
     let enum_aliases = aliases(&container_attrs.aliases);
     if data_enum.variants.iter().all(|v| Fields::Unit == v.fields) {
-        let default_value = default_enum_variant(&data_enum, ident_span)?;
+        let default_value = default_enum_variant(data_enum, ident_span)?;
         let default = preserve_optional(default_value);
         let mut symbols = Vec::new();
         for variant in &data_enum.variants {

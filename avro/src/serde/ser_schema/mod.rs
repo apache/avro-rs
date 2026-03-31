@@ -1645,15 +1645,13 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
             Schema::Union(union_schema) => {
                 for (i, variant_schema) in union_schema.schemas.iter().enumerate() {
                     match variant_schema {
-                        Schema::Record(inner) => {
-                            if inner.fields.len() == len {
-                                encode_int(i as i32, &mut *self.writer)?;
-                                return self.serialize_tuple_struct_with_schema(
-                                    name,
-                                    len,
-                                    variant_schema,
-                                );
-                            }
+                        Schema::Record(inner) if inner.fields.len() == len => {
+                            encode_int(i as i32, &mut *self.writer)?;
+                            return self.serialize_tuple_struct_with_schema(
+                                name,
+                                len,
+                                variant_schema,
+                            );
                         }
                         Schema::Array(_) | Schema::Ref { name: _ } => {
                             encode_int(i as i32, &mut *self.writer)?;

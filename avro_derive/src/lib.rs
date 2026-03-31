@@ -68,16 +68,16 @@ fn derive_avro_schema(input: DeriveInput) -> Result<TokenStream, Vec<syn::Error>
                 let (schema_def, record_fields) =
                     get_struct_schema_def(&named_type_options, data_struct, input.ident.span())?;
                 (
-                    handle_named_schemas(named_type_options.name, schema_def),
+                    handle_named_schemas(&named_type_options.name, &schema_def),
                     record_fields,
                 )
             };
             Ok(create_trait_definition(
-                input.ident,
+                &input.ident,
                 &input.generics,
-                get_schema_impl,
-                get_record_fields_impl,
-                named_type_options.default,
+                &get_schema_impl,
+                &get_record_fields_impl,
+                &named_type_options.default,
             ))
         }
         syn::Data::Enum(data_enum) => {
@@ -89,14 +89,14 @@ fn derive_avro_schema(input: DeriveInput) -> Result<TokenStream, Vec<syn::Error>
                 )]);
             }
             let schema_def =
-                get_data_enum_schema_def(&named_type_options, data_enum, input.ident.span())?;
-            let inner = handle_named_schemas(named_type_options.name, schema_def);
+                get_data_enum_schema_def(&named_type_options, &data_enum, input.ident.span())?;
+            let inner = handle_named_schemas(&named_type_options.name, &schema_def);
             Ok(create_trait_definition(
-                input.ident,
+                &input.ident,
                 &input.generics,
-                inner,
-                quote! { ::std::option::Option::None },
-                named_type_options.default,
+                &inner,
+                &quote! { ::std::option::Option::None },
+                &named_type_options.default,
             ))
         }
         syn::Data::Union(_) => Err(vec![syn::Error::new(
@@ -108,11 +108,11 @@ fn derive_avro_schema(input: DeriveInput) -> Result<TokenStream, Vec<syn::Error>
 
 /// Generate the trait definition with the correct generics
 fn create_trait_definition(
-    ident: Ident,
+    ident: &Ident,
     generics: &Generics,
-    get_schema_impl: TokenStream,
-    get_record_fields_impl: TokenStream,
-    field_default_impl: TokenStream,
+    get_schema_impl: &TokenStream,
+    get_record_fields_impl: &TokenStream,
+    field_default_impl: &TokenStream,
 ) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     quote! {
@@ -134,7 +134,7 @@ fn create_trait_definition(
 }
 
 /// Generate the code to check `named_schemas` if this schema already exist
-fn handle_named_schemas(full_schema_name: String, schema_def: TokenStream) -> TokenStream {
+fn handle_named_schemas(full_schema_name: &str, schema_def: &TokenStream) -> TokenStream {
     quote! {
         let name = ::apache_avro::schema::Name::new_with_enclosing_namespace(#full_schema_name, enclosing_namespace).expect(concat!("Unable to parse schema name ", #full_schema_name));
         if named_schemas.contains(&name) {
@@ -448,15 +448,16 @@ fn type_to_field_default_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>>
 }
 
 /// Stolen from serde
-fn to_compile_errors(errors: Vec<syn::Error>) -> proc_macro2::TokenStream {
-    let compile_errors = errors.iter().map(syn::Error::to_compile_error);
+fn to_compile_errors(errors: impl AsRef<[syn::Error]>) -> proc_macro2::TokenStream {
+    let compile_errors = errors.as_ref().iter().map(syn::Error::to_compile_error);
     quote!(#(#compile_errors)*)
 }
 
 fn preserve_optional(op: Option<impl quote::ToTokens>) -> TokenStream {
-    match op {
-        Some(tt) => quote! {::std::option::Option::Some(#tt.into())},
-        None => quote! {::std::option::Option::None},
+    if let Some(tt) = op {
+        quote! {::std::option::Option::Some(#tt.into())}
+    } else {
+        quote! {::std::option::Option::None}
     }
 }
 

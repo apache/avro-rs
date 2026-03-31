@@ -66,14 +66,14 @@ impl ContainerAttributes {
                 span,
                 r#"`#[avro(name = "...")]` is deprecated."#,
                 r#"Use `#[serde(rename = "...")]` instead."#,
-            )
+            );
         }
         if self.rename_all != RenameRule::None {
             super::warn(
                 span,
                 r#"`#[avro(rename_all = "..")]` is deprecated"#,
                 r#"Use `#[serde(rename_all = "..")]` instead"#,
-            )
+            );
         }
     }
 }
@@ -98,7 +98,7 @@ impl VariantAttributes {
                 span,
                 r#"`#[avro(rename = "..")]` is deprecated"#,
                 r#"Use `#[serde(rename = "..")]` instead"#,
-            )
+            );
         }
     }
 }
@@ -177,28 +177,28 @@ impl FieldAttributes {
                 span,
                 r#"`#[avro(alias = "..")]` is deprecated"#,
                 r#"Use `#[serde(alias = "..")]` instead"#,
-            )
+            );
         }
         if self.rename.is_some() {
             super::warn(
                 span,
                 r#"`#[avro(rename = "..")]` is deprecated"#,
                 r#"Use `#[serde(rename = "..")]` instead"#,
-            )
+            );
         }
         if self.skip {
             super::warn(
                 span,
                 "`#[avro(skip)]` is deprecated",
                 "Use `#[serde(skip)]` instead",
-            )
+            );
         }
         if self.flatten {
             super::warn(
                 span,
                 "`#[avro(flatten)]` is deprecated",
                 "Use `#[serde(flatten)]` instead",
-            )
+            );
         }
     }
 }

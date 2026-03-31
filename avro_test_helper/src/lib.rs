@@ -15,9 +15,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
+pub mod data;
+pub mod logger;
+
+use core::any::type_name;
+use core::cell::RefCell;
+use core::fmt::{Debug, Display};
 #[cfg(not(target_arch = "wasm32"))]
 use ctor::{ctor, dtor};
-use std::cell::RefCell;
 
 thread_local! {
     // The unit tests run in parallel
@@ -25,9 +30,6 @@ thread_local! {
     // and clear them after assertion
     pub(crate) static LOG_MESSAGES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
-
-pub mod data;
-pub mod logger;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[ctor]
@@ -56,13 +58,13 @@ pub struct TestError;
 /// A converter of any error into [`TestError`].
 ///
 /// It is used to print better error messages in the tests.
-/// Borrowed from <https://bluxte.net/musings/2023/01/08/improving_failure_messages_rust_tests/>
+/// Borrowed from <https://bluxte.net/musings/2023/01/08/improving_failure_messages_rust_tests/>.
 // The Display bound is needed so that the `From` implementation doesn't
 // apply to `TestError` itself.
-impl<Err: std::fmt::Display + std::fmt::Debug> From<Err> for TestError {
+impl<Err: Display + Debug> From<Err> for TestError {
     #[track_caller]
     fn from(err: Err) -> Self {
-        panic!("{}: {:?}", std::any::type_name::<Err>(), err);
+        panic!("{}: {:?}", type_name::<Err>(), err);
     }
 }
 
@@ -71,4 +73,4 @@ pub type TestResult = Result<(), TestError>;
 /// Does nothing. Just loads the crate.
 /// Should be used in the integration tests, because they do not use [dev-dependencies]
 /// and do not auto-load this crate.
-pub fn init() {}
+pub const fn init() {}
