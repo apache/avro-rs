@@ -57,23 +57,19 @@ pub fn clear_log_messages() {
     LOG_MESSAGES.with_borrow_mut(Vec::clear);
 }
 
-/// Asserts that the message is not the last in the log for this thread.
+/// Asserts that the message is not in the log for this thread.
 ///
 /// # Panics
-/// Will panic if the provided message is an exact match for the last log message.
+/// Will panic if the provided message is an exact match for any message in the log.
 ///
 /// # Example
 /// ```should_panic
-/// use apache_avro_test_helper::logger::assert_not_logged;
-///
-/// log::error!("Something went wrong");
+/// # use apache_avro_test_helper::logger::assert_not_logged;
+/// #
 /// log::error!("Unexpected Error");
 ///
 /// // This will not panic as it is not an exact match
 /// assert_not_logged("No Unexpected Error");
-///
-/// // This will not panic as it is not the last log message
-/// assert_not_logged("Something went wrong");
 ///
 /// // This will panic
 /// assert_not_logged("Unexpected Error");
