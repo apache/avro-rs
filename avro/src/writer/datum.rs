@@ -353,6 +353,10 @@ mod tests {
         Ok(())
     }
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "Value does not implement PartialEq<&Value>"
+    )]
     fn logical_type_test<T: Into<Value> + Clone>(
         schema_str: &'static str,
 

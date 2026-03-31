@@ -22,22 +22,26 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// Takes in a type that implements the right combination of traits and runs it through a Serde
 /// round-trip and asserts the result is the same.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Significantly complicates the trait bounds"
+)]
 #[track_caller]
 fn serde_assert<T>(obj: T)
 where
-    T: std::fmt::Debug + Serialize + DeserializeOwned + AvroSchema + Clone + PartialEq,
+    T: std::fmt::Debug + Serialize + DeserializeOwned + AvroSchema + PartialEq,
 {
-    assert_eq!(obj, serde(obj.clone()).unwrap());
+    assert_eq!(obj, serde(&obj).unwrap());
 }
 
-fn serde<T>(obj: T) -> Result<T, Error>
+fn serde<T>(obj: &T) -> Result<T, Error>
 where
     T: Serialize + DeserializeOwned + AvroSchema,
 {
-    de(ser(obj)?)
+    de(&ser(obj)?)
 }
 
-fn ser<T>(obj: T) -> Result<Vec<u8>, Error>
+fn ser<T>(obj: &T) -> Result<Vec<u8>, Error>
 where
     T: Serialize + AvroSchema,
 {
@@ -47,7 +51,7 @@ where
         .write_ser_to_vec(&obj)
 }
 
-fn de<T>(encoded: Vec<u8>) -> Result<T, Error>
+fn de<T>(mut encoded: &[u8]) -> Result<T, Error>
 where
     T: DeserializeOwned + AvroSchema,
 {
@@ -55,7 +59,7 @@ where
     let schema = T::get_schema();
     GenericDatumReader::builder(&schema)
         .build()?
-        .read_deser(&mut &encoded[..])
+        .read_deser(&mut encoded)
 }
 
 mod container_attributes {
@@ -619,6 +623,6 @@ mod field_attributes {
             }"#,
         )
         .unwrap();
-        assert_eq!(schema, TestStructWithBytes::get_schema())
+        assert_eq!(schema, TestStructWithBytes::get_schema());
     }
 }

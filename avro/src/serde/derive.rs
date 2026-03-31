@@ -371,6 +371,7 @@ pub trait AvroSchemaComponent {
 /// Get the record fields from `schema_fn` without polluting `named_schemas` or causing duplicate names
 ///
 /// This is public so the derive macro can use it for `#[avro(with = ||)]` and `#[avro(with = path)]`
+#[doc(hidden)]
 pub fn get_record_fields_in_ctxt(
     named_schemas: &mut HashSet<Name>,
     enclosing_namespace: NamespaceRef,

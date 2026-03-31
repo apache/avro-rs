@@ -141,45 +141,42 @@ impl RecordField {
     ) -> AvroResult<()> {
         if let Some(value) = default {
             let avro_value = types::Value::try_from(value.clone())?;
-            match field_schema {
-                Schema::Union(union_schema) => {
-                    let schemas = &union_schema.schemas;
-                    let resolved = schemas.iter().any(|schema| {
-                        avro_value
-                            .to_owned()
-                            .resolve_internal(schema, names, schema.namespace(), &None)
-                            .is_ok()
-                    });
+            if let Schema::Union(union_schema) = field_schema {
+                let schemas = &union_schema.schemas;
+                let resolved = schemas.iter().any(|schema| {
+                    avro_value
+                        .to_owned()
+                        .resolve_internal(schema, names, schema.namespace(), &None)
+                        .is_ok()
+                });
 
-                    if !resolved {
-                        let schema: Option<&Schema> = schemas.first();
-                        return match schema {
-                            Some(first_schema) => Err(Details::GetDefaultUnion(
-                                SchemaKind::from(first_schema),
-                                types::ValueKind::from(avro_value),
-                            )
-                            .into()),
-                            None => Err(Details::EmptyUnion.into()),
-                        };
-                    }
-                }
-                _ => {
-                    let resolved = avro_value
-                        .resolve_internal(field_schema, names, field_schema.namespace(), &None)
-                        .is_ok();
-
-                    if !resolved {
-                        let schemata = names.values().cloned().collect::<Vec<_>>();
-                        return Err(Details::GetDefaultRecordField(
-                            field_name.to_string(),
-                            record_name.to_string(),
-                            field_schema
-                                .independent_canonical_form(&schemata)
-                                .unwrap_or_else(|_| field_schema.canonical_form()),
-                            value.clone(),
+                if !resolved {
+                    let schema: Option<&Schema> = schemas.first();
+                    return match schema {
+                        Some(first_schema) => Err(Details::GetDefaultUnion(
+                            SchemaKind::from(first_schema),
+                            types::ValueKind::from(avro_value),
                         )
-                        .into());
-                    }
+                        .into()),
+                        None => Err(Details::EmptyUnion.into()),
+                    };
+                }
+            } else {
+                let resolved = avro_value
+                    .resolve_internal(field_schema, names, field_schema.namespace(), &None)
+                    .is_ok();
+
+                if !resolved {
+                    let schemata = names.values().cloned().collect::<Vec<_>>();
+                    return Err(Details::GetDefaultRecordField(
+                        field_name.to_string(),
+                        record_name.to_string(),
+                        field_schema
+                            .independent_canonical_form(&schemata)
+                            .unwrap_or_else(|_| field_schema.canonical_form()),
+                        value.clone(),
+                    )
+                    .into());
                 }
             };
         }

@@ -34,24 +34,28 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use uuid::Uuid;
 
 /// Takes in a type that implements the right combination of traits and runs it through a Serde Cycle and asserts the result is the same
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Significantly complicates the trait bounds"
+)]
 #[track_caller]
 fn serde_assert<T>(obj: T)
 where
-    T: std::fmt::Debug + Serialize + DeserializeOwned + AvroSchema + Clone + PartialEq,
+    T: std::fmt::Debug + Serialize + DeserializeOwned + AvroSchema + PartialEq,
 {
-    assert_eq!(obj, serde(obj.clone()));
+    assert_eq!(obj, serde(&obj));
 }
 
 #[track_caller]
-fn serde<T>(obj: T) -> T
+fn serde<T>(obj: &T) -> T
 where
     T: Serialize + DeserializeOwned + AvroSchema,
 {
-    de(ser(obj))
+    de(&ser(obj))
 }
 
 #[track_caller]
-fn ser<T>(obj: T) -> Vec<u8>
+fn ser<T>(obj: &T) -> Vec<u8>
 where
     T: Serialize + AvroSchema,
 {
@@ -64,7 +68,7 @@ where
 }
 
 #[track_caller]
-fn de<T>(encoded: Vec<u8>) -> T
+fn de<T>(mut encoded: &[u8]) -> T
 where
     T: DeserializeOwned + AvroSchema,
 {
@@ -73,7 +77,7 @@ where
     GenericDatumReader::builder(&schema)
         .build()
         .unwrap()
-        .read_deser(&mut &encoded[..])
+        .read_deser(&mut encoded)
         .unwrap()
 }
 
@@ -139,7 +143,7 @@ fn test_basic_namespace() {
     let schema = Schema::parse_str(schema).unwrap();
     assert_eq!(schema, TestBasicNamespace::get_schema());
     if let Schema::Record(RecordSchema { name, .. }) = TestBasicNamespace::get_schema() {
-        assert_eq!(Some("com.testing.namespace"), name.namespace())
+        assert_eq!(Some("com.testing.namespace"), name.namespace());
     } else {
         panic!("TestBasicNamespace schema must be a record schema")
     }
@@ -193,7 +197,7 @@ fn test_complex_namespace() {
             .map(|field| &field.schema)
             .next();
         if let Some(Schema::Record(RecordSchema { name, .. })) = inner_schema {
-            assert_eq!(Some("com.testing.namespace"), name.namespace())
+            assert_eq!(Some("com.testing.namespace"), name.namespace());
         } else {
             panic!("Field 'a' must have a record schema")
         }
@@ -232,7 +236,7 @@ fn avro_rs_239_test_named_record() {
     assert_eq!(schema, TestNamedRecord::get_schema());
     if let Schema::Record(RecordSchema { name, .. }) = TestNamedRecord::get_schema() {
         assert_eq!("Other", name.name());
-        assert_eq!(Some("com.testing.namespace"), name.namespace())
+        assert_eq!(Some("com.testing.namespace"), name.namespace());
     } else {
         panic!("TestNamedRecord schema must be a record schema")
     }
@@ -730,7 +734,7 @@ fn test_cons() {
             next: None,
         })),
     };
-    serde_assert(list)
+    serde_assert(list);
 }
 
 #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
@@ -792,7 +796,7 @@ fn test_cons_generic() {
             next: None,
         })),
     };
-    serde_assert(list)
+    serde_assert(list);
 }
 
 #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
@@ -823,7 +827,7 @@ fn test_simple_array(a: [i32; 4]) {
     let schema = Schema::parse_str(schema).unwrap();
     assert_eq!(schema, TestSimpleArray::get_schema());
     let test = TestSimpleArray { a };
-    serde_assert(test)
+    serde_assert(test);
 }}
 
 #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
@@ -877,7 +881,7 @@ fn test_complex_array() {
             },
         ],
     };
-    serde_assert(test)
+    serde_assert(test);
 }
 
 #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
@@ -895,7 +899,7 @@ fn test_bytes_handled(a: Vec<u8>, b: [u8; 2]) {
         a,
         b,
     };
-    serde_assert(test)
+    serde_assert(test);
     // don't check for schema equality to allow for transitioning to bytes or fixed types in the future
 }}
 
@@ -939,7 +943,7 @@ fn test_smart_pointers() {
         c: Cow::Owned(32),
     };
     // test serde with manual equality for mutex
-    let test = serde(test);
+    let test = serde(&test);
     assert_eq!("hey", test.a);
     assert_eq!(vec![42], *test.b.lock().unwrap());
     assert_eq!(Cow::Owned::<i32>(32), test.c);
@@ -987,7 +991,7 @@ fn test_reference_struct(a: Vec<i32>, c: f64) {
         b: "testing_static",
         c: &c,
     };
-    ser(test);
+    ser(&test);
 }}
 
 #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
@@ -1023,7 +1027,7 @@ fn test_basic_with_attributes() {
     let schema = Schema::parse_str(schema).unwrap();
     if let Schema::Record(RecordSchema { name, doc, .. }) = TestBasicWithAttributes::get_schema() {
         assert_eq!(Some("com.testing.namespace"), name.namespace());
-        assert_eq!("A Documented Record", doc.unwrap())
+        assert_eq!("A Documented Record", doc.unwrap());
     } else {
         panic!("TestBasicWithAttributes schema must be a record schema")
     }
@@ -1066,7 +1070,7 @@ fn test_basic_with_out_doc_attributes() {
     assert_eq!(&schema, &derived_schema);
     if let Schema::Record(RecordSchema { name, doc, .. }) = derived_schema {
         assert_eq!(Some("com.testing.namespace"), name.namespace());
-        assert_eq!("A Documented Record", doc.unwrap())
+        assert_eq!("A Documented Record", doc.unwrap());
     } else {
         panic!("TestBasicWithOuterDocAttributes schema must be a record schema")
     }
@@ -1111,7 +1115,7 @@ fn test_basic_with_large_doc() {
         assert_eq!(
             "A Documented Record\nthat spans\nmultiple lines",
             doc.unwrap()
-        )
+        );
     } else {
         panic!("TestBasicWithLargeDoc schema must be a record schema")
     }
@@ -1147,7 +1151,7 @@ fn avro_3634_test_basic_with_bool(a in any::<bool>(), b in any::<Option<bool>>()
     let derived_schema = TestBasicWithBool::get_schema();
 
     if let Schema::Record(RecordSchema { name, .. }) = derived_schema {
-        assert_eq!("TestBasicWithBool", name.fullname(None))
+        assert_eq!("TestBasicWithBool", name.fullname(None));
     } else {
         panic!("TestBasicWithBool schema must be a record schema")
     }
@@ -1178,7 +1182,7 @@ fn test_basic_with_u32(a in any::<u32>()) {
     "#;
     let schema = Schema::parse_str(schema).unwrap();
     if let Schema::Record(RecordSchema { name, .. }) = TestBasicWithU32::get_schema() {
-        assert_eq!("TestBasicWithU32", name.fullname(None))
+        assert_eq!("TestBasicWithU32", name.fullname(None));
     } else {
         panic!("TestBasicWithU32 schema must be a record schema")
     }
@@ -1458,7 +1462,7 @@ fn test_basic_struct_with_defaults() {
             match field.name.as_str() {
                 "a" => assert_eq!(Some(json!(123_i32)), field.default),
                 "b" => assert_eq!(
-                    Some(json!(r#"The default value for 'b'"#.to_owned())),
+                    Some(json!("The default value for 'b'".to_owned())),
                     field.default
                 ),
                 "condition" => assert_eq!(Some(json!(true)), field.default),

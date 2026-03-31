@@ -251,7 +251,7 @@ impl Record<'_> {
         V: Into<Value>,
     {
         if let Some(&position) = self.schema_lookup.get(field) {
-            self.fields[position].1 = value.into()
+            self.fields[position].1 = value.into();
         }
     }
 
@@ -368,16 +368,23 @@ impl TryFrom<Value> for JsonValue {
 }
 
 impl Value {
-    /// Validate the value against the given [Schema](../schema/enum.Schema.html).
+    /// Validate the value against the given [`Schema`].
     ///
     /// See the [Avro specification](https://avro.apache.org/docs/++version++/specification)
     /// for the full set of rules of schema validation.
+    ///
+    /// # Panics
+    /// Will panic if the schema contain unresolved references or duplicate named types.
     pub fn validate(&self, schema: &Schema) -> bool {
-        self.validate_schemata(vec![schema])
+        self.validate_schemata(&[schema])
     }
 
-    pub fn validate_schemata(&self, schemata: Vec<&Schema>) -> bool {
-        let rs = ResolvedSchema::try_from(schemata.clone())
+    /// Validate the value against the given schemata.
+    ///
+    /// # Panics
+    /// Will panic if the schemata contain unresolved references or duplicate schemas.
+    pub fn validate_schemata(&self, schemata: &[&Schema]) -> bool {
+        let rs = ResolvedSchema::try_from(schemata.to_vec())
             .expect("Schemata didn't successfully resolve");
         let schemata_len = schemata.len();
         schemata.iter().any(
@@ -3109,8 +3116,9 @@ Field with name '"b"' is not a member of the map items"#,
 
         let resolve_result = avro_value.resolve_schemata(main_schema, other_schemata)?;
 
+        let schemata_ref = schemata.iter().collect::<Vec<_>>();
         assert!(
-            resolve_result.validate_schemata(schemata.iter().collect()),
+            resolve_result.validate_schemata(&schemata_ref),
             "result of validation with schemata should be true"
         );
 

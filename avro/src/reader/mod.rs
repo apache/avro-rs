@@ -184,6 +184,9 @@ impl<R: Read, T: DeserializeOwned> Iterator for ReaderDeser<'_, R, T> {
 }
 
 /// Reads the marker bytes from Avro bytes generated earlier by a `Writer`
+///
+/// # Panics
+/// Will panic if `bytes` does not contain at least 16 bytes.
 pub fn read_marker(bytes: &[u8]) -> [u8; 16] {
     assert!(
         bytes.len() > 16,

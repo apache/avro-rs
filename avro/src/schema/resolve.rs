@@ -158,7 +158,7 @@ pub fn resolve_names<'s, 'n>(
         }
         Schema::Union(UnionSchema { schemas, .. }) => {
             for schema in schemas {
-                resolve_names(schema, names, enclosing_namespace, known_schemata)?
+                resolve_names(schema, names, enclosing_namespace, known_schemata)?;
             }
             Ok(())
         }
@@ -195,7 +195,7 @@ pub fn resolve_names<'s, 'n>(
                         names,
                         record_namespace.as_deref(),
                         known_schemata,
-                    )?
+                    )?;
                 }
                 Ok(())
             }

@@ -96,7 +96,7 @@ impl Parser {
                 .expect("Key unexpectedly missing");
             let parsed = self.parse(&value, None)?;
             self.parsed_schemas
-                .insert(self.get_schema_type_name(name, value), parsed);
+                .insert(self.get_schema_type_name(name, &value), parsed);
         }
         Ok(())
     }
@@ -197,7 +197,7 @@ impl Parser {
         // parsing a full schema from inside another schema. Other full schema will not inherit namespace
         let parsed = self.parse(&value, None)?;
         self.parsed_schemas.insert(
-            self.get_schema_type_name(fully_qualified_name, value),
+            self.get_schema_type_name(fully_qualified_name, &value),
             parsed.clone(),
         );
 
@@ -583,7 +583,7 @@ impl Parser {
             doc: complex.doc(),
             fields,
             lookup,
-            attributes: self.get_custom_attributes(complex, vec!["fields"]),
+            attributes: self.get_custom_attributes(complex, &["fields"]),
         });
 
         self.register_parsed_schema(&fully_qualified_name, &schema, &aliases);
@@ -593,7 +593,7 @@ impl Parser {
     fn get_custom_attributes(
         &self,
         complex: &Map<String, Value>,
-        excluded: Vec<&'static str>,
+        excluded: &[&'static str],
     ) -> BTreeMap<String, Value> {
         let mut custom_attributes: BTreeMap<String, Value> = BTreeMap::new();
         for (key, value) in complex {
@@ -675,7 +675,7 @@ impl Parser {
             doc: complex.doc(),
             symbols,
             default,
-            attributes: self.get_custom_attributes(complex, vec!["symbols", "default"]),
+            attributes: self.get_custom_attributes(complex, &["symbols", "default"]),
         });
 
         self.register_parsed_schema(&fully_qualified_name, &schema, &aliases);
@@ -695,7 +695,7 @@ impl Parser {
             .and_then(|items| self.parse(items, enclosing_namespace))?;
         Ok(Schema::Array(ArraySchema {
             items: Box::new(items),
-            attributes: self.get_custom_attributes(complex, vec!["items"]),
+            attributes: self.get_custom_attributes(complex, &["items"]),
         }))
     }
 
@@ -712,7 +712,7 @@ impl Parser {
 
         Ok(Schema::Map(MapSchema {
             types: Box::new(types),
-            attributes: self.get_custom_attributes(complex, vec!["values"]),
+            attributes: self.get_custom_attributes(complex, &["values"]),
         }))
     }
 
@@ -778,7 +778,7 @@ impl Parser {
             aliases: aliases.clone(),
             doc,
             size: size as usize,
-            attributes: self.get_custom_attributes(complex, vec!["size"]),
+            attributes: self.get_custom_attributes(complex, &["size"]),
         });
 
         self.register_parsed_schema(&fully_qualified_name, &schema, &aliases);
@@ -814,7 +814,7 @@ impl Parser {
         })
     }
 
-    fn get_schema_type_name(&self, name: Name, value: Value) -> Name {
+    fn get_schema_type_name(&self, name: Name, value: &Value) -> Name {
         match value.get("type") {
             Some(Value::Object(complex_type)) => match complex_type.name() {
                 Some(name) => Name::new(name).unwrap(),

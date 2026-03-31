@@ -1035,7 +1035,7 @@ mod tests {
             .map_err(Error::into_details)
         {
             Err(e @ Details::FileHeaderAlreadyWritten) => {
-                assert_eq!(e.to_string(), "The file metadata is already flushed.")
+                assert_eq!(e.to_string(), "The file metadata is already flushed.");
             }
             Err(e) => panic!("Unexpected error occurred while writing user metadata: {e:?}"),
             Ok(_) => panic!("Expected an error that metadata cannot be added after adding data"),
@@ -1060,7 +1060,7 @@ mod tests {
                     format!(
                         "Metadata keys starting with 'avro.' are reserved for internal usage: {key}."
                     )
-                )
+                );
             }
             Err(e) => panic!(
                 "Unexpected error occurred while writing user metadata with reserved prefix ('avro.'): {e:?}"

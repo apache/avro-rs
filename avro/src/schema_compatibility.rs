@@ -560,7 +560,7 @@ mod tests {
 
     fn union_schema(schemas: Vec<Schema>) -> Schema {
         let schema_string = schemas
-            .iter()
+            .into_iter()
             .map(|s| s.canonical_form())
             .collect::<Vec<String>>()
             .join(",");
@@ -600,7 +600,7 @@ mod tests {
             Compatibility::Partial,
             SchemaCompatibility::can_read(&int_string_union_schema(), &int_union_schema()).unwrap(),
             "Only compatible if writer writes an int"
-        )
+        );
     }
 
     #[test]
@@ -847,7 +847,7 @@ mod tests {
         assert_eq!(
             expected_error,
             SchemaCompatibility::can_read(&writer_schema, &reader_schema).unwrap_err()
-        )
+        );
     }
 
     #[test]

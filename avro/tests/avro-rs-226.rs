@@ -23,9 +23,14 @@ use apache_avro::{
 use apache_avro_test_helper::TestResult;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Significantly complicates the trait bounds"
+)]
+#[track_caller]
 fn ser_deser<T>(schema: &Schema, record: T) -> TestResult
 where
-    T: Serialize + DeserializeOwned + Debug + PartialEq + Clone,
+    T: Serialize + DeserializeOwned + Debug + PartialEq,
 {
     let serialized = GenericDatumWriter::builder(schema)
         .build()?

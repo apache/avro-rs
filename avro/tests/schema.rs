@@ -96,12 +96,12 @@ fn test_parse() -> TestResult {
             assert!(
                 schema.is_ok(),
                 "schema {raw_schema} was supposed to be valid; error: {schema:?}",
-            )
+            );
         } else {
             assert!(
                 schema.is_err(),
                 "schema {raw_schema} was supposed to be invalid"
-            )
+            );
         }
     }
     Ok(())
@@ -116,12 +116,12 @@ fn test_3799_parse_reader() -> TestResult {
             assert!(
                 schema.is_ok(),
                 "schema {raw_schema} was supposed to be valid; error: {schema:?}",
-            )
+            );
         } else {
             assert!(
                 schema.is_err(),
                 "schema {raw_schema} was supposed to be invalid"
-            )
+            );
         }
     }
 
@@ -133,12 +133,12 @@ fn test_3799_parse_reader() -> TestResult {
             assert!(
                 schema.is_ok(),
                 "schema {raw_schema} was supposed to be valid; error: {schema:?}",
-            )
+            );
         } else {
             assert!(
                 schema.is_err(),
                 "schema {raw_schema} was supposed to be invalid"
-            )
+            );
         }
     }
     Ok(())
@@ -405,7 +405,7 @@ fn permutations<T>(list: &[T]) -> Vec<Vec<&T>> {
         for ix in perm_map {
             perm.push(&list[*ix]);
         }
-        perms.push(perm)
+        perms.push(perm);
     }
     perms
 }
@@ -701,7 +701,7 @@ fn test_doc_attributes() -> TestResult {
         assert_doc(&original_schema);
         if let Schema::Record(RecordSchema { fields, .. }) = original_schema {
             for f in fields {
-                assert_doc(&f.schema)
+                assert_doc(&f.schema);
             }
         }
     }
@@ -747,7 +747,7 @@ fn test_avro_old_93_other_attributes() -> TestResult {
 #[test]
 fn test_root_error_is_not_swallowed_on_parse_error() -> Result<(), String> {
     init();
-    let raw_schema = r#"/not/a/real/file"#;
+    let raw_schema = "/not/a/real/file";
     let error = Schema::parse_str(raw_schema).unwrap_err().into_details();
 
     if let Details::ParseSchemaJson(e) = error {

@@ -46,13 +46,13 @@ impl GenericSingleObjectWriter {
         initial_buffer_cap: usize,
     ) -> AvroResult<GenericSingleObjectWriter> {
         let header_builder = RabinFingerprintHeader::from_schema(schema);
-        Self::new_with_capacity_and_header_builder(schema, initial_buffer_cap, header_builder)
+        Self::new_with_capacity_and_header_builder(schema, initial_buffer_cap, &header_builder)
     }
 
     pub fn new_with_capacity_and_header_builder<HB: HeaderBuilder>(
         schema: &Schema,
         initial_buffer_cap: usize,
-        header_builder: HB,
+        header_builder: &HB,
     ) -> AvroResult<GenericSingleObjectWriter> {
         let mut buffer = Vec::with_capacity(initial_buffer_cap);
         let header = header_builder.build_header();
@@ -83,6 +83,10 @@ impl GenericSingleObjectWriter {
     }
 
     /// Write the Value to the provided Write object. Returns a result with the number of bytes written including the header
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "That's the whole point of this wrapper function"
+    )]
     pub fn write_value<W: Write>(&mut self, v: Value, writer: &mut W) -> AvroResult<usize> {
         self.write_value_ref(&v, writer)
     }
@@ -139,7 +143,7 @@ where
         })
     }
 
-    pub fn new_with_header_builder(header_builder: impl HeaderBuilder) -> AvroResult<Self> {
+    pub fn new_with_header_builder(header_builder: &impl HeaderBuilder) -> AvroResult<Self> {
         let header = header_builder.build_header();
         let resolved = ResolvedOwnedSchema::new(T::get_schema())?;
         Ok(Self {
@@ -214,6 +218,10 @@ where
     ///
     /// Each call writes a complete single-object encoded message (header + data),
     /// making each message independently decodable.
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "That's the whole point of this wrapper function"
+    )]
     pub fn write<W: Write>(&self, data: T, writer: &mut W) -> AvroResult<usize> {
         self.write_ref(&data, writer)
     }
@@ -357,7 +365,7 @@ mod tests {
         let mut writer = GenericSingleObjectWriter::new_with_capacity_and_header_builder(
             &TestSingleObjectWriter::get_schema(),
             1024,
-            header_builder,
+            &header_builder,
         )
         .expect("Should resolve schema");
         let value = obj.into();

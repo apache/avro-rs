@@ -756,6 +756,10 @@ mod tests {
         writer::datum::GenericDatumWriter,
     };
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "Significantly complicates the trait bounds"
+    )]
     #[track_caller]
     fn assert_roundtrip<T>(value: T, schema: &Schema, schemata: Vec<&Schema>) -> AvroResult<()>
     where

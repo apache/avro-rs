@@ -172,7 +172,8 @@ pub mod bytes_opt {
     /// Returns `Schema::Union(Schema::Null, Schema::Bytes)`
     pub fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Schema {
         Schema::Union(
-            UnionSchema::new(vec![Schema::Null, Schema::Bytes]).expect("This is a valid union"),
+            UnionSchema::new(vec![Schema::Null, Schema::Bytes])
+                .unwrap_or_else(|_| unreachable!("This is a valid union")),
         )
     }
 
@@ -247,7 +248,7 @@ pub mod fixed {
             format!("serde_avro_fixed_{N}"),
             enclosing_namespace,
         )
-        .expect("Name is valid");
+        .unwrap_or_else(|_| unreachable!("Name is valid"));
         if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {
@@ -328,7 +329,7 @@ pub mod fixed_opt {
                 Schema::Null,
                 super::fixed::get_schema_in_ctxt::<N>(named_schemas, enclosing_namespace),
             ])
-            .expect("This is a valid union"),
+            .unwrap_or_else(|_| unreachable!("This is a valid union")),
         )
     }
 
@@ -468,7 +469,8 @@ pub mod slice_opt {
     /// Returns `Schema::Union(Schema::Null, Schema::Bytes)`
     pub fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Schema {
         Schema::Union(
-            UnionSchema::new(vec![Schema::Null, Schema::Bytes]).expect("This is a valid union"),
+            UnionSchema::new(vec![Schema::Null, Schema::Bytes])
+                .unwrap_or_else(|_| unreachable!("This is a valid union")),
         )
     }
 
@@ -611,7 +613,7 @@ pub mod bigdecimal_opt {
     pub fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Schema {
         Schema::Union(
             UnionSchema::new(vec![Schema::Null, Schema::BigDecimal])
-                .expect("This is a valid union"),
+                .unwrap_or_else(|_| unreachable!("This is a valid union")),
         )
     }
 
@@ -763,7 +765,7 @@ pub mod array_opt {
                 Schema::Null,
                 Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace)).build(),
             ])
-            .expect("This is a valid union"),
+            .unwrap_or_else(|_| unreachable!("This is a valid union")),
         )
     }
 

@@ -464,8 +464,9 @@ impl Schema {
     /// [Parsing Canonical Form]:
     /// https://avro.apache.org/docs/++version++/specification/#parsing-canonical-form-for-schemas
     pub fn canonical_form(&self) -> String {
-        let json = serde_json::to_value(self)
-            .unwrap_or_else(|e| panic!("Cannot parse Schema from JSON: {e}"));
+        let json = serde_json::to_value(self).unwrap_or_else(|e| {
+            unreachable!("Cannot parse Schema from JSON that was just generated: {e}")
+        });
         let mut defined_names = HashSet::new();
         parsing_canonical_form(&json, &mut defined_names)
     }

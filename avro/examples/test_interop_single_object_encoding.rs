@@ -58,7 +58,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let single_object = std::fs::read(format!("{resource_folder}/test_message.bin"))
         .expect("File with single object not found or error occurred while reading it.");
     test_write(&single_object);
-    test_read(single_object);
+    test_read(&single_object);
 
     Ok(())
 }
@@ -69,11 +69,10 @@ fn test_write(expected: &[u8]) {
         .expect("Resolving failed")
         .write_value(InteropMessage, &mut encoded)
         .expect("Encoding failed");
-    assert_eq!(expected, &encoded)
+    assert_eq!(expected, &encoded);
 }
 
-fn test_read(encoded: Vec<u8>) {
-    let mut encoded = &encoded[..];
+fn test_read(mut encoded: &[u8]) {
     let read_message = apache_avro::GenericSingleObjectReader::builder()
         .schema(InteropMessage::get_schema())
         .build()
@@ -81,5 +80,5 @@ fn test_read(encoded: Vec<u8>) {
         .read_value(&mut encoded)
         .expect("Decoding failed");
     let expected_value: Value = InteropMessage.into();
-    assert_eq!(expected_value, read_message)
+    assert_eq!(expected_value, read_message);
 }

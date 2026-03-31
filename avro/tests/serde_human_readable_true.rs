@@ -103,7 +103,7 @@ fn avro_rs_440_uuid_bytes() -> TestResult {
     let writer = SpecificSingleObjectWriter::new()?;
     assert_eq!(
         writer.write(uuid, &mut buffer).unwrap_err().to_string(),
-        r#"Failed to serialize value of type `str` using Schema::Uuid(Bytes): Expected Schema::String | Schema::Uuid(String)"#
+        "Failed to serialize value of type `str` using Schema::Uuid(Bytes): Expected Schema::String | Schema::Uuid(String)"
     );
 
     Ok(())
