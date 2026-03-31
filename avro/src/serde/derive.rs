@@ -22,7 +22,10 @@ use std::{
 
 use crate::{
     Schema,
-    schema::{FixedSchema, Name, NamespaceRef, RecordField, RecordSchema, UnionSchema, UuidSchema},
+    schema::{
+        FixedSchema, Name, NamespaceRef, RecordField, RecordSchema, SchemaKind, UnionSchema,
+        UuidSchema,
+    },
 };
 
 /// Trait for types that serve as an Avro data model.
@@ -590,11 +593,16 @@ where
         named_schemas: &mut HashSet<Name>,
         enclosing_namespace: NamespaceRef,
     ) -> Schema {
-        let variants = vec![
-            Schema::Null,
-            T::get_schema_in_ctxt(named_schemas, enclosing_namespace),
-        ];
-
+        let variants = match T::get_schema_in_ctxt(named_schemas, enclosing_namespace) {
+            Schema::Union(union) if union.index_of_schema_kind(SchemaKind::Null).is_some() => {
+                union.schemas
+            }
+            Schema::Union(union) => vec![Schema::Null]
+                .into_iter()
+                .chain(union.schemas)
+                .collect(),
+            schema => vec![Schema::Null, schema],
+        };
         Schema::Union(
             UnionSchema::new(variants).expect("Option<T> must produce a valid (non-nested) union"),
         )
@@ -970,11 +978,12 @@ mod tests {
     use apache_avro_test_helper::TestResult;
 
     use crate::{
-        AvroSchema, Schema,
+        AvroSchema, AvroSchemaComponent, Schema,
         reader::datum::GenericDatumReader,
-        schema::{FixedSchema, Name},
+        schema::{FixedSchema, Name, NamespaceRef, UnionSchema},
         writer::datum::GenericDatumWriter,
     };
+    use std::collections::HashSet;
 
     #[test]
     fn avro_rs_401_str() -> TestResult {
@@ -1090,11 +1099,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(
-        expected = "Option<T> must produce a valid (non-nested) union: Error { details: Unions may not directly contain a union }"
-    )]
-    fn avro_rs_489_option_option() {
-        <Option<Option<i32>>>::get_schema();
+    fn avro_rs_489_option_option() -> TestResult {
+        let schema = <Option<Option<i32>>>::get_schema();
+        assert_eq!(
+            schema,
+            Schema::Union(UnionSchema::new(vec![Schema::Null, Schema::Int])?)
+        );
+        Ok(())
     }
 
     #[test]
@@ -1224,6 +1235,35 @@ mod tests {
             schema,
             <(Option<uuid::Uuid>, uuid::Uuid, String)>::get_schema()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_nullable_complex_union() -> TestResult {
+        let schema = Schema::parse_str(r#"["null", "int", "string"]"#)?;
+
+        #[allow(dead_code)]
+        enum MyUnion {
+            Int(i32),
+            String(String),
+        }
+
+        impl AvroSchemaComponent for MyUnion {
+            fn get_schema_in_ctxt(
+                named_schemas: &mut HashSet<Name>,
+                enclosing_namespace: NamespaceRef,
+            ) -> Schema {
+                let int_schema = i32::get_schema_in_ctxt(named_schemas, enclosing_namespace);
+                let string_schema = String::get_schema_in_ctxt(named_schemas, enclosing_namespace);
+                Schema::Union(
+                    UnionSchema::new(vec![Schema::Null, int_schema, string_schema])
+                        .expect("Union must be valid"),
+                )
+            }
+        }
+
+        assert_eq!(schema, Option::<MyUnion>::get_schema());
+
         Ok(())
     }
 }
