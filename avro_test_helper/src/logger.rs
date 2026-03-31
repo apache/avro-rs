@@ -92,8 +92,8 @@ pub fn assert_not_logged(unexpected_message: &str) {
 ///
 /// # Example
 /// ```should_panic
-/// use apache_avro_test_helper::logger::assert_logged;
-///
+/// # use apache_avro_test_helper::logger::assert_logged;
+/// #
 /// log::error!("Something went wrong");
 /// log::info!("Something happened");
 /// log::error!("Something went wrong");
