@@ -102,13 +102,12 @@ impl RecordField {
             );
         }
 
-        let default = field.get("default").cloned().and_then(|value|{
+        field.get("default").cloned().inspect(|value|{
             parser.field_defaults_to_resolve.push(DefaultToResolve {
                 field_name: name.to_string(),
                 record_name: enclosing_record.fully_qualified_name(Option::None).to_string(),
                 schema: schema.clone(),
                 json: value.clone() });
-            Some(value)
         });
 
         let aliases = field
@@ -127,7 +126,7 @@ impl RecordField {
         Ok(RecordField {
             name: name.into(),
             doc: field.doc(),
-            default,
+            default: field.get("default").cloned(),
             aliases,
             custom_attributes: RecordField::get_field_custom_attributes(field),
             schema,

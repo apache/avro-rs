@@ -22,7 +22,7 @@ use crate::{
     bigdecimal::big_decimal_as_bytes,
     encode::{encode_int, encode_long},
     error::{Details, Error},
-    schema::{Name, NamesRef, Namespace, RecordField, RecordSchema, Schema},
+    schema::{Name, Namespace, RecordField, RecordSchema, Schema},
     serde::util::StringSerializer,
 };
 use bigdecimal::BigDecimal;
@@ -635,7 +635,7 @@ impl<'s, W: Write> SchemaAwareWriteSerializer<'s, W> {
     fn get_ref_schema(&self, name: &'s Name) -> Result<&'s Schema, Error> {
         let full_name = name.fully_qualified_name(self.enclosing_namespace.as_deref());
 
-        let ref_schema = self.names.get(full_name.as_ref()).and_then(|arc_ref| Some(arc_ref.as_ref()));
+        let ref_schema = self.names.get(full_name.as_ref()).map(|arc_ref| arc_ref.as_ref());
 
         ref_schema.ok_or_else(|| Details::SchemaResolutionError(full_name.as_ref().clone()).into())
     }

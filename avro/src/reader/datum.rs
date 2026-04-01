@@ -89,7 +89,7 @@ impl<'s, S: generic_datum_reader_builder::State> GenericDatumReaderBuilder<'s, S
     where
         S::ResolvedWriterSchemata: generic_datum_reader_builder::IsUnset,
     {
-        let [resolved] = ResolvedSchema::resolve().additional(schemata)?.build_array([self.writer_schema])?;
+        let [resolved] = ResolvedSchema::builder().additional(schemata)?.build_array([self.writer_schema])?;
         Ok(self.resolved_writer_schemata(resolved))
     }
 
@@ -110,7 +110,7 @@ impl<'s, S: generic_datum_reader_builder::State> GenericDatumReaderBuilder<'s, S
         S::ResolvedReaderSchemata: generic_datum_reader_builder::IsUnset,
         S::ReaderSchema: generic_datum_reader_builder::IsUnset,
     {
-        let [resolved] = ResolvedSchema::resolve().additional(schemata)?.build_array([schema])?;
+        let [resolved] = ResolvedSchema::builder().additional(schemata)?.build_array([schema])?;
         Ok(self.reader_schema(schema).resolved_reader_schemata(resolved))
     }
     pub fn maybe_reader_schema_with_schemata(
@@ -125,7 +125,7 @@ impl<'s, S: generic_datum_reader_builder::State> GenericDatumReaderBuilder<'s, S
         S::ReaderSchema: generic_datum_reader_builder::IsUnset,
     {
         if let Some(schema) = schema {
-            let [resolved] = ResolvedSchema::resolve().additional(schemata)?.build_array([schema])?;
+            let [resolved] = ResolvedSchema::builder().additional(schemata)?.build_array([schema])?;
             Ok(self.reader_schema(schema).resolved_reader_schemata(resolved))
         } else {
             Ok(self

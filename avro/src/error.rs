@@ -16,7 +16,7 @@
 // under the License.
 
 use crate::{
-    AvroResult, schema::{Name, Schema, SchemaKind, UnionSchema}, types::{Value, ValueKind}
+    schema::{Name, Schema, SchemaKind, UnionSchema}, types::{Value, ValueKind}
 };
 use std::{error::Error as _, fmt};
 
@@ -429,7 +429,7 @@ pub enum Details {
     #[error("No `type` in complex type")]
     GetComplexTypeField,
 
-    #[error("Given json value {value:?} is not allowed to be the value of \"type\" when interpreting a JSON object as a schema. Only builtin type names as strings are allowed")]
+    #[error("Json value {value:?} is not allowed to be the value of \"type\" inside a schema JSON object. Only built-in type names as strings are allowed")]
     JsonSchemaTypeNotAllowed{
         value: serde_json::Value,
     },
@@ -618,13 +618,13 @@ pub enum Details {
     #[error("Unresolved schema reference: {0}")]
     SchemaResolutionError(Name),
 
-    /// Error while resolving Schema::Ref with message
+    /// Error while resolving `Schema::Ref` with message
     /// from resolver
     #[error("Unresolved schema reference: {0}. Error message: {1}")]
     SchemaResolutionErrorWithMsg(Name, String),
 
     /// Error thrown when no schema with provided name
-    /// is found in a ResolvedContext
+    /// is found in a `ResolvedContext`
     #[error("Could not find schema with name: {0} in this context")]
     SchemaLookupError(Name),
 
@@ -633,9 +633,8 @@ pub enum Details {
         received from resolver: {1:?}")]
     CustomSchemaResolverMismatch(Name, Vec<Name>),
 
-    /// Wrapper error for a collection of errors when attempting to resolve several schema
-    /// KTODO: check on this!
-    #[error("Error when resolving: error messages: {0:?}")]
+    /// One or more errors encountered while resolving schema references.
+    #[error("{}", display_resolution_errors(.0))]
     ResolvedSchemaCreationError(Vec<Error>),
 
     #[error("The file metadata is already flushed.")]
@@ -752,6 +751,20 @@ impl serde::ser::Error for Details {
 impl serde::de::Error for Details {
     fn custom<T: fmt::Display>(msg: T) -> Self {
         Details::DeserializeValue(msg.to_string())
+    }
+}
+
+fn display_resolution_errors(errors: &[Error]) -> String {
+    match errors.len() {
+        0 => "Schema resolution failed (no details available)".to_string(),
+        1 => format!("Schema resolution failed: {}", errors[0]),
+        n => {
+            let mut msg = format!("Schema resolution failed with {n} errors:");
+            for (i, err) in errors.iter().enumerate() {
+                msg.push_str(&format!("\n  {}: {err}", i + 1));
+            }
+            msg
+        }
     }
 }
 

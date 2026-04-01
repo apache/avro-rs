@@ -87,7 +87,7 @@ impl<'s, S: generic_datum_writer_builder::State> GenericDatumWriterBuilder<'s, S
     where
         S::ResolvedSchemata: generic_datum_writer_builder::IsUnset,
     {
-        let [resolved] = ResolvedSchema::resolve().additional(schemata)?.build_array([self.schema])?;
+        let [resolved] = ResolvedSchema::builder().additional(schemata)?.build_array([self.schema])?;
         Ok(self.resolved_schemata(resolved))
     }
 }

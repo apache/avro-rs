@@ -19,11 +19,10 @@ use crate::schema::{
     Alias, ArraySchema, EnumSchema, FixedSchema, MapSchema, Name, RecordField, RecordSchema,
     UnionSchema,
 };
-use crate::types::Value;
 use crate::{AvroResult, Schema};
 use bon::bon;
 use serde_json::Value as JsonValue;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap};
 
 #[bon]
 impl Schema {

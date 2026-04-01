@@ -312,8 +312,8 @@ fn test_parse_list_with_cross_deps_and_namespaces_error() -> TestResult {
 
     let schema_strs_first = [schema_str_1, schema_str_2];
     let schema_strs_second = [schema_str_2, schema_str_1];
-    let _ = ResolvedSchema::resolve().build_array(schema_strs_first).expect_err("Test failed");
-    let _ = ResolvedSchema::resolve().build_array(schema_strs_second).expect_err("Test failed");
+    let _ = ResolvedSchema::builder().build_array(schema_strs_first).expect_err("Test failed");
+    let _ = ResolvedSchema::builder().build_array(schema_strs_second).expect_err("Test failed");
 
     Ok(())
 }
@@ -531,7 +531,7 @@ fn test_name_collision_error() -> TestResult {
         ]
     }"#;
 
-    let _ = ResolvedSchema::resolve().build_array([schema_str_1, schema_str_2]).expect_err("Test failed");
+    let _ = ResolvedSchema::builder().build_array([schema_str_1, schema_str_2]).expect_err("Test failed");
     Ok(())
 }
 
@@ -2136,11 +2136,11 @@ fn avro_rs_66_test_independent_canonical_form_primitives() -> TestResult {
     for schema_str_perm in permutations(&schema_strs) {
         let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
         let schemata = Schema::parse_list(&schema_str_perm)?;
-        let [resolved_independent_schema] = ResolvedSchema::resolve().build_array([&independent_schema])?;
+        let [resolved_independent_schema] = ResolvedSchema::builder().build_array([&independent_schema])?;
         let complete = CompleteSchema::from(&resolved_independent_schema);
         assert_eq!(schemata.len(), schema_strs.len());
 
-        let [test_resolved] = ResolvedSchema::resolve().additional(schemata.iter())?.build_array([&dependant_schema])?;
+        let [test_resolved] = ResolvedSchema::builder().additional(schemata.iter())?.build_array([&dependant_schema])?;
         let test_complete = CompleteSchema::from(&test_resolved);
 
         assert_eq!(
@@ -2257,7 +2257,7 @@ fn avro_rs_66_test_independent_canonical_form_usages() -> TestResult {
         let schemata = Schema::parse_list(&schema_str_perm)?;
         for schema in &schemata {
             let other_schemata = schemata.iter().filter(|other_schema|{other_schema != &schema});
-            let [resolved] = ResolvedSchema::resolve().additional(other_schemata)?.build_array([schema])?;
+            let [resolved] = ResolvedSchema::builder().additional(other_schemata)?.build_array([schema])?;
             let complete = CompleteSchema::from(&resolved);
             match schema.name().unwrap().to_string().as_str() {
                 "RecUsage" => {
@@ -2353,8 +2353,8 @@ fn avro_rs_66_test_independent_canonical_form_deep_recursion() -> TestResult {
     for schema_str_perm in permutations(&schema_strs) {
         let schema_str_perm: Vec<&str> = schema_str_perm.iter().map(|s| **s).collect();
         let schemata = Schema::parse_list(&schema_str_perm)?;
-        let ruu = Schema::parse_str(&record_usage_usage)?;
-        let [resolved] = ResolvedSchema::resolve().additional(schemata.iter())?.build_array([&ruu])?;
+        let ruu = Schema::parse_str(record_usage_usage)?;
+        let [resolved] = ResolvedSchema::builder().additional(schemata.iter())?.build_array([&ruu])?;
         assert_eq!(
             CompleteSchema::from(&resolved).independent_canonical_form()?,
             Schema::parse_str(record_usage_usage_independent)?.canonical_form()

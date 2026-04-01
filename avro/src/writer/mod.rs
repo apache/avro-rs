@@ -69,9 +69,9 @@ impl<'a, W: Write> Writer<'a, W> {
         #[builder(default)] user_metadata: HashMap<String, Value>,
     ) -> AvroResult<Self> {
         let [resolved_schema] = if let Some(schemata) = schemata {
-            ResolvedSchema::resolve().additional(schemata)?.build_array([schema])?
+            ResolvedSchema::builder().additional(schemata)?.build_array([schema])?
         } else {
-            ResolvedSchema::resolve().build_array([schema])?
+            ResolvedSchema::builder().build_array([schema])?
         };
         Ok(Self {
             schema,

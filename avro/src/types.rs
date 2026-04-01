@@ -369,9 +369,9 @@ impl TryFrom<Value> for JsonValue {
 
 impl Value {
     /// Validate the value against the given [Schema](../schema/enum.Schema.html).
-    /// This is a convenience method to keep backwards compatibility intact and is slow.
-    /// This method copies the supplied schema and attempts to convert it into ResolvedSchema.
-    /// Prefer using validate_complete if able.
+    /// This is a convenience method to keep backwards compatibility and may not be the fastest option.
+    /// This method copies the supplied schema and attempts to convert it into [`ResolvedSchema`].
+    /// Prefer using [`Self::validate_against_resolved`] if able.
     ///
     /// See the [Avro specification](https://avro.apache.org/docs/++version++/specification)
     /// for the full set of rules of schema validation.
@@ -388,7 +388,10 @@ impl Value {
         }
     }
 
-    /// Validates this value against the given ResolvedSchema.
+    /// Validates this value against the given [`ResolvedSchema`].
+    ///
+    /// See the [Avro specification](https://avro.apache.org/docs/++version++/specification)
+    /// for the full set of rules of schema validation.
     pub fn validate_against_resolved(&self, schema: &ResolvedSchema) -> bool {
         match self.validate_internal(ResolvedNode::new(schema)){
             Some(reason) => {
@@ -632,19 +635,19 @@ impl Value {
 
     /// Resolve this value (self) with provided resolved schema.
     /// This resolution techinically follows a superset of the the schema resolution
-    /// rules defined by the specification. TODO: documentation
+    /// rules defined by the [specification](https://avro.apache.org/docs/++version++/specification/).
     pub fn resolve_against_resolved(self, resolved: ResolvedSchema) -> AvroResult<Self> {
         self.resolve_internal(ResolvedNode::new(&resolved))
     }
 
     /// Resolves value against the provided schema.
     /// This resolution follows a superset of the schema resolution rules defined by the
-    /// specification. TODO: link to docs
-    /// Provided Schema is first cloned then transformed into a ResolvedSchema, which is
-    /// slow and may fail. If succesfull, this function simply calls resolve_complete
-    /// with this new ResolvedSchema.
-    /// Prefer using resolve_complete on a given ResolvedSchema,
-    /// this function exists for convenience and to maintain backwards compatibility.
+    /// [specification](https://avro.apache.org/docs/++version++/specification/).
+    ///
+    /// **Note:** The provided [`Schema`] is first cloned then transformed into a [`ResolvedSchema`], which can
+    /// be slow and may fail. If succesfull, this function simply calls [`Self::resolve_against_resolved`]
+    /// with this new [`ResolvedSchema`].
+    /// Prefer using [`Self::resolve_against_resolved`] on a given [`ResolvedSchema`].
     pub fn resolve(self, schema: &Schema)->AvroResult<Self>{
        self.resolve_against_resolved(schema.clone().try_into()?)
     }
@@ -1407,7 +1410,7 @@ mod tests {
             default: None,
             attributes: Default::default(),
         });
-        let [schema] = ResolvedSchema::resolve().build_array([&schema])?;
+        let [schema] = ResolvedSchema::builder().build_array([&schema])?;
 
         assert!(Value::Enum(0, "spades".to_string()).validate_against_resolved(&schema));
         assert!(Value::String("spades".to_string()).validate_against_resolved(&schema));
@@ -1455,7 +1458,7 @@ mod tests {
             default: None,
             attributes: Default::default(),
         });
-        let [other_schema] = ResolvedSchema::resolve().build_array([&other_schema])?;
+        let [other_schema] = ResolvedSchema::builder().build_array([&other_schema])?;
 
         let value = Value::Enum(0, "spades".to_string());
         assert!(!value.validate_against_resolved(&other_schema));
@@ -2996,7 +2999,7 @@ mod tests {
 
         let avro_value = Value::try_from(value)?;
 
-        let [rs] = ResolvedSchema::resolve().additional(vec![referenced_schema])?.build_array([main_schema])?;
+        let [rs] = ResolvedSchema::builder().additional(vec![referenced_schema])?.build_array([main_schema])?;
 
         let resolve_result = avro_value.clone().resolve_against_resolved(rs);
 
@@ -3005,7 +3008,7 @@ mod tests {
             "result of resolving with schemata should be ok, got: {resolve_result:?}"
         );
 
-        let resolve_result = avro_value.resolve(&Schema::parse_str(&main_schema)?);
+        let resolve_result = avro_value.resolve(&Schema::parse_str(main_schema)?);
         assert!(
             resolve_result.is_err(),
             "result of resolving without schemata should be err, got: {resolve_result:?}"
@@ -3033,7 +3036,7 @@ mod tests {
 
         let avro_value = Value::try_from(value)?;
 
-        let [rs] = ResolvedSchema::resolve().additional(vec![referenced_enum, referenced_record])?.build_array([main_schema])?;
+        let [rs] = ResolvedSchema::builder().additional(vec![referenced_enum, referenced_record])?.build_array([main_schema])?;
 
         let resolve_result = avro_value.resolve_against_resolved(rs.clone())?;
 

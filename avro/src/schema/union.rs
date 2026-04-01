@@ -17,7 +17,7 @@
 
 use crate::error::Details;
 use crate::schema::{
-    DecimalSchema, InnerDecimalSchema, Name, NamespaceRef, Schema, SchemaKind, UuidSchema,
+    DecimalSchema, InnerDecimalSchema, Name, Schema, SchemaKind, UuidSchema,
 };
 use crate::types;
 use crate::{AvroResult, Error};
@@ -485,8 +485,7 @@ mod tests {
                 .collect(),
         );
 
-        // KTODO, this test does not refactor in a nice way like the others...
-        let [rs] = ResolvedSchema::resolve().build_array([&Schema::Union(union)])?;
+        let [rs] = ResolvedSchema::builder().build_array([&Schema::Union(union)])?;
         let rn = ResolvedNode::new(&rs);
         let resolved_union = match rn {
             ResolvedNode::Union(res) => res,
@@ -506,8 +505,7 @@ mod tests {
         let union = UnionSchema::new(vec![Schema::Long, Schema::Null])?;
         let value = Value::Int(42);
 
-        // KTODO, this test does not refactor in a nice way like the others...
-        let [rs] = ResolvedSchema::resolve().build_array([&Schema::Union(union)])?;
+        let [rs] = ResolvedSchema::builder().build_array([&Schema::Union(union)])?;
         let rn = ResolvedNode::new(&rs);
         let resolved_union = match rn {
             ResolvedNode::Union(res) => res,
@@ -524,7 +522,6 @@ mod tests {
         Ok(())
     }
 
-    // KTODO: this refactors horribly....
     #[test]
     fn avro_rs_489_find_schema_with_known_schemata_uuid_vs_fixed() -> TestResult {
         let uuid = Schema::parse_str(
@@ -538,7 +535,7 @@ mod tests {
         let union = UnionSchema::new(vec![uuid.clone(), Schema::Null])?;
         let value = Value::Fixed(16, vec![0; 16]);
 
-        let [union_rs] = ResolvedSchema::resolve().build_array([&Schema::Union(union)])?;
+        let [union_rs] = ResolvedSchema::builder().build_array([&Schema::Union(union)])?;
         let union_rs = ResolvedNode::new(&union_rs);
 
         let resolved_union = match union_rs {

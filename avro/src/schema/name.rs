@@ -61,7 +61,7 @@ pub type Namespace = Option<String>;
 /// Represents the namespace for Named Schema
 pub type NamespaceRef<'a> = Option<&'a str>;
 
-// convenience types KTODO: make these the "main" names types we use..
+// convenience types
 pub type NameMap = HashMap<Arc<Name>, Arc<Schema>>;
 pub type NameSet = HashSet<Arc<Name>>;
 

@@ -28,21 +28,27 @@ use crate::{
     util::{zig_i32, zig_i64},
 };
 use log::error;
-use std::{collections::HashMap, io::Write, sync::Arc};
+use std::{collections::HashMap, io::Write};
 
-///KTODO: documentation
-/// Encode a `Value` into avro format.
+/// Encode a `Value` into avro format. This function will first attempt to convert the provided [`Schema`] into a [`ResolvedSchema`]
+/// and will produce an error if this conversion is not successful. If a [`ResolvedSchema`] is
+/// already on hand, it is more performant to use [`encode_complete`].
 ///
 /// **NOTE** This will not perform schema validation. The value is assumed to
 /// be valid with regards to the schema. Schema are needed only to guide the
 /// encoding for complex type values.
+///
 pub fn encode<W: Write>(value: &Value, schema: &Schema, writer: &mut W) -> AvroResult<usize> {
     let rs = ResolvedSchema::try_from(schema.clone())?;
     encode_complete(value, rs, writer)
 }
 
-/// Encode a 'Value' into avro format given the provided ResolvedSchema.
-/// This is the preffered method over `encode`.
+/// Encode a 'Value' into avro format given the provided [`ResolvedSchema`].
+///
+/// **NOTE** This will not perform schema validation. The value is assumed to
+/// be valid with regards to the schema. Schema are needed only to guide the
+/// encoding for complex type values.
+///
 pub fn encode_complete<W: Write>(value: &Value, resolved_schema: ResolvedSchema, writer: &mut W) -> AvroResult<usize> {
     encode_internal(value, ResolvedNode::new(&resolved_schema), writer)
 }
@@ -359,6 +365,7 @@ pub fn encode_to_vec(value: &Value, schema: &Schema) -> AvroResult<Vec<u8>> {
 #[allow(clippy::expect_fun_call)]
 pub(crate) mod tests {
     use super::*;
+    use std::sync::Arc;
     use crate::error::{Details, Error};
     use apache_avro_test_helper::TestResult;
     use pretty_assertions::assert_eq;

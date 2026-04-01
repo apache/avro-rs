@@ -30,7 +30,7 @@ pub use crate::schema::{
     resolve::{ResolvedSchema, ResolvedSchemaBuilder, IntoSchemaWithSymbols,
         ResolvedNode, ResolvedRecord, ResolvedUnion,
         ResolvedArray, ResolvedMap, ResolvedRecordField, CompleteSchema,
-        Resolver, DefaultResolver},
+        Resolver, DefaultResolver, ResolvedContext},
     union::{UnionSchema, UnionSchemaBuilder},
 };
 use crate::{
@@ -91,37 +91,78 @@ pub struct DefaultToResolve{
     json: JsonValue
 }
 
-/// KDOTO: docs!
-/// Represents a parsed Avro schema with information on
-/// what named schemata are exposed by the schema as well
-/// as schemata names used and defined by this schema.
+
+/// Represents a parsed Avro Schema with the following additional information
+/// - What schema names are defined within this schema
+/// - What schema names are references by this schema but are not provided a definition.
+/// - What field defualts have been provided and what schema they must match.
+///   `SchemaWithSymbols` is designed to provided the suite of information necessary that when
+///   evaluation if two schemata can be included in the same context a walk of the schema tree is not
+///   required.
+///
+///   `SchemaWithSymbols` wraps `Arc` references and `HashMap`/`HashSet`'s of Arc references and is
+///   therefore fairly cheap to clone.
+/// # Construction
+/// A `SchemaWithSymbols` can be constructed from a `&str` using [`SchemaWithSymbols::parse_str`]. To
+/// construct several `SchemaWithSymbols`, use [`SchemaWithSymbols::parse_array`] or
+/// [`SchemaWithSymbols::parse_list`]. If one wishes to get a standalone [`Schema`] representation of a
+/// `SchemaWithSymbols`, use [`SchemaWithSymbols::unravel`].
+/// # Examples
+/// ```
+/// use apache_avro::schema::SchemaWithSymbols;
+/// let schema = r#"
+///     {
+///         "name": "helloWorldRecord",
+///         "type": "record",
+///         "fields": [{"name": "field", "type": "string"}] 
+///     }
+/// "#;
+///
+/// let schema2 = r#"{
+///     "name": "helloWorldEnum",
+///     "type": "enum",
+///     "symbols": ["HELLO", "WORLD"]
+/// }"#;
+///
+/// let schema_vec = vec![&schema, &schema2];
+///
+/// let with_symbols = SchemaWithSymbols::parse_str(&schema).unwrap();
+///
+/// let [with_symbols1, with_symbols2] = SchemaWithSymbols::parse_array([&schema, &schema2]).unwrap();
+///
+/// let with_symbols_vec = SchemaWithSymbols::parse_list(schema_vec).unwrap();
+/// ```
 #[derive(Clone,Debug)]
 pub struct SchemaWithSymbols{
-    /// schema fullnames defined in this schema.
-    pub(crate) defined_names: HashMap<Arc<Name>, Arc<Schema>>,
-    /// all schema fullnames references in this schema, both those that have
-    /// an internal resolution and those that are internally unresolved.
-    pub(crate) referenced_names: HashSet<Arc<Name>>,
-    /// The parseed schema tree
-    pub(crate) stub: Arc<Schema>,
-    /// Record fields that have defualt values that need to be
-    /// resolved.
-    /// KTODO: documentation
-    pub(crate) field_defaults_to_resolve: Arc<Vec<DefaultToResolve>>
+    /// Schemata defined within this Schema
+    pub defined_names: HashMap<Arc<Name>, Arc<Schema>>,
+    /// Referenced Schema names that do not have a definition inside this Schema.
+    pub referenced_names: HashSet<Arc<Name>>,
+    /// The root stub of this schema
+    pub stub: Arc<Schema>,
+    /// Fields within this Schema that have a default and need to be resolved against the appropriate
+    /// field schema.
+    pub field_defaults_to_resolve: Arc<Vec<DefaultToResolve>>
 }
 
 
 impl SchemaWithSymbols{
+    /// Parse a single `&str` into a `SchemaWithSymbols`. This function does not check
+    /// to ensure that all named schema are given defintions. If this check is desired, use [`ResolvedSchema`].
     pub fn parse_str(input: &str) -> Result<SchemaWithSymbols,Error>{
         let parser = Parser::default();
         parser.parse_str(input)
     }
-
+    /// Parse a [`JsonValue`] into a `SchemaWithSymbols`
     pub fn parse(value: &JsonValue) -> AvroResult<SchemaWithSymbols>{
         let parser = Parser::default();
         parser.parse(value, None)
     }
 
+    /// Parse the provided array of `impl AsRev<str>` into an array of `SchemaWithSymbols` of the
+    /// same length. This function does not check for naming conflicts in the provided schemata or
+    /// that all referenced schema names are given definitions. To check that an array of schemata 
+    /// is consistent, consider using [`ResolvedSchema`] or [`ResolvedContext`]
     pub fn parse_array<const N: usize>(input: [impl AsRef<str>; N]) -> AvroResult<[SchemaWithSymbols; N]>{
         let input = input.into_iter();
         let mut parsed = Self::parse_list(input)?.into_iter();
@@ -130,6 +171,11 @@ impl SchemaWithSymbols{
         }))
     }
 
+    /// Parse the provided `impl IntoIterator<impl AsRef<str>>` into a `Vec` of
+    /// `SchemaWithSymbols`. This function does not check for naming conflicts 
+    /// in the provided schemata or that all referenced schema names are given 
+    /// definitions. To check that an array of schemata is consistent, consider 
+    /// using [`ResolvedSchema`] or [`ResolvedContext`]
     pub fn parse_list(input: impl IntoIterator<Item = impl AsRef<str>>) -> AvroResult<Vec<SchemaWithSymbols>> {
         let input = input.into_iter();
         input.map(|str| {
@@ -138,10 +184,12 @@ impl SchemaWithSymbols{
         }).collect()
     }
 
+    /// Take this `SchemaWithSymbols` and unravel it's stub given the definitions contained in the field `defined_names`.
+    /// This produces a standalone [`Schema`] representation of this `SchemaWithSymbols`.
     pub fn unravel(&self) -> Schema{
         let mut stub = self.stub.as_ref().clone();
         unravel_inner(&mut stub, &self.defined_names, &mut HashSet::new(), &mut HashMap::new());
-        return stub
+        stub
     }
 }
 pub(crate) fn unravel_inner(schema: &mut Schema, defined_schemata: & NameMap, placed_schemata: &mut NameSet, alias_map: &mut HashMap<Name, Arc<Name>>){
@@ -151,7 +199,7 @@ pub(crate) fn unravel_inner(schema: &mut Schema, defined_schemata: & NameMap, pl
                 let mut definition = defined_schemata.get(name).unwrap().as_ref().clone();
                 unravel_inner(&mut definition, defined_schemata, placed_schemata, alias_map);
                 *schema = definition;
-            }else if alias_map.contains_key(&name) {
+            }else if alias_map.contains_key(name) {
                *schema = Schema::Ref{name: Arc::clone(alias_map.get(name).unwrap())};
             }
         },
@@ -178,8 +226,8 @@ pub(crate) fn unravel_inner(schema: &mut Schema, defined_schemata: & NameMap, pl
             unravel_inner(map_schema.types.as_mut(), defined_schemata, placed_schemata, alias_map);
         }
         Schema::Union(union_schema) => {
-            for mut el_schema in &mut union_schema.schemas {
-                unravel_inner(&mut el_schema, defined_schemata, placed_schemata, alias_map);
+            for el_schema in &mut union_schema.schemas {
+                unravel_inner(el_schema, defined_schemata, placed_schemata, alias_map);
             }
         },
         Schema::Fixed(fixed_schema) => {
@@ -218,7 +266,7 @@ impl From<Arc<Schema>> for SchemaWithSymbols{
 
 impl AsRef<SchemaWithSymbols> for SchemaWithSymbols{
     fn as_ref(&self) -> &SchemaWithSymbols {
-        return self
+        self
     }
 }
 /// Represents any valid Avro schema
@@ -355,7 +403,6 @@ impl PartialEq for Schema {
     }
 }
 
-// KTODO, need to test this out the wazoo, big error here!
 impl From<Schema> for SchemaWithSymbols{
     fn from(value: Schema) -> Self {
         fn transform(schema: Schema, defined_names: &mut HashMap<Arc<Name>, Arc<Schema>>, referenced_names: &mut HashSet<Arc<Name>>, field_defaults_to_resolve: &mut Vec<DefaultToResolve>) -> Schema {
@@ -413,7 +460,7 @@ impl From<Schema> for SchemaWithSymbols{
 
         let schema = transform(value , &mut defined_names, &mut referenced_names, &mut field_defaults_to_resolve);
 
-        return Self{
+        Self{
             defined_names,
             referenced_names,
             field_defaults_to_resolve: field_defaults_to_resolve.into(),
@@ -718,22 +765,19 @@ impl Schema {
     }
 
     /// Create a `Schema` from a string representing a JSON Avro schema.
-    /// Note: Unless a bare schema is needed, prefer using SchemaWithSymbols::parse_str
+    /// **Note:** Unless a bare schema is needed, prefer using [`SchemaWithSymbols::parse_str`]
     pub fn parse_str(input: &str) -> Result<Schema, Error> {
         let parser = Parser::default();
-        let schema = parser.parse_str(input)?.unravel(); //KTODO this needs changing
+        let schema = parser.parse_str(input)?.unravel();
         Ok(schema)
     }
 
     /// Create an array of `Schema`'s from a list of named JSON Avro schemas (Record, Enum, and
-    /// Fixed).
+    /// Fixed). This method will not check that the provided list of schemata has the property that
+    /// every named schema reference has a unique unambiguous definition. If this check is desired, look
+    /// at building a [`ResolvedSchema`].
     ///
-    /// It is allowed that the schemas have cross-dependencies; these will be resolved
-    /// during parsing.
-    ///
-    /// If two of the input schemas have the same fullname, an Error will be returned.
-    ///
-    /// Note: Unless a bare schema is needed, prefer using SchemaWithSymbols::parse_list
+    /// **Note:** Unless a bare schema is needed, prefer using [`SchemaWithSymbols::parse_list`]
     pub fn parse_list(input: impl IntoIterator<Item = impl AsRef<str>>) -> AvroResult<Vec<Schema>> {
         let input = input.into_iter();
 
@@ -748,11 +792,11 @@ impl Schema {
                 if let Err(err) = schem {
                     return Err(err);
                 }else{
-                    schemata.push(schem.unwrap().unravel()); //KTODO this needs changing!!
+                    schemata.push(schem.unwrap().unravel());
                 }
         };
 
-        return Ok(schemata)
+        Ok(schemata)
     }
 
 
@@ -1375,7 +1419,7 @@ mod tests {
 
         let schema_str_c = r#"["A", "B"]"#;
 
-        let [schema_c, schema_a, schema_b] = ResolvedSchema::resolve().build_array([&schema_str_c,&schema_str_a, &schema_str_b])?;
+        let [schema_c, schema_a, schema_b] = ResolvedSchema::builder().build_array([&schema_str_c,&schema_str_a, &schema_str_b])?;
 
         let schema_a_expected = Schema::Record(RecordSchema {
             name: Name::new("A")?.into(),
@@ -1439,7 +1483,7 @@ mod tests {
 
         let schema_str_c = r#"["A", "A"]"#;
 
-        let rs = ResolvedSchema::resolve().additional([schema_str_a1, schema_str_a2]).and_then(|b| b.build_array([schema_str_c]));
+        let rs = ResolvedSchema::builder().additional([schema_str_a1, schema_str_a2]).and_then(|b| b.build_array([schema_str_c]));
         match rs {
             Ok(_) => unreachable!("Expected an error that the name is already defined"),
             Err(e) => assert_eq!(
@@ -1471,7 +1515,7 @@ mod tests {
 
         let schema_str_c = r#"["A"]"#;
 
-        match ResolvedSchema::resolve().additional([schema_str_a, schema_str_b]).and_then(|b| b.build_array([schema_str_c])) {
+        match ResolvedSchema::builder().additional([schema_str_a, schema_str_b]).and_then(|b| b.build_array([schema_str_c])) {
             Ok(_) => unreachable!("Expected an error that schema_str_b is missing a name field"),
             Err(e) => assert_eq!(e.to_string(), "No `name` field"),
         }
@@ -4979,7 +5023,7 @@ mod tests {
 
     #[test]
     fn avro_rs_420_independent_canonical_form() -> TestResult {
-        let [rs] = ResolvedSchema::resolve()
+        let [rs] = ResolvedSchema::builder()
             .additional([r#"{
             "name": "node",
             "type": "record",
@@ -5051,28 +5095,6 @@ mod tests {
 
         Ok(())
     }
-
-    //#[test] // KTODO -- this should be changed to a WARNING, not an error...
-    //fn avro_rs_476_enum_cannot_be_directly_in_field() -> TestResult {
-    //    let schema_str = r#"{
-    //        "type": "record",
-    //        "name": "ExampleEnum",
-    //        "namespace": "com.schema",
-    //        "fields": [
-    //            {
-    //            "name": "wrong_enum",
-    //            "type": "enum",
-    //            "symbols": ["INSERT", "UPDATE"]
-    //            }
-    //        ]
-    //    }"#;
-    //    let result = Schema::parse_str(schema_str).unwrap_err();
-    //    assert_eq!(
-    //        result.to_string(),
-    //        "Invalid schema: There is no type called 'enum', if you meant to define a non-primitive schema, it should be defined inside `type` attribute."
-    //    );
-    //    Ok(())
-    //}
 
     #[test]
     fn avro_rs_509_default_must_be_in_custom_attributes_for_map_and_enum() -> TestResult {
@@ -5167,7 +5189,7 @@ mod tests {
             &inner_fixed_b_schema
         );
 
-        return Ok(())
+        Ok(())
     }
 
     #[test]
@@ -5217,9 +5239,9 @@ mod tests {
        let schema1 = SchemaWithSymbols::parse_str(schema1)?;
        let schema2 = SchemaWithSymbols::parse_str(schema2)?;
 
-       let _resolved = ResolvedSchema::resolve().additional([schema2])?.build_array([schema1])?;
+       let _resolved = ResolvedSchema::builder().additional([schema2])?.build_array([schema1])?;
 
-       return Ok(())
+       Ok(())
     }
 
     #[test]
@@ -5231,7 +5253,7 @@ mod tests {
            }"#;
 
            let _schema = SchemaWithSymbols::parse_str(schema1).unwrap();
-           return Ok(())
+           Ok(())
     }
 
     #[test]
@@ -5244,6 +5266,36 @@ mod tests {
 
            let schema = SchemaWithSymbols::parse_str(schema1).unwrap();
            assert!(schema.referenced_names.is_empty());
+           Ok(())
+    }
+
+    #[test]
+    fn avro_rs_json_schema_not_allowed_for_type_when_at_root() -> TestResult{
+           let schema1 = r#"
+                        {
+                            "type":  {
+                                               "type": "enum",
+                                               "name": "testEnum",
+                                               "symbols": ["A","B","C"]
+                                           }
+                        }
+                        "#;
+
+           let schema = SchemaWithSymbols::parse_str(schema1);
+           assert!(schema.expect_err("Expected not to parse correctly!").into_details().to_string().contains("Only built-in type names as strings are allowed"));
+           Ok(())
+    }
+
+    #[test]
+    fn avro_rs_user_type_name_not_allowed_for_type_when_at_root() -> TestResult{
+           let schema = r#"
+                        {
+                            "type": "testEnum"
+                        }
+                        "#;
+
+           let schema = SchemaWithSymbols::parse_str(schema);
+           assert!(schema.expect_err("Expected not to parse correctly!").into_details().to_string().contains("Only built-in type names as strings are allowed"));
            Ok(())
     }
 }

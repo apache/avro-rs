@@ -69,7 +69,7 @@ impl<'a, R: Read> Reader<'a, R> {
         reader_schema: Option<&'a Schema>,
         schemata: Option<Vec<&'a Schema>>,
     ) -> AvroResult<Reader<'a, R>> {
-        let schemata = schemata.unwrap_or_else(|| vec![]);
+        let schemata = schemata.unwrap_or_default();
         let block = Block::new(reader, schemata)?;
         let mut reader = Reader {
             block,

@@ -19,7 +19,6 @@ use crate::error::Details;
 use crate::schema::{
     self, Alias, Aliases, ArraySchema, DecimalMetadata, DecimalSchema, DefaultToResolve, EnumSchema, FixedSchema, MapSchema, Name, NamespaceRef, Precision, RecordField, RecordSchema, Scale, Schema, SchemaKind, SchemaWithSymbols, UnionSchema, UuidSchema
 };
-use crate::serde::fixed;
 use crate::types;
 use crate::util::MapHelper;
 use crate::validator::validate_enum_symbol_name;
@@ -29,6 +28,7 @@ use serde_json::{Map, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
+#[derive(Debug)]
 enum ReservedSchema {
     Reserved,
     Completed(Arc<Schema>)
@@ -58,10 +58,10 @@ impl Parser {
     /// Create a `SchemaWithSymbols` from a `serde_json::Value` representing a JSON Avro
     /// schema.
     pub(super) fn parse(mut self, value: &Value, enclosing_namespace: NamespaceRef) -> AvroResult<SchemaWithSymbols>{
-        let schema = self.parse_schema(&value, enclosing_namespace)?;
+        let schema = self.parse_schema(value, enclosing_namespace)?;
         let defined_names : HashMap<Arc<Name>, Arc<Schema>> = HashMap::from_iter(self.defined_names.drain().map(|(key, val)| {
             match val {
-                ReservedSchema::Reserved => {panic!("reserved schema encountered that was not provided a definition")} // KTODO: clean this message up!!
+                ReservedSchema::Reserved => {unreachable!("apache_avro internal parser error, reserved a spot for schema name {key:?} that never resolved to a schema definition.")}
                 ReservedSchema::Completed(schema_ref) => (key, schema_ref)
             }
         }));
@@ -228,7 +228,7 @@ impl Parser {
                                                 scale,
                                                 inner: schema::InnerDecimalSchema::Fixed(inner.clone()),
                                             });
-                                            let _ = self.insert_parsed_for_reserved(&inner.name, &inner.aliases, &Arc::new(schema))?;
+                                            self.insert_parsed_for_reserved(&inner.name, &inner.aliases, &Arc::new(schema))?;
                                             Ok(Schema::Ref{name: Arc::clone(&inner.name)})
                                         },
                                         Schema::Bytes => {
@@ -244,7 +244,7 @@ impl Parser {
                                 Err(err) => {
                                     warn!("Ignoring invalid decimal logical type: {err}");
                                     if let Schema::Fixed(ref fixed_inner) = inner {
-                                        let _ = self.insert_parsed_for_reserved(&fixed_inner.name, &fixed_inner.aliases, &Arc::new(inner.clone()))?;
+                                        self.insert_parsed_for_reserved(&fixed_inner.name, &fixed_inner.aliases, &Arc::new(inner.clone()))?;
                                         Ok(Schema::Ref{name: Arc::clone(&fixed_inner.name)})
                                     }else{
                                         Ok(inner)
@@ -271,7 +271,7 @@ impl Parser {
                             Schema::String => Ok(Schema::Uuid(UuidSchema::String)),
                             Schema::Fixed(fixed @ FixedSchema { size: 16, .. }) => {
                                 let schema = Schema::Uuid(UuidSchema::Fixed(fixed.clone()));
-                                let _ = self.insert_parsed_for_reserved(&fixed.name, &fixed.aliases, &Arc::new(schema))?;
+                                self.insert_parsed_for_reserved(&fixed.name, &fixed.aliases, &Arc::new(schema))?;
                                 Ok(Schema::Ref{name: Arc::clone(&fixed.name)})
                             }
                             Schema::Fixed(ref fixed) => {
@@ -279,7 +279,7 @@ impl Parser {
                                     "Ignoring uuid logical type for a Fixed schema because its size ({:?}) is not 16! Schema: {schema:?}",
                                     fixed.size
                                 );
-                                let _ = self.insert_parsed_for_reserved(&fixed.name, &fixed.aliases, &Arc::new(schema.clone()))?;
+                                self.insert_parsed_for_reserved(&fixed.name, &fixed.aliases, &Arc::new(schema.clone()))?;
                                 Ok(Schema::Ref{name: Arc::clone(&fixed.name)})
                             }
                             Schema::Bytes => Ok(Schema::Uuid(UuidSchema::Bytes)),
@@ -371,7 +371,7 @@ impl Parser {
                             match schema {
                                 Schema::Fixed(fixed @ FixedSchema { size: 12, .. }) => {
                                     let schema = Schema::Duration(fixed.clone());
-                                    let _ = self.insert_parsed_for_reserved(&fixed.name, &fixed.aliases, &Arc::new(schema))?;
+                                    self.insert_parsed_for_reserved(&fixed.name, &fixed.aliases, &Arc::new(schema))?;
                                     Ok(Schema::Ref{name: Arc::clone(&fixed.name)})
                                 }
                                 Schema::Fixed(ref fixed) => {
@@ -379,7 +379,7 @@ impl Parser {
                                         "Ignoring duration logical type on fixed type because size ({}) is not 12! Schema: {schema:?}",
                                         fixed.size
                                     );
-                                    let _ = self.insert_parsed_for_reserved(&fixed.name, &fixed.aliases, &Arc::new(schema.clone()))?;
+                                    self.insert_parsed_for_reserved(&fixed.name, &fixed.aliases, &Arc::new(schema.clone()))?;
                                     Ok(Schema::Ref{name: Arc::clone(&fixed.name)})
                                 }
                                 _ => {
@@ -421,7 +421,7 @@ impl Parser {
                         let fixed = self.parse_fixed(complex, enclosing_namespace)?;
                         match fixed {
                             Schema::Fixed(ref fixed_internal) => {
-                                let _ = self.insert_parsed_for_reserved(&fixed_internal.name, &fixed_internal.aliases, &Arc::new(fixed.clone()))?;
+                                self.insert_parsed_for_reserved(&fixed_internal.name, &fixed_internal.aliases, &Arc::new(fixed.clone()))?;
                                 Ok(Schema::Ref{name: Arc::clone(&fixed_internal.name)})
                             },
                             _ => panic!("Internal error, parse_fixed did not return a schema variant of Schema::Fixed!")
@@ -436,11 +436,11 @@ impl Parser {
     }
 
     /// checks if a fullname or its aliases have been registered with the parser yet. If so, fails
-    /// on NameCollision, else, reserves spots in the defined_names map that will be filled in when
+    /// with a name collision, else, reserves spots in the `defined_names` map that will be filled in when
     /// the definition is complete.
     fn check_and_reserve_name_and_aliases(&mut self, name: &Arc<Name>, aliases: &Aliases) -> AvroResult<()>{
 
-        if let Option::None = self.defined_names.insert(Arc::clone(name), ReservedSchema::Reserved) {
+        if self.defined_names.insert(Arc::clone(name), ReservedSchema::Reserved).is_none() {
         }else{
             return Err(Details::NameCollision(name.fullname(Option::None)).into());
         }
@@ -449,9 +449,9 @@ impl Parser {
 
         if let Some(aliases) = aliases {
             for alias in aliases {
-                let alias_name : Arc<Name> = Arc::new(alias.fully_qualified_name(namespace).into_owned()); //KTODO: is this okay??
+                let alias_name : Arc<Name> = Arc::new(alias.fully_qualified_name(namespace).into_owned());
 
-                if let Option::Some(_) = self.defined_names.insert(Arc::clone(&alias_name), ReservedSchema::Reserved) {
+                if self.defined_names.insert(Arc::clone(&alias_name), ReservedSchema::Reserved).is_some() {
                     return Err(Details::NameCollision(alias_name.fullname(Option::None)).into());
                 }
             }
@@ -461,22 +461,27 @@ impl Parser {
     }
 
     /// adds the completed parsed schema into a spot previously reserved via
-    /// check_and_reserve_name_and_aliases
+    /// `check_and_reserve_name_and_aliases`
     fn insert_parsed_for_reserved(&mut self, name: &Arc<Name>, aliases: &Aliases, schema: &Arc<Schema>) -> AvroResult<()>{
 
         if let Some(ReservedSchema::Reserved) = self.defined_names.insert(Arc::clone(name), ReservedSchema::Completed(Arc::clone(schema))) {
         }else{
-            panic!("Attempting to write into a spot that has not been reserved!"); // TODO: IMPROVE THIS MESSAGE
+            unreachable!("apache_avro internal parser error: Attempting to write into schema name {name:?} into a spot in defined_names that has not been reserved! Value already at name {:?}",
+                    self.defined_names.get(name)
+                );
         }
 
         let namespace = name.namespace();
 
         if let Some(aliases) = aliases {
             for alias in aliases {
-                let alias_name : Arc<Name> = Arc::new(alias.fully_qualified_name(namespace).into_owned()); // KTODO: same with this, is this okay??
+                let alias_name : Arc<Name> = Arc::new(alias.fully_qualified_name(namespace).into_owned());
 
-                if let Option::None = self.defined_names.insert(Arc::clone(&alias_name), ReservedSchema::Completed(Arc::clone(schema))) {
-                    panic!("Attempting to write into a spot that has not been reserved!"); // TODO: IMPROVE THIS MESSAGE
+                if let Some(ReservedSchema::Reserved) = self.defined_names.insert(Arc::clone(&alias_name), ReservedSchema::Completed(Arc::clone(schema))) {
+                }else{
+                    unreachable!("apache_avro internal parser error: Attempting to write into schema name {name:?} into a spot in defined_names that has not been reserved! Value already at name {:?}",
+                                self.defined_names.get(name)
+                    );
                 }
             }
         }
@@ -532,7 +537,7 @@ impl Parser {
             attributes: self.get_custom_attributes(complex, vec!["fields"]),
         });
 
-        let _ = self.insert_parsed_for_reserved(&fully_qualified_name, &aliases, &Arc::new(schema))?;
+        self.insert_parsed_for_reserved(&fully_qualified_name, &aliases, &Arc::new(schema))?;
         Ok(Schema::Ref{name: fully_qualified_name})
     }
 
@@ -620,7 +625,7 @@ impl Parser {
             attributes: self.get_custom_attributes(complex, vec!["symbols", "default"]),
         });
 
-        self.insert_parsed_for_reserved(&fully_qualified_name, &aliases, &Arc::new(schema));
+        self.insert_parsed_for_reserved(&fully_qualified_name, &aliases, &Arc::new(schema))?;
         Ok(Schema::Ref { name: fully_qualified_name })
     }
 
@@ -753,16 +758,6 @@ impl Parser {
                 .map(|alias| Alias::new(alias.as_str()).unwrap())
                 .collect()
         })
-    }
-
-    fn get_schema_type_name(&self, name: Name, value: Value) -> Name {
-        match value.get("type") {
-            Some(Value::Object(complex_type)) => match complex_type.name() {
-                Some(name) => Name::new(name).unwrap(),
-                _ => name,
-            },
-            _ => name,
-        }
     }
 
     fn parse_json_integer_for_decimal(

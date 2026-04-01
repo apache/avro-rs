@@ -26,65 +26,26 @@ use crate::{AvroResult, types};
 use crate::error::{Details,Error};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
-use std::{collections::{HashMap, HashSet}, sync::Arc, iter::once};
+use std::{collections::{HashMap, HashSet}, sync::Arc};
 
-/// a map of names and definitions that is consistent: that is, we have all named schemata refered
-/// by any of the component schemata has a unique definition in this context.
+/// A map of names and definitions that is valid in that any reference to a named schema has a unambiguous definition.
 #[derive(Debug,Clone)]
 pub struct ResolvedContext(NameMap);
 
 impl ResolvedContext{
     /// gets the resolved context from a `ResolvedSchema`
-    pub fn from_resolved_schema(resolved_schema : &ResolvedSchema) -> ResolvedContext{
+    fn from_resolved_schema(resolved_schema : &ResolvedSchema) -> ResolvedContext{
         resolved_schema.context.clone()
     }
 
+    /// Returns a new empty `ResolvedContext`.
     pub fn empty() -> ResolvedContext{
-        ResolvedContext(HashMap::new().into())
+        ResolvedContext(HashMap::new())
     }
 
-    // convenience method for copying (pointer copy) ony the definitions we need for a given schema
-    // KTODO: bug with this, see notes, need to get to a stable testing environment to look at
-    // more...
-    //pub fn copy_needed_definitions(&self, schema_with_symbols: &SchemaWithSymbols) -> AvroResult<ResolvedContext> {
-    //    let needed_references = &schema_with_symbols.referenced_names;
-    //    let mut needed_defs : NameMap = HashMap::new();
-    //    for needed in needed_references{
-    //        if let Some(def) = self.0.get(needed){
-    //            needed_defs.insert(Arc::clone(needed), Arc::clone(def));
-    //        }else{
-    //            return Err(Details::SchemaLookupError(needed.as_ref().clone()).into());
-    //        }
-    //    };
-
-    //    // *Why we can form another resolved*: since we provided a schema_with_symbols, we are
-    //    // guarenteed that we we have the complete set of definitions needed to descend through
-    //    // that schema, since part of our parsing is to track this.
-    //    Ok(ResolvedContext(needed_defs.into()))
-    //}
-
-    // checks that the provided definition names do not conflict with existing definitions.
-    fn check_if_conflicts<'a>(defined_names: &NameMap, added: &NameMap) -> AvroResult<()>{
-        let mut conflicting_fullnames : Vec<String> = Vec::new();
-        for (name, schema) in added{
-            if defined_names.contains_key(name) && Some(schema) != defined_names.get(name){
-                conflicting_fullnames.push(name.fullname(Option::None));
-            }
-        }
-
-        if conflicting_fullnames.len() == 0 {
-            Ok(())
-        }else{
-            Err(Details::MultipleNameCollision(conflicting_fullnames).into())
-        }
-    }
-
-    //pub fn new_context(schemata: impl Iterator<Item = SchemaWithSymbols>) -> AvroResult<ResolvedContext>{
-    //    Self::new_context_with_resolver(schemata, &mut DefaultResolver::new())
-    //}
-
-    /// KTODO: docs
-    pub fn new_context_with_resolver<'s>(schemata: &Vec<SchemaWithSymbols>, resolver: &mut impl Resolver) -> AvroResult<ResolvedContext>{
+    /// Attempts to form a context from the provided schemata. This will use the provided custom
+    /// resolver if a referenced schema name is not found in the provided schemata.
+    pub fn new_context_with_resolver(schemata: &Vec<SchemaWithSymbols>, resolver: &mut impl Resolver) -> AvroResult<ResolvedContext>{
         let mut context : NameMap = HashMap::new();
         let mut defaults : Vec<Arc<Vec<DefaultToResolve>>> = Vec::new();
         Self::add_to_context(&mut context, &mut defaults, schemata, resolver)?;
@@ -93,8 +54,10 @@ impl ResolvedContext{
         Ok(context)
     }
 
-    /// KTODO: docs
-    pub fn needed_context_with_resolver<'s>(schema: &'s SchemaWithSymbols, schemata: &Vec<SchemaWithSymbols>, resolver: &mut impl Resolver) -> AvroResult<ResolvedContext>{
+    /// Attempts to form the minimal context needed to resolve all references in `schema` from definitions
+    /// in `schemata`. This will use the provided custom resolver if a referenced schema name is
+    /// not found in the provided schemata.
+    pub fn needed_context_with_resolver(schema: &SchemaWithSymbols, schemata: &[SchemaWithSymbols], resolver: &mut impl Resolver) -> AvroResult<ResolvedContext>{
         let mut context : NameMap = HashMap::new();
         let mut defaults : Vec<Arc<Vec<DefaultToResolve>>> = Vec::new();
         Self::check_if_schemata_redefine_names(schemata.iter())?;
@@ -102,6 +65,22 @@ impl ResolvedContext{
         let context = ResolvedContext(context);
         Self::check_defaults(&defaults, &context)?;
         Ok(context)
+    }
+
+    // checks that the provided definition names do not conflict with existing definitions.
+    fn check_if_conflicts(defined_names: &NameMap, added: &NameMap) -> AvroResult<()>{
+        let mut conflicting_fullnames : Vec<String> = Vec::new();
+        for (name, schema) in added{
+            if defined_names.contains_key(name) && Some(schema) != defined_names.get(name){
+                conflicting_fullnames.push(name.fullname(Option::None));
+            }
+        }
+
+        if conflicting_fullnames.is_empty() {
+            Ok(())
+        }else{
+            Err(Details::MultipleNameCollision(conflicting_fullnames).into())
+        }
     }
 
     // add the with_symbols into the defined_names and check for naming conflicts.
@@ -112,7 +91,7 @@ impl ResolvedContext{
 
         for schema_with_symbol in schemata{
             defaults.push(Arc::clone(&schema_with_symbol.field_defaults_to_resolve));
-            Self::check_if_conflicts(&defined_names, &schema_with_symbol.defined_names)?;
+            Self::check_if_conflicts(defined_names, &schema_with_symbol.defined_names)?;
             defined_names.extend(schema_with_symbol.defined_names.clone());
             references.extend(schema_with_symbol.referenced_names.clone());
         }
@@ -125,8 +104,7 @@ impl ResolvedContext{
 
     }
 
-    /// KTODO: docs
-    fn add_needed_to_context(schema: &SchemaWithSymbols, defined_names: &mut NameMap, defaults: &mut Vec<Arc<Vec<DefaultToResolve>>>, schemata: &Vec<SchemaWithSymbols>, resolver: &mut impl Resolver) -> AvroResult<()>{
+    fn add_needed_to_context(schema: &SchemaWithSymbols, defined_names: &mut NameMap, defaults: &mut Vec<Arc<Vec<DefaultToResolve>>>, schemata: &[SchemaWithSymbols], resolver: &mut impl Resolver) -> AvroResult<()>{
         defined_names.extend(schema.defined_names.clone());
         defaults.push(Arc::clone(&schema.field_defaults_to_resolve));
         let mut worklist: HashSet<Arc<Name>> = schema.referenced_names.clone();
@@ -171,7 +149,7 @@ impl ResolvedContext{
             defined_names.extend(&schema.defined_names);
         }
 
-        if conflicting_fullnames.len() == 0 {
+        if conflicting_fullnames.is_empty() {
             Ok(())
         }else{
             Err(Details::MultipleNameCollision(conflicting_fullnames).into())
@@ -200,7 +178,7 @@ impl ResolvedContext{
                 Ok(())
             },
             Err(msg) => {
-                return Err(Details::SchemaResolutionErrorWithMsg(name.as_ref().clone(), msg).into());
+                Err(Details::SchemaResolutionErrorWithMsg(name.as_ref().clone(), msg).into())
             }
         }
     }
@@ -212,14 +190,14 @@ impl ResolvedContext{
                        avro_value.resolve_internal(ResolvedNode::new(&ResolvedSchema{
                            stub: Arc::new(default.schema.clone()), // TODO: would be nice to get rid of clones here!
                            context: context.clone()
-                       })).or_else(|error| {
-                           Err(Details::DefaultValidationWithReason {
+                       })).map_err(|error| {
+                           Details::DefaultValidationWithReason {
                                record_name: default.record_name.clone(),
                                field_name: default.field_name.clone(),
                                value: default.json.clone() ,
                                schema: default.schema.clone(),
-                               reason: error.to_string() })}
-                           )?;
+                               reason: error.to_string() }
+                       })?;
             }
         }
 
@@ -256,23 +234,42 @@ impl IntoSchemaWithSymbols for SchemaWithSymbols {
 
 /// Builder for resolving one or more schemas into [`ResolvedSchema`] values.
 ///
-/// Created via [`ResolvedSchema::resolve()`]. Accepts schema strings, `&Schema` references,
+/// Created via [`ResolvedSchema::builder()`]. Accepts schema strings, `&Schema` references,
 /// or [`SchemaWithSymbols`] values as input — all via the [`IntoSchemaWithSymbols`] trait.
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust
+/// use apache_avro::schema::{SchemaWithSymbols, ResolvedSchema};
 /// // Resolve a single schema:
-/// let resolved = ResolvedSchema::resolve().build_one(schema_str)?;
+/// let schema = r#"
+///     {
+///         "name": "helloWorldRecord",
+///         "type": "record",
+///         "fields": [{"name": "field", "type": "string"}]
+///     }
+/// "#;
+///
+/// let resolved = ResolvedSchema::parse_str(&schema).unwrap();
+///
+/// // Multiple schemas with context:
+///
+/// let schema_name_ref = r#""mySchema""#;
+/// let schema_union = r#"["mySchema", "long"]"#;
+/// let schema_definition = r#"{
+///     "name": "mySchema",
+///     "type": "enum",
+///     "symbols": ["A", "B", "C"]
+/// }"#;
 ///
 /// // Resolve with additional context schemas:
-/// let [resolved] = ResolvedSchema::resolve()
-///     .additional(vec![context_schema])?
-///     .build_array([main_schema])?;
+/// let [resolved_name_ref, resvoled_union] = ResolvedSchema::builder()
+///     .additional(vec![schema_definition]).unwrap()
+///     .build_array([schema_name_ref, schema_union]).unwrap();
 ///
 /// // With a custom resolver (e.g. schema registry):
-/// let [resolved] = ResolvedSchema::resolve()
-///     .build_array_with_resolver([schema], &mut my_resolver)?;
+/// // let [resolved] = ResolvedSchema::builder()
+/// //    .build_array_with_resolver([schema], &mut my_resolver).unwrap();
 /// ```
 pub struct ResolvedSchemaBuilder {
     additional: Vec<SchemaWithSymbols>,
@@ -328,7 +325,7 @@ impl ResolvedSchemaBuilder {
 
     /// Resolve a dynamic list of schemas.
     pub fn build_list(self, to_resolve: impl IntoIterator<Item = impl IntoSchemaWithSymbols>) -> AvroResult<Vec<ResolvedSchema>> {
-        self.build_list_with_resolver(to_resolve, &mut DefaultResolver::new())
+        self.build_list_with_resolver(to_resolve, &mut DefaultResolver::default())
     }
 
     /// Resolve a dynamic list of schemas with a custom [`Resolver`].
@@ -341,27 +338,44 @@ impl ResolvedSchemaBuilder {
     }
 }
 
-/// Contains a schema with all of the schema definitions it needs to be completely resolved.
-///
-/// This type is a promise from the API that each named type in the schema has exactly one
-/// unique definition and every named reference in the schema can be uniquely resolved to
-/// one of these definitions.
+/// Contains a schema with a map of schema definitions such that each named type
+/// in the schema has exactly one unique definition and every named reference
+/// in the schema can be uniquely resolved to one of these definitions.
 ///
 /// `ResolvedSchema` wraps `Arc` references and is therefore cheap to clone.
 ///
 /// # Construction
 ///
-/// Use [`ResolvedSchema::resolve()`] to get a [`ResolvedSchemaBuilder`], or
+/// Use [`ResolvedSchema::builder()`] to get a [`ResolvedSchemaBuilder`], or
 /// [`ResolvedSchema::parse_str()`] for the single-schema convenience method.
 ///
-/// ```rust,ignore
+/// ```rust
+/// use apache_avro::schema::ResolvedSchema;
+///
 /// // Single schema:
-/// let resolved = ResolvedSchema::parse_str(r#"{"type":"record", ...}"#)?;
+/// let schema = r#"
+///     {
+///         "name": "helloWorldRecord",
+///         "type": "record",
+///         "fields": [{"name": "field", "type": "string"}]
+///     }
+/// "#;
+///
+/// let resolved = ResolvedSchema::parse_str(&schema).unwrap();
 ///
 /// // Multiple schemas with context:
-/// let [a, b] = ResolvedSchema::resolve()
-///     .additional(vec![context])?
-///     .build_array([schema_a, schema_b])?;
+///
+/// let schema_name_ref = r#""mySchema""#;
+/// let schema_union = r#"["mySchema", "long"]"#;
+/// let schema_definition = r#"{
+///     "name": "mySchema",
+///     "type": "enum",
+///     "symbols": ["A", "B", "C"]
+/// }"#;
+///
+/// let [a, b] = ResolvedSchema::builder()
+///     .additional(vec![schema_definition]).unwrap()
+///     .build_array([schema_name_ref, schema_union]).unwrap();
 /// ```
 #[derive(Debug,Clone)]
 pub struct ResolvedSchema{
@@ -371,27 +385,27 @@ pub struct ResolvedSchema{
 
 impl ResolvedSchema{
 
-    /// Start building a schema resolution. Returns a [`ResolvedSchemaBuilder`].
-    pub fn resolve() -> ResolvedSchemaBuilder {
+    /// Start building a `ResolvedSchema`. Returns a [`ResolvedSchemaBuilder`].
+    pub fn builder() -> ResolvedSchemaBuilder {
         ResolvedSchemaBuilder::new()
     }
 
+    /// Returns the stub of this `ResolvedSchema` as a fully unwrapped standalone [`Schema`].
     pub fn unravel(&self) -> Schema{
         let complete : CompleteSchema = self.into();
         complete.0
     }
 
+    /// creates and returns an empty [`ResolvedSchema`] with stub `Schema::Null`
     pub fn new_empty() -> Self{
        Schema::Null.try_into().unwrap()
     }
 
-    /// Parse and resolve a single JSON schema string. Convenience for
-    /// `ResolvedSchema::resolve().build_one(string)`.
+    /// Parse and resolve a single schema string. Convenience for
+    /// `ResolvedSchema::builder().build_one(string)`.
     pub fn parse_str(string: impl AsRef<str>) -> AvroResult<ResolvedSchema>{
-        Self::resolve().build_one(string)
+        Self::builder().build_one(string)
     }
-
-    // ----- internal implementation methods -----
 
     fn resolve_symbols_array<const N : usize>(to_resolve: [SchemaWithSymbols; N], additional: Vec<SchemaWithSymbols>, resolver: &mut impl Resolver) -> AvroResult<[ResolvedSchema; N]> {
 
@@ -436,7 +450,7 @@ impl ResolvedSchema{
             return Err(Details::ResolvedSchemaCreationError(context_errs).into())
         }
 
-        let schema_and_context = to_resolve.into_iter().zip(contexts.into_iter());
+        let schema_and_context = to_resolve.into_iter().zip(contexts);
         Ok(schema_and_context.into_iter().map(|(schema_with_symbols, context)|{ResolvedSchema{
                 stub: schema_with_symbols.stub,
                 context: context.unwrap()
@@ -445,15 +459,18 @@ impl ResolvedSchema{
 
 
 
-    pub fn get_names<'b>(&'b self) -> &'b NameMap{
+    /// Get a reference to the [`NameMap`] for this `ResolvedSchema`.
+    pub fn get_names(&self) -> &NameMap{
         &self.context.0
     }
 
+    /// Get an [`Iterator`] of this `ResolvedSchema`'s defined schemata.
     pub fn get_schemata(&self) -> impl Iterator<Item = &Arc<Schema>>{
         self.context.0.values()
     }
 }
 
+/// An Avro array that makes a type level promise that its `"item"` schema is fully resolved.
 #[derive(Clone, Debug)]
 pub struct ResolvedArray<'a>{
     pub attributes: &'a BTreeMap<String, JsonValue>,
@@ -463,6 +480,7 @@ pub struct ResolvedArray<'a>{
     schema: &'a Schema,
 }
 
+/// An Avro map that makes a type level promise that its `"types"` schema is fully resolved
 #[derive(Clone, Debug)]
 pub struct ResolvedMap<'a>{
     pub attributes: &'a BTreeMap<String, JsonValue>,
@@ -472,6 +490,7 @@ pub struct ResolvedMap<'a>{
     schema: &'a Schema
 }
 
+/// An Avro union that makes a type level promise that the schemata it contains are all fully resolved.
 #[derive(Clone, Debug)]
 pub struct ResolvedUnion<'a>{
     pub variant_index: &'a BTreeMap<SchemaKind, usize>,
@@ -483,6 +502,8 @@ pub struct ResolvedUnion<'a>{
     schema: &'a Schema
 }
 
+/// An Avro record that makes a type level promise that each of its field's schemata are fully
+/// resolved and any provided default value has been resolved against this schema.
 #[derive(Clone,Debug)]
 pub struct ResolvedRecord<'a>{
     pub name: &'a Arc<Name>,
@@ -497,6 +518,8 @@ pub struct ResolvedRecord<'a>{
     schema: &'a Schema,
 }
 
+/// An Avro record field that makes a type level promise that its schema is fully resolved and any
+/// provided default value has been resolved against this schema.
 #[derive(Clone,Debug)]
 pub struct ResolvedRecordField<'a>{
     pub name: &'a String,
@@ -510,6 +533,8 @@ pub struct ResolvedRecordField<'a>{
     root: &'a ResolvedSchema
 }
 
+/// A node within a walk of a Avro Schema that makes the type level promise that its children
+/// schema are resovled unambiguously.
 #[derive(Clone,Debug, Display)]
 pub enum ResolvedNode<'a>{
     Null,
@@ -541,9 +566,6 @@ pub enum ResolvedNode<'a>{
     Record(ResolvedRecord<'a>),
 }
 
-/// Represents a node inside a resolved schema.
-/// This is can be used when traversing down a resolved schema tree as it couples
-/// the root definintion information with a reference into the schema.
 impl<'a> ResolvedNode<'a> {
    pub fn new(root: &'a ResolvedSchema)->ResolvedNode<'a>{
        let schema = root.stub.as_ref();
@@ -559,7 +581,10 @@ impl<'a> ResolvedNode<'a> {
             let fields = fields.iter()
                 .map(|field|{
                     let RecordField {name, doc, aliases, default, schema, custom_attributes} = field;
-                    let default_value = default.as_ref().and_then(|json_value|{Some(crate::types::Value::try_from(json_value.clone()).expect("unable to resolve defualt json value into value. This is an internal error and should never be reached."))});
+                    let default_value = default.as_ref().map(|json_value|{
+                        crate::types::Value::try_from(json_value.clone())
+                        .expect("unable to resolve defualt json value into value. This is an internal error and should never be reached.")
+                    });
                     ResolvedRecordField{name, doc, aliases, default: default_value, schema, custom_attributes, record_field: field, root}
                 }).collect();
             ResolvedNode::Record(ResolvedRecord{ name, aliases, doc, fields, lookup, attributes, root, schema})
@@ -591,8 +616,8 @@ impl<'a> ResolvedNode<'a> {
        }
    }
 
-   /// For a given resolved node, recreates the ResolvedSchema context. KTODO, need better
-   /// documentation
+   /// For a given resolved node, recreates the [`ResolvedContext`] used to start create this node
+   /// and uses the current node as the stub of this context.
    pub fn get_resolved(&self) -> ResolvedSchema{
        match self {
         ResolvedNode::Map(resolved_map) => ResolvedSchema{stub: resolved_map.schema.clone().into(), context: resolved_map.root.context.clone()},
@@ -662,7 +687,7 @@ impl From<&ResolvedNode<'_>> for SchemaKind {
 
 impl<'a> ResolvedMap<'a>{
     pub fn resolve_types(&'a self)->ResolvedNode<'a>{
-       ResolvedNode::from_schema(&self.types, self.root)
+       ResolvedNode::from_schema(self.types, self.root)
     }
 }
 
@@ -683,11 +708,12 @@ impl<'a> ResolvedUnion<'a>{
         let value_schema_kind = SchemaKind::from(value);
         let resolved_nodes = self.resolve_schemas();
         if let Some(i) = self.get_variant_index(&value_schema_kind) {
-            // fast path KTODO double check this!
+            // fast path
             let variant_clone = resolved_nodes.get(i).unwrap().clone();
-            if let Ok(_) = value
+            if value
                 .clone()
-                .resolve_internal(variant_clone.clone()){
+                .resolve_internal(variant_clone.clone())
+                .is_ok(){
                 Some((i, variant_clone))
             }else{
                 None
@@ -710,13 +736,13 @@ impl<'a> ResolvedUnion<'a>{
 
 impl<'a> ResolvedArray<'a>{
     pub fn resolve_items(&self)->ResolvedNode<'a>{
-        ResolvedNode::from_schema(&self.items, self.root)
+        ResolvedNode::from_schema(self.items, self.root)
     }
 }
 
 impl<'a> ResolvedRecordField<'a>{
     pub fn resolve_field(&self)->ResolvedNode<'a>{
-        ResolvedNode::from_schema(&self.schema, self.root)
+        ResolvedNode::from_schema(self.schema, self.root)
     }
 
     // delegate to implementation on Schema
@@ -725,8 +751,8 @@ impl<'a> ResolvedRecordField<'a>{
     }
 }
 
-/// this is a schema object that is "self contained" in that it contains all named definitions
-/// needed to encode/decode form this schema.
+/// Represents an Avro [Schema] with a type level promise that this `Schema` is self contained and
+/// complete in that all named schema references have a unique defintion within this `Schema`.
 #[derive(Debug)]
 pub struct CompleteSchema(Schema);
 
@@ -737,7 +763,8 @@ impl CompleteSchema{
     /// [Parsing Canonical Form]:
     /// https://avro.apache.org/docs/current/specification/#parsing-canonical-form-for-schemas
     pub fn independent_canonical_form(&self) -> Result<String, Error> { // TODO: I think this will
-                                                                        // never panic..
+                                                                        // never *actually* return
+                                                                        // Error..
         Ok(self.0.canonical_form())
     }
 }
@@ -755,7 +782,7 @@ impl TryFrom<Schema> for CompleteSchema{
 
     fn try_from(value: Schema) -> Result<Self, Error> {
         let resolved : ResolvedSchema = value.try_into()?;
-        return Ok((&resolved).into())
+        Ok((&resolved).into())
     }
 }
 
@@ -788,13 +815,11 @@ impl PartialEq for ResolvedSchema{
     }
 }
 
-/// technically this is a tighter bound that we need, as we may have
-/// iterated far enough down that we don't need to check the entire conext definitions.
 impl PartialEq for ResolvedNode<'_>{
     fn eq(&self, other: &Self) -> bool {
         let resolved_self = self.get_resolved();
         let resolved_other = other.get_resolved();
-        return resolved_other.unravel() == resolved_self.unravel()
+        resolved_other.unravel() == resolved_self.unravel()
     }
 }
 
@@ -808,7 +833,7 @@ impl TryFrom<SchemaWithSymbols> for ResolvedSchema{
     type Error = Error;
 
     fn try_from(schema: SchemaWithSymbols) -> AvroResult<Self> {
-        ResolvedSchema::resolve().build_one(schema)
+        ResolvedSchema::builder().build_one(schema)
     }
 }
 
@@ -816,7 +841,7 @@ impl TryFrom<&SchemaWithSymbols> for ResolvedSchema{
     type Error = Error;
 
     fn try_from(schema: &SchemaWithSymbols) -> AvroResult<Self> {
-        ResolvedSchema::resolve().build_one(schema.clone())
+        ResolvedSchema::builder().build_one(schema.clone())
     }
 }
 
@@ -825,7 +850,7 @@ impl TryFrom<Schema> for ResolvedSchema{
 
     fn try_from(schema: Schema) -> AvroResult<Self> {
         let with_symbols: SchemaWithSymbols = schema.into();
-        ResolvedSchema::resolve().build_one(with_symbols)
+        ResolvedSchema::builder().build_one(with_symbols)
     }
 }
 
@@ -834,30 +859,55 @@ impl TryFrom<&Schema> for ResolvedSchema{
     type Error = Error;
 
     fn try_from(schema: &Schema) -> AvroResult<Self> {
-        ResolvedSchema::resolve().build_one(schema)
+        ResolvedSchema::builder().build_one(schema)
     }
 }
 
-//impl<'a> TryFrom<UnionSchema> for ResolvedUnion<'a>{ // KTODO: is this something I should do??
-//    type Error = Error;
-//
-//    fn try_from(value: UnionSchema) -> Result<Self, Self::Error> {
-//        let [resolved] = ResolvedSchema::from_raw_schema_array([&Schema::Union(value)], vec![])?;
-//        let node = ResolvedNode::new(&resolved);
-//        match node {
-//            ResolvedNode::Union(resolved_union) => {resolved_union},
-//            _ => unreachable!()
-//        }
-//    }
-//}
-
-/// trait for implementing a custom schema name resolver. For instance this
-/// could be used to create resolvers that lookup schema names
-/// from a shcema registry.
+/// Trait for implementing a custom schema name resolver. This resolved is designed to be used with
+/// [`ResolvedSchema`]/[`ResolvedContext`] and will be called during schema name resolution if a local
+/// defintion for the schema name can't be found.
+/// # Example
+/// ```rust
+/// use apache_avro::schema::{ResolvedSchema,SchemaWithSymbols,Resolver, Name};
+/// use std::{collections::HashMap, sync::Arc};
+///
+/// // Here is a basic resolver that stores schema definitions in a map.
+/// struct MapResolver {
+///     registry: HashMap<String, String>,
+///     call_log: Vec<String>,
+/// }
+///
+/// impl MapResolver {
+///     fn new(entries: impl IntoIterator<Item = (impl Into<String>, impl Into<String>)>) -> Self {
+///         MapResolver {
+///             registry: entries.into_iter().map(|(k, v)| (k.into(), v.into())).collect(),
+///             call_log: Vec::new(),
+///         }
+///     }
+///
+///     fn calls(&self) -> &[String] {
+///         &self.call_log
+///     }
+/// }
+///
+/// impl Resolver for MapResolver {
+///     fn find_schema(&mut self, name: &Arc<Name>) -> Result<SchemaWithSymbols, String> {
+///         let fullname = name.fullname(None);
+///         self.call_log.push(fullname.clone());
+///         match self.registry.get(&fullname) {
+///             Some(json) => SchemaWithSymbols::parse_str(json)
+///                 .map_err(|e| format!("parse error: {e}")),
+///             None => Err(format!("not found: {fullname}")),
+///         }
+///     }
+/// }
+///
+/// ```
 pub trait Resolver{
     fn find_schema(&mut self, name: &Arc<Name>) -> Result<SchemaWithSymbols, String>;
 }
 
+#[derive(Default)]
 pub struct DefaultResolver{}
 impl Resolver for DefaultResolver{
     fn find_schema(&mut self, _name: &Arc<Name>) -> Result<SchemaWithSymbols, String> {
@@ -879,8 +929,8 @@ fn compare_schema_and_context(schema_one: &Schema, schema_two: &Schema, context_
     }
 
     // verify the provided definitions are the same:
-    let one_contains_two = context_one.keys().fold(true, |acc, val|{acc && context_two.contains_key(val)});
-    let two_contains_one = context_two.keys().fold(true, |acc, val|{acc && context_one.contains_key(val)});
+    let one_contains_two = context_one.keys().all(|val|{context_two.contains_key(val)});
+    let two_contains_one = context_two.keys().all(|val|{context_one.contains_key(val)});
 
     if !(one_contains_two && two_contains_one){
         return false
@@ -908,11 +958,10 @@ mod tests {
         schema::{Alias, CompleteSchema, Name, RecordField, RecordSchema, ResolvedNode, SchemaWithSymbols, UnionSchema},
     };
     use apache_avro_test_helper::TestResult;
-    use log::RecordBuilder;
 
     // ---------- custom resolver infrastructure for tests ----------
 
-    /// A simple resolver backed by a HashMap of JSON schema strings keyed by fullname.
+    // A simple resolver backed by a HashMap of JSON schema strings keyed by fullname.
     struct MapResolver {
         registry: HashMap<String, String>,
         call_log: Vec<String>,
@@ -969,7 +1018,7 @@ mod tests {
         }"#;
 
         let mut resolver = MapResolver::new([("ext.Address", address)]);
-        let [rs] = ResolvedSchema::resolve().build_array_with_resolver([person], &mut resolver)?;
+        let [rs] = ResolvedSchema::builder().build_array_with_resolver([person], &mut resolver)?;
 
         // The resolver was called for ext.Address
         assert!(resolver.calls().contains(&"ext.Address".to_string()));
@@ -1002,7 +1051,7 @@ mod tests {
         }"#;
 
         let mut resolver = MapResolver::new([("shop.OrderStatus", status_enum)]);
-        let [rs] = ResolvedSchema::resolve().build_array_with_resolver([order], &mut resolver)?;
+        let [rs] = ResolvedSchema::builder().build_array_with_resolver([order], &mut resolver)?;
 
         assert!(resolver.calls().contains(&"shop.OrderStatus".to_string()));
         assert!(rs.get_names().contains_key(&Name::new("shop.Order")?));
@@ -1031,7 +1080,7 @@ mod tests {
         }"#;
 
         let mut resolver = MapResolver::new([("proto.Checksum", checksum_fixed)]);
-        let [rs] = ResolvedSchema::resolve().build_array_with_resolver([msg], &mut resolver)?;
+        let [rs] = ResolvedSchema::builder().build_array_with_resolver([msg], &mut resolver)?;
 
         assert!(resolver.calls().contains(&"proto.Checksum".to_string()));
         assert!(rs.get_names().contains_key(&Name::new("proto.Message")?));
@@ -1063,7 +1112,7 @@ mod tests {
         }"#;
 
         let mut resolver = MapResolver::new(Vec::<(&str, &str)>::new());
-        let [rs] = ResolvedSchema::resolve().additional(vec![address])?.build_array_with_resolver([person], &mut resolver)?;
+        let [rs] = ResolvedSchema::builder().additional(vec![address])?.build_array_with_resolver([person], &mut resolver)?;
 
         assert!(resolver.calls().is_empty(), "resolver should not be called when all names resolve locally");
         assert_eq!(rs.get_names().len(), 2);
@@ -1100,7 +1149,7 @@ mod tests {
             ("chain.C", schema_c),
         ]);
 
-        let [rs] = ResolvedSchema::resolve().build_array_with_resolver([schema_a], &mut resolver)?;
+        let [rs] = ResolvedSchema::builder().build_array_with_resolver([schema_a], &mut resolver)?;
 
         // Both B and C should have been requested
         assert!(resolver.calls().contains(&"chain.B".to_string()));
@@ -1126,7 +1175,7 @@ mod tests {
         }"#;
 
         let mut resolver = MapResolver::new(Vec::<(&str, &str)>::new());
-        let result = ResolvedSchema::resolve().build_array_with_resolver([schema_a], &mut resolver);
+        let result = ResolvedSchema::builder().build_array_with_resolver([schema_a], &mut resolver);
 
         assert!(result.is_err(), "should fail when resolver cannot find the schema");
         let err_msg = result.unwrap_err().to_string();
@@ -1153,7 +1202,7 @@ mod tests {
         }"#;
 
         let mut resolver = MapResolver::new([("ns.Expected", wrong_schema)]);
-        let result = ResolvedSchema::resolve().build_array_with_resolver([schema_a], &mut resolver);
+        let result = ResolvedSchema::builder().build_array_with_resolver([schema_a], &mut resolver);
 
         assert!(result.is_err(), "should fail when resolver returns a schema that doesn't define the requested name");
 
@@ -1185,7 +1234,7 @@ mod tests {
         }"#;
 
         let mut resolver = MapResolver::new([("ext.Shared", shared)]);
-        let resolved = ResolvedSchema::resolve().build_list_with_resolver(
+        let resolved = ResolvedSchema::builder().build_list_with_resolver(
             vec![schema_a, schema_b],
             &mut resolver,
         )?;
@@ -1227,7 +1276,7 @@ mod tests {
         }"#;
 
         let mut resolver = MapResolver::new([("ext.C", schema_c)]);
-        let [rs] = ResolvedSchema::resolve().additional(vec![schema_b])?.build_array_with_resolver([schema_a], &mut resolver)?;
+        let [rs] = ResolvedSchema::builder().additional(vec![schema_b])?.build_array_with_resolver([schema_a], &mut resolver)?;
 
         // B resolved locally, C externally
         assert!(rs.get_names().contains_key(&Name::new("ns.A")?));
@@ -1266,7 +1315,7 @@ mod tests {
         }"#;
 
         let mut resolver = MapResolver::new([("ext.Inner", inner)]);
-        let [rs] = ResolvedSchema::resolve().build_array_with_resolver([wrapper], &mut resolver)?;
+        let [rs] = ResolvedSchema::builder().build_array_with_resolver([wrapper], &mut resolver)?;
 
         // Walk the resolved schema tree
         let node = ResolvedNode::new(&rs);
@@ -1309,7 +1358,7 @@ mod tests {
         }"#;
 
         let mut resolver = MapResolver::new([("ext.Payload", payload)]);
-        let [rs] = ResolvedSchema::resolve().build_array_with_resolver([record], &mut resolver)?;
+        let [rs] = ResolvedSchema::builder().build_array_with_resolver([record], &mut resolver)?;
 
         assert!(rs.get_names().contains_key(&Name::new("ext.Payload")?));
 
@@ -1354,7 +1403,7 @@ mod tests {
         }"#;
 
         let mut resolver = MapResolver::new([("ext.Item", item)]);
-        let [rs] = ResolvedSchema::resolve().build_array_with_resolver([record], &mut resolver)?;
+        let [rs] = ResolvedSchema::builder().build_array_with_resolver([record], &mut resolver)?;
 
         assert!(rs.get_names().contains_key(&Name::new("ext.Item")?));
 
@@ -1396,7 +1445,7 @@ mod tests {
         }"#;
 
         let mut resolver = MapResolver::new([("ext.Entry", entry)]);
-        let [rs] = ResolvedSchema::resolve().build_array_with_resolver([record], &mut resolver)?;
+        let [rs] = ResolvedSchema::builder().build_array_with_resolver([record], &mut resolver)?;
 
         assert!(rs.get_names().contains_key(&Name::new("ext.Entry")?));
 
@@ -1437,10 +1486,10 @@ mod tests {
 
         // Resolve via custom resolver
         let mut resolver = MapResolver::new([("ns.Dep", dep)]);
-        let [via_resolver] = ResolvedSchema::resolve().build_array_with_resolver([main], &mut resolver)?;
+        let [via_resolver] = ResolvedSchema::builder().build_array_with_resolver([main], &mut resolver)?;
 
         // Resolve by providing dep locally
-        let [via_local] = ResolvedSchema::resolve().additional(vec![dep])?.build_array([main])?;
+        let [via_local] = ResolvedSchema::builder().additional(vec![dep])?.build_array([main])?;
 
         assert_eq!(via_resolver, via_local);
 
@@ -1463,7 +1512,7 @@ mod tests {
         }"#;
 
         let mut resolver = MapResolver::new([("ns.Dep", dep)]);
-        let [rs] = ResolvedSchema::resolve().build_array_with_resolver([main], &mut resolver)?;
+        let [rs] = ResolvedSchema::builder().build_array_with_resolver([main], &mut resolver)?;
 
         // Serialize and re-parse: the resulting schema should be self-contained.
         let json = serde_json::to_string(&rs)?;
@@ -1501,7 +1550,7 @@ mod tests {
         }"#;
 
         let mut resolver = MapResolver::new([("ext.Detail", detail)]);
-        let [rs] = ResolvedSchema::resolve().build_array_with_resolver([main], &mut resolver)?;
+        let [rs] = ResolvedSchema::builder().build_array_with_resolver([main], &mut resolver)?;
 
         assert!(rs.get_names().contains_key(&Name::new("ns.Main")?));
         assert!(rs.get_names().contains_key(&Name::new("ext.Detail")?));
@@ -1536,7 +1585,7 @@ mod tests {
             ("deep.D", schema_d),
         ]);
 
-        let [rs] = ResolvedSchema::resolve().build_array_with_resolver([schema_a], &mut resolver)?;
+        let [rs] = ResolvedSchema::builder().build_array_with_resolver([schema_a], &mut resolver)?;
 
         for name in ["deep.A", "deep.B", "deep.C", "deep.D"] {
             assert!(rs.get_names().contains_key(&Name::new(name)?), "missing {name}");
@@ -1573,7 +1622,7 @@ mod tests {
         let main_sws = SchemaWithSymbols::parse_str(main)?;
 
         let mut resolver = MapResolver::new([("ns.External", external)]);
-        let [rs] = ResolvedSchema::resolve().build_array_with_resolver(
+        let [rs] = ResolvedSchema::builder().build_array_with_resolver(
             [main_sws],
             &mut resolver,
         )?;
@@ -1612,7 +1661,7 @@ mod tests {
             ("ns.Tag", tag),
             ("ns.Meta", meta),
         ]);
-        let [rs] = ResolvedSchema::resolve().build_array_with_resolver([main], &mut resolver)?;
+        let [rs] = ResolvedSchema::builder().build_array_with_resolver([main], &mut resolver)?;
 
         let unraveled = rs.unravel();
 
@@ -1660,7 +1709,7 @@ mod tests {
           ]
         }
         "#;
-        let [rs] = ResolvedSchema::resolve().build_array([schema])?;
+        let [rs] = ResolvedSchema::builder().build_array([schema])?;
         assert_eq!(rs.get_names().len(), 2);
         for s in ["space.record_name", "space.inner_record_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -1700,7 +1749,7 @@ mod tests {
           ]
         }
         "#;
-        let [rs] = ResolvedSchema::resolve().build_array([&schema])?;
+        let [rs] = ResolvedSchema::builder().build_array([&schema])?;
         assert_eq!(rs.get_names().len(), 2);
         for s in ["space.record_name", "space.inner_record_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -1735,7 +1784,7 @@ mod tests {
           ]
         }
         "#;
-        let [rs] = ResolvedSchema::resolve().build_array([&schema])?;
+        let [rs] = ResolvedSchema::builder().build_array([&schema])?;
         assert_eq!(rs.get_names().len(), 2);
         for s in ["space.record_name", "space.inner_enum_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -1770,7 +1819,7 @@ mod tests {
           ]
         }
         "#;
-        let [rs] = ResolvedSchema::resolve().build_array([&schema])?;
+        let [rs] = ResolvedSchema::builder().build_array([&schema])?;
         assert_eq!(rs.get_names().len(), 2);
         for s in ["space.record_name", "space.inner_enum_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -1805,7 +1854,7 @@ mod tests {
           ]
         }
         "#;
-        let [rs] = ResolvedSchema::resolve().build_array([&schema])?;
+        let [rs] = ResolvedSchema::builder().build_array([&schema])?;
         assert_eq!(rs.get_names().len(), 2);
         for s in ["space.record_name", "space.inner_fixed_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -1840,7 +1889,7 @@ mod tests {
           ]
         }
         "#;
-        let [rs] = ResolvedSchema::resolve().build_array([&schema])?;
+        let [rs] = ResolvedSchema::builder().build_array([&schema])?;
         assert_eq!(rs.get_names().len(), 2);
         for s in ["space.record_name", "space.inner_fixed_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -1881,7 +1930,7 @@ mod tests {
           ]
         }
         "#;
-        let [rs] = ResolvedSchema::resolve().build_array([&schema])?;
+        let [rs] = ResolvedSchema::builder().build_array([&schema])?;
         assert_eq!(rs.get_names().len(), 2);
         for s in ["space.record_name", "inner_space.inner_record_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -1917,7 +1966,7 @@ mod tests {
           ]
         }
         "#;
-        let [rs] = ResolvedSchema::resolve().build_array([&schema])?;
+        let [rs] = ResolvedSchema::builder().build_array([&schema])?;
         assert_eq!(rs.get_names().len(), 2);
         for s in ["space.record_name", "inner_space.inner_enum_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -1953,7 +2002,7 @@ mod tests {
           ]
         }
         "#;
-        let [rs] = ResolvedSchema::resolve().build_array([&schema])?;
+        let [rs] = ResolvedSchema::builder().build_array([&schema])?;
         assert_eq!(rs.get_names().len(), 2);
         for s in ["space.record_name", "inner_space.inner_fixed_name"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -2005,7 +2054,7 @@ mod tests {
           ]
         }
         "#;
-        let [rs] = ResolvedSchema::resolve().build_array([&schema])?;
+        let [rs] = ResolvedSchema::builder().build_array([&schema])?;
         assert_eq!(rs.get_names().len(), 3);
         for s in [
             "space.record_name",
@@ -2062,7 +2111,7 @@ mod tests {
           ]
         }
         "#;
-        let [rs] = ResolvedSchema::resolve().build_array([&schema])?;
+        let [rs] = ResolvedSchema::builder().build_array([&schema])?;
         assert_eq!(rs.get_names().len(), 3);
         for s in [
             "space.record_name",
@@ -2120,7 +2169,7 @@ mod tests {
           ]
         }
         "#;
-        let [rs] = ResolvedSchema::resolve().build_array([&schema])?;
+        let [rs] = ResolvedSchema::builder().build_array([&schema])?;
         assert_eq!(rs.get_names().len(), 3);
         for s in [
             "space.record_name",
@@ -2164,7 +2213,7 @@ mod tests {
           ]
         }
         "#;
-        let [rs] = ResolvedSchema::resolve().build_array([&schema])?;
+        let [rs] = ResolvedSchema::builder().build_array([&schema])?;
         assert_eq!(rs.get_names().len(), 2);
         for s in ["space.record_name", "space.in_array_record"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -2204,7 +2253,7 @@ mod tests {
           ]
         }
         "#;
-        let [rs] = ResolvedSchema::resolve().build_array([&schema])?;
+        let [rs] = ResolvedSchema::builder().build_array([&schema])?;
         assert_eq!(rs.get_names().len(), 2);
         for s in ["space.record_name", "space.in_map_record"] {
             assert!(rs.get_names().contains_key(&Name::new(s)?));
@@ -2241,7 +2290,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let [rs] = ResolvedSchema::resolve().build_array([&schema])?;
+        let [rs] = ResolvedSchema::builder().build_array([&schema])?;
 
         // confirm we have expected 2 full-names
         assert_eq!(rs.get_names().len(), 2);
@@ -2285,7 +2334,7 @@ mod tests {
         }
         "#;
         let schema = Schema::parse_str(schema)?;
-        let [rs] = ResolvedSchema::resolve().build_array([&schema])?;
+        let [rs] = ResolvedSchema::builder().build_array([&schema])?;
 
         // confirm we have expected 2 full-names
         assert_eq!(rs.get_names().len(), 2);
@@ -2322,7 +2371,7 @@ mod tests {
                 }
             ]
         }"#;
-        let _resolved = ResolvedSchema::resolve().build_array([&schema])?;
+        let _resolved = ResolvedSchema::builder().build_array([&schema])?;
 
         Ok(())
     }
@@ -2350,7 +2399,7 @@ mod tests {
                 }
             ]
         }"#;
-        let _resolved = ResolvedSchema::resolve().build_array([&schema])?;
+        let _resolved = ResolvedSchema::builder().build_array([&schema])?;
 
         Ok(())
     }
@@ -2397,7 +2446,7 @@ mod tests {
 
         let ambig_schema = r#""duplicated_name""#;
 
-        let result = ResolvedSchema::resolve().additional(vec![&schema, &other_schema])?.build_array([&ambig_schema])
+        let result = ResolvedSchema::builder().additional(vec![&schema, &other_schema])?.build_array([&ambig_schema])
             .unwrap_err();
 
         assert!(
@@ -2443,7 +2492,7 @@ mod tests {
         }
             "#;
 
-        let _resolved = ResolvedSchema::resolve().build_array([schema1, schema2])?;
+        let _resolved = ResolvedSchema::builder().build_array([schema1, schema2])?;
 
         Ok(())
     }
@@ -2486,9 +2535,9 @@ mod tests {
         }
             "#;
 
-        assert_eq!(
-            ResolvedSchema::resolve().additional([schema1, schema2])?.build_array([union]).is_err(),
-            true);
+        assert!(
+            ResolvedSchema::builder().additional([schema1, schema2])?.build_array([union]).is_err()
+            );
 
         Ok(())
 
@@ -2496,7 +2545,7 @@ mod tests {
 
     #[test]
     fn unravel_is_alias_aware() -> TestResult{
-        let complete = CompleteSchema::try_from(&ResolvedSchema::parse_str(
+        let complete = CompleteSchema::from(&ResolvedSchema::parse_str(
             r#"
             {
               "type": "record",
@@ -2508,7 +2557,7 @@ mod tests {
               ]
             }
         "#,
-        )?)?;
+        )?);
 
         let mut lookup = BTreeMap::new();
         lookup.insert("value".to_owned(), 0);
@@ -2638,7 +2687,7 @@ mod tests {
             "size": 4
         }"#;
 
-        let [rs] = ResolvedSchema::resolve().additional([schema2, schema3, schema4, schema5])?.build_array([schema1])?;
+        let [rs] = ResolvedSchema::builder().additional([schema2, schema3, schema4, schema5])?.build_array([schema1])?;
         let my_fixed = rs.context.0.get(&Name::try_from("myfixed")?);
 
         assert_eq!(
@@ -2668,7 +2717,7 @@ mod tests {
             "fields": [{"name": "myfield", "type": "long"}]
         }"#;
 
-        let _rs = ResolvedSchema::resolve().additional([&schema2, &schema3, &schema4, &schema4])?.build_array([&schema1])?;
+        let _rs = ResolvedSchema::builder().additional([&schema2, &schema3, &schema4, &schema4])?.build_array([&schema1])?;
 
         Ok(())
     }
@@ -2701,7 +2750,7 @@ mod tests {
             "symbols": ["F","W","D"]
         }"#;
 
-        let _rs = ResolvedSchema::resolve().additional([&schema1, &schema2])?.build_array([&union, &record])?;
+        let _rs = ResolvedSchema::builder().additional([&schema1, &schema2])?.build_array([&union, &record])?;
 
         Ok(())
     }
@@ -2724,7 +2773,7 @@ mod tests {
         "symbols": ["X", "Y"]
     }"#;
 
-    /// baz as a record instead of fixed — conflicts with BAZ_FIXED
+    /// baz as a record instead of fixed — conflicts with `BAZ_FIXED`
     const BAZ_RECORD: &str = r#"{
         "type": "record",
         "name": "baz",
@@ -2741,7 +2790,7 @@ mod tests {
 
     #[test]
     fn resolved_schema_only_includes_needed_definitions() {
-        let [resolved] = ResolvedSchema::resolve()
+        let [resolved] = ResolvedSchema::builder()
             .additional(vec![BAR_ENUM, BAZ_FIXED])
             .unwrap()
             .build_array([FOO_USES_BAR])
@@ -2761,14 +2810,14 @@ mod tests {
     #[test]
     fn equal_when_different_unused_definitions_in_pool() {
         // resolve foo with {bar, baz}
-        let [resolved_a] = ResolvedSchema::resolve()
+        let [resolved_a] = ResolvedSchema::builder()
             .additional(vec![BAR_ENUM, BAZ_FIXED])
             .unwrap()
             .build_array([FOO_USES_BAR])
             .unwrap();
 
         // resolve foo with {bar, qux}
-        let [resolved_b] = ResolvedSchema::resolve()
+        let [resolved_b] = ResolvedSchema::builder()
             .additional(vec![BAR_ENUM, QUX_ENUM])
             .unwrap()
             .build_array([FOO_USES_BAR])
@@ -2783,7 +2832,7 @@ mod tests {
     #[test]
     fn equal_despite_conflicting_unused_definitions_across_pools() {
         // pool A has baz as a fixed
-        let [resolved_a] = ResolvedSchema::resolve()
+        let [resolved_a] = ResolvedSchema::builder()
             .additional(vec![BAR_ENUM, BAZ_FIXED])
             .unwrap()
             .build_array([FOO_USES_BAR])
@@ -2791,7 +2840,7 @@ mod tests {
 
         // pool B has baz as a record — conflicts with pool A's baz,
         // but neither resolution actually needs baz
-        let [resolved_b] = ResolvedSchema::resolve()
+        let [resolved_b] = ResolvedSchema::builder()
             .additional(vec![BAR_ENUM, BAZ_RECORD])
             .unwrap()
             .build_array([FOO_USES_BAR])
@@ -2811,13 +2860,13 @@ mod tests {
             "symbols": ["D", "E", "F"]
         }"#;
 
-        let [resolved_a] = ResolvedSchema::resolve()
+        let [resolved_a] = ResolvedSchema::builder()
             .additional(vec![BAR_ENUM])
             .unwrap()
             .build_array([FOO_USES_BAR])
             .unwrap();
 
-        let [resolved_b] = ResolvedSchema::resolve()
+        let [resolved_b] = ResolvedSchema::builder()
             .additional(vec![bar_enum_alt])
             .unwrap()
             .build_array([FOO_USES_BAR])
@@ -2840,7 +2889,7 @@ mod tests {
             ]
         }"#;
 
-        let [resolved] = ResolvedSchema::resolve()
+        let [resolved] = ResolvedSchema::builder()
             .additional(vec![bar_uses_baz, BAZ_FIXED, QUX_ENUM])
             .unwrap()
             .build_array([FOO_USES_BAR])
@@ -2869,14 +2918,14 @@ mod tests {
         }"#;
 
         // pool has an extra unrelated schema
-        let [resolved_a] = ResolvedSchema::resolve()
+        let [resolved_a] = ResolvedSchema::builder()
             .additional(vec![bar_uses_baz, BAZ_FIXED, QUX_ENUM])
             .unwrap()
             .build_array([FOO_USES_BAR])
             .unwrap();
 
         // pool without the extra
-        let [resolved_b] = ResolvedSchema::resolve()
+        let [resolved_b] = ResolvedSchema::builder()
             .additional(vec![bar_uses_baz, BAZ_FIXED])
             .unwrap()
             .build_array([FOO_USES_BAR])

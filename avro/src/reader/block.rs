@@ -203,9 +203,7 @@ impl<'r, R: Read> Block<'r, R> {
         Ok(Some(item))
     }
 
-    fn read_writer_schema(&mut self, metadata: &HashMap<String, Value>) -> AvroResult<()> { // KTODO,
-                                                                                            // Include
-                                                                                            // atest here, mine expands this
+    fn read_writer_schema(&mut self, metadata: &HashMap<String, Value>) -> AvroResult<()> {
         let json: serde_json::Value = metadata
             .get("avro.schema")
             .and_then(|bytes| {
@@ -219,7 +217,7 @@ impl<'r, R: Read> Block<'r, R> {
         let writer_from_stream = Schema::parse(&json)?;
         let writer_from_stream_with_symbols : SchemaWithSymbols = writer_from_stream.clone().into();
         let schemata_with_symbols : Vec<SchemaWithSymbols> = self.schemata.iter().map(|schema|{SchemaWithSymbols::from((*schema).clone())}).collect();
-        let [writer_from_stream_resolved] = ResolvedSchema::resolve().additional(schemata_with_symbols)?.build_array([writer_from_stream_with_symbols])?;
+        let [writer_from_stream_resolved] = ResolvedSchema::builder().additional(schemata_with_symbols)?.build_array([writer_from_stream_with_symbols])?;
         self.writer_schema = writer_from_stream;
         self.resolved_writer = writer_from_stream_resolved;
         Ok(())
