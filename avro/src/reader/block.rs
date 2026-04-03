@@ -217,7 +217,7 @@ impl<'r, R: Read> Block<'r, R> {
 
     pub(super) fn read_next_deser<T: DeserializeOwned>(
         &mut self,
-        read_schema: Option<&Schema>,
+        reader_schema: Option<&Schema>,
     ) -> AvroResult<Option<T>> {
         if self.is_empty() {
             self.read_block_next()?;
@@ -229,7 +229,7 @@ impl<'r, R: Read> Block<'r, R> {
         let mut block_bytes = &self.buf[self.buf_idx..];
         let b_original = block_bytes.len();
 
-        let item = if read_schema.is_some() {
+        let item = if reader_schema.is_some() {
             // TODO: Implement SchemaAwareResolvingDeserializer
             panic!("Schema aware deserialisation does not resolve schemas yet");
         } else {

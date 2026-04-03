@@ -71,12 +71,12 @@
 //!     - **unit_variant** => [`Schema::Record`] named as the variant and with no fields.
 //!     - **newtype_variant** => [`Schema::Record`] named as the variant and with one field.
 //!       The schema must have the attribute `org.apache.avro.rust.union_of_records` with the value set to `true`.
-//!     - **tuple_variant** => [`Schema::Record`] named as the variant and with as many fields as there are element.
+//!     - **tuple_variant** => [`Schema::Record`] named as the variant and with as many fields as there are elements.
 //!     - **struct_variant** => [`Schema::Record`] named as the variant and with a field for every field of the struct variant.
 //! - As a [`Schema::Union`] without the wrapper [`Schema::Record`], all schemas must be unique:
 //!     - **unit_variant** => [`Schema::Null`].
 //!     - **newtype_variant** => The schema of the inner type.
-//!     - **tuple_variant** => [`Schema::Record`] named as the variant and with as many fields as there are element.
+//!     - **tuple_variant** => [`Schema::Record`] named as the variant and with as many fields as there are elements.
 //!     - **struct_variant** => [`Schema::Record`] named as the variant and with a field for every field of the struct variant.
 //!
 //! ### Internally tagged
@@ -95,7 +95,7 @@
 //! to a [`Schema::Union`] with the following schemas:
 //!   - **unit_variant** => [`Schema::Null`].
 //!   - **newtype_variant** => The schema of the inner type.
-//!   - **tuple_variant** => [`Schema::Record`] named as the variant and with as many fields as there are element.
+//!   - **tuple_variant** => [`Schema::Record`] named as the variant and with as many fields as there are elements.
 //!   - **struct_variant** => [`Schema::Record`] named as the variant and with a field for every field of the struct variant.
 //!
 //! [`AvroSchema`]: crate::AvroSchema

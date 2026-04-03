@@ -99,7 +99,9 @@ impl UnionSchema {
         self.variant_index.get(&kind).copied()
     }
 
-    /// Get the index and schema for the provided name.
+    /// Get the index and schema for the provided Rust type name.
+    ///
+    /// This ignores the namespace of schemas.
     ///
     /// Will use `names` to resolve references.
     pub(crate) fn find_named_schema<'s>(

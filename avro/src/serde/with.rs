@@ -730,8 +730,6 @@ pub mod array {
 ///
 /// Use [`apache_avro::serde::array`] for non-optional array values.
 ///
-/// When used with different serialization formats, this is equivalent to [`serde_bytes`].
-///
 /// See usage with below example:
 /// ```
 /// # use apache_avro::AvroSchema;
