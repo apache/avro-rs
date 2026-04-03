@@ -15,26 +15,30 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{AvroSchema, Schema, Writer, from_value};
-use apache_avro_test_helper::TestResult;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::fmt::Debug;
 
+use apache_avro::{
+    AvroSchema, Schema, reader::datum::GenericDatumReader, writer::datum::GenericDatumWriter,
+};
+use apache_avro_test_helper::TestResult;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Significantly complicates the trait bounds"
+)]
+#[track_caller]
 fn ser_deser<T>(schema: &Schema, record: T) -> TestResult
 where
-    T: Serialize + DeserializeOwned + Debug + PartialEq + Clone,
+    T: Serialize + DeserializeOwned + Debug + PartialEq,
 {
-    let record2 = record.clone();
-    let mut writer = Writer::new(schema, vec![])?;
-    writer.append_ser(record)?;
-    let bytes_written = writer.into_inner()?;
-
-    let reader = apache_avro::Reader::new(&bytes_written[..])?;
-    for value in reader {
-        let value = value?;
-        let deserialized = from_value::<T>(&value)?;
-        assert_eq!(deserialized, record2);
-    }
+    let serialized = GenericDatumWriter::builder(schema)
+        .build()?
+        .write_ser_to_vec(&record)?;
+    let deserialized: T = GenericDatumReader::builder(schema)
+        .build()?
+        .read_deser(&mut &serialized[..])?;
+    assert_eq!(deserialized, record);
 
     Ok(())
 }

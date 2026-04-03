@@ -49,6 +49,10 @@
 //! [`Serialize`]: https://docs.rs/serde/latest/serde/trait.Serialize.html
 //! [`Deserialize`]: https://docs.rs/serde/latest/serde/trait.Deserialize.html
 
+// Enable using `fake_variadic` on docs.rs
+#![cfg_attr(docsrs, feature(rustdoc_internals))]
+#![cfg_attr(docsrs, allow(internal_features))]
+
 mod bigdecimal;
 mod bytes;
 mod codec;

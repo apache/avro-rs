@@ -15,57 +15,81 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::decode::decode_internal;
-use crate::error::Details;
-use crate::headers::{HeaderBuilder, RabinFingerprintHeader};
-use crate::schema::ResolvedOwnedSchema;
-use crate::types::Value;
-use crate::{AvroResult, AvroSchema, Schema, from_value};
+use std::{io::Read, marker::PhantomData};
+
+use bon::bon;
 use serde::de::DeserializeOwned;
-use std::io::Read;
-use std::marker::PhantomData;
+
+use crate::{
+    AvroResult, AvroSchema, Schema,
+    decode::decode_internal,
+    error::Details,
+    headers::{HeaderBuilder, RabinFingerprintHeader},
+    schema::ResolvedOwnedSchema,
+    serde::deser_schema::{Config, SchemaAwareDeserializer},
+    types::Value,
+    util::is_human_readable,
+};
 
 pub struct GenericSingleObjectReader {
     write_schema: ResolvedOwnedSchema,
     expected_header: Vec<u8>,
+    human_readable: bool,
+}
+
+#[bon]
+impl GenericSingleObjectReader {
+    #[builder]
+    pub fn new(
+        schema: Schema,
+        /// The expected header.
+        #[builder(default = RabinFingerprintHeader::from_schema(&schema).build_header())]
+        header: Vec<u8>,
+        /// Was the data serialized with `human_readable`.
+        #[builder(default = is_human_readable())]
+        human_readable: bool,
+    ) -> AvroResult<GenericSingleObjectReader> {
+        Ok(Self {
+            write_schema: schema.try_into()?,
+            expected_header: header,
+            human_readable,
+        })
+    }
 }
 
 impl GenericSingleObjectReader {
-    pub fn new(schema: Schema) -> AvroResult<GenericSingleObjectReader> {
-        let header_builder = RabinFingerprintHeader::from_schema(&schema);
-        Self::new_with_header_builder(schema, header_builder)
-    }
-
-    pub fn new_with_header_builder<HB: HeaderBuilder>(
-        schema: Schema,
-        header_builder: HB,
-    ) -> AvroResult<GenericSingleObjectReader> {
-        let expected_header = header_builder.build_header();
-        Ok(GenericSingleObjectReader {
-            write_schema: ResolvedOwnedSchema::try_from(schema)?,
-            expected_header,
-        })
-    }
-
     pub fn read_value<R: Read>(&self, reader: &mut R) -> AvroResult<Value> {
+        self.read_header(reader)?;
+        decode_internal(
+            self.write_schema.get_root_schema(),
+            self.write_schema.get_names(),
+            None,
+            reader,
+        )
+    }
+
+    pub fn read_deser<T: DeserializeOwned>(&self, reader: &mut impl Read) -> AvroResult<T> {
+        self.read_header(reader)?;
+        let config = Config {
+            names: self.write_schema.get_names(),
+            human_readable: self.human_readable,
+        };
+        T::deserialize(SchemaAwareDeserializer::new(
+            reader,
+            self.write_schema.get_root_schema(),
+            config,
+        )?)
+    }
+
+    fn read_header(&self, reader: &mut impl Read) -> AvroResult<()> {
         let mut header = vec![0; self.expected_header.len()];
-        match reader.read_exact(&mut header) {
-            Ok(_) => {
-                if self.expected_header == header {
-                    decode_internal(
-                        self.write_schema.get_root_schema(),
-                        self.write_schema.get_names(),
-                        None,
-                        reader,
-                    )
-                } else {
-                    Err(
-                        Details::SingleObjectHeaderMismatch(self.expected_header.clone(), header)
-                            .into(),
-                    )
-                }
-            }
-            Err(io_error) => Err(Details::ReadHeader(io_error).into()),
+        reader
+            .read_exact(&mut header)
+            .map_err(Details::ReadHeader)?;
+        if self.expected_header == header {
+            Ok(())
+        } else {
+            Err(Details::SingleObjectHeaderMismatch(self.expected_header.clone(), header).into())
         }
     }
 }
@@ -84,7 +108,9 @@ where
 {
     pub fn new() -> AvroResult<SpecificSingleObjectReader<T>> {
         Ok(SpecificSingleObjectReader {
-            inner: GenericSingleObjectReader::new(T::get_schema())?,
+            inner: GenericSingleObjectReader::builder()
+                .schema(T::get_schema())
+                .build()?,
             _model: PhantomData,
         })
     }
@@ -104,20 +130,18 @@ where
     T: AvroSchema + DeserializeOwned,
 {
     pub fn read<R: Read>(&self, reader: &mut R) -> AvroResult<T> {
-        from_value::<T>(&self.inner.read_value(reader)?)
+        self.inner.read_deser(reader)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::encode::encode;
-    use crate::headers::GlueSchemaUuidHeader;
-    use crate::rabin::Rabin;
-    use crate::{AvroSchema, Error, Schema};
     use apache_avro_test_helper::TestResult;
     use serde::Deserialize;
     use uuid::Uuid;
+
+    use super::*;
+    use crate::{AvroSchema, Schema, encode::encode, headers::GlueSchemaUuidHeader, rabin::Rabin};
 
     #[derive(Deserialize, Clone, PartialEq, Debug)]
     struct TestSingleObjectReader {
@@ -131,7 +155,7 @@ mod tests {
             let schema = r#"
             {
                 "type":"record",
-                "name":"TestSingleObjectWrtierSerialize",
+                "name":"TestSingleObjectReader",
                 "fields":[
                     {
                         "name":"a",
@@ -220,7 +244,9 @@ mod tests {
         )
         .expect("Encode should succeed");
         let mut to_read = &to_read[..];
-        let generic_reader = GenericSingleObjectReader::new(TestSingleObjectReader::get_schema())
+        let generic_reader = GenericSingleObjectReader::builder()
+            .schema(TestSingleObjectReader::get_schema())
+            .build()
             .expect("Schema should resolve");
         let val = generic_reader
             .read_value(&mut to_read)
@@ -254,7 +280,9 @@ mod tests {
         )
         .expect("Encode should succeed");
         let mut to_read = (&to_read_1[..]).chain(&to_read_2[..]).chain(&to_read_3[..]);
-        let generic_reader = GenericSingleObjectReader::new(TestSingleObjectReader::get_schema())
+        let generic_reader = GenericSingleObjectReader::builder()
+            .schema(TestSingleObjectReader::get_schema())
+            .build()
             .expect("Schema should resolve");
         let val = generic_reader
             .read_value(&mut to_read)
@@ -286,7 +314,9 @@ mod tests {
             &mut to_read,
         )
         .expect("Encode should succeed");
-        let generic_reader = GenericSingleObjectReader::new(TestSingleObjectReader::get_schema())
+        let generic_reader = GenericSingleObjectReader::builder()
+            .schema(TestSingleObjectReader::get_schema())
+            .build()
             .expect("Schema should resolve");
         let specific_reader = SpecificSingleObjectReader::<TestSingleObjectReader>::new()
             .expect("schema should resolve");
@@ -315,19 +345,26 @@ mod tests {
     fn avro_rs_164_generic_reader_alternate_header() -> TestResult {
         let schema_uuid = Uuid::parse_str("b2f1cf00-0434-013e-439a-125eb8485a5f")?;
         let header_builder = GlueSchemaUuidHeader::from_uuid(schema_uuid);
-        let generic_reader = GenericSingleObjectReader::new_with_header_builder(
-            TestSingleObjectReader::get_schema(),
-            header_builder,
-        )
-        .expect("failed to build reader");
+        let generic_reader = GenericSingleObjectReader::builder()
+            .schema(TestSingleObjectReader::get_schema())
+            .header(header_builder.build_header())
+            .build()
+            .expect("failed to build reader");
+        // First 18 bytes are the header, then it's a varint 0, double 0 and an empty list (0)
         let data_to_read: Vec<u8> = vec![
-            3, 0, 178, 241, 207, 0, 4, 52, 1, 62, 67, 154, 18, 94, 184, 72, 90, 95,
+            3, 0, 178, 241, 207, 0, 4, 52, 1, 62, 67, 154, 18, 94, 184, 72, 90, 95, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0,
         ];
         let mut to_read = &data_to_read[..];
-        let read_result = generic_reader
-            .read_value(&mut to_read)
-            .map_err(Error::into_details);
-        matches!(read_result, Err(Details::ReadBytes(_)));
+        let read_result = generic_reader.read_value(&mut to_read)?;
+        assert_eq!(
+            read_result,
+            Value::Record(vec![
+                ("a".to_string(), Value::Long(0)),
+                ("b".to_string(), Value::Double(0.0)),
+                ("c".to_string(), Value::Array(vec![]))
+            ])
+        );
         Ok(())
     }
 }

@@ -45,6 +45,7 @@ use serde::{
     ser::{SerializeMap, SerializeSeq},
 };
 use serde_json::{Map, Value as JsonValue};
+use std::borrow::Cow;
 use std::fmt::Formatter;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
@@ -463,8 +464,9 @@ impl Schema {
     /// [Parsing Canonical Form]:
     /// https://avro.apache.org/docs/++version++/specification/#parsing-canonical-form-for-schemas
     pub fn canonical_form(&self) -> String {
-        let json = serde_json::to_value(self)
-            .unwrap_or_else(|e| panic!("Cannot parse Schema from JSON: {e}"));
+        let json = serde_json::to_value(self).unwrap_or_else(|e| {
+            unreachable!("Cannot parse Schema from JSON that was just generated: {e}")
+        });
         let mut defined_names = HashSet::new();
         parsing_canonical_form(&json, &mut defined_names)
     }
@@ -783,6 +785,70 @@ impl Schema {
             _ => (),
         }
         Ok(())
+    }
+
+    /// Derive a name for this schema.
+    ///
+    /// The name is a valid schema name and will be unique if the named
+    /// schemas in this schema have unique names.
+    pub(crate) fn unique_normalized_name(&self) -> Cow<'static, str> {
+        match self {
+            Schema::Null => Cow::Borrowed("n"),
+            Schema::Boolean => Cow::Borrowed("B"),
+            Schema::Int => Cow::Borrowed("i"),
+            Schema::Long => Cow::Borrowed("l"),
+            Schema::Float => Cow::Borrowed("f"),
+            Schema::Double => Cow::Borrowed("d"),
+            Schema::Bytes => Cow::Borrowed("b"),
+            Schema::String => Cow::Borrowed("s"),
+            Schema::Array(array) => {
+                Cow::Owned(format!("a_{}", array.items.unique_normalized_name()))
+            }
+            Schema::Map(map) => Cow::Owned(format!("m_{}", map.types.unique_normalized_name())),
+            Schema::Union(union) => {
+                let mut name = format!("u{}", union.schemas.len());
+                for schema in &union.schemas {
+                    name.push('_');
+                    name.push_str(&schema.unique_normalized_name());
+                }
+                Cow::Owned(name)
+            }
+            Schema::BigDecimal => Cow::Borrowed("bd"),
+            Schema::Date => Cow::Borrowed("D"),
+            Schema::TimeMillis => Cow::Borrowed("t"),
+            Schema::TimeMicros => Cow::Borrowed("tm"),
+            Schema::TimestampMillis => Cow::Borrowed("T"),
+            Schema::TimestampMicros => Cow::Borrowed("TM"),
+            Schema::TimestampNanos => Cow::Borrowed("TN"),
+            Schema::LocalTimestampMillis => Cow::Borrowed("L"),
+            Schema::LocalTimestampMicros => Cow::Borrowed("LM"),
+            Schema::LocalTimestampNanos => Cow::Borrowed("LN"),
+            Schema::Decimal(DecimalSchema {
+                inner: InnerDecimalSchema::Bytes,
+                precision,
+                scale,
+            }) => Cow::Owned(format!("db_{precision}_{scale}")),
+            Schema::Uuid(UuidSchema::Bytes) => Cow::Borrowed("ub"),
+            Schema::Uuid(UuidSchema::String) => Cow::Borrowed("us"),
+            Schema::Record(RecordSchema { name, .. })
+            | Schema::Enum(EnumSchema { name, .. })
+            | Schema::Fixed(FixedSchema { name, .. })
+            | Schema::Decimal(DecimalSchema {
+                inner: InnerDecimalSchema::Fixed(FixedSchema { name, .. }),
+                ..
+            })
+            | Schema::Uuid(UuidSchema::Fixed(FixedSchema { name, .. }))
+            | Schema::Duration(FixedSchema { name, .. })
+            | Schema::Ref { name } => {
+                let name: String = name
+                    .to_string()
+                    .replace('_', "__")
+                    .chars()
+                    .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+                    .collect();
+                Cow::Owned(format!("r{}_{}", name.len(), name))
+            }
+        }
     }
 }
 
@@ -5113,6 +5179,34 @@ mod tests {
         assert_eq!(
             array.attributes.get("default"),
             Some(&serde_json::Value::Null)
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_unique_normalized_name_must_be_unique() -> TestResult {
+        let one = Schema::Ref {
+            name: "a.b.c".parse()?,
+        };
+        let two = Schema::Ref {
+            name: "a_b_c".parse()?,
+        };
+        let three = Schema::Ref {
+            name: "a__b__c".parse()?,
+        };
+        let four = Schema::Ref {
+            name: "a._b._c".parse()?,
+        };
+
+        assert_ne!(one.unique_normalized_name(), two.unique_normalized_name());
+        assert_ne!(one.unique_normalized_name(), three.unique_normalized_name());
+        assert_ne!(one.unique_normalized_name(), four.unique_normalized_name());
+        assert_ne!(two.unique_normalized_name(), three.unique_normalized_name());
+        assert_ne!(two.unique_normalized_name(), four.unique_normalized_name());
+        assert_ne!(
+            three.unique_normalized_name(),
+            four.unique_normalized_name()
         );
 
         Ok(())

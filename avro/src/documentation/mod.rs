@@ -20,5 +20,7 @@
 //! This module does not contain any code, and is only available during `rustdoc` builds.
 //!
 
+pub mod avro_data_model_to_serde;
 pub mod dynamic;
 pub mod primer;
+pub mod serde_data_model_to_avro;

@@ -15,12 +15,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::Schema;
-use crate::schema::{
-    FixedSchema, Name, NamespaceRef, RecordField, RecordSchema, UnionSchema, UuidSchema,
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
 };
-use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+
+use crate::{
+    Schema,
+    schema::{FixedSchema, Name, NamespaceRef, RecordField, RecordSchema, UnionSchema, UuidSchema},
+};
 
 /// Trait for types that serve as an Avro data model.
 ///
@@ -368,6 +371,7 @@ pub trait AvroSchemaComponent {
 /// Get the record fields from `schema_fn` without polluting `named_schemas` or causing duplicate names
 ///
 /// This is public so the derive macro can use it for `#[avro(with = ||)]` and `#[avro(with = path)]`
+#[doc(hidden)]
 pub fn get_record_fields_in_ctxt(
     named_schemas: &mut HashSet<Name>,
     enclosing_namespace: NamespaceRef,
@@ -558,27 +562,6 @@ macro_rules! impl_array_schema (
 
 impl_array_schema!([T] where T: AvroSchemaComponent);
 impl_array_schema!(Vec<T> where T: AvroSchemaComponent);
-// This doesn't work as the macro doesn't allow specifying the N parameter
-// impl_array_schema!([T; N] where T: AvroSchemaComponent);
-
-impl<const N: usize, T> AvroSchemaComponent for [T; N]
-where
-    T: AvroSchemaComponent,
-{
-    fn get_schema_in_ctxt(
-        named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: NamespaceRef,
-    ) -> Schema {
-        Schema::array(T::get_schema_in_ctxt(named_schemas, enclosing_namespace)).build()
-    }
-
-    fn get_record_fields_in_ctxt(
-        _: &mut HashSet<Name>,
-        _: NamespaceRef,
-    ) -> Option<Vec<RecordField>> {
-        None
-    }
-}
 
 impl<T> AvroSchemaComponent for HashMap<String, T>
 where
@@ -630,35 +613,46 @@ where
 }
 
 impl AvroSchemaComponent for core::time::Duration {
-    /// The schema is [`Schema::Duration`] with the name `duration`.
+    /// The schema is [`Schema::Record`] with the name `Duration`.
     ///
-    /// This is a lossy conversion as this Avro type does not store the amount of nanoseconds.
+    /// It has two fields:
+    /// - `secs` with the schema `Schema::Fixed(name: "u64", size: 8)`
+    /// - `nanos` with the schema `Schema::Long`
     fn get_schema_in_ctxt(
         named_schemas: &mut HashSet<Name>,
         enclosing_namespace: NamespaceRef,
     ) -> Schema {
-        let name = Name::new_with_enclosing_namespace("duration", enclosing_namespace)
+        let name = Name::new_with_enclosing_namespace("Duration", enclosing_namespace)
             .expect("Name is valid");
         if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {
-            let schema = Schema::Duration(FixedSchema {
-                name: name.clone(),
-                aliases: None,
-                doc: None,
-                size: 12,
-                attributes: Default::default(),
-            });
-            named_schemas.insert(name);
-            schema
+            named_schemas.insert(name.clone());
+            Schema::record(name)
+                .fields(
+                    Self::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)
+                        .expect("Unreachable!"),
+                )
+                .build()
         }
     }
 
     fn get_record_fields_in_ctxt(
-        _: &mut HashSet<Name>,
-        _: NamespaceRef,
+        named_schemas: &mut HashSet<Name>,
+        enclosing_namespace: NamespaceRef,
     ) -> Option<Vec<RecordField>> {
-        None
+        Some(vec![
+            // Secs is an u64
+            RecordField::builder()
+                .name("secs")
+                .schema(u64::get_schema_in_ctxt(named_schemas, enclosing_namespace))
+                .build(),
+            // Nanos is an u32
+            RecordField::builder()
+                .name("nanos")
+                .schema(Schema::Long)
+                .build(),
+        ])
     }
 }
 
@@ -666,6 +660,8 @@ impl AvroSchemaComponent for uuid::Uuid {
     /// The schema is [`Schema::Uuid`] with the name `uuid`.
     ///
     /// The underlying schema is [`Schema::Fixed`] with a size of 16.
+    ///
+    /// If you're using `human_readable: true` you need to override this schema with a `Schema::String`.
     fn get_schema_in_ctxt(
         named_schemas: &mut HashSet<Name>,
         enclosing_namespace: NamespaceRef,
@@ -788,13 +784,197 @@ impl AvroSchemaComponent for i128 {
     }
 }
 
+/// Schema definition for `[T; N]`
+///
+/// Schema is defined as follows:
+/// - 0-sized arrays: [`Schema::Null`]
+/// - 1-sized arrays: `T::get_schema_in_ctxt`
+/// - N-sized arrays: [`Schema::Record`] with a field for every index
+///
+/// If you need or want a [`Schema::Array`], [`Schema::Bytes`], or [`Schema::Fixed`] instead,
+/// use [`apache_avro::serde::array`], [`apache_avro::serde::bytes`], or [`apache_avro::serde::fixed`] respectively.
+///
+/// [`apache_avro::serde::array`]: crate::serde::array
+/// [`apache_avro::serde::bytes`]: crate::serde::bytes
+/// [`apache_avro::serde::fixed`]: crate::serde::fixed
+impl<const N: usize, T: AvroSchemaComponent> AvroSchemaComponent for [T; N] {
+    fn get_schema_in_ctxt(
+        named_schemas: &mut HashSet<Name>,
+        enclosing_namespace: NamespaceRef,
+    ) -> Schema {
+        if N == 0 {
+            Schema::Null
+        } else if N == 1 {
+            T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
+        } else {
+            let t_schema = T::get_schema_in_ctxt(named_schemas, enclosing_namespace);
+            let name = Name::new_with_enclosing_namespace(
+                format!("A{N}_{}", t_schema.unique_normalized_name()),
+                enclosing_namespace,
+            )
+            .expect("Name is valid");
+            if named_schemas.contains(&name) {
+                Schema::Ref { name }
+            } else {
+                named_schemas.insert(name.clone());
+
+                let t_default = T::field_default();
+                // If T is a named schema or contains named schemas, they'll now be a reference.
+                let t_ref = T::get_schema_in_ctxt(named_schemas, enclosing_namespace);
+                let fields = std::iter::once(
+                    RecordField::builder()
+                        .name("field_0".to_string())
+                        .schema(t_schema)
+                        .maybe_default(t_default.clone())
+                        .build(),
+                )
+                .chain((1..N).map(|n| {
+                    RecordField::builder()
+                        .name(format!("field_{n}"))
+                        .schema(t_ref.clone())
+                        .maybe_default(t_default.clone())
+                        .build()
+                }))
+                .collect();
+
+                Schema::record(name).fields(fields).build()
+            }
+        }
+    }
+
+    fn get_record_fields_in_ctxt(
+        named_schemas: &mut HashSet<Name>,
+        enclosing_namespace: NamespaceRef,
+    ) -> Option<Vec<RecordField>> {
+        if N == 0 {
+            None
+        } else if N == 1 {
+            T::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)
+        } else {
+            let t_schema = T::get_schema_in_ctxt(named_schemas, enclosing_namespace);
+            let t_default = T::field_default();
+            // If T is a named schema or contains named schemas, they'll now be a reference.
+            let t_ref = T::get_schema_in_ctxt(named_schemas, enclosing_namespace);
+            let fields = std::iter::once(
+                RecordField::builder()
+                    .name("field_0".to_string())
+                    .schema(t_schema)
+                    .maybe_default(t_default.clone())
+                    .build(),
+            )
+            .chain((1..N).map(|n| {
+                RecordField::builder()
+                    .name(format!("field_{n}"))
+                    .schema(t_ref.clone())
+                    .maybe_default(t_default.clone())
+                    .build()
+            }))
+            .collect();
+            Some(fields)
+        }
+    }
+
+    /// `None` for 0-sized and N-sized arrays, `T::field_default` for 1-sized arrays
+    fn field_default() -> Option<serde_json::Value> {
+        if N == 1 { T::field_default() } else { None }
+    }
+}
+
+/// Schema definition for `(T₁, T₂, …, Tₙ)`.
+///
+/// Implemented for tuples of up to 16 elements.
+///
+/// Schema is defined as follows:
+/// - 1-tuple: `T::get_schema_in_ctxt`
+/// - N-tuple: [`Schema::Record`] with a field for every element
+#[cfg_attr(docsrs, doc(fake_variadic))]
+impl<T: AvroSchemaComponent> AvroSchemaComponent for (T,) {
+    fn get_schema_in_ctxt(
+        named_schemas: &mut HashSet<Name>,
+        enclosing_namespace: NamespaceRef,
+    ) -> Schema {
+        T::get_schema_in_ctxt(named_schemas, enclosing_namespace)
+    }
+
+    fn get_record_fields_in_ctxt(
+        named_schemas: &mut HashSet<Name>,
+        enclosing_namespace: NamespaceRef,
+    ) -> Option<Vec<RecordField>> {
+        T::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)
+    }
+
+    /// `None` for N-tuples, `T::field_default()` for 1-tuple.
+    fn field_default() -> Option<serde_json::Value> {
+        T::field_default()
+    }
+}
+
+macro_rules! tuple_impls {
+    ($($len:expr => ($($name:ident)+))+) => {
+        $(
+            #[cfg_attr(docsrs, doc(hidden))]
+            impl<$($name: AvroSchemaComponent),+> AvroSchemaComponent for ($($name),+) {
+                fn get_schema_in_ctxt(named_schemas: &mut HashSet<Name>, enclosing_namespace: NamespaceRef) -> Schema {
+                    let schemas: [Schema; $len] = [$($name::get_schema_in_ctxt(named_schemas, enclosing_namespace)),+];
+
+                    let mut name = format!("T{}", $len);
+                    for schema in &schemas {
+                        name.push('_');
+                        name.push_str(&schema.unique_normalized_name());
+                    }
+                    let name = Name::new_with_enclosing_namespace(name, enclosing_namespace).expect("Name is valid");
+
+                    if named_schemas.contains(&name) {
+                        Schema::Ref { name }
+                    } else {
+                        named_schemas.insert(name.clone());
+
+                        let defaults: [Option<serde_json::Value>; $len] = [$($name::field_default()),+];
+
+                        let fields = schemas.into_iter().zip(defaults.into_iter()).enumerate().map(|(n, (schema, default))| {
+                            RecordField::builder()
+                                .name(format!("field_{n}"))
+                                .schema(schema)
+                                .maybe_default(default)
+                                .build()
+                        }).collect();
+
+                        Schema::record(name).fields(fields).build()
+                    }
+                }
+            }
+        )+
+    }
+}
+
+tuple_impls! {
+    2 => (T0 T1)
+    3 => (T0 T1 T2)
+    4 => (T0 T1 T2 T3)
+    5 => (T0 T1 T2 T3 T4)
+    6 => (T0 T1 T2 T3 T4 T5)
+    7 => (T0 T1 T2 T3 T4 T5 T6)
+    8 => (T0 T1 T2 T3 T4 T5 T6 T7)
+    9 => (T0 T1 T2 T3 T4 T5 T6 T7 T8)
+    10 => (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9)
+    11 => (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10)
+    12 => (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11)
+    13 => (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12)
+    14 => (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13)
+    15 => (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14)
+    16 => (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15)
+}
+
 #[cfg(test)]
 mod tests {
+    use apache_avro_test_helper::TestResult;
+
     use crate::{
         AvroSchema, Schema,
+        reader::datum::GenericDatumReader,
         schema::{FixedSchema, Name},
+        writer::datum::GenericDatumWriter,
     };
-    use apache_avro_test_helper::TestResult;
 
     #[test]
     fn avro_rs_401_str() -> TestResult {
@@ -824,22 +1004,11 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_401_array() -> TestResult {
-        let schema = <[u8; 55]>::get_schema();
-        assert_eq!(schema, Schema::array(Schema::Int).build());
-
-        Ok(())
-    }
-
-    #[test]
     fn avro_rs_401_option_ref_slice_array() -> TestResult {
-        let schema = <Option<&[[u8; 55]]>>::get_schema();
+        let schema = <Option<&[u8]>>::get_schema();
         assert_eq!(
             schema,
-            Schema::union(vec![
-                Schema::Null,
-                Schema::array(Schema::array(Schema::Int).build()).build()
-            ])?
+            Schema::union(vec![Schema::Null, Schema::array(Schema::Int).build()])?
         );
 
         Ok(())
@@ -926,5 +1095,135 @@ mod tests {
     )]
     fn avro_rs_489_option_option() {
         <Option<Option<i32>>>::get_schema();
+    }
+
+    #[test]
+    fn avro_rs_512_std_time_duration() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "record",
+            "name": "Duration",
+            "fields": [
+                { "name": "secs", "type": {"type": "fixed", "name": "u64", "size": 8} },
+                { "name": "nanos", "type": "long" }
+            ]
+        }"#,
+        )?;
+        let zero = std::time::Duration::ZERO;
+        let max = std::time::Duration::MAX;
+        assert_eq!(schema, std::time::Duration::get_schema());
+
+        let writer = GenericDatumWriter::builder(&schema).build()?;
+        let written_zero = writer.write_ser_to_vec(&zero)?;
+        let written_max = writer.write_ser_to_vec(&max)?;
+
+        let reader = GenericDatumReader::builder(&schema).build()?;
+        let read_zero = reader.read_deser(&mut &written_zero[..])?;
+        assert_eq!(zero, read_zero);
+        let read_max = reader.read_deser(&mut &written_max[..])?;
+        assert_eq!(max, read_max);
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_0_array() -> TestResult {
+        assert_eq!(Schema::Null, <[String; 0]>::get_schema());
+        assert_eq!(Schema::Null, <[(); 0]>::get_schema());
+        assert_eq!(Schema::Null, <[bool; 0]>::get_schema());
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_1_array() -> TestResult {
+        assert_eq!(Schema::String, <[String; 1]>::get_schema());
+        assert_eq!(Schema::Null, <[(); 1]>::get_schema());
+        assert_eq!(Schema::Boolean, <[bool; 1]>::get_schema());
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_n_array() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "record",
+            "name": "A5_s",
+            "fields": [
+                { "name": "field_0", "type": "string" },
+                { "name": "field_1", "type": "string" },
+                { "name": "field_2", "type": "string" },
+                { "name": "field_3", "type": "string" },
+                { "name": "field_4", "type": "string" }
+            ]
+        }"#,
+        )?;
+
+        assert_eq!(schema, <[String; 5]>::get_schema());
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_n_array_complex_type() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "record",
+            "name": "A2_u2_n_r4_uuid",
+            "fields": [
+                { "name": "field_0", "type": ["null", {"type": "fixed", "logicalType": "uuid", "size": 16, "name": "uuid"}], "default": null },
+                { "name": "field_1", "type": ["null", "uuid"], "default": null }
+            ]
+        }"#,
+        )?;
+
+        assert_eq!(schema, <[Option<uuid::Uuid>; 2]>::get_schema());
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_1_tuple() -> TestResult {
+        assert_eq!(Schema::String, <(String,)>::get_schema());
+        assert_eq!(Schema::Null, <((),)>::get_schema());
+        assert_eq!(Schema::Boolean, <(bool,)>::get_schema());
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_n_tuple() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "record",
+            "name": "T5_s_i_l_B_n",
+            "fields": [
+                { "name": "field_0", "type": "string" },
+                { "name": "field_1", "type": "int" },
+                { "name": "field_2", "type": "long" },
+                { "name": "field_3", "type": "boolean" },
+                { "name": "field_4", "type": "null" }
+            ]
+        }"#,
+        )?;
+
+        assert_eq!(schema, <(String, i32, i64, bool, ())>::get_schema());
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_512_n_tuple_complex_type() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"{
+            "type": "record",
+            "name": "T3_u2_n_r4_uuid_r4_uuid_s",
+            "fields": [
+                { "name": "field_0", "type": ["null", {"type": "fixed", "logicalType": "uuid", "size": 16, "name": "uuid"}], "default": null },
+                { "name": "field_1", "type": "uuid" },
+                { "name": "field_2", "type": "string" }
+            ]
+        }"#,
+        )?;
+
+        assert_eq!(
+            schema,
+            <(Option<uuid::Uuid>, uuid::Uuid, String)>::get_schema()
+        );
+        Ok(())
     }
 }

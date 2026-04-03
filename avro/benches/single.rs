@@ -180,7 +180,7 @@ fn bench_small_schema_write_record(c: &mut Criterion) {
                 .build()
                 .unwrap()
                 .write_value_to_vec(record.clone())
-        })
+        });
     });
 }
 
@@ -192,7 +192,7 @@ fn bench_big_schema_write_record(c: &mut Criterion) {
                 .build()
                 .unwrap()
                 .write_value_to_vec(record.clone())
-        })
+        });
     });
 }
 
@@ -200,7 +200,7 @@ fn bench_small_schema_write_record_reuse_datum_writer(c: &mut Criterion) {
     let (schema, record) = make_small_record().unwrap();
     let writer = GenericDatumWriter::builder(&schema).build().unwrap();
     c.bench_function("small record (reused writer)", |b| {
-        b.iter(|| writer.write_value_ref(&mut Vec::new(), &record))
+        b.iter(|| writer.write_value_ref(&mut Vec::new(), &record));
     });
 }
 
@@ -208,7 +208,7 @@ fn bench_big_schema_write_record_reuse_datum_writer(c: &mut Criterion) {
     let (schema, record) = make_big_record().unwrap();
     let writer = GenericDatumWriter::builder(&schema).build().unwrap();
     c.bench_function("big record (reused writer)", |b| {
-        b.iter(|| writer.write_value_ref(&mut Vec::new(), &record))
+        b.iter(|| writer.write_value_ref(&mut Vec::new(), &record));
     });
 }
 
@@ -219,7 +219,7 @@ fn bench_small_schema_write_record_no_validation(c: &mut Criterion) {
         .build()
         .unwrap();
     c.bench_function("small record (no validation)", |b| {
-        b.iter(|| writer.write_value_ref(&mut Vec::new(), &record))
+        b.iter(|| writer.write_value_ref(&mut Vec::new(), &record));
     });
 }
 
@@ -230,7 +230,7 @@ fn bench_big_schema_write_record_no_validation(c: &mut Criterion) {
         .build()
         .unwrap();
     c.bench_function("big record (no validation)", |b| {
-        b.iter(|| writer.write_value_ref(&mut Vec::new(), &record))
+        b.iter(|| writer.write_value_ref(&mut Vec::new(), &record));
     });
 }
 

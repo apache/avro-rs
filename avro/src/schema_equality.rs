@@ -326,7 +326,7 @@ mod tests {
         });
         let specification_eq_res = SPECIFICATION_EQ.compare(&schema_one, &schema_two);
         let struct_field_eq_res = STRUCT_FIELD_EQ.compare(&schema_one, &schema_two);
-        assert_eq!(specification_eq_res, struct_field_eq_res)
+        assert_eq!(specification_eq_res, struct_field_eq_res);
     }
 
     #[test]
@@ -349,7 +349,7 @@ mod tests {
         assert!(!specification_eq_res);
 
         let struct_field_eq_res = STRUCT_FIELD_EQ.compare(&schema_one, &schema_two);
-        assert!(!struct_field_eq_res)
+        assert!(!struct_field_eq_res);
     }
 
     #[test]

@@ -360,7 +360,7 @@ fn bench_small_schema_write_10_000_record_ser(c: &mut Criterion) {
         10_000,
         "small schema, write 10k records (serde way)",
     )
-    .unwrap()
+    .unwrap();
 }
 
 fn bench_small_schema_read_1_record(c: &mut Criterion) {

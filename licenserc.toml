@@ -22,5 +22,6 @@ excludes = [
   "*.avro",
   "NOTICE",
   "README.tpl",
-  ".requirements-precommit.txt"
+  ".requirements-precommit.txt",
+  "*.proptest-regressions"
 ]

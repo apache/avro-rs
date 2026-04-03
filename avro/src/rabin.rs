@@ -103,7 +103,7 @@ impl Update for Rabin {
 
 impl FixedOutput for Rabin {
     fn finalize_into(self, out: &mut Output<Self>) {
-        out.copy_from_slice(&self.result.to_le_bytes())
+        out.copy_from_slice(&self.result.to_le_bytes());
     }
 }
 

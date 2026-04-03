@@ -17,10 +17,13 @@
 
 use std::{io::Write, marker::PhantomData, ops::RangeInclusive};
 
+use bon::Builder;
 use serde::Serialize;
 
+use crate::Error;
 use crate::encode::encode_internal;
-use crate::serde::ser_schema::SchemaAwareWriteSerializer;
+use crate::serde::ser_schema::{Config, SchemaAwareSerializer};
+use crate::util::is_human_readable;
 use crate::{
     AvroResult, AvroSchema, Schema,
     error::Details,
@@ -43,13 +46,13 @@ impl GenericSingleObjectWriter {
         initial_buffer_cap: usize,
     ) -> AvroResult<GenericSingleObjectWriter> {
         let header_builder = RabinFingerprintHeader::from_schema(schema);
-        Self::new_with_capacity_and_header_builder(schema, initial_buffer_cap, header_builder)
+        Self::new_with_capacity_and_header_builder(schema, initial_buffer_cap, &header_builder)
     }
 
     pub fn new_with_capacity_and_header_builder<HB: HeaderBuilder>(
         schema: &Schema,
         initial_buffer_cap: usize,
-        header_builder: HB,
+        header_builder: &HB,
     ) -> AvroResult<GenericSingleObjectWriter> {
         let mut buffer = Vec::with_capacity(initial_buffer_cap);
         let header = header_builder.build_header();
@@ -80,18 +83,45 @@ impl GenericSingleObjectWriter {
     }
 
     /// Write the Value to the provided Write object. Returns a result with the number of bytes written including the header
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "That's the whole point of this wrapper function"
+    )]
     pub fn write_value<W: Write>(&mut self, v: Value, writer: &mut W) -> AvroResult<usize> {
         self.write_value_ref(&v, writer)
     }
 }
 
 /// Writer that encodes messages according to the single object encoding v1 spec
+#[derive(Builder)]
 pub struct SpecificSingleObjectWriter<T>
 where
     T: AvroSchema,
 {
+    #[builder(
+        with = |schema: Schema| -> Result<_, Error> { ResolvedOwnedSchema::new(schema) },
+        default = ResolvedOwnedSchema::new(T::get_schema()).expect("AvroSchema implementation should create valid schemas")
+    )]
     resolved: ResolvedOwnedSchema,
+    #[builder(
+        default = RabinFingerprintHeader::from_schema(resolved.get_root_schema()).build_header(),
+        with = |header_builder: impl HeaderBuilder| header_builder.build_header(),
+    )]
     header: Vec<u8>,
+    /// Should [`Serialize`] implementations pick a human readable representation.
+    ///
+    /// It is recommended to set this to `false`.
+    #[builder(default = is_human_readable())]
+    human_readable: bool,
+    /// At what block size to start a new block (for arrays and maps).
+    ///
+    /// This is a minimum value, the block size will always be larger than this except for the last
+    /// block.
+    ///
+    /// When set to `None` all values will be written in a single block. This can be faster as no
+    /// intermediate buffer is used, but seeking through written data will be slower.
+    target_block_size: Option<usize>,
+    #[builder(skip)]
     _model: PhantomData<T>,
 }
 
@@ -107,16 +137,20 @@ where
         Ok(Self {
             resolved,
             header,
+            human_readable: is_human_readable(),
+            target_block_size: None,
             _model: PhantomData,
         })
     }
 
-    pub fn new_with_header_builder(header_builder: impl HeaderBuilder) -> AvroResult<Self> {
+    pub fn new_with_header_builder(header_builder: &impl HeaderBuilder) -> AvroResult<Self> {
         let header = header_builder.build_header();
         let resolved = ResolvedOwnedSchema::new(T::get_schema())?;
         Ok(Self {
             resolved,
             header,
+            human_readable: is_human_readable(),
+            target_block_size: None,
             _model: PhantomData,
         })
     }
@@ -163,13 +197,17 @@ where
             .write_all(&self.header)
             .map_err(Details::WriteBytes)?;
 
-        let mut serializer = SchemaAwareWriteSerializer::new(
+        let config = Config {
+            names: self.resolved.get_names(),
+            target_block_size: self.target_block_size,
+            human_readable: self.human_readable,
+        };
+
+        let bytes = data.serialize(SchemaAwareSerializer::new(
             writer,
             self.resolved.get_root_schema(),
-            self.resolved.get_names(),
-            None,
-        );
-        let bytes = data.serialize(&mut serializer)?;
+            config,
+        )?)?;
 
         Ok(bytes + self.header.len())
     }
@@ -180,6 +218,10 @@ where
     ///
     /// Each call writes a complete single-object encoded message (header + data),
     /// making each message independently decodable.
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "That's the whole point of this wrapper function"
+    )]
     pub fn write<W: Write>(&self, data: T, writer: &mut W) -> AvroResult<usize> {
         self.write_ref(&data, writer)
     }
@@ -323,7 +365,7 @@ mod tests {
         let mut writer = GenericSingleObjectWriter::new_with_capacity_and_header_builder(
             &TestSingleObjectWriter::get_schema(),
             1024,
-            header_builder,
+            &header_builder,
         )
         .expect("Should resolve schema");
         let value = obj.into();
