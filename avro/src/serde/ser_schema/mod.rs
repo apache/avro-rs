@@ -87,6 +87,7 @@ pub struct SchemaAwareSerializer<'s, 'w, W: Write, S: Borrow<Schema>> {
     /// This schema is guaranteed to not be a [`Schema::Ref`].
     schema: &'s Schema,
     config: Config<'s, S>,
+    null_variant_index: Option<usize>,
 }
 
 impl<'s, 'w, W: Write, S: Borrow<Schema>> SchemaAwareSerializer<'s, 'w, W, S> {
@@ -104,6 +105,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> SchemaAwareSerializer<'s, 'w, W, S> {
             writer,
             schema,
             config,
+            null_variant_index: None,
         })
     }
 
@@ -127,13 +129,25 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> SchemaAwareSerializer<'s, 'w, W, S> {
         Ok(self)
     }
 
+    fn with_null_variant_index(mut self, null_variant_index: usize) -> Self {
+        self.null_variant_index = Some(null_variant_index);
+        self
+    }
+
+    fn get_branch_index(&self, variant_index: usize) -> usize {
+        match self.null_variant_index {
+            Some(null_index) if variant_index >= null_index => variant_index + 1,
+            _ => variant_index,
+        }
+    }
+
     /// Get the schema at the given index of the union, resolving references.
     fn get_resolved_union_variant(
         &self,
         union: &'s UnionSchema,
-        index: u32,
+        index: usize,
     ) -> Result<&'s Schema, Error> {
-        match union.get_variant(index as usize)? {
+        match union.get_variant(index)? {
             Schema::Ref { name } => self.config.get_schema(name),
             schema => Ok(schema),
         }
@@ -359,7 +373,6 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
         if let Schema::Union(union) = self.schema
-            && union.variants().len() == 2
             && let Some(null_index) = union.index_of_schema_kind(SchemaKind::Null)
         {
             zig_i32(null_index as i32, &mut *self.writer)
@@ -373,14 +386,17 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
         T: ?Sized + Serialize,
     {
         if let Schema::Union(union) = self.schema
-            && union.variants().len() == 2
             && let Some(null_index) = union.index_of_schema_kind(SchemaKind::Null)
         {
-            let some_index = (null_index + 1) & 1;
-            let mut bytes_written = zig_i32(some_index as i32, &mut *self.writer)?;
-            bytes_written +=
-                value.serialize(self.with_different_schema(&union.variants()[some_index])?)?;
-            Ok(bytes_written)
+            if union.variants().len() == 2 {
+                let some_index = (null_index + 1) & 1;
+                let mut bytes_written = zig_i32(some_index as i32, &mut *self.writer)?;
+                bytes_written +=
+                    value.serialize(self.with_different_schema(&union.variants()[some_index])?)?;
+                Ok(bytes_written)
+            } else {
+                value.serialize(self.with_null_variant_index(null_index))
+            }
         } else {
             Err(self.error("some", "Expected Schema::Union([Schema::Null, _])"))
         }
@@ -426,14 +442,17 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
                     Err(self.error("unit variant", format!(r#"Expected symbol "{variant}" at index {variant_index} in enum"#)))
                 }
             }
-            Schema::Union(union) => match self.get_resolved_union_variant(union, variant_index)? {
-                // Bare union
-                Schema::Null => zig_i32(variant_index as i32, &mut *self.writer),
-                Schema::Record(record) if record.fields.is_empty() && record.name.name() == variant => {
-                    // Union of records
-                    zig_i32(variant_index as i32, &mut *self.writer)
+            Schema::Union(union) => {
+                let branch_index = self.get_branch_index(variant_index as usize);
+                match self.get_resolved_union_variant(union, branch_index)? {
+                    // Bare union
+                    Schema::Null => zig_i32(branch_index as i32, &mut *self.writer),
+                    Schema::Record(record) if record.fields.is_empty() && record.name.name() == variant => {
+                        // Union of records
+                        zig_i32(branch_index as i32, &mut *self.writer)
+                    }
+                    _ => Err(self.error("unit variant", format!("Expected Schema::Null | Schema::Record(name: {variant}, fields: []) at index {branch_index} in the union"))),
                 }
-                _ => Err(self.error("unit variant", format!("Expected Schema::Null | Schema::Record(name: {variant}, fields: []) at index {variant_index} in the union"))),
             }
             _ => Err(self.error("unit variant", format!("Expected Schema::Enum(symbols[{variant_index}] == {variant}) | Schema::Union(variants[{variant_index}] == Schema::Null | Schema::Record(name: {variant}, fields: []))"))),
         }
@@ -471,8 +490,9 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
     where
         T: ?Sized + Serialize,
     {
+        let branch_index = self.get_branch_index(variant_index as usize);
         match self.schema {
-            Schema::Union(union) => match self.get_resolved_union_variant(union, variant_index)? {
+            Schema::Union(union) => match self.get_resolved_union_variant(union, branch_index)? {
                 Schema::Record(record)
                     if record.fields.len() == 1
                         && record.name.name() == variant
@@ -482,13 +502,13 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
                             == Some(&Bool(true)) =>
                 {
                     // Union of records
-                    let mut bytes_written = zig_i32(variant_index as i32, &mut *self.writer)?;
+                    let mut bytes_written = zig_i32(branch_index as i32, &mut *self.writer)?;
                     let schema = &record.fields[0].schema;
                     bytes_written += value.serialize(self.with_different_schema(schema)?)?;
                     Ok(bytes_written)
                 }
                 schema => {
-                    let mut bytes_written = zig_i32(variant_index as i32, &mut *self.writer)?;
+                    let mut bytes_written = zig_i32(branch_index as i32, &mut *self.writer)?;
                     bytes_written += value.serialize(self.with_different_schema(schema)?)?;
                     Ok(bytes_written)
                 }
@@ -564,12 +584,13 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
+        let branch_index = self.get_branch_index(variant_index as usize);
         if let Schema::Union(union) = self.schema
-            && let Schema::Record(record) = self.get_resolved_union_variant(union, variant_index)?
+            && let Schema::Record(record) = self.get_resolved_union_variant(union, branch_index)?
             && record.fields.len() == len
             && record.name.name() == variant
         {
-            let bytes_written = zig_i32(variant_index as i32, &mut *self.writer)?;
+            let bytes_written = zig_i32(branch_index as i32, &mut *self.writer)?;
             Ok(ManyTupleSerializer::new(
                 self.writer,
                 record,
@@ -577,7 +598,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
                 Some(bytes_written),
             ))
         } else {
-            Err(self.error("tuple variant", format!("Expected Schema::Union(variants[{variant_index}] == Schema::Record(name: {variant}, fields.len() == {len}))")))
+            Err(self.error("tuple variant", format!("Expected Schema::Union(variants[{branch_index}] == Schema::Record(name: {variant}, fields.len() == {len}))")))
         }
     }
 
@@ -638,12 +659,13 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
+        let branch_index = self.get_branch_index(variant_index as usize);
         if let Schema::Union(union) = self.schema
-            && let Schema::Record(record) = self.get_resolved_union_variant(union, variant_index)?
+            && let Schema::Record(record) = self.get_resolved_union_variant(union, branch_index)?
             && record.fields.len() == len
             && record.name.name() == variant
         {
-            let bytes_written = zig_i32(variant_index as i32, &mut *self.writer)?;
+            let bytes_written = zig_i32(branch_index as i32, &mut *self.writer)?;
             Ok(RecordSerializer::new(
                 self.writer,
                 record,
@@ -651,7 +673,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
                 Some(bytes_written),
             ))
         } else {
-            Err(self.error("struct variant", format!("Expected Schema::Union(variants[{variant_index}] == Schema::Record(name: {variant}, fields.len() == {len}))")))
+            Err(self.error("struct variant", format!("Expected Schema::Union(variants[{branch_index}] == Schema::Record(name: {variant}, fields.len() == {len}))")))
         }
     }
 
@@ -1900,21 +1922,15 @@ mod tests {
         }
 
         #[derive(Serialize)]
-        #[serde(untagged)]
         enum InnerUnion {
             IntField(i32),
         }
 
         let rs = ResolvedSchema::try_from(&schema)?;
 
-        // Flattening a Option into the underlying union is NOT supported
         let null_record = TestRecord { inner_union: None };
-        assert_serialize_err(
-            null_record,
-            &schema,
-            rs.get_names(),
-            r#"Failed to serialize field 'innerUnion' of record RecordSchema { name: Name { name: "TestRecord", .. }, fields: [RecordField { name: "innerUnion", schema: Union(UnionSchema { schemas: [Null, Record(RecordSchema { name: Name { name: "innerRecordFoo", .. }, fields: [RecordField { name: "foo", schema: String, .. }], .. }), Record(RecordSchema { name: Name { name: "innerRecordBar", .. }, fields: [RecordField { name: "bar", schema: String, .. }], .. }), Int, String] }), .. }], .. }: Failed to serialize value of type `none`: Expected Schema::Union([Schema::Null, _])"#,
-        );
+        assert_serialize(null_record, &schema, rs.get_names(), &[0]);
+        // Incorrect order, needs to be the 3rd variant, not the first one.
         let foo_record = TestRecord {
             inner_union: Some(InnerUnion::IntField(42)),
         };
@@ -1922,7 +1938,7 @@ mod tests {
             foo_record,
             &schema,
             rs.get_names(),
-            r#"Failed to serialize field 'innerUnion' of record RecordSchema { name: Name { name: "TestRecord", .. }, fields: [RecordField { name: "innerUnion", schema: Union(UnionSchema { schemas: [Null, Record(RecordSchema { name: Name { name: "innerRecordFoo", .. }, fields: [RecordField { name: "foo", schema: String, .. }], .. }), Record(RecordSchema { name: Name { name: "innerRecordBar", .. }, fields: [RecordField { name: "bar", schema: String, .. }], .. }), Int, String] }), .. }], .. }: Failed to serialize value of type `some`: Expected Schema::Union([Schema::Null, _])"#,
+            r#"Failed to serialize field 'innerUnion' of record RecordSchema { name: Name { name: "TestRecord", .. }, fields: [RecordField { name: "innerUnion", schema: Union(UnionSchema { schemas: [Null, Record(RecordSchema { name: Name { name: "innerRecordFoo", .. }, fields: [RecordField { name: "foo", schema: String, .. }], .. }), Record(RecordSchema { name: Name { name: "innerRecordBar", .. }, fields: [RecordField { name: "bar", schema: String, .. }], .. }), Int, String] }), .. }], .. }: Failed to serialize value of type `i32`: Expected Schema::Int | Schema::Date | Schema::TimeMillis"#,
         );
         Ok(())
     }
