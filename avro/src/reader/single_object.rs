@@ -350,7 +350,7 @@ mod tests {
             .header(header_builder.build_header())
             .build()
             .expect("failed to build reader");
-        // First 18 bytes are the header, than it's a varint 0, double 0 and an empty list (0)
+        // First 18 bytes are the header, then it's a varint 0, double 0 and an empty list (0)
         let data_to_read: Vec<u8> = vec![
             3, 0, 178, 241, 207, 0, 4, 52, 1, 62, 67, 154, 18, 94, 184, 72, 90, 95, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0,
