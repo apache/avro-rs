@@ -22,10 +22,7 @@ use std::{
 
 use crate::{
     Schema,
-    schema::{
-        FixedSchema, Name, NamespaceRef, RecordField, RecordSchema, SchemaKind, UnionSchema,
-        UuidSchema,
-    },
+    schema::{FixedSchema, Name, NamespaceRef, RecordField, RecordSchema, UnionSchema, UuidSchema},
 };
 
 /// Trait for types that serve as an Avro data model.
@@ -594,9 +591,6 @@ where
         enclosing_namespace: NamespaceRef,
     ) -> Schema {
         let variants = match T::get_schema_in_ctxt(named_schemas, enclosing_namespace) {
-            Schema::Union(union) if union.index_of_schema_kind(SchemaKind::Null).is_some() => {
-                union.schemas
-            }
             Schema::Union(union) => vec![Schema::Null]
                 .into_iter()
                 .chain(union.schemas)
@@ -1099,13 +1093,9 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_489_option_option() -> TestResult {
-        let schema = <Option<Option<i32>>>::get_schema();
-        assert_eq!(
-            schema,
-            Schema::Union(UnionSchema::new(vec![Schema::Null, Schema::Int])?)
-        );
-        Ok(())
+    #[should_panic(expected = "Unions cannot contain duplicate types, found at least two Null")]
+    fn avro_rs_489_option_option() {
+        <Option<Option<i32>>>::get_schema();
     }
 
     #[test]
@@ -1256,8 +1246,7 @@ mod tests {
                 let int_schema = i32::get_schema_in_ctxt(named_schemas, enclosing_namespace);
                 let string_schema = String::get_schema_in_ctxt(named_schemas, enclosing_namespace);
                 Schema::Union(
-                    UnionSchema::new(vec![Schema::Null, int_schema, string_schema])
-                        .expect("Union must be valid"),
+                    UnionSchema::new(vec![int_schema, string_schema]).expect("Union must be valid"),
                 )
             }
         }
