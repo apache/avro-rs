@@ -17,7 +17,7 @@
 
 use std::{
     collections::HashMap,
-    io::{ErrorKind, Read},
+    io::{ErrorKind, Read, Seek, SeekFrom},
     str::FromStr,
 };
 
@@ -35,10 +35,57 @@ use crate::{
     util,
 };
 
+/// Position and size of a single Avro data block within the file stream.
+///
+/// Captured automatically as blocks are read during forward iteration.
+/// Use with [`super::Reader::seek_to_block`] to jump back to a previously-read block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlockPosition {
+    /// Byte offset in the stream where this block starts (before the object-count varint).
+    pub offset: u64,
+    /// Total number of records in this block.
+    pub message_count: usize,
+}
+
+/// Wraps an inner reader and tracks the current byte position.
+///
+/// Avoids requiring `Seek` just to know how many bytes have been consumed.
+/// When the inner reader also implements `Seek`, seeking updates the tracked position.
+#[derive(Debug, Clone)]
+struct PositionTracker<R> {
+    inner: R,
+    pos: u64,
+}
+
+impl<R> PositionTracker<R> {
+    fn new(inner: R) -> Self {
+        Self { inner, pos: 0 }
+    }
+
+    fn position(&self) -> u64 {
+        self.pos
+    }
+}
+
+impl<R: Read> Read for PositionTracker<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        self.pos += n as u64;
+        Ok(n)
+    }
+}
+
+impl<R: Seek> Seek for PositionTracker<R> {
+    fn seek(&mut self, from: SeekFrom) -> std::io::Result<u64> {
+        self.pos = self.inner.seek(from)?;
+        Ok(self.pos)
+    }
+}
+
 /// Internal Block reader.
 #[derive(Debug, Clone)]
 pub(super) struct Block<'r, R> {
-    reader: R,
+    reader: PositionTracker<R>,
     /// Internal buffering to reduce allocation.
     buf: Vec<u8>,
     buf_idx: usize,
@@ -51,6 +98,10 @@ pub(super) struct Block<'r, R> {
     pub(super) user_metadata: HashMap<String, Vec<u8>>,
     names_refs: Names,
     human_readable: bool,
+    /// Byte offset where data blocks begin (right after header and sync marker).
+    pub(super) data_start: u64,
+    /// Position and record count of the currently loaded block.
+    pub(super) current_block_info: Option<BlockPosition>,
 }
 
 impl<'r, R: Read> Block<'r, R> {
@@ -60,7 +111,7 @@ impl<'r, R: Read> Block<'r, R> {
         human_readable: bool,
     ) -> AvroResult<Block<'r, R>> {
         let mut block = Block {
-            reader,
+            reader: PositionTracker::new(reader),
             codec: Codec::Null,
             writer_schema: Schema::Null,
             schemata,
@@ -71,9 +122,12 @@ impl<'r, R: Read> Block<'r, R> {
             user_metadata: Default::default(),
             names_refs: Default::default(),
             human_readable,
+            data_start: 0,
+            current_block_info: None,
         };
 
         block.read_header()?;
+        block.data_start = block.reader.position();
         Ok(block)
     }
 
@@ -142,6 +196,7 @@ impl<'r, R: Read> Block<'r, R> {
     /// the block. The objects are stored in an internal buffer to the `Reader`.
     fn read_block_next(&mut self) -> AvroResult<()> {
         assert!(self.is_empty(), "Expected self to be empty!");
+        let block_start = self.reader.position();
         match util::read_usize(&mut self.reader).map_err(Error::into_details) {
             Ok(block_len) => {
                 self.message_count = block_len;
@@ -155,6 +210,11 @@ impl<'r, R: Read> Block<'r, R> {
                 if marker != self.marker {
                     return Err(Details::GetBlockMarker.into());
                 }
+
+                self.current_block_info = Some(BlockPosition {
+                    offset: block_start,
+                    message_count: block_len,
+                });
 
                 // NOTE (JAB): This doesn't fit this Reader pattern very well.
                 // `self.buf` is a growable buffer that is reused as the reader is iterated.
@@ -295,6 +355,23 @@ impl<'r, R: Read> Block<'r, R> {
     }
 }
 
+impl<R: Read + Seek> Block<'_, R> {
+    /// Seek the underlying stream to `offset` and read the block there.
+    /// Validates the sync marker to confirm it's a real block boundary.
+    pub(super) fn seek_to_block(&mut self, offset: u64) -> AvroResult<()> {
+        self.reader
+            .seek(SeekFrom::Start(offset))
+            .map_err(Details::SeekToBlock)?;
+
+        self.buf.clear();
+        self.buf_idx = 0;
+        self.message_count = 0;
+        self.current_block_info = None;
+
+        self.read_block_next()
+    }
+}
+
 fn read_codec(metadata: &HashMap<String, Value>) -> AvroResult<Codec> {
     let result = metadata
         .get("avro.codec")
@@ -356,7 +433,7 @@ fn read_codec(metadata: &HashMap<String, Value>) -> AvroResult<Codec> {
 
 #[cfg(test)]
 mod tests {
-    use super::Block;
+    use super::{Block, PositionTracker};
     use crate::error::Details;
     use crate::{Codec, Schema};
 
@@ -364,7 +441,10 @@ mod tests {
     fn avro_rs_586_negative_block_size() {
         let mut block = Block::<'_, &[u8]> {
             // Block header with an object count of 1 and a block size of -1
-            reader: &[0x02, 0x01],
+            reader: PositionTracker {
+                inner: &[0x02, 0x01],
+                pos: 0,
+            },
             buf: vec![],
             buf_idx: 0,
             message_count: 0,
@@ -375,6 +455,8 @@ mod tests {
             user_metadata: Default::default(),
             names_refs: Default::default(),
             human_readable: false,
+            data_start: 0,
+            current_block_info: None,
         };
 
         let err = block.read_block_next().unwrap_err().into_details();
@@ -385,7 +467,10 @@ mod tests {
     fn avro_rs_586_negative_block_len() {
         let mut block = Block::<'_, &[u8]> {
             // Block header with an object count of -1 and a block size of 0
-            reader: &[0x01, 0x00],
+            reader: PositionTracker {
+                inner: &[0x01, 0x00],
+                pos: 0,
+            },
             buf: vec![],
             buf_idx: 0,
             message_count: 0,
@@ -396,6 +481,8 @@ mod tests {
             user_metadata: Default::default(),
             names_refs: Default::default(),
             human_readable: false,
+            data_start: 0,
+            current_block_info: None,
         };
 
         let err = block.read_block_next().unwrap_err().into_details();
