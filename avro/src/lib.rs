@@ -99,7 +99,7 @@ pub use error::Error;
     reason = "Still need to export it until we remove it completely"
 )]
 pub use reader::{
-    Reader,
+    BlockPosition, Reader,
     datum::{from_avro_datum, from_avro_datum_reader_schemata, from_avro_datum_schemata},
     read_marker,
     single_object::{GenericSingleObjectReader, SpecificSingleObjectReader},
