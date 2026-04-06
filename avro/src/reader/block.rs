@@ -35,7 +35,7 @@ use crate::{
     util,
 };
 
-/// Position and size of a single Avro data block within the file stream.
+/// Byte offset and record count of a single Avro data block.
 ///
 /// Captured automatically as blocks are read during forward iteration.
 /// Use with [`super::Reader::seek_to_block`] to jump back to a previously-read block.
@@ -358,6 +358,8 @@ impl<'r, R: Read> Block<'r, R> {
 impl<R: Read + Seek> Block<'_, R> {
     /// Seek the underlying stream to `offset` and read the block there.
     /// Validates the sync marker to confirm it's a real block boundary.
+    /// Returns an error if no valid block can be read at the offset
+    /// (e.g., the offset is at or past EOF).
     pub(super) fn seek_to_block(&mut self, offset: u64) -> AvroResult<()> {
         self.reader
             .seek(SeekFrom::Start(offset))
@@ -368,7 +370,18 @@ impl<R: Read + Seek> Block<'_, R> {
         self.message_count = 0;
         self.current_block_info = None;
 
-        self.read_block_next()
+        // read_block_next treats UnexpectedEof as a clean end-of-stream
+        // (returns Ok with message_count=0). That's correct for forward
+        // iteration but wrong here — the caller asked for a specific block.
+        self.read_block_next()?;
+        if self.is_empty() {
+            return Err(Details::SeekToBlock(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                format!("no block at offset {offset}"),
+            ))
+            .into());
+        }
+        Ok(())
     }
 }
 
