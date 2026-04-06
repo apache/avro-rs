@@ -534,6 +534,9 @@ pub enum Details {
     #[error("Failed to read block marker bytes: {0}")]
     ReadBlockMarker(#[source] std::io::Error),
 
+    #[error("Failed to seek to block: {0}")]
+    SeekToBlock(#[source] std::io::Error),
+
     #[error("Read into buffer failed: {0}")]
     ReadIntoBuf(#[source] std::io::Error),
 
