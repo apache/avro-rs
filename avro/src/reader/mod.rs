@@ -164,11 +164,11 @@ impl<R: Read> Iterator for Reader<'_, R> {
     }
 }
 
-impl<R: Read + Seek> Reader<'_, R> {
+impl<R: Read> Reader<'_, R> {
     /// The currently loaded block's position and record count.
     ///
-    /// Returns `None` before the first record has been read.
-    /// Updated automatically each time a new block is loaded during iteration.
+    /// Returns `None` only before the first block is loaded (via iteration or
+    /// [`seek_to_block`](Self::seek_to_block)). Always `Some` afterward.
     pub fn current_block(&self) -> Option<BlockPosition> {
         self.block.current_block_info
     }
@@ -180,7 +180,9 @@ impl<R: Read + Seek> Reader<'_, R> {
     pub fn data_start(&self) -> u64 {
         self.block.data_start
     }
+}
 
+impl<R: Read + Seek> Reader<'_, R> {
     /// Seek to the data block at the given byte offset and load it.
     ///
     /// The offset must point to the start of a valid data block (before its
