@@ -193,9 +193,9 @@ impl<R: Read + Seek> Reader<'_, R> {
     /// Typically the caller saves offsets from [`current_block`](Self::current_block)
     /// during forward iteration and later passes them here to jump back.
     pub fn seek_to_block(&mut self, offset: u64) -> AvroResult<()> {
-        self.block.seek_to_block(offset)?;
-        self.errored = false;
-        Ok(())
+        let seek_status = self.block.seek_to_block(offset);
+        self.errored = seek_status.is_err();
+        seek_status
     }
 }
 

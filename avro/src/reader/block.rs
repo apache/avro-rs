@@ -370,17 +370,7 @@ impl<R: Read + Seek> Block<'_, R> {
         self.message_count = 0;
         self.current_block_info = None;
 
-        // read_block_next treats UnexpectedEof as a clean end-of-stream
-        // (returns Ok with message_count=0). That's correct for forward
-        // iteration but wrong here — the caller asked for a specific block.
         self.read_block_next()?;
-        if self.is_empty() {
-            return Err(Details::SeekToBlock(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                format!("no block at offset {offset}"),
-            ))
-            .into());
-        }
         Ok(())
     }
 }
