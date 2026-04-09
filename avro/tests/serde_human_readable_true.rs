@@ -129,7 +129,7 @@ fn avro_rs_440_uuid_fixed() -> TestResult {
     let writer = SpecificSingleObjectWriter::new()?;
     assert_eq!(
         writer.write(uuid, &mut buffer).unwrap_err().to_string(),
-        r#"Failed to serialize value of type `str` using Schema::Uuid(Fixed(FixedSchema { name: Name { name: "uuid", .. }, size: 16, .. })): Expected Schema::String | Schema::Uuid(String)"#
+        r#"Failed to serialize value of type `str` using Schema::Uuid(Fixed(FixedSchema { name: Name { name: "Uuid", namespace: Some("org.apache.avro.rust") }, size: 16, .. })): Expected Schema::String | Schema::Uuid(String)"#
     );
 
     Ok(())

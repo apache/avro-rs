@@ -29,10 +29,10 @@
 //!     - `bool` => [`Schema::Boolean`]
 //!     - `i8`, `i16`, `i32`, `u8`, `u16` => [`Schema::Int`]
 //!     - `i64`, `u32` => [`Schema::Long`]
-//!     - `u64` => [`Schema::Fixed`]`(name: "u64", size: 8)`
+//!     - `u64` => [`Schema::Fixed`]`(name: "org.apache.avro.rust.u64", size: 8)`
 //!         - This is not a `Schema::Long` as that is a signed number of maximum 64 bits.
-//!     - `i128` => [`Schema::Fixed`]`(name: "i128", size: 16)`
-//!     - `u128` => [`Schema::Fixed`]`(name: "u128", size: 16)`
+//!     - `i128` => [`Schema::Fixed`]`(name: "org.apache.avro.rust.i128", size: 16)`
+//!     - `u128` => [`Schema::Fixed`]`(name: "org.apache.avro.rust.u128", size: 16)`
 //!     - `f32` => [`Schema::Float`]
 //!     - `f64` => [`Schema::Double`]
 //!     - `char` => [`Schema::String`]

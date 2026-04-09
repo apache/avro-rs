@@ -613,17 +613,16 @@ where
 }
 
 impl AvroSchemaComponent for core::time::Duration {
-    /// The schema is [`Schema::Record`] with the name `Duration`.
+    /// The schema is [`Schema::Record`] with the name `org.apache.avro.rust.Duration`.
     ///
     /// It has two fields:
-    /// - `secs` with the schema `Schema::Fixed(name: "u64", size: 8)`
+    /// - `secs` with the schema `Schema::Fixed(name: "org.apache.avro.rust.u64", size: 8)`
     /// - `nanos` with the schema `Schema::Long`
     fn get_schema_in_ctxt(
         named_schemas: &mut HashSet<Name>,
         enclosing_namespace: NamespaceRef,
     ) -> Schema {
-        let name = Name::new_with_enclosing_namespace("Duration", enclosing_namespace)
-            .expect("Name is valid");
+        let name = Name::new("org.apache.avro.rust.Duration").expect("Name is valid");
         if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {
@@ -657,17 +656,13 @@ impl AvroSchemaComponent for core::time::Duration {
 }
 
 impl AvroSchemaComponent for uuid::Uuid {
-    /// The schema is [`Schema::Uuid`] with the name `uuid`.
+    /// The schema is [`Schema::Uuid`] with the name `org.apache.avro.rust.Uuid`.
     ///
     /// The underlying schema is [`Schema::Fixed`] with a size of 16.
     ///
     /// If you're using `human_readable: true` you need to override this schema with a `Schema::String`.
-    fn get_schema_in_ctxt(
-        named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: NamespaceRef,
-    ) -> Schema {
-        let name =
-            Name::new_with_enclosing_namespace("uuid", enclosing_namespace).expect("Name is valid");
+    fn get_schema_in_ctxt(named_schemas: &mut HashSet<Name>, _: NamespaceRef) -> Schema {
+        let name = Name::new("org.apache.avro.rust.Uuid").expect("Name is valid");
         if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {
@@ -692,13 +687,9 @@ impl AvroSchemaComponent for uuid::Uuid {
 }
 
 impl AvroSchemaComponent for u64 {
-    /// The schema is [`Schema::Fixed`] of size 8 with the name `u64`.
-    fn get_schema_in_ctxt(
-        named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: NamespaceRef,
-    ) -> Schema {
-        let name =
-            Name::new_with_enclosing_namespace("u64", enclosing_namespace).expect("Name is valid");
+    /// The schema is [`Schema::Fixed`] of size 8 with the name `org.apache.avro.rust.u64`.
+    fn get_schema_in_ctxt(named_schemas: &mut HashSet<Name>, _: NamespaceRef) -> Schema {
+        let name = Name::new("org.apache.avro.rust.u64").expect("Name is valid");
         if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {
@@ -723,13 +714,9 @@ impl AvroSchemaComponent for u64 {
 }
 
 impl AvroSchemaComponent for u128 {
-    /// The schema is [`Schema::Fixed`] of size 16 with the name `u128`.
-    fn get_schema_in_ctxt(
-        named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: NamespaceRef,
-    ) -> Schema {
-        let name =
-            Name::new_with_enclosing_namespace("u128", enclosing_namespace).expect("Name is valid");
+    /// The schema is [`Schema::Fixed`] of size 16 with the name `org.apache.avro.rust.u128`.
+    fn get_schema_in_ctxt(named_schemas: &mut HashSet<Name>, _: NamespaceRef) -> Schema {
+        let name = Name::new("org.apache.avro.rust.u128").expect("Name is valid");
         if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {
@@ -754,13 +741,9 @@ impl AvroSchemaComponent for u128 {
 }
 
 impl AvroSchemaComponent for i128 {
-    /// The schema is [`Schema::Fixed`] of size 16 with the name `i128`.
-    fn get_schema_in_ctxt(
-        named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: NamespaceRef,
-    ) -> Schema {
-        let name =
-            Name::new_with_enclosing_namespace("i128", enclosing_namespace).expect("Name is valid");
+    /// The schema is [`Schema::Fixed`] of size 16 with the name `org.apache.avro.rust.i128`.
+    fn get_schema_in_ctxt(named_schemas: &mut HashSet<Name>, _: NamespaceRef) -> Schema {
+        let name = Name::new("org.apache.avro.rust.i128").expect("Name is valid");
         if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {
@@ -1028,7 +1011,7 @@ mod tests {
         assert_eq!(
             schema,
             Schema::Fixed(FixedSchema {
-                name: Name::new("u64")?,
+                name: Name::new("org.apache.avro.rust.u64")?,
                 aliases: None,
                 doc: None,
                 size: 8,
@@ -1045,7 +1028,7 @@ mod tests {
         assert_eq!(
             schema,
             Schema::Fixed(FixedSchema {
-                name: Name::new("i128")?,
+                name: Name::new("org.apache.avro.rust.i128")?,
                 aliases: None,
                 doc: None,
                 size: 16,
@@ -1062,7 +1045,7 @@ mod tests {
         assert_eq!(
             schema,
             Schema::Fixed(FixedSchema {
-                name: Name::new("u128")?,
+                name: Name::new("org.apache.avro.rust.u128")?,
                 aliases: None,
                 doc: None,
                 size: 16,
@@ -1103,8 +1086,9 @@ mod tests {
             r#"{
             "type": "record",
             "name": "Duration",
+            "namespace": "org.apache.avro.rust",
             "fields": [
-                { "name": "secs", "type": {"type": "fixed", "name": "u64", "size": 8} },
+                { "name": "secs", "type": {"type": "fixed", "name": "u64", "namespace": "org.apache.avro.rust", "size": 8} },
                 { "name": "nanos", "type": "long" }
             ]
         }"#,
@@ -1166,10 +1150,10 @@ mod tests {
         let schema = Schema::parse_str(
             r#"{
             "type": "record",
-            "name": "A2_u2_n_r4_uuid",
+            "name": "A2_u2_n_r25_org_apache_avro_rust_Uuid",
             "fields": [
-                { "name": "field_0", "type": ["null", {"type": "fixed", "logicalType": "uuid", "size": 16, "name": "uuid"}], "default": null },
-                { "name": "field_1", "type": ["null", "uuid"], "default": null }
+                { "name": "field_0", "type": ["null", {"type": "fixed", "logicalType": "uuid", "size": 16, "name": "Uuid", "namespace": "org.apache.avro.rust"}], "default": null },
+                { "name": "field_1", "type": ["null", "org.apache.avro.rust.Uuid"], "default": null }
             ]
         }"#,
         )?;
@@ -1211,10 +1195,10 @@ mod tests {
         let schema = Schema::parse_str(
             r#"{
             "type": "record",
-            "name": "T3_u2_n_r4_uuid_r4_uuid_s",
+            "name": "T3_u2_n_r25_org_apache_avro_rust_Uuid_r25_org_apache_avro_rust_Uuid_s",
             "fields": [
-                { "name": "field_0", "type": ["null", {"type": "fixed", "logicalType": "uuid", "size": 16, "name": "uuid"}], "default": null },
-                { "name": "field_1", "type": "uuid" },
+                { "name": "field_0", "type": ["null", {"type": "fixed", "logicalType": "uuid", "size": 16, "name": "Uuid", "namespace": "org.apache.avro.rust"}], "default": null },
+                { "name": "field_1", "type": "org.apache.avro.rust.Uuid" },
                 { "name": "field_2", "type": "string" }
             ]
         }"#,

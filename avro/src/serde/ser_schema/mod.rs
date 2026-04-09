@@ -249,13 +249,18 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
 
     fn serialize_i128(mut self, v: i128) -> Result<Self::Ok, Self::Error> {
         match self.schema {
-            Schema::Fixed(fixed) if fixed.size == 16 && fixed.name.name() == "i128" => {
+            Schema::Fixed(fixed)
+                if fixed.size == 16 && fixed.name.as_ref() == "org.apache.avro.rust.i128" =>
+            {
                 self.write_array(v.to_le_bytes())
             }
             Schema::Union(union) => {
                 UnionSerializer::new(self.writer, union, self.config).serialize_i128(v)
             }
-            _ => Err(self.error("i128", r#"Expected Schema::Fixed(name: "i128", size: 16)"#)),
+            _ => Err(self.error(
+                "i128",
+                r#"Expected Schema::Fixed(name: "org.apache.avro.rust.i128", size: 16)"#,
+            )),
         }
     }
 
@@ -273,25 +278,35 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
 
     fn serialize_u64(mut self, v: u64) -> Result<Self::Ok, Self::Error> {
         match self.schema {
-            Schema::Fixed(fixed) if fixed.size == 8 && fixed.name.name() == "u64" => {
+            Schema::Fixed(fixed)
+                if fixed.size == 8 && fixed.name.as_ref() == "org.apache.avro.rust.u64" =>
+            {
                 self.write_array(v.to_le_bytes())
             }
             Schema::Union(union) => {
                 UnionSerializer::new(self.writer, union, self.config).serialize_u64(v)
             }
-            _ => Err(self.error("u64", r#"Expected Schema::Fixed(name: "u64", size: 8)"#)),
+            _ => Err(self.error(
+                "u64",
+                r#"Expected Schema::Fixed(name: "org.apache.avro.rust.u64", size: 8)"#,
+            )),
         }
     }
 
     fn serialize_u128(mut self, v: u128) -> Result<Self::Ok, Self::Error> {
         match self.schema {
-            Schema::Fixed(fixed) if fixed.size == 16 && fixed.name.name() == "u128" => {
+            Schema::Fixed(fixed)
+                if fixed.size == 16 && fixed.name.as_ref() == "org.apache.avro.rust.u128" =>
+            {
                 self.write_array(v.to_le_bytes())
             }
             Schema::Union(union) => {
                 UnionSerializer::new(self.writer, union, self.config).serialize_u128(v)
             }
-            _ => Err(self.error("u128", r#"Expected Schema::Fixed(name: "u128", size: 16)"#)),
+            _ => Err(self.error(
+                "u128",
+                r#"Expected Schema::Fixed(name: "org.apache.avro.rust.u128", size: 16)"#,
+            )),
         }
     }
 
@@ -921,7 +936,7 @@ mod tests {
             24u64,
             &schema,
             &names,
-            r#"Failed to serialize value of type `u64` using Schema::Long: Expected Schema::Fixed(name: "u64", size: 8)"#,
+            r#"Failed to serialize value of type `u64` using Schema::Long: Expected Schema::Fixed(name: "org.apache.avro.rust.u64", size: 8)"#,
         );
         assert_serialize_err(
             "",
@@ -2049,7 +2064,7 @@ mod tests {
     #[test]
     fn avro_rs_414_serialize_i128_as_fixed() -> TestResult {
         let schema = Schema::Fixed(FixedSchema {
-            name: Name::new("i128")?,
+            name: Name::new("org.apache.avro.rust.i128")?,
             aliases: None,
             doc: None,
             size: 16,
@@ -2085,7 +2100,7 @@ mod tests {
             i128::MAX,
             &schema,
             &names,
-            r#"Failed to serialize value of type `i128` using Schema::Fixed(FixedSchema { name: Name { name: "onehundredtwentyeight", .. }, size: 16, .. }): Expected Schema::Fixed(name: "i128", size: 16)"#,
+            r#"Failed to serialize value of type `i128` using Schema::Fixed(FixedSchema { name: Name { name: "onehundredtwentyeight", .. }, size: 16, .. }): Expected Schema::Fixed(name: "org.apache.avro.rust.i128", size: 16)"#,
         );
 
         Ok(())
@@ -2106,7 +2121,7 @@ mod tests {
             i128::MAX,
             &schema,
             &names,
-            r#"Failed to serialize value of type `i128` using Schema::Fixed(FixedSchema { name: Name { name: "i128", .. }, size: 8, .. }): Expected Schema::Fixed(name: "i128", size: 16)"#,
+            r#"Failed to serialize value of type `i128` using Schema::Fixed(FixedSchema { name: Name { name: "i128", .. }, size: 8, .. }): Expected Schema::Fixed(name: "org.apache.avro.rust.i128", size: 16)"#,
         );
 
         Ok(())
@@ -2115,7 +2130,7 @@ mod tests {
     #[test]
     fn avro_rs_414_serialize_u128_as_fixed() -> TestResult {
         let schema = Schema::Fixed(FixedSchema {
-            name: Name::new("u128")?,
+            name: Name::new("org.apache.avro.rust.u128")?,
             aliases: None,
             doc: None,
             size: 16,
@@ -2151,7 +2166,7 @@ mod tests {
             u128::MAX,
             &schema,
             &names,
-            r#"Failed to serialize value of type `u128` using Schema::Fixed(FixedSchema { name: Name { name: "onehundredtwentyeight", .. }, size: 16, .. }): Expected Schema::Fixed(name: "u128", size: 16)"#,
+            r#"Failed to serialize value of type `u128` using Schema::Fixed(FixedSchema { name: Name { name: "onehundredtwentyeight", .. }, size: 16, .. }): Expected Schema::Fixed(name: "org.apache.avro.rust.u128", size: 16)"#,
         );
 
         Ok(())
@@ -2172,7 +2187,7 @@ mod tests {
             u128::MAX,
             &schema,
             &names,
-            r#"Failed to serialize value of type `u128` using Schema::Fixed(FixedSchema { name: Name { name: "u128", .. }, size: 8, .. }): Expected Schema::Fixed(name: "u128", size: 16)"#,
+            r#"Failed to serialize value of type `u128` using Schema::Fixed(FixedSchema { name: Name { name: "u128", .. }, size: 8, .. }): Expected Schema::Fixed(name: "org.apache.avro.rust.u128", size: 16)"#,
         );
 
         Ok(())
