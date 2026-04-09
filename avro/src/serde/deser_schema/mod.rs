@@ -348,11 +348,16 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
         V: Visitor<'de>,
     {
         match self.schema {
-            Schema::Fixed(fixed) if fixed.size == 16 && fixed.name.name() == "i128" => {
+            Schema::Fixed(fixed)
+                if fixed.size == 16 && fixed.name.as_ref() == "org.apache.avro.rust.i128" =>
+            {
                 visitor.visit_i128(i128::from_le_bytes(self.read_array()?))
             }
             Schema::Union(union) => self.with_union(union)?.deserialize_i128(visitor),
-            _ => Err(self.error("i128", r#"Expected Schema::Fixed(name: "i128", size: 16)"#)),
+            _ => Err(self.error(
+                "i128",
+                r#"Expected Schema::Fixed(name: "org.apache.avro.rust.i128", size: 16)"#,
+            )),
         }
     }
 
@@ -405,11 +410,16 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
         V: Visitor<'de>,
     {
         match self.schema {
-            Schema::Fixed(fixed) if fixed.size == 8 && fixed.name.name() == "u64" => {
+            Schema::Fixed(fixed)
+                if fixed.size == 8 && fixed.name.as_ref() == "org.apache.avro.rust.u64" =>
+            {
                 visitor.visit_u64(u64::from_le_bytes(self.read_array()?))
             }
             Schema::Union(union) => self.with_union(union)?.deserialize_u64(visitor),
-            _ => Err(self.error("u64", r#"Expected Schema::Fixed(name: "u64", size: 8)"#)),
+            _ => Err(self.error(
+                "u64",
+                r#"Expected Schema::Fixed(name: "org.apache.avro.rust.u64", size: 8)"#,
+            )),
         }
     }
 
@@ -418,11 +428,16 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
         V: Visitor<'de>,
     {
         match self.schema {
-            Schema::Fixed(fixed) if fixed.size == 16 && fixed.name.name() == "u128" => {
+            Schema::Fixed(fixed)
+                if fixed.size == 16 && fixed.name.as_ref() == "org.apache.avro.rust.u128" =>
+            {
                 visitor.visit_u128(u128::from_le_bytes(self.read_array()?))
             }
             Schema::Union(union) => self.with_union(union)?.deserialize_u128(visitor),
-            _ => Err(self.error("u128", r#"Expected Schema::Fixed(name: "u128", size: 16)"#)),
+            _ => Err(self.error(
+                "u128",
+                r#"Expected Schema::Fixed(name: "org.apache.avro.rust.u128", size: 16)"#,
+            )),
         }
     }
 

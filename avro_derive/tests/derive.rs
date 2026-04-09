@@ -1954,7 +1954,8 @@ fn avro_rs_397_uuid() {
                 "type":{
                     "type":"fixed",
                     "logicalType":"uuid",
-                    "name":"uuid",
+                    "name":"Uuid",
+                    "namespace": "org.apache.avro.rust",
                     "default":"\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
                     "size":16
                 }
@@ -2140,6 +2141,7 @@ fn avro_rs_414_round_trip_char_u64_u128_i128() {
             "name": "b",
             "type": {
                 "name": "u64",
+                "namespace": "org.apache.avro.rust",
                 "type": "fixed",
                 "size": 8
             }
@@ -2148,6 +2150,7 @@ fn avro_rs_414_round_trip_char_u64_u128_i128() {
             "name": "c",
             "type": {
                 "name": "u128",
+                "namespace": "org.apache.avro.rust",
                 "type": "fixed",
                 "size": 16
             }
@@ -2156,6 +2159,7 @@ fn avro_rs_414_round_trip_char_u64_u128_i128() {
             "name": "d",
             "type": {
                 "name": "i128",
+                "namespace": "org.apache.avro.rust",
                 "type": "fixed",
                 "size": 16
             }
@@ -2420,7 +2424,7 @@ fn avro_rs_476_field_default() {
     let schema = Foo::get_schema();
     assert_eq!(
         serde_json::to_string(&schema).unwrap(),
-        r#"{"type":"record","name":"Foo","fields":[{"name":"_a","type":"boolean"},{"name":"_b","type":"int"},{"name":"_c","type":"int"},{"name":"_d","type":"int"},{"name":"_e","type":"long"},{"name":"_f","type":"int"},{"name":"_g","type":"int"},{"name":"_h","type":"long"},{"name":"_i","type":"float"},{"name":"_j","type":"double"},{"name":"_k","type":"string"},{"name":"_l","type":"string"},{"name":"_m","type":"string"},{"name":"_n","type":{"type":"record","name":"Spam","fields":[{"name":"_field","type":"boolean"}]},"default":{"_field":true}},{"name":"_o","type":{"type":"array","items":"boolean"}},{"name":"_p","type":{"type":"array","items":"int"}},{"name":"_p_alt","type":{"type":"array","items":{"type":"record","name":"Bar","fields":[{"name":"_field","type":"Bar"}]}}},{"name":"_q","type":{"type":"map","values":"string"}},{"name":"_r","type":["null","double"],"default":null},{"name":"_s","type":{"type":"record","name":"Duration","fields":[{"name":"secs","type":{"type":"fixed","name":"u64","size":8}},{"name":"nanos","type":"long"}]}},{"name":"_t","type":{"type":"fixed","name":"uuid","size":16,"logicalType":"uuid"}},{"name":"_u","type":"u64"},{"name":"_v","type":{"type":"fixed","name":"u128","size":16}},{"name":"_w","type":{"type":"fixed","name":"i128","size":16}},{"name":"_x","type":"Bar"},{"name":"_z","type":"Spam","default":{"_field":true}}]}"#
+        r#"{"type":"record","name":"Foo","fields":[{"name":"_a","type":"boolean"},{"name":"_b","type":"int"},{"name":"_c","type":"int"},{"name":"_d","type":"int"},{"name":"_e","type":"long"},{"name":"_f","type":"int"},{"name":"_g","type":"int"},{"name":"_h","type":"long"},{"name":"_i","type":"float"},{"name":"_j","type":"double"},{"name":"_k","type":"string"},{"name":"_l","type":"string"},{"name":"_m","type":"string"},{"name":"_n","type":{"type":"record","name":"Spam","fields":[{"name":"_field","type":"boolean"}]},"default":{"_field":true}},{"name":"_o","type":{"type":"array","items":"boolean"}},{"name":"_p","type":{"type":"array","items":"int"}},{"name":"_p_alt","type":{"type":"array","items":{"type":"record","name":"Bar","fields":[{"name":"_field","type":"Bar"}]}}},{"name":"_q","type":{"type":"map","values":"string"}},{"name":"_r","type":["null","double"],"default":null},{"name":"_s","type":{"type":"record","namespace":"org.apache.avro.rust","name":"Duration","fields":[{"name":"secs","type":{"type":"fixed","namespace":"org.apache.avro.rust","name":"u64","size":8}},{"name":"nanos","type":"long"}]}},{"name":"_t","type":{"type":"fixed","namespace":"org.apache.avro.rust","name":"Uuid","size":16,"logicalType":"uuid"}},{"name":"_u","type":"org.apache.avro.rust.u64"},{"name":"_v","type":{"type":"fixed","namespace":"org.apache.avro.rust","name":"u128","size":16}},{"name":"_w","type":{"type":"fixed","namespace":"org.apache.avro.rust","name":"i128","size":16}},{"name":"_x","type":"Bar"},{"name":"_z","type":"Spam","default":{"_field":true}}]}"#
     );
 }
 
@@ -2531,7 +2535,7 @@ fn avro_rs_476_field_default_provided() {
     let schema = Foo::get_schema();
     assert_eq!(
         serde_json::to_string(&schema).unwrap(),
-        r#"{"type":"record","name":"Foo","fields":[{"name":"_a","type":"boolean","default":true},{"name":"_b","type":"int","default":42},{"name":"_c","type":"int","default":42},{"name":"_d","type":"int","default":42},{"name":"_e","type":"long","default":42},{"name":"_f","type":"int","default":42},{"name":"_g","type":"int","default":42},{"name":"_h","type":"long","default":42},{"name":"_i","type":"float","default":42.0},{"name":"_j","type":"double","default":42.0},{"name":"_k","type":"string","default":"String"},{"name":"_l","type":"string","default":"str"},{"name":"_m","type":"string","default":"Z"},{"name":"_n","type":{"type":"record","name":"Spam","fields":[{"name":"_field","type":"boolean"}]},"default":{"_field":false}},{"name":"_o","type":{"type":"array","items":"boolean"},"default":[true,false,true]},{"name":"_p","type":{"type":"array","items":"int"},"default":[1,2,3,4,5]},{"name":"_p_alt","type":{"type":"array","items":"Spam"},"default":[{"_field":true},{"_field":false},{"_field":true},{"_field":false},{"_field":true}]},{"name":"_q","type":{"type":"map","values":"string"},"default":{"A":"B"}},{"name":"_r","type":["null","double"],"default":42.0},{"name":"_s","type":{"type":"record","name":"Duration","fields":[{"name":"secs","type":{"type":"fixed","name":"u64","size":8}},{"name":"nanos","type":"long"}]},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_t","type":{"type":"fixed","name":"uuid","size":16,"logicalType":"uuid"},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_u","type":"u64","default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_v","type":{"type":"fixed","name":"u128","size":16},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_w","type":{"type":"fixed","name":"i128","size":16},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_x","type":"Spam","default":{"_field":false}}]}"#
+        r#"{"type":"record","name":"Foo","fields":[{"name":"_a","type":"boolean","default":true},{"name":"_b","type":"int","default":42},{"name":"_c","type":"int","default":42},{"name":"_d","type":"int","default":42},{"name":"_e","type":"long","default":42},{"name":"_f","type":"int","default":42},{"name":"_g","type":"int","default":42},{"name":"_h","type":"long","default":42},{"name":"_i","type":"float","default":42.0},{"name":"_j","type":"double","default":42.0},{"name":"_k","type":"string","default":"String"},{"name":"_l","type":"string","default":"str"},{"name":"_m","type":"string","default":"Z"},{"name":"_n","type":{"type":"record","name":"Spam","fields":[{"name":"_field","type":"boolean"}]},"default":{"_field":false}},{"name":"_o","type":{"type":"array","items":"boolean"},"default":[true,false,true]},{"name":"_p","type":{"type":"array","items":"int"},"default":[1,2,3,4,5]},{"name":"_p_alt","type":{"type":"array","items":"Spam"},"default":[{"_field":true},{"_field":false},{"_field":true},{"_field":false},{"_field":true}]},{"name":"_q","type":{"type":"map","values":"string"},"default":{"A":"B"}},{"name":"_r","type":["null","double"],"default":42.0},{"name":"_s","type":{"type":"record","namespace":"org.apache.avro.rust","name":"Duration","fields":[{"name":"secs","type":{"type":"fixed","namespace":"org.apache.avro.rust","name":"u64","size":8}},{"name":"nanos","type":"long"}]},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_t","type":{"type":"fixed","namespace":"org.apache.avro.rust","name":"Uuid","size":16,"logicalType":"uuid"},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_u","type":"org.apache.avro.rust.u64","default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_v","type":{"type":"fixed","namespace":"org.apache.avro.rust","name":"u128","size":16},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_w","type":{"type":"fixed","namespace":"org.apache.avro.rust","name":"i128","size":16},"default":"\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001"},{"name":"_x","type":"Spam","default":{"_field":false}}]}"#
     );
 }
 

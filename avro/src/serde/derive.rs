@@ -613,17 +613,16 @@ where
 }
 
 impl AvroSchemaComponent for core::time::Duration {
-    /// The schema is [`Schema::Record`] with the name `Duration`.
+    /// The schema is [`Schema::Record`] with the name `org.apache.avro.rust.Duration`.
     ///
     /// It has two fields:
-    /// - `secs` with the schema `Schema::Fixed(name: "u64", size: 8)`
+    /// - `secs` with the schema `Schema::Fixed(name: "org.apache.avro.rust.u64", size: 8)`
     /// - `nanos` with the schema `Schema::Long`
     fn get_schema_in_ctxt(
         named_schemas: &mut HashSet<Name>,
         enclosing_namespace: NamespaceRef,
     ) -> Schema {
-        let name = Name::new_with_enclosing_namespace("Duration", enclosing_namespace)
-            .expect("Name is valid");
+        let name = Name::new("org.apache.avro.rust.Duration").expect("Name is valid");
         if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {
@@ -657,17 +656,13 @@ impl AvroSchemaComponent for core::time::Duration {
 }
 
 impl AvroSchemaComponent for uuid::Uuid {
-    /// The schema is [`Schema::Uuid`] with the name `uuid`.
+    /// The schema is [`Schema::Uuid`] with the name `org.apache.avro.rust.Uuid`.
     ///
     /// The underlying schema is [`Schema::Fixed`] with a size of 16.
     ///
     /// If you're using `human_readable: true` you need to override this schema with a `Schema::String`.
-    fn get_schema_in_ctxt(
-        named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: NamespaceRef,
-    ) -> Schema {
-        let name =
-            Name::new_with_enclosing_namespace("uuid", enclosing_namespace).expect("Name is valid");
+    fn get_schema_in_ctxt(named_schemas: &mut HashSet<Name>, _: NamespaceRef) -> Schema {
+        let name = Name::new("org.apache.avro.rust.Uuid").expect("Name is valid");
         if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {
@@ -692,13 +687,9 @@ impl AvroSchemaComponent for uuid::Uuid {
 }
 
 impl AvroSchemaComponent for u64 {
-    /// The schema is [`Schema::Fixed`] of size 8 with the name `u64`.
-    fn get_schema_in_ctxt(
-        named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: NamespaceRef,
-    ) -> Schema {
-        let name =
-            Name::new_with_enclosing_namespace("u64", enclosing_namespace).expect("Name is valid");
+    /// The schema is [`Schema::Fixed`] of size 8 with the name `org.apache.avro.rust.u64`.
+    fn get_schema_in_ctxt(named_schemas: &mut HashSet<Name>, _: NamespaceRef) -> Schema {
+        let name = Name::new("org.apache.avro.rust.u64").expect("Name is valid");
         if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {
@@ -723,13 +714,12 @@ impl AvroSchemaComponent for u64 {
 }
 
 impl AvroSchemaComponent for u128 {
-    /// The schema is [`Schema::Fixed`] of size 16 with the name `u128`.
+    /// The schema is [`Schema::Fixed`] of size 16 with the name `org.apache.avro.rust.u128`.
     fn get_schema_in_ctxt(
         named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: NamespaceRef,
+        _: NamespaceRef,
     ) -> Schema {
-        let name =
-            Name::new_with_enclosing_namespace("u128", enclosing_namespace).expect("Name is valid");
+        let name = Name::new("org.apache.avro.rust.u128").expect("Name is valid");
         if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {
@@ -754,13 +744,12 @@ impl AvroSchemaComponent for u128 {
 }
 
 impl AvroSchemaComponent for i128 {
-    /// The schema is [`Schema::Fixed`] of size 16 with the name `i128`.
+    /// The schema is [`Schema::Fixed`] of size 16 with the name `org.apache.avro.rust.i128`.
     fn get_schema_in_ctxt(
         named_schemas: &mut HashSet<Name>,
-        enclosing_namespace: NamespaceRef,
+        _: NamespaceRef,
     ) -> Schema {
-        let name =
-            Name::new_with_enclosing_namespace("i128", enclosing_namespace).expect("Name is valid");
+        let name = Name::new("org.apache.avro.rust.i128").expect("Name is valid");
         if named_schemas.contains(&name) {
             Schema::Ref { name }
         } else {

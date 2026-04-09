@@ -230,6 +230,12 @@ impl Debug for Name {
     }
 }
 
+impl AsRef<str> for Name {
+    fn as_ref(&self) -> &str {
+        self.namespace_and_name.as_ref()
+    }
+}
+
 impl Display for Name {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         assert!(

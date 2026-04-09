@@ -166,7 +166,10 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
     }
 
     fn serialize_i128(mut self, v: i128) -> Result<Self::Ok, Self::Error> {
-        match self.union.find_named_schema("i128", self.config.names)? {
+        match self
+            .union
+            .find_fully_qualified_named_schema("org.apache.avro.rust.i128", self.config.names)?
+        {
             Some((index, Schema::Fixed(FixedSchema { size: 16, .. }))) => {
                 let mut bytes_written = zig_i32(index as i32, &mut *self.writer)?;
                 bytes_written += self.write_array(v.to_le_bytes())?;
@@ -192,7 +195,10 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
     }
 
     fn serialize_u64(mut self, v: u64) -> Result<Self::Ok, Self::Error> {
-        match self.union.find_named_schema("u64", self.config.names)? {
+        match self
+            .union
+            .find_fully_qualified_named_schema("org.apache.avro.rust.u64", self.config.names)?
+        {
             Some((index, Schema::Fixed(FixedSchema { size: 8, .. }))) => {
                 let mut bytes_written = zig_i32(index as i32, &mut *self.writer)?;
                 bytes_written += self.write_array(v.to_le_bytes())?;
@@ -206,7 +212,10 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
     }
 
     fn serialize_u128(mut self, v: u128) -> Result<Self::Ok, Self::Error> {
-        match self.union.find_named_schema("u128", self.config.names)? {
+        match self
+            .union
+            .find_fully_qualified_named_schema("org.apache.avro.rust.u128", self.config.names)?
+        {
             Some((index, Schema::Fixed(FixedSchema { size: 16, .. }))) => {
                 let mut bytes_written = zig_i32(index as i32, &mut *self.writer)?;
                 bytes_written += self.write_array(v.to_le_bytes())?;
