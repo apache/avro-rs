@@ -846,6 +846,20 @@ impl Value {
                     Ok(Value::Decimal(Decimal::from(bytes)))
                 }
             }
+            // JSON string defaults per spec §Records: codepoints 0-255
+            // map to byte values 0-255. No precision check — defaults
+            // need only be valid `bytes`, not fit the declared precision.
+            Value::String(s) => {
+                let mut bytes = Vec::with_capacity(s.len());
+                for c in s.chars() {
+                    let cp = c as u32;
+                    if cp > 0xFF {
+                        return Err(Details::ResolveDecimal(Value::String(s)).into());
+                    }
+                    bytes.push(cp as u8);
+                }
+                Ok(Value::Decimal(Decimal::from(bytes)))
+            }
             other => Err(Details::ResolveDecimal(other).into()),
         }
     }
@@ -1773,6 +1787,69 @@ Field with name '"b"' is not a member of the map items"#,
         }))?;
         assert!(value.resolve(&Schema::String).is_err());
 
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_decimal_from_string_default() -> TestResult {
+        let value = Value::String("\u{0000}".to_string());
+        let resolved = value.resolve(&Schema::Decimal(DecimalSchema {
+            precision: 10,
+            scale: 4,
+            inner: InnerDecimalSchema::Bytes,
+        }))?;
+        assert_eq!(resolved, Value::Decimal(Decimal::from(vec![0u8])));
+
+        let mut all_bytes_str = String::new();
+        for b in 0u8..=255u8 {
+            all_bytes_str.push(char::from_u32(b as u32).unwrap());
+        }
+        let resolved = Value::String(all_bytes_str).resolve(&Schema::Decimal(DecimalSchema {
+            precision: 10,
+            scale: 0,
+            inner: InnerDecimalSchema::Bytes,
+        }))?;
+        assert_eq!(
+            resolved,
+            Value::Decimal(Decimal::from((0u8..=255u8).collect::<Vec<_>>()))
+        );
+
+        let value = Value::String("\u{0100}".to_string());
+        assert!(
+            value
+                .resolve(&Schema::Decimal(DecimalSchema {
+                    precision: 10,
+                    scale: 4,
+                    inner: InnerDecimalSchema::Bytes,
+                }))
+                .is_err()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_schema_with_nullable_decimal_string_default() -> TestResult {
+        let schema_json = r#"{
+            "type": "record",
+            "name": "NullableDecimal",
+            "fields": [
+                {
+                    "name": "amount",
+                    "type": [
+                        {
+                            "type": "bytes",
+                            "scale": 4,
+                            "precision": 10,
+                            "logicalType": "decimal"
+                        },
+                        "null"
+                    ],
+                    "default": "\u0000"
+                }
+            ]
+        }"#;
+        Schema::parse_str(schema_json)?;
         Ok(())
     }
 
