@@ -32,7 +32,7 @@ thread_local! {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-#[ctor]
+#[ctor(unsafe)]
 fn before_all() {
     // better stacktraces in tests
     better_panic::Settings::new()
@@ -46,7 +46,7 @@ fn before_all() {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-#[dtor]
+#[dtor(unsafe)]
 fn after_all() {
     logger::clear_log_messages();
 }
