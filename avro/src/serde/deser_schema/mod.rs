@@ -35,10 +35,9 @@ mod tuple;
 
 use block::BlockDeserializer;
 use enums::PlainEnumDeserializer;
+use enums::UnionEnumDeserializer;
 use record::RecordDeserializer;
 use tuple::{ManyTupleDeserializer, OneTupleDeserializer};
-
-use crate::serde::deser_schema::enums::UnionEnumDeserializer;
 
 /// Configure the deserializer.
 #[derive(Debug)]
@@ -79,6 +78,7 @@ pub struct SchemaAwareDeserializer<'s, 'r, R: Read, S: Borrow<Schema>> {
     /// This schema is guaranteed to not be a [`Schema::Ref`].
     schema: &'s Schema,
     config: Config<'s, S>,
+    branch_index: Option<usize>,
 }
 
 impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
@@ -96,12 +96,14 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
                 reader,
                 schema,
                 config,
+                branch_index: None,
             })
         } else {
             Ok(Self {
                 reader,
                 schema,
                 config,
+                branch_index: None,
             })
         }
     }
@@ -129,12 +131,22 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
         Ok(self)
     }
 
+    fn with_branch_index(mut self, branch_index: usize) -> Self {
+        self.branch_index = Some(branch_index);
+        self
+    }
+
     /// Read the union and create a new deserializer with the existing reader and config.
     ///
     /// This will resolve the read schema if it is a reference.
     fn with_union(self, schema: &'s UnionSchema) -> Result<Self, Error> {
-        let index = zag_i32(self.reader)?;
-        let index = usize::try_from(index).map_err(|e| Details::ConvertI32ToUsize(e, index))?;
+        let index = match self.branch_index {
+            Some(index) => index,
+            None => {
+                let index = zag_i32(self.reader)?;
+                usize::try_from(index).map_err(|e| Details::ConvertI32ToUsize(e, index))?
+            }
+        };
         let variant = schema.get_variant(index)?;
         self.with_different_schema(variant)
     }
@@ -524,7 +536,6 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
         V: Visitor<'de>,
     {
         if let Schema::Union(union) = self.schema
-            && union.variants().len() == 2
             && union.is_nullable()
         {
             let index = zag_i32(self.reader)?;
@@ -533,7 +544,11 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
             if let Schema::Null = schema {
                 visitor.visit_none()
             } else {
-                visitor.visit_some(self.with_different_schema(schema)?)
+                if union.variants().len() == 2 {
+                    visitor.visit_some(self.with_different_schema(schema)?)
+                } else {
+                    visitor.visit_some(self.with_branch_index(index))
+                }
             }
         } else {
             Err(self.error("option", "Expected Schema::Union([Schema::Null, _])"))
@@ -708,9 +723,12 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
             Schema::Enum(schema) => {
                 visitor.visit_enum(PlainEnumDeserializer::new(self.reader, schema))
             }
-            Schema::Union(union) => {
-                visitor.visit_enum(UnionEnumDeserializer::new(self.reader, union, self.config))
-            }
+            Schema::Union(union) => visitor.visit_enum(UnionEnumDeserializer::new(
+                self.reader,
+                union,
+                self.config,
+                self.branch_index,
+            )),
             _ => Err(self.error("enum", "Expected Schema::Enum | Schema::Union")),
         }
     }
