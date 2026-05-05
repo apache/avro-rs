@@ -3747,6 +3747,7 @@ Field with name '"b"' is not a member of the map items"#,
         )]);
 
         value = value.resolve(&schema)?;
+        value = value.resolve(&schema)?;
 
         assert_eq!(
             value,
