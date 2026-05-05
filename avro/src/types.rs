@@ -3731,7 +3731,6 @@ Field with name '"b"' is not a member of the map items"#,
                 Value::String("abc".to_string()))]);
 
         value = value.resolve(&schema)?;
-        value = value.resolve(&schema)?;
 
         assert_eq!(value,
              Value::Record(vec![("test_field".to_string() , Value::Fixed(6, vec![97, 98, 99, 0 ,0 , 0]))])
