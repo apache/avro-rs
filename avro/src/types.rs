@@ -3653,7 +3653,7 @@ Field with name '"b"' is not a member of the map items"#,
     }
 
     #[test]
-    fn avro_rs_test_biggger_string_to_smaller_fixed_resolution() -> TestResult{
+    fn avro_rs_542_test_bigger_string_to_smaller_fixed_resolution() -> TestResult {
         let schema = Schema::parse_str(r#"
         {
             "name": "test",
@@ -3684,7 +3684,7 @@ Field with name '"b"' is not a member of the map items"#,
     }
 
     #[test]
-    fn avro_rs_test_smaller_string_to_bigger_fixed_resolution() -> TestResult{
+    fn avro_rs_542_test_smaller_string_to_bigger_fixed_resolution() -> TestResult {
         let schema = Schema::parse_str(r#"
         {
             "name": "test",
@@ -3712,7 +3712,7 @@ Field with name '"b"' is not a member of the map items"#,
     }
 
     #[test]
-    fn avro_rs_test_smaller_string_to_bigger_fixed_resolution_idempotence() -> TestResult{
+    fn avro_rs_542_test_smaller_string_to_bigger_fixed_resolution_idempotence() -> TestResult {
         let schema = Schema::parse_str(r#"
         {
             "name": "test",
