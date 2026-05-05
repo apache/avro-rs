@@ -1118,7 +1118,7 @@ impl Value {
                     bytes.resize(size, 0);
                     Ok(Value::Fixed(size, bytes))
                 }
-            },
+            }
             Value::Bytes(s) => {
                 if s.len() == size {
                     Ok(Value::Fixed(size, s))
@@ -3654,7 +3654,8 @@ Field with name '"b"' is not a member of the map items"#,
 
     #[test]
     fn avro_rs_542_test_bigger_string_to_smaller_fixed_resolution() -> TestResult {
-        let schema = Schema::parse_str(r#"
+        let schema = Schema::parse_str(
+            r#"
         {
             "name": "test",
             "type": "record",
@@ -3666,11 +3667,14 @@ Field with name '"b"' is not a member of the map items"#,
                     "size": 2
                 }
             }]
-        }"#)?;
+        }"#,
+        )?;
 
         let long_string = "This string is too long and won't fit!!".to_string();
-        let value = Value::Record(vec![("test_field".to_string(),
-                Value::String(long_string.clone()))]);
+        let value = Value::Record(vec![(
+            "test_field".to_string(),
+            Value::String(long_string.clone()),
+        )]);
 
         assert_eq!(
             value.resolve(&schema)
@@ -3685,7 +3689,8 @@ Field with name '"b"' is not a member of the map items"#,
 
     #[test]
     fn avro_rs_542_test_smaller_string_to_bigger_fixed_resolution() -> TestResult {
-        let schema = Schema::parse_str(r#"
+        let schema = Schema::parse_str(
+            r#"
         {
             "name": "test",
             "type": "record",
@@ -3697,23 +3702,31 @@ Field with name '"b"' is not a member of the map items"#,
                     "size": 6
                 }
             }]
-        }"#)?;
+        }"#,
+        )?;
 
-        let mut value = Value::Record(vec![("test_field".to_string(),
-                Value::String("abc".to_string()))]);
+        let mut value = Value::Record(vec![(
+            "test_field".to_string(),
+            Value::String("abc".to_string()),
+        )]);
 
         value = value.resolve(&schema)?;
 
-        assert_eq!(value,
-             Value::Record(vec![("test_field".to_string() , Value::Fixed(6, vec![97, 98, 99, 0 ,0 , 0]))])
-            );
+        assert_eq!(
+            value,
+            Value::Record(vec![(
+                "test_field".to_string(),
+                Value::Fixed(6, vec![97, 98, 99, 0, 0, 0])
+            )])
+        );
 
         Ok(())
     }
 
     #[test]
     fn avro_rs_542_test_smaller_string_to_bigger_fixed_resolution_idempotence() -> TestResult {
-        let schema = Schema::parse_str(r#"
+        let schema = Schema::parse_str(
+            r#"
         {
             "name": "test",
             "type": "record",
@@ -3725,16 +3738,23 @@ Field with name '"b"' is not a member of the map items"#,
                     "size": 6
                 }
             }]
-        }"#)?;
+        }"#,
+        )?;
 
-        let mut value = Value::Record(vec![("test_field".to_string(),
-                Value::String("abc".to_string()))]);
+        let mut value = Value::Record(vec![(
+            "test_field".to_string(),
+            Value::String("abc".to_string()),
+        )]);
 
         value = value.resolve(&schema)?;
 
-        assert_eq!(value,
-             Value::Record(vec![("test_field".to_string() , Value::Fixed(6, vec![97, 98, 99, 0 ,0 , 0]))])
-            );
+        assert_eq!(
+            value,
+            Value::Record(vec![(
+                "test_field".to_string(),
+                Value::Fixed(6, vec![97, 98, 99, 0, 0, 0])
+            )])
+        );
 
         Ok(())
     }
