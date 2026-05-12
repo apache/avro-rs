@@ -16,7 +16,7 @@
 // under the License.
 
 //! Logic for serde-compatible deserialization.
-use crate::{Error, error::Details, serde::with::DE_BYTES_BORROWED, types::Value};
+use crate::{Error, bigdecimal::big_decimal_as_bytes, error::Details, serde::with::DE_BYTES_BORROWED, types::Value};
 use serde::{
     Deserialize,
     de::{self, DeserializeSeed, Deserializer as _, Visitor},
@@ -612,6 +612,7 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
             }
             Value::Uuid(u) => visitor.visit_bytes(u.as_bytes()),
             Value::Decimal(d) => visitor.visit_bytes(&d.to_vec()?),
+            Value::BigDecimal(d) => visitor.visit_bytes(&big_decimal_as_bytes(d)?),
             Value::Duration(d) => {
                 let d_bytes: [u8; 12] = d.into();
                 visitor.visit_bytes(&d_bytes[..])
@@ -634,6 +635,7 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
             }
             Value::Uuid(u) => visitor.visit_byte_buf(Vec::from(u.as_bytes())),
             Value::Decimal(d) => visitor.visit_byte_buf(d.to_vec()?),
+            Value::BigDecimal(d) => visitor.visit_byte_buf(big_decimal_as_bytes(d)?),
             Value::Duration(d) => {
                 let d_bytes: [u8; 12] = d.into();
                 visitor.visit_byte_buf(Vec::from(d_bytes))
