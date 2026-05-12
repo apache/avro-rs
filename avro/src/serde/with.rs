@@ -510,7 +510,7 @@ pub mod slice_opt {
 ///
 /// When used with different serialization formats, this will write bytes.
 ///
-/// See usage with below example:
+/// Example usage:
 /// ```
 /// # use apache_avro::{AvroSchema, BigDecimal};
 /// # use serde::{Deserialize, Serialize};

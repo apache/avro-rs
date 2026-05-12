@@ -1806,7 +1806,7 @@ mod tests {
 
     #[test]
     fn avro_543_deserialize_bigdecimal_as_bytes() -> TestResult {
-        #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+        #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
         #[serde(transparent)]
         struct WrappedBigDecimal(
             // crate::serde::bigdecimal serializes/deserializes BigDecimal as bytes
@@ -1817,7 +1817,11 @@ mod tests {
         let value = Value::BigDecimal(str::parse("7.45")?);
         let actual_decimal = from_value::<WrappedBigDecimal>(&value)?;
 
-        assert_eq!(actual_decimal, expected_decimal);
+        assert_eq!(actual_decimal, expected_decimal.clone());
+
+        let value = Value::Union(0, Box::new(Value::BigDecimal(str::parse("7.45")?)));
+        let raw_bytes = from_value::<Option<WrappedBigDecimal>>(&value)?;
+        assert_eq!(raw_bytes, Some(expected_decimal));
 
         Ok(())
     }
