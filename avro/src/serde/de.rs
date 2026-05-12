@@ -1802,7 +1802,7 @@ mod tests {
     }
 
     #[test]
-    fn test_deserialize_bigdecimal_as_bytes() -> TestResult {
+    fn avro_543_deserialize_bigdecimal_as_bytes() -> TestResult {
         #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
         #[serde(transparent)]
         struct WrappedBigDecimal (
