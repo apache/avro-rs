@@ -16,7 +16,10 @@
 // under the License.
 
 //! Logic for serde-compatible deserialization.
-use crate::{Error, bigdecimal::big_decimal_as_bytes, error::Details, serde::with::DE_BYTES_BORROWED, types::Value};
+use crate::{
+    Error, bigdecimal::big_decimal_as_bytes, error::Details, serde::with::DE_BYTES_BORROWED,
+    types::Value,
+};
 use serde::{
     Deserialize,
     de::{self, DeserializeSeed, Deserializer as _, Visitor},
@@ -1805,10 +1808,9 @@ mod tests {
     fn avro_543_deserialize_bigdecimal_as_bytes() -> TestResult {
         #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
         #[serde(transparent)]
-        struct WrappedBigDecimal (
+        struct WrappedBigDecimal(
             // crate::serde::bigdecimal serializes/deserializes BigDecimal as bytes
-            #[serde(with="crate::serde::bigdecimal")]
-            bigdecimal::BigDecimal
+            #[serde(with = "crate::serde::bigdecimal")] bigdecimal::BigDecimal,
         );
 
         let expected_decimal = WrappedBigDecimal(str::parse("7.45")?);
@@ -1817,7 +1819,7 @@ mod tests {
 
         assert_eq!(actual_decimal, expected_decimal);
 
-        Ok(())        
+        Ok(())
     }
 
     #[test]
