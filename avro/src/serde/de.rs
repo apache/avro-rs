@@ -1802,6 +1802,25 @@ mod tests {
     }
 
     #[test]
+    fn test_deserialize_bigdecimal_as_bytes() -> TestResult {
+        #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+        #[serde(transparent)]
+        struct WrappedBigDecimal (
+            // crate::serde::bigdecimal serializes/deserializes BigDecimal as bytes
+            #[serde(with="crate::serde::bigdecimal")]
+            bigdecimal::BigDecimal
+        );
+
+        let expected_decimal = WrappedBigDecimal(str::parse("7.45")?);
+        let value = Value::BigDecimal(str::parse("7.45")?);
+        let actual_decimal = from_value::<WrappedBigDecimal>(&value)?;
+
+        assert_eq!(actual_decimal, expected_decimal);
+
+        Ok(())        
+    }
+
+    #[test]
     fn test_avro_3892_deserialize_bytes_from_uuid() -> TestResult {
         let uuid_str = "10101010-2020-2020-2020-101010101010";
         let expected_bytes = Uuid::parse_str(uuid_str)?.as_bytes().to_vec();
