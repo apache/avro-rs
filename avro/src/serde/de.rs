@@ -621,7 +621,7 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
                 visitor.visit_bytes(&d_bytes[..])
             }
             _ => Err(de::Error::custom(format!(
-                "Expected a String|Bytes|Fixed|Uuid|Decimal|Duration, but got {:?}",
+                "Expected a String|Bytes|Fixed|Uuid|BigDecimal|Decimal|Duration, but got {:?}",
                 self.input
             ))),
         }
@@ -644,7 +644,7 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
                 visitor.visit_byte_buf(Vec::from(d_bytes))
             }
             _ => Err(de::Error::custom(format!(
-                "Expected a String|Bytes|Fixed|Uuid|Decimal|Duration, but got {:?}",
+                "Expected a String|Bytes|Fixed|Uuid|BigDecimal|Decimal|Duration, but got {:?}",
                 self.input
             ))),
         }
