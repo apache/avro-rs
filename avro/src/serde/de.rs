@@ -16,7 +16,10 @@
 // under the License.
 
 //! Logic for serde-compatible deserialization.
-use crate::{Error, error::Details, serde::with::DE_BYTES_BORROWED, types::Value};
+use crate::{
+    Error, bigdecimal::big_decimal_as_bytes, error::Details, serde::with::DE_BYTES_BORROWED,
+    types::Value,
+};
 use serde::{
     Deserialize,
     de::{self, DeserializeSeed, Deserializer as _, Visitor},
@@ -612,12 +615,13 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
             }
             Value::Uuid(u) => visitor.visit_bytes(u.as_bytes()),
             Value::Decimal(d) => visitor.visit_bytes(&d.to_vec()?),
+            Value::BigDecimal(d) => visitor.visit_bytes(&big_decimal_as_bytes(d)?),
             Value::Duration(d) => {
                 let d_bytes: [u8; 12] = d.into();
                 visitor.visit_bytes(&d_bytes[..])
             }
             _ => Err(de::Error::custom(format!(
-                "Expected a String|Bytes|Fixed|Uuid|Decimal|Duration, but got {:?}",
+                "Expected a String|Bytes|Fixed|Uuid|BigDecimal|Decimal|Duration, but got {:?}",
                 self.input
             ))),
         }
@@ -634,12 +638,13 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
             }
             Value::Uuid(u) => visitor.visit_byte_buf(Vec::from(u.as_bytes())),
             Value::Decimal(d) => visitor.visit_byte_buf(d.to_vec()?),
+            Value::BigDecimal(d) => visitor.visit_byte_buf(big_decimal_as_bytes(d)?),
             Value::Duration(d) => {
                 let d_bytes: [u8; 12] = d.into();
                 visitor.visit_byte_buf(Vec::from(d_bytes))
             }
             _ => Err(de::Error::custom(format!(
-                "Expected a String|Bytes|Fixed|Uuid|Decimal|Duration, but got {:?}",
+                "Expected a String|Bytes|Fixed|Uuid|BigDecimal|Decimal|Duration, but got {:?}",
                 self.input
             ))),
         }
@@ -1796,6 +1801,28 @@ mod tests {
         let value = Value::Union(0, Box::new(Value::Decimal(Decimal::from(&expected_bytes))));
         let raw_bytes = from_value::<Option<Bytes>>(&value)?;
         assert_eq!(raw_bytes.unwrap().0, expected_bytes);
+        Ok(())
+    }
+
+    #[test]
+    fn avro_543_deserialize_bigdecimal_as_bytes() -> TestResult {
+        #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
+        #[serde(transparent)]
+        struct WrappedBigDecimal(
+            // crate::serde::bigdecimal serializes/deserializes BigDecimal as bytes
+            #[serde(with = "crate::serde::bigdecimal")] bigdecimal::BigDecimal,
+        );
+
+        let expected_decimal = WrappedBigDecimal(str::parse("7.45")?);
+        let value = Value::BigDecimal(str::parse("7.45")?);
+        let actual_decimal = from_value::<WrappedBigDecimal>(&value)?;
+
+        assert_eq!(actual_decimal, expected_decimal.clone());
+
+        let value = Value::Union(0, Box::new(Value::BigDecimal(str::parse("7.45")?)));
+        let raw_bytes = from_value::<Option<WrappedBigDecimal>>(&value)?;
+        assert_eq!(raw_bytes, Some(expected_decimal));
+
         Ok(())
     }
 
