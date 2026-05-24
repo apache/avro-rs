@@ -15,15 +15,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use log::warn;
+use serde::de::DeserializeOwned;
+use serde_json::from_slice;
+use std::io::IoSliceMut;
 use std::{
     collections::HashMap,
     io::{ErrorKind, Read, Seek, SeekFrom},
     str::FromStr,
 };
-
-use log::warn;
-use serde::de::DeserializeOwned;
-use serde_json::from_slice;
 
 use crate::{
     AvroResult, Codec, Error,
@@ -41,44 +41,105 @@ use crate::{
 /// Use with [`super::Reader::seek_to_block`] to jump back to a previously-read block.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlockPosition {
-    /// Byte offset in the stream where this block starts (before the object-count varint).
-    pub offset: u64,
-    /// Total number of records in this block.
-    pub message_count: usize,
+    // Byte offset in the stream where this block starts (before the object-count varint).
+    offset: u64,
+    // Total number of records in this block.
+    message_count: usize,
 }
 
-/// Wraps an inner reader and tracks the current byte position.
+impl BlockPosition {
+    /// Byte offset in the stream where this block starts (before the object-count varint).
+    pub fn offset(&self) -> u64 {
+        self.offset
+    }
+
+    /// Total number of records in this block.
+    pub fn message_count(&self) -> usize {
+        self.message_count
+    }
+}
+
+/// Optional byte-offset tracker over an inner reader.
 ///
-/// Avoids requiring `Seek` just to know how many bytes have been consumed.
-/// When the inner reader also implements `Seek`, seeking updates the tracked position.
+/// `Direct` is a transparent pass-through so the inner type's optimized
+/// `read_exact`/`read_to_end`/`read_vectored` are reached unchanged.
+///
+/// `Tracking` mirrors those same delegations and accumulates bytes consumed,
+/// exposing the offset via [`Self::position`]. Tracking is opt-in.
 #[derive(Debug, Clone)]
-struct PositionTracker<R> {
-    inner: R,
-    pos: u64,
+pub(super) enum PositionTracker<R> {
+    Direct(R),
+    Tracking { inner: R, pos: u64 },
 }
 
 impl<R> PositionTracker<R> {
-    fn new(inner: R) -> Self {
-        Self { inner, pos: 0 }
-    }
-
-    fn position(&self) -> u64 {
-        self.pos
+    /// Byte offset consumed so far, or `None` when tracking is disabled.
+    pub(super) fn position(&self) -> Option<u64> {
+        match self {
+            Self::Direct(_) => None,
+            Self::Tracking { pos, .. } => Some(*pos),
+        }
     }
 }
 
 impl<R: Read> Read for PositionTracker<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let n = self.inner.read(buf)?;
-        self.pos += n as u64;
-        Ok(n)
+        match self {
+            Self::Direct(r) => r.read(buf),
+            Self::Tracking { inner, pos } => {
+                let n = inner.read(buf)?;
+                *pos += n as u64;
+                Ok(n)
+            }
+        }
+    }
+
+    fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> std::io::Result<usize> {
+        match self {
+            Self::Direct(r) => r.read_vectored(bufs),
+            Self::Tracking { inner, pos } => {
+                let n = inner.read_vectored(bufs)?;
+                *pos += n as u64;
+                Ok(n)
+            }
+        }
+    }
+
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> std::io::Result<usize> {
+        match self {
+            Self::Direct(r) => r.read_to_end(buf),
+            Self::Tracking { inner, pos } => {
+                let n = inner.read_to_end(buf)?;
+                *pos += n as u64;
+                Ok(n)
+            }
+        }
+    }
+
+    fn read_exact(&mut self, buf: &mut [u8]) -> std::io::Result<()> {
+        match self {
+            Self::Direct(r) => r.read_exact(buf),
+            Self::Tracking { inner, pos } => {
+                inner.read_exact(buf)?;
+                // `read_exact` either fills `buf` completely or errors, so on
+                // success exactly `buf.len()` bytes were consumed.
+                *pos += buf.len() as u64;
+                Ok(())
+            }
+        }
     }
 }
 
 impl<R: Seek> Seek for PositionTracker<R> {
     fn seek(&mut self, from: SeekFrom) -> std::io::Result<u64> {
-        self.pos = self.inner.seek(from)?;
-        Ok(self.pos)
+        match self {
+            Self::Direct(r) => r.seek(from),
+            Self::Tracking { inner, pos } => {
+                let new_pos = inner.seek(from)?;
+                *pos = new_pos;
+                Ok(new_pos)
+            }
+        }
     }
 }
 
@@ -99,7 +160,7 @@ pub(super) struct Block<'r, R> {
     names_refs: Names,
     human_readable: bool,
     /// Byte offset where data blocks begin (right after header and sync marker).
-    pub(super) data_start: u64,
+    pub(super) data_start: Option<u64>,
     /// Position and record count of the currently loaded block.
     pub(super) current_block_info: Option<BlockPosition>,
 }
@@ -109,9 +170,18 @@ impl<'r, R: Read> Block<'r, R> {
         reader: R,
         schemata: Vec<&'r Schema>,
         human_readable: bool,
+        track_positions: bool,
     ) -> AvroResult<Block<'r, R>> {
+        let reader = if track_positions {
+            PositionTracker::Tracking {
+                inner: reader,
+                pos: 0,
+            }
+        } else {
+            PositionTracker::Direct(reader)
+        };
         let mut block = Block {
-            reader: PositionTracker::new(reader),
+            reader,
             codec: Codec::Null,
             writer_schema: Schema::Null,
             schemata,
@@ -122,7 +192,7 @@ impl<'r, R: Read> Block<'r, R> {
             user_metadata: Default::default(),
             names_refs: Default::default(),
             human_readable,
-            data_start: 0,
+            data_start: None,
             current_block_info: None,
         };
 
@@ -211,18 +281,24 @@ impl<'r, R: Read> Block<'r, R> {
                     return Err(Details::GetBlockMarker.into());
                 }
 
-                self.current_block_info = Some(BlockPosition {
-                    offset: block_start,
-                    message_count: block_len as usize,
-                });
-
                 // NOTE (JAB): This doesn't fit this Reader pattern very well.
                 // `self.buf` is a growable buffer that is reused as the reader is iterated.
                 // For non `Codec::Null` variants, `decompress` will allocate a new `Vec`
                 // and replace `buf` with the new one, instead of reusing the same buffer.
                 // We can address this by using some "limited read" type to decode directly
                 // into the buffer. But this is fine, for now.
-                self.codec.decompress(&mut self.buf)
+                let next = self.codec.decompress(&mut self.buf);
+
+                // Make sure the position points only to a valid block
+                self.current_block_info = match next {
+                    Ok(_) => block_start.map(|offset| BlockPosition {
+                        offset,
+                        message_count: block_len as usize,
+                    }),
+                    Err(_) => None,
+                };
+
+                next
             }
             Err(Details::ReadVariableIntegerBytes(io_err)) => {
                 if let ErrorKind::UnexpectedEof = io_err.kind() {
@@ -361,14 +437,14 @@ impl<R: Read + Seek> Block<'_, R> {
     /// Returns an error if no valid block can be read at the offset
     /// (e.g., the offset is at or past EOF).
     pub(super) fn seek_to_block(&mut self, offset: u64) -> AvroResult<()> {
-        self.reader
-            .seek(SeekFrom::Start(offset))
-            .map_err(Details::SeekToBlock)?;
-
         self.buf.clear();
         self.buf_idx = 0;
         self.message_count = 0;
         self.current_block_info = None;
+
+        self.reader
+            .seek(SeekFrom::Start(offset))
+            .map_err(Details::SeekToBlock)?;
 
         self.read_block_next()?;
         Ok(())
