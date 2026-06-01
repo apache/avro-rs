@@ -522,8 +522,12 @@ impl Parser {
     ) -> Option<&Schema> {
         match complex.get("type") {
             Some(Value::String(typ)) => {
+                // A `type` that is not a valid Avro name cannot match any
+                // already-seen schema, so treat it as "not seen" rather than
+                // panicking. The real validation error is surfaced later by
+                // the parse path that calls `Name::parse`.
                 let name =
-                    Name::new_with_enclosing_namespace(typ.as_str(), enclosing_namespace).unwrap();
+                    Name::new_with_enclosing_namespace(typ.as_str(), enclosing_namespace).ok()?;
                 self.resolving_schemas
                     .get(&name)
                     .or_else(|| self.parsed_schemas.get(&name))
@@ -548,7 +552,7 @@ impl Parser {
 
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
         let aliases =
-            self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace());
+            self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace())?;
 
         let mut lookup = BTreeMap::new();
 
@@ -622,7 +626,7 @@ impl Parser {
 
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
         let aliases =
-            self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace());
+            self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace())?;
 
         let symbols: Vec<String> = symbols_opt
             .and_then(|v| v.as_array())
@@ -771,7 +775,7 @@ impl Parser {
 
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
         let aliases =
-            self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace());
+            self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace())?;
 
         let schema = Schema::Fixed(FixedSchema {
             name: fully_qualified_name.clone(),
@@ -795,29 +799,36 @@ impl Parser {
         &self,
         aliases: Option<Vec<String>>,
         namespace: NamespaceRef,
-    ) -> Aliases {
-        aliases.map(|aliases| {
-            aliases
-                .iter()
-                .map(|alias| {
-                    if alias.find('.').is_none() {
-                        match namespace {
-                            Some(ns) => format!("{ns}.{alias}"),
-                            None => alias.clone(),
-                        }
-                    } else {
-                        alias.clone()
-                    }
-                })
-                .map(|alias| Alias::new(alias.as_str()).unwrap())
-                .collect()
-        })
+    ) -> AvroResult<Aliases> {
+        aliases
+            .map(|aliases| {
+                aliases
+                    .iter()
+                    .map(|alias| {
+                        let qualified = if alias.find('.').is_none() {
+                            match namespace {
+                                Some(ns) => format!("{ns}.{alias}"),
+                                None => alias.clone(),
+                            }
+                        } else {
+                            alias.clone()
+                        };
+                        // An alias that is not a valid Avro name is a schema
+                        // error — propagate it instead of unwrapping (which
+                        // would panic on attacker-controlled schema JSON).
+                        Alias::new(qualified.as_str())
+                    })
+                    .collect::<AvroResult<Vec<_>>>()
+            })
+            .transpose()
     }
 
     fn get_schema_type_name(&self, name: Name, value: &Value) -> Name {
         match value.get("type") {
             Some(Value::Object(complex_type)) => match complex_type.name() {
-                Some(name) => Name::new(name).unwrap(),
+                // Fall back to the enclosing name if the nested `type` name is
+                // not a valid Avro name, rather than panicking on `unwrap()`.
+                Some(type_name) => Name::new(type_name).unwrap_or(name),
                 _ => name,
             },
             _ => name,
