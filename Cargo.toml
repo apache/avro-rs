@@ -40,7 +40,7 @@ documentation = "https://docs.rs/apache-avro"
 
 # dependencies used by more than one members
 [workspace.dependencies]
-log = { default-features = false, version = "0.4.31" }
+log = { default-features = false, version = "0.4.32" }
 pretty_assertions = { default-features = false, version = "1.4.1", features = ["std"] }
 serde = { default-features = false, version = "1.0.228", features = ["std", "derive"] }
 serde_bytes = { default-features = false, version = "0.11.19", features = ["std"] }
