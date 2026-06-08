@@ -96,7 +96,7 @@ impl Parser {
                 .expect("Key unexpectedly missing");
             let parsed = self.parse(&value, None)?;
             self.parsed_schemas
-                .insert(self.get_schema_type_name(name, &value), parsed);
+                .insert(self.get_schema_type_name(name, &value)?, parsed);
         }
         Ok(())
     }
@@ -197,7 +197,7 @@ impl Parser {
         // parsing a full schema from inside another schema. Other full schema will not inherit namespace
         let parsed = self.parse(&value, None)?;
         self.parsed_schemas.insert(
-            self.get_schema_type_name(fully_qualified_name, &value),
+            self.get_schema_type_name(fully_qualified_name, &value)?,
             parsed.clone(),
         );
 
@@ -522,8 +522,12 @@ impl Parser {
     ) -> Option<&Schema> {
         match complex.get("type") {
             Some(Value::String(typ)) => {
+                // A `type` that is not a valid Avro name cannot match any
+                // already-seen schema, so treat it as "not seen" rather than
+                // panicking. The real validation error is surfaced later by
+                // the parse path that calls `Name::parse`.
                 let name =
-                    Name::new_with_enclosing_namespace(typ.as_str(), enclosing_namespace).unwrap();
+                    Name::new_with_enclosing_namespace(typ.as_str(), enclosing_namespace).ok()?;
                 self.resolving_schemas
                     .get(&name)
                     .or_else(|| self.parsed_schemas.get(&name))
@@ -548,7 +552,7 @@ impl Parser {
 
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
         let aliases =
-            self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace());
+            self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace())?;
 
         let mut lookup = BTreeMap::new();
 
@@ -622,7 +626,7 @@ impl Parser {
 
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
         let aliases =
-            self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace());
+            self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace())?;
 
         let symbols: Vec<String> = symbols_opt
             .and_then(|v| v.as_array())
@@ -771,7 +775,7 @@ impl Parser {
 
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
         let aliases =
-            self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace());
+            self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace())?;
 
         let schema = Schema::Fixed(FixedSchema {
             name: fully_qualified_name.clone(),
@@ -795,32 +799,38 @@ impl Parser {
         &self,
         aliases: Option<Vec<String>>,
         namespace: NamespaceRef,
-    ) -> Aliases {
-        aliases.map(|aliases| {
-            aliases
-                .iter()
-                .map(|alias| {
-                    if alias.find('.').is_none() {
-                        match namespace {
-                            Some(ns) => format!("{ns}.{alias}"),
-                            None => alias.clone(),
+    ) -> AvroResult<Aliases> {
+        aliases
+            .map(|aliases| {
+                aliases
+                    .iter()
+                    .map(|alias| {
+                        // An alias that is not a valid Avro name is a schema
+                        // error — propagate it instead of unwrapping (which
+                        // would panic on attacker-controlled schema JSON).
+                        if alias.contains('.') {
+                            Alias::new(alias.as_str())
+                        } else {
+                            match namespace {
+                                Some(ns) => Alias::new(&format!("{ns}.{alias}")),
+                                None => Alias::new(alias.as_str()),
+                            }
                         }
-                    } else {
-                        alias.clone()
-                    }
-                })
-                .map(|alias| Alias::new(alias.as_str()).unwrap())
-                .collect()
-        })
+                    })
+                    .collect::<AvroResult<Vec<_>>>()
+            })
+            .transpose()
     }
 
-    fn get_schema_type_name(&self, name: Name, value: &Value) -> Name {
+    fn get_schema_type_name(&self, name: Name, value: &Value) -> AvroResult<Name> {
         match value.get("type") {
             Some(Value::Object(complex_type)) => match complex_type.name() {
-                Some(name) => Name::new(name).unwrap(),
-                _ => name,
+                // Propagate the validation error if the nested `type` name is
+                // not a valid Avro name, rather than panicking on `unwrap()`.
+                Some(type_name) => Name::new(type_name),
+                _ => Ok(name),
             },
-            _ => name,
+            _ => Ok(name),
         }
     }
 
