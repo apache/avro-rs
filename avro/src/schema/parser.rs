@@ -803,19 +803,12 @@ impl Parser {
         aliases
             .map(|aliases| {
                 aliases
-                    .iter()
+                    .into_iter()
                     .map(|alias| {
                         // An alias that is not a valid Avro name is a schema
                         // error — propagate it instead of unwrapping (which
                         // would panic on attacker-controlled schema JSON).
-                        if alias.contains('.') {
-                            Alias::new(alias.as_str())
-                        } else {
-                            match namespace {
-                                Some(ns) => Alias::new(&format!("{ns}.{alias}")),
-                                None => Alias::new(alias.as_str()),
-                            }
-                        }
+                        Alias::new_with_enclosing_namespace(alias, namespace)
                     })
                     .collect::<AvroResult<Vec<_>>>()
             })
