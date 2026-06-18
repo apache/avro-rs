@@ -257,13 +257,22 @@ impl<'de> Deserialize<'de> for Name {
 }
 
 /// Newtype pattern for `Name` to better control the `serde_json::Value` representation.
+///
 /// Aliases are serialized as an array of plain strings in the JSON representation.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Alias(Name);
 
 impl Alias {
-    pub fn new(name: &str) -> AvroResult<Self> {
+    pub fn new(name: impl Into<String> + AsRef<str>) -> AvroResult<Self> {
         Name::new(name).map(Self)
+    }
+
+    /// Create a new `Alias` using the namespace from `enclosing_namespace` if absent.
+    pub fn new_with_enclosing_namespace(
+        name: impl Into<String> + AsRef<str>,
+        enclosing_namespace: NamespaceRef,
+    ) -> AvroResult<Self> {
+        Name::new_with_enclosing_namespace(name, enclosing_namespace).map(Self)
     }
 
     pub fn name(&self) -> &str {
