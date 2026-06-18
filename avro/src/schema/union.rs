@@ -128,6 +128,33 @@ impl UnionSchema {
         Ok(None)
     }
 
+    /// Get the index and schema for the provided Rust type name.
+    ///
+    /// Will use `names` to resolve references.
+    pub(crate) fn find_fully_qualified_named_schema<'s>(
+        &'s self,
+        full_name: &str,
+        names: &'s HashMap<Name, impl Borrow<Schema>>,
+    ) -> Result<Option<(usize, &'s Schema)>, Error> {
+        for index in self.named_index.iter().copied() {
+            let schema = &self.schemas[index];
+            if let Some(schema_name) = schema.name()
+                && schema_name.as_ref() == full_name
+            {
+                let schema = if let Schema::Ref { name } = schema {
+                    names
+                        .get(name)
+                        .ok_or_else(|| Details::SchemaResolutionError(name.clone()))?
+                        .borrow()
+                } else {
+                    schema
+                };
+                return Ok(Some((index, schema)));
+            }
+        }
+        Ok(None)
+    }
+
     /// Find a [`Schema::Fixed`] with the given size.
     ///
     /// Will use `names` to resolve references.
