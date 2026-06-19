@@ -4848,13 +4848,13 @@ mod tests {
                             }) => {
                                 assert!(attributes.is_empty());
                             }
-                            _ => panic!("Expected ArraySchema. got: {}", &fields[0].schema),
+                            _ => panic!("Expected ArraySchema. got: {}", fields[0].schema),
                         }
                     }
-                    _ => panic!("Expected RecordSchema. got: {}", &items),
+                    _ => panic!("Expected RecordSchema. got: {items}"),
                 }
             }
-            _ => panic!("Expected ArraySchema. got: {}", &schema1),
+            _ => panic!("Expected ArraySchema. got: {schema1}"),
         }
         let canonical_form1 = schema1.canonical_form();
         let schema2 = Schema::parse_str(&canonical_form1)?;
@@ -4918,13 +4918,13 @@ mod tests {
                             }) => {
                                 assert!(attributes.is_empty());
                             }
-                            _ => panic!("Expected MapSchema. got: {}", &fields[0].schema),
+                            _ => panic!("Expected MapSchema. got: {}", fields[0].schema),
                         }
                     }
-                    _ => panic!("Expected RecordSchema. got: {}", &items),
+                    _ => panic!("Expected RecordSchema. got: {items}"),
                 }
             }
-            _ => panic!("Expected ArraySchema. got: {}", &schema1),
+            _ => panic!("Expected ArraySchema. got: {schema1}"),
         }
         let canonical_form1 = schema1.canonical_form();
         let schema2 = Schema::parse_str(&canonical_form1)?;

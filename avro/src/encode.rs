@@ -381,10 +381,7 @@ pub(crate) mod tests {
     use uuid::Uuid;
 
     pub(crate) fn success(value: &Value, schema: &Schema) -> String {
-        format!(
-            "Value: {:?}\n should encode with schema:\n{:?}",
-            &value, &schema
-        )
+        format!("Value: {value:?}\n should encode with schema:\n{schema:?}")
     }
 
     #[test]

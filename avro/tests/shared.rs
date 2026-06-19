@@ -41,7 +41,7 @@ fn test_schema() -> TestResult {
     for f in directory {
         let entry: DirEntry = match f {
             Ok(entry) => entry,
-            Err(e) => core::panic!("Can't get file {}", e),
+            Err(e) => core::panic!("Can't get file {e}"),
         };
         log::debug!("{:?}", entry.file_name());
         if let Ok(ft) = entry.file_type()

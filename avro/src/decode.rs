@@ -506,8 +506,7 @@ mod tests {
         assert_eq!(
             outer_value1,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to decode using recursive definitions with schema:\n {:?}\n",
-                &schema
+                "Failed to decode using recursive definitions with schema:\n {schema:?}\n"
             ))
         );
 
@@ -521,8 +520,7 @@ mod tests {
         assert_eq!(
             outer_value2,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to decode using recursive definitions with schema:\n {:?}\n",
-                &schema
+                "Failed to decode using recursive definitions with schema:\n {schema:?}\n"
             ))
         );
 
@@ -571,8 +569,7 @@ mod tests {
         assert_eq!(
             outer_value,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to decode using recursive definitions with schema:\n {:?}\n",
-                &schema
+                "Failed to decode using recursive definitions with schema:\n {schema:?}\n"
             ))
         );
 
@@ -624,8 +621,7 @@ mod tests {
         assert_eq!(
             outer_value,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to decode using recursive definitions with schema:\n {:?}\n",
-                &schema
+                "Failed to decode using recursive definitions with schema:\n {schema:?}\n"
             ))
         );
 
@@ -716,8 +712,7 @@ mod tests {
         assert_eq!(
             outer_record_variation_1,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
-                &schema
+                "Failed to Decode with recursively defined namespace with schema:\n {schema:?}\n"
             ))
         );
 
@@ -728,8 +723,7 @@ mod tests {
         assert_eq!(
             outer_record_variation_2,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
-                &schema
+                "Failed to Decode with recursively defined namespace with schema:\n {schema:?}\n"
             ))
         );
 
@@ -740,8 +734,7 @@ mod tests {
         assert_eq!(
             outer_record_variation_3,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
-                &schema
+                "Failed to Decode with recursively defined namespace with schema:\n {schema:?}\n"
             ))
         );
 
@@ -833,8 +826,7 @@ mod tests {
         assert_eq!(
             outer_record_variation_1,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
-                &schema
+                "Failed to Decode with recursively defined namespace with schema:\n {schema:?}\n"
             ))
         );
 
@@ -845,8 +837,7 @@ mod tests {
         assert_eq!(
             outer_record_variation_2,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
-                &schema
+                "Failed to Decode with recursively defined namespace with schema:\n {schema:?}\n"
             ))
         );
 
@@ -857,8 +848,7 @@ mod tests {
         assert_eq!(
             outer_record_variation_3,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
-                &schema
+                "Failed to Decode with recursively defined namespace with schema:\n {schema:?}\n"
             ))
         );
 
