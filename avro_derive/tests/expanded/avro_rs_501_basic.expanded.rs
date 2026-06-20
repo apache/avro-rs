@@ -28,7 +28,7 @@ impl ::apache_avro::AvroSchemaComponent for A {
                         name: "a".to_string(),
                         doc: ::std::option::Option::None,
                         default: <i32 as ::apache_avro::AvroSchemaComponent>::field_default(),
-                        aliases: ::std::vec::Vec::new(),
+                        aliases: ::alloc::vec::Vec::new(),
                         schema: <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
                             named_schemas,
                             enclosing_namespace,
@@ -40,7 +40,7 @@ impl ::apache_avro::AvroSchemaComponent for A {
                         name: "b".to_string(),
                         doc: ::std::option::Option::None,
                         default: <String as ::apache_avro::AvroSchemaComponent>::field_default(),
-                        aliases: ::std::vec::Vec::new(),
+                        aliases: ::alloc::vec::Vec::new(),
                         schema: <String as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
                             named_schemas,
                             enclosing_namespace,
@@ -104,7 +104,7 @@ impl ::apache_avro::AvroSchemaComponent for A {
                 name: "a".to_string(),
                 doc: ::std::option::Option::None,
                 default: <i32 as ::apache_avro::AvroSchemaComponent>::field_default(),
-                aliases: ::std::vec::Vec::new(),
+                aliases: ::alloc::vec::Vec::new(),
                 schema: <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
                     named_schemas,
                     enclosing_namespace,
@@ -116,7 +116,7 @@ impl ::apache_avro::AvroSchemaComponent for A {
                 name: "b".to_string(),
                 doc: ::std::option::Option::None,
                 default: <String as ::apache_avro::AvroSchemaComponent>::field_default(),
-                aliases: ::std::vec::Vec::new(),
+                aliases: ::alloc::vec::Vec::new(),
                 schema: <String as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
                     named_schemas,
                     enclosing_namespace,

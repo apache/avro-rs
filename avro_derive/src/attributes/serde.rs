@@ -249,8 +249,8 @@ pub struct FieldAttributes {
 #[cfg(test)]
 mod tests {
     use crate::{
-        RenameRule,
         attributes::serde::{ContainerAttributes, RenameAll, SerdeDefault},
+        case::RenameRule,
     };
     use darling::FromAttributes;
     use syn::DeriveInput;

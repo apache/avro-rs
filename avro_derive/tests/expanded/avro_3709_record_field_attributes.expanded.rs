@@ -36,10 +36,7 @@ impl ::apache_avro::AvroSchemaComponent for A {
                         aliases: ::alloc::boxed::box_assume_init_into_vec_unsafe(
                             ::alloc::intrinsics::write_box_via_move(
                                 ::alloc::boxed::Box::new_uninit(),
-                                [
-                                    "a1".try_into().expect("Alias is invalid"),
-                                    "a2".try_into().expect("Alias is invalid"),
-                                ],
+                                [String::from("a1"), String::from("a2")],
                             ),
                         ),
                         schema: <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
@@ -111,10 +108,7 @@ impl ::apache_avro::AvroSchemaComponent for A {
                 aliases: ::alloc::boxed::box_assume_init_into_vec_unsafe(
                     ::alloc::intrinsics::write_box_via_move(
                         ::alloc::boxed::Box::new_uninit(),
-                        [
-                            "a1".try_into().expect("Alias is invalid"),
-                            "a2".try_into().expect("Alias is invalid"),
-                        ],
+                        [String::from("a1"), String::from("a2")],
                     ),
                 ),
                 schema: <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
