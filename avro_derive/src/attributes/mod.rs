@@ -31,7 +31,7 @@ pub struct NamedTypeOptions {
     pub aliases: Vec<String>,
     pub rename_all: RenameRule,
     pub transparent: bool,
-    pub default: TokenStream,
+    pub default: Option<TokenStream>,
 }
 
 impl NamedTypeOptions {
@@ -112,20 +112,19 @@ impl NamedTypeOptions {
 
         let doc = avro.doc.or_else(|| extract_rustdoc(attributes));
 
-        let default = match avro.default {
-            None => quote! { None },
-            Some(default_value) => {
-                let _: serde_json::Value =
-                    serde_json::from_str(&default_value[..]).map_err(|e| {
-                        vec![syn::Error::new(
-                            ident.span(),
-                            format!("Invalid Avro `default` JSON: \n{e}"),
-                        )]
-                    })?;
-                quote! {
-                    Some(::serde_json::from_str(#default_value).expect(format!("Invalid JSON: {:?}", #default_value).as_str()))
-                }
-            }
+        let default = if let Some(default_value) = avro.default {
+            let _: serde_json::Value =
+                serde_json::from_str(default_value.as_str()).map_err(|e| {
+                    vec![syn::Error::new(
+                        ident.span(),
+                        format!("Invalid Avro `default` JSON: \n{e}"),
+                    )]
+                })?;
+            Some(quote! {
+                ::std::option::Option::Some(::serde_json::from_str(#default_value).expect(format!("Invalid JSON: {:?}", #default_value).as_str()))
+            })
+        } else {
+            None
         };
 
         Ok(Self {
