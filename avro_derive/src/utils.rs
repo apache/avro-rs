@@ -59,7 +59,7 @@ pub fn field_aliases(op: &[impl AsRef<str>]) -> TokenStream {
         .map(|string| {
             let string = string.as_ref();
             quote! {
-                String::from(#string)
+                ::std::string::String::from(#string)
             }
         })
         .collect();

@@ -31,12 +31,17 @@ impl ::apache_avro::AvroSchemaComponent for A {
                         doc: ::std::option::Option::Some("a doc".into()),
                         default: ::std::option::Option::Some(
                             ::serde_json::from_str("123")
-                                .expect("Unreachable! This parsed at compile time!"),
+                                .expect(
+                                    "Unreachable! This parsed successfully at compile time!",
+                                ),
                         ),
                         aliases: ::alloc::boxed::box_assume_init_into_vec_unsafe(
                             ::alloc::intrinsics::write_box_via_move(
                                 ::alloc::boxed::Box::new_uninit(),
-                                [String::from("a1"), String::from("a2")],
+                                [
+                                    ::std::string::String::from("a1"),
+                                    ::std::string::String::from("a2"),
+                                ],
                             ),
                         ),
                         schema: <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
@@ -103,12 +108,15 @@ impl ::apache_avro::AvroSchemaComponent for A {
                 doc: ::std::option::Option::Some("a doc".into()),
                 default: ::std::option::Option::Some(
                     ::serde_json::from_str("123")
-                        .expect("Unreachable! This parsed at compile time!"),
+                        .expect("Unreachable! This parsed successfully at compile time!"),
                 ),
                 aliases: ::alloc::boxed::box_assume_init_into_vec_unsafe(
                     ::alloc::intrinsics::write_box_via_move(
                         ::alloc::boxed::Box::new_uninit(),
-                        [String::from("a1"), String::from("a2")],
+                        [
+                            ::std::string::String::from("a1"),
+                            ::std::string::String::from("a2"),
+                        ],
                     ),
                 ),
                 schema: <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(

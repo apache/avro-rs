@@ -1,5 +1,3 @@
-use crate::attributes::{FieldOptions, NamedTypeOptions};
-use crate::case::RenameRule;
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -17,8 +15,10 @@ use crate::case::RenameRule;
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::attributes::{FieldOptions, NamedTypeOptions};
+use crate::case::RenameRule;
 use crate::fields::{
-    get_field_field_default_expr, get_field_get_record_fields_expr, get_field_schema_expr,
+    field_to_field_default_expr, field_to_record_fields_expr, field_to_schema_expr,
 };
 use crate::utils::{aliases, field_aliases, preserve_optional};
 use proc_macro2::{Span, TokenStream};
@@ -60,8 +60,7 @@ pub fn get_struct_schema_def(
                 } else if field_attrs.flatten {
                     // Inline the fields of the child record at runtime, as we don't have access to
                     // the schema here.
-                    let get_record_fields =
-                        get_field_get_record_fields_expr(&field, field_attrs.with)?;
+                    let get_record_fields = field_to_record_fields_expr(&field, field_attrs.with)?;
                     record_field_exprs.push(quote! {
                         if let Some(flattened_fields) = #get_record_fields {
                             schema_fields.extend(flattened_fields);
@@ -73,9 +72,9 @@ pub fn get_struct_schema_def(
                     // Don't add this field as it's been replaced by the child record fields
                     continue;
                 }
-                let default_value = get_field_field_default_expr(&field, field_attrs.default)?;
+                let default_value = field_to_field_default_expr(&field, field_attrs.default)?;
                 let aliases = field_aliases(&field_attrs.alias);
-                let schema_expr = get_field_schema_expr(&field, field_attrs.with)?;
+                let schema_expr = field_to_schema_expr(&field, field_attrs.with)?;
                 record_field_exprs.push(quote! {
                     schema_fields.push(::apache_avro::schema::RecordField {
                         name: #name.to_string(),
@@ -164,8 +163,8 @@ pub fn get_transparent_struct_schema_def(
 
             if let Some((field, attrs)) = found {
                 Ok((
-                    get_field_schema_expr(&field, attrs.with.clone())?,
-                    get_field_get_record_fields_expr(&field, attrs.with)?,
+                    field_to_schema_expr(&field, attrs.with.clone())?,
+                    field_to_record_fields_expr(&field, attrs.with)?,
                 ))
             } else {
                 Err(vec![syn::Error::new(

@@ -21,7 +21,7 @@ use quote::quote;
 use syn::spanned::Spanned;
 use syn::{Expr, Field, Type};
 
-pub fn get_field_schema_expr(field: &Field, with: With) -> Result<TokenStream, Vec<syn::Error>> {
+pub fn field_to_schema_expr(field: &Field, with: With) -> Result<TokenStream, Vec<syn::Error>> {
     match with {
         With::Trait => Ok(type_to_schema_expr(&field.ty)?),
         With::Serde(path) => {
@@ -40,17 +40,17 @@ pub fn get_field_schema_expr(field: &Field, with: With) -> Result<TokenStream, V
         With::Expr(Expr::Path(path)) => Ok(quote! { #path(named_schemas, enclosing_namespace) }),
         With::Expr(_expr) => Err(vec![syn::Error::new(
             field.span(),
-            "Invalid expression, expected function or closure",
+            "Invalid expression, expected a function or a closure",
         )]),
     }
 }
 
-pub fn get_field_get_record_fields_expr(
+pub fn field_to_record_fields_expr(
     field: &Field,
     with: With,
 ) -> Result<TokenStream, Vec<syn::Error>> {
     match with {
-        With::Trait => Ok(type_to_get_record_fields_expr(&field.ty)?),
+        With::Trait => Ok(type_to_record_fields_expr(&field.ty)?),
         With::Serde(path) => {
             Ok(quote! { #path::get_record_fields_in_ctxt(named_schemas, enclosing_namespace) })
         }
@@ -75,12 +75,12 @@ pub fn get_field_get_record_fields_expr(
         }),
         With::Expr(_expr) => Err(vec![syn::Error::new(
             field.span(),
-            "Invalid expression, expected function or closure",
+            "Invalid expression, expected a function or a closure",
         )]),
     }
 }
 
-pub fn get_field_field_default_expr(
+pub fn field_to_field_default_expr(
     field: &Field,
     default: FieldDefault,
 ) -> Result<TokenStream, Vec<syn::Error>> {
@@ -90,12 +90,12 @@ pub fn get_field_field_default_expr(
         FieldDefault::Value(default_value) => {
             let _: serde_json::Value = serde_json::from_str(&default_value[..]).map_err(|e| {
                 vec![syn::Error::new(
-                    field.ident.span(),
+                    field.span(),
                     format!("Invalid avro default json: \n{e}"),
                 )]
             })?;
             Ok(quote! {
-                ::std::option::Option::Some(::serde_json::from_str(#default_value).expect("Unreachable! This parsed at compile time!"))
+                ::std::option::Option::Some(::serde_json::from_str(#default_value).expect("Unreachable! This parsed successfully at compile time!"))
             })
         }
     }
@@ -124,7 +124,7 @@ fn type_to_schema_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>> {
     }
 }
 
-fn type_to_get_record_fields_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>> {
+fn type_to_record_fields_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>> {
     match ty {
         Type::Array(_) | Type::Slice(_) | Type::Path(_) | Type::Reference(_) => Ok(
             quote! {<#ty as :: apache_avro::AvroSchemaComponent>::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)},
