@@ -117,8 +117,10 @@ pub struct ContainerAttributes {
     pub _default: Option<SerdeDefault>,
     /// This type is the serde implementation for a "remote" type.
     ///
-    /// This makes the (de)serialisation use/return a different type.
-    pub remote: Option<String>,
+    /// This makes the (de)serialisation use/return a different type. However, the this type should
+    /// match the other type so the schema we generate is correct.
+    #[darling(rename = "remote")]
+    pub _remote: Option<String>,
     /// Directly use the inner type for (de)serialisation.
     #[darling(default)]
     pub transparent: bool,
@@ -243,7 +245,8 @@ pub struct FieldAttributes {
     #[darling(rename = "borrow")]
     pub _borrow: Option<SerdeBorrow>,
     /// Used for remote types.
-    pub getter: Option<String>,
+    #[darling(rename = "getter")]
+    pub _getter: Option<String>,
 }
 
 #[cfg(test)]
