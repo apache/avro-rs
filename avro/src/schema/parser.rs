@@ -558,7 +558,7 @@ impl Parser {
 
         self.register_resolving_schema(&fully_qualified_name, &aliases);
 
-        debug!("Going to parse record schema: {:?}", &fully_qualified_name);
+        debug!("Going to parse record schema: {fully_qualified_name:?}");
 
         let fields: Vec<RecordField> = fields_opt
             .and_then(|fields| fields.as_array())

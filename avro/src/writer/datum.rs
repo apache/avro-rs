@@ -279,7 +279,7 @@ mod tests {
         let mut expected = Vec::new();
         zig_i64(27, &mut expected)?;
         zig_i64(3, &mut expected)?;
-        expected.extend([b'f', b'o', b'o']);
+        expected.extend(b"foo");
 
         let written = GenericDatumWriter::builder(&schema)
             .build()?
@@ -308,7 +308,7 @@ mod tests {
         let mut expected = Vec::new();
         zig_i64(27, &mut expected)?;
         zig_i64(3, &mut expected)?;
-        expected.extend([b'f', b'o', b'o']);
+        expected.extend(b"foo");
 
         let bytes = GenericDatumWriter::builder(&schema)
             .build()?

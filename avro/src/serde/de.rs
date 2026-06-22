@@ -760,7 +760,7 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de> {
             Value::Record(fields) => visitor.visit_map(RecordDeserializer::new(fields)),
             _ => Err(de::Error::custom(format_args!(
                 "Expected a record or a map. Got: {:?}",
-                &self.input
+                self.input
             ))),
         }
     }
@@ -1877,7 +1877,7 @@ mod tests {
 
     #[test]
     fn avro_rs_414_deserialize_char_from_bytes() -> TestResult {
-        let value = Value::Bytes([b'a'].to_vec());
+        let value = Value::Bytes(b"a".to_vec());
         let result = from_value::<char>(&value)?;
         assert_eq!(result, 'a');
 

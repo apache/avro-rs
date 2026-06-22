@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let ext = path.extension().and_then(OsStr::to_str).unwrap();
 
             if ext == "avro" {
-                println!("Checking {:?}", &path);
+                println!("Checking {path:?}");
                 let content = std::fs::File::open(&path)?;
                 let reader = Reader::new(BufReader::new(&content))?;
 
@@ -51,8 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 for value in reader {
                     if let Err(e) = value {
                         errors.push(format!(
-                            "There is a problem with reading of '{:?}', \n {:?}\n",
-                            &path, e
+                            "There is a problem with reading of '{path:?}', \n {e:?}\n"
                         ));
                     }
                 }
