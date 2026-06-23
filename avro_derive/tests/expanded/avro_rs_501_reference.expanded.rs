@@ -30,7 +30,7 @@ impl<'a> ::apache_avro::AvroSchemaComponent for A<'a> {
                         default: <&'a Vec<
                             i32,
                         > as ::apache_avro::AvroSchemaComponent>::field_default(),
-                        aliases: ::std::vec::Vec::new(),
+                        aliases: ::alloc::vec::Vec::new(),
                         schema: <&'a Vec<
                             i32,
                         > as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
@@ -44,7 +44,7 @@ impl<'a> ::apache_avro::AvroSchemaComponent for A<'a> {
                         name: "b".to_string(),
                         doc: ::std::option::Option::None,
                         default: <&'static str as ::apache_avro::AvroSchemaComponent>::field_default(),
-                        aliases: ::std::vec::Vec::new(),
+                        aliases: ::alloc::vec::Vec::new(),
                         schema: <&'static str as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
                             named_schemas,
                             enclosing_namespace,
@@ -110,7 +110,7 @@ impl<'a> ::apache_avro::AvroSchemaComponent for A<'a> {
                 default: <&'a Vec<
                     i32,
                 > as ::apache_avro::AvroSchemaComponent>::field_default(),
-                aliases: ::std::vec::Vec::new(),
+                aliases: ::alloc::vec::Vec::new(),
                 schema: <&'a Vec<
                     i32,
                 > as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
@@ -124,7 +124,7 @@ impl<'a> ::apache_avro::AvroSchemaComponent for A<'a> {
                 name: "b".to_string(),
                 doc: ::std::option::Option::None,
                 default: <&'static str as ::apache_avro::AvroSchemaComponent>::field_default(),
-                aliases: ::std::vec::Vec::new(),
+                aliases: ::alloc::vec::Vec::new(),
                 schema: <&'static str as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
                     named_schemas,
                     enclosing_namespace,

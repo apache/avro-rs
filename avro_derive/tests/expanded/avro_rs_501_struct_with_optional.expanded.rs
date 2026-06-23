@@ -29,7 +29,7 @@ impl ::apache_avro::AvroSchemaComponent for TestOptional {
                         default: <Option<
                             i32,
                         > as ::apache_avro::AvroSchemaComponent>::field_default(),
-                        aliases: ::std::vec::Vec::new(),
+                        aliases: ::alloc::vec::Vec::new(),
                         schema: <Option<
                             i32,
                         > as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
@@ -98,7 +98,7 @@ impl ::apache_avro::AvroSchemaComponent for TestOptional {
                 default: <Option<
                     i32,
                 > as ::apache_avro::AvroSchemaComponent>::field_default(),
-                aliases: ::std::vec::Vec::new(),
+                aliases: ::alloc::vec::Vec::new(),
                 schema: <Option<
                     i32,
                 > as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
