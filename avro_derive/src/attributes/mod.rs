@@ -63,12 +63,6 @@ impl NamedTypeOptions {
                 "AvroSchema derive does not support changing the tagging Serde generates (`tag`, `content`, `untagged`, `variant_identifier`, `field_identifier`)",
             ));
         }
-        if serde.remote.is_some() {
-            errors.push(syn::Error::new(
-                span,
-                "AvroSchema derive does not support the Serde `remote` attribute",
-            ));
-        }
         if serde.rename_all.deserialize != serde.rename_all.serialize {
             errors.push(syn::Error::new(
                 span,
@@ -283,14 +277,6 @@ impl FieldOptions {
 
         // Collect errors so user gets all feedback at once
         let mut errors = Vec::new();
-
-        // Check for any Serde attributes that are hard errors
-        if serde.getter.is_some() {
-            errors.push(syn::Error::new(
-                span,
-                "AvroSchema derive does not support the Serde `getter` attribute",
-            ));
-        }
 
         // Check for conflicts between Serde and Avro
         if avro.skip && !(serde.skip || (serde.skip_serializing && serde.skip_deserializing)) {

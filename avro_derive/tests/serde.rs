@@ -370,6 +370,74 @@ mod container_attributes {
             a: vec!["spam".to_string()],
         });
     }
+
+    #[test]
+    fn avro_rs_564_remote() {
+        // The types and supporting code here have been pulled directly from the Serde documentation
+        // (https://serde.rs/remote-derive.html)
+
+        // Pretend that this is somebody else's crate, not a module.
+        mod other_crate {
+            // Neither Serde nor the other crate provides Serialize and Deserialize
+            // impls for this struct. Oh, and the fields are private.
+            #[derive(Debug, PartialEq, Eq)]
+            pub struct Duration {
+                secs: i64,
+                nanos: i32,
+            }
+
+            impl Duration {
+                pub fn new(secs: i64, nanos: i32) -> Self {
+                    Duration { secs, nanos }
+                }
+
+                pub fn seconds(&self) -> i64 {
+                    self.secs
+                }
+
+                pub fn subsec_nanos(&self) -> i32 {
+                    self.nanos
+                }
+            }
+        }
+
+        ////////////////////////////////////////////////////////////////////////////////
+
+        use other_crate::Duration;
+        use serde::{Deserialize, Serialize};
+
+        // Provide getters for every private field of the remote struct. The getter must
+        // return either `T` or `&T` where `T` is the type of the field.
+        #[derive(Serialize, Deserialize, AvroSchema)]
+        #[serde(remote = "Duration")]
+        struct DurationDef {
+            #[serde(getter = "Duration::seconds")]
+            secs: i64,
+            #[serde(getter = "Duration::subsec_nanos")]
+            nanos: i32,
+        }
+
+        // Provide a conversion to construct the remote type.
+        impl From<DurationDef> for Duration {
+            fn from(def: DurationDef) -> Duration {
+                Duration::new(def.secs, def.nanos)
+            }
+        }
+
+        #[derive(Serialize, Deserialize, AvroSchema, Debug, PartialEq, Eq)]
+        struct Process {
+            command_line: String,
+
+            #[serde(with = "DurationDef")]
+            #[avro(with)]
+            wall_time: Duration,
+        }
+
+        serde_assert(Process {
+            command_line: "abracadabra".to_string(),
+            wall_time: Duration::new(15, 42),
+        });
+    }
 }
 
 mod variant_attributes {
