@@ -372,7 +372,7 @@ mod container_attributes {
     }
 
     #[test]
-    fn avro_rs_562_remote() {
+    fn avro_rs_564_remote() {
         // The types and supporting code here have been pulled directly from the Serde documentation
         // (https://serde.rs/remote-derive.html)
 

@@ -117,8 +117,10 @@ pub struct ContainerAttributes {
     pub _default: Option<SerdeDefault>,
     /// This type is the serde implementation for a "remote" type.
     ///
-    /// This makes the (de)serialisation use/return a different type. However, the this type should
-    /// match the other type so the schema we generate is correct.
+    /// This allows the user to derive `Serialize`/`Deserialize` for a type in another crate.
+    ///
+    /// This makes the (de)serialisation use/return a different type. To make this work Serde requires
+    /// that the remote type and this type have the same fields so the schema generated is correct.
     #[darling(rename = "remote")]
     pub _remote: Option<String>,
     /// Directly use the inner type for (de)serialisation.

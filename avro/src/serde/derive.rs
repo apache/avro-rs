@@ -175,13 +175,10 @@ use crate::{
 ///     - `untagged`
 ///     - `variant_identifier`
 ///     - `field_identifier`
-///     - `remote`
 ///     - `rename_all(serialize = "..", deserialize = "..")` where `serialize` != `deserialize`
 /// - Variant attributes
 ///     - `other`
 ///     - `untagged`
-/// - Field attributes
-///     - `getter`
 ///
 /// ## Working with foreign types
 ///
