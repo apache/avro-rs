@@ -69,7 +69,7 @@ jobs:
       - uses: taiki-e/install-action@v2
         if: matrix.rust == 'stable' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
         with:
-          tool: cargo-rdme
+          tool: cargo-rdme@1.4.2
 
       - name: Checkout
         uses: actions/checkout@v6
