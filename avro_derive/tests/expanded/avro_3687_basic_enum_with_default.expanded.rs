@@ -35,7 +35,9 @@ impl ::apache_avro::AvroSchemaComponent for Basic {
                         ["A".to_owned(), "B".to_owned(), "C".to_owned(), "D".to_owned()],
                     ),
                 ),
-                default: ::std::option::Option::Some("A".into()),
+                default: ::std::option::Option::Some(
+                    ::std::string::String::from("A").into(),
+                ),
                 attributes: ::std::collections::BTreeMap::new(),
             })
         }

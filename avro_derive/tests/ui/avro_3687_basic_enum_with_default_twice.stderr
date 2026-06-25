@@ -1,15 +1,3 @@
-error: AvroSchema: Multiple defaults defined: ["A", "C"]
-  --> tests/ui/avro_3687_basic_enum_with_default_twice.rs:21:1
-   |
-21 | / enum Basic {
-22 | |     #[default]
-23 | |     A,
-24 | |     B,
-...  |
-27 | |     D
-28 | | }
-   | |_^
-
 error: multiple declared defaults
   --> tests/ui/avro_3687_basic_enum_with_default_twice.rs:20:22
    |

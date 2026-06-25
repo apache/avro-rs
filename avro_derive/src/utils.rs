@@ -17,6 +17,7 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
+use serde_json::Value;
 
 /// Convert a list of errors into actual compiler errors.
 ///
@@ -64,4 +65,66 @@ pub fn field_aliases(op: &[impl AsRef<str>]) -> TokenStream {
         })
         .collect();
     quote! {vec![#(#items),*]}
+}
+
+/// Convert a `Value` into a `TokenStream`.
+///
+/// The `Value` is constructed, not parsed from a JSON string.
+pub fn json_value_expr(value: Value) -> TokenStream {
+    match value {
+        Value::Null => quote! {
+            ::serde_json::Value::Null
+        },
+        Value::Bool(bool) => quote! {
+            ::serde_json::Value::Bool(#bool)
+        },
+        Value::Number(number) => {
+            if let Some(n) = number.as_u64() {
+                quote! {
+                    ::serde_json::Value::Number(::serde_json::Number::from(#n))
+                }
+            } else if let Some(n) = number.as_i64() {
+                quote! {
+                    ::serde_json::Value::Number(::serde_json::Number::from(#n))
+                }
+            } else if let Some(n) = number.as_f64() {
+                quote! {
+                    ::serde_json::Value::Number(::serde_json::Number::from_f64(#n).expect("Unreachable, f64 is finite"))
+                }
+            } else {
+                // This is needed when the arbitrary-precision feature flag is enabled on serde_json
+                let s = number.to_string();
+                quote! {
+                    ::serde_json::Value::Number(#s.parse().expect(concat!("This was a valid number at compile time: ", #s)))
+                }
+            }
+        }
+        Value::String(string) => quote! {
+            ::serde_json::Value::String(::std::string::String::from(#string))
+        },
+        Value::Array(array) => {
+            let array = array.into_iter().map(json_value_expr);
+            quote! {
+                ::serde_json::Value::Array(vec![#(#array),*])
+            }
+        }
+        Value::Object(object) => {
+            let len = object.len();
+
+            let mut keys = Vec::with_capacity(len);
+            let mut values = Vec::with_capacity(len);
+            for (key, value) in object {
+                keys.push(key);
+                values.push(json_value_expr(value));
+            }
+
+            quote! {
+                ::serde_json::Value::Object({
+                    let mut map = ::serde_json::Map::with_capacity(#len);
+                    #(map.insert(::std::string::String::from(#keys), #values));*;
+                    map
+                })
+            }
+        }
+    }
 }

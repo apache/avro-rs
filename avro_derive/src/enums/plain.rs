@@ -18,9 +18,11 @@
 use crate::attributes::{NamedTypeOptions, VariantOptions};
 use crate::case::RenameRule;
 use crate::implementation::Implementation;
+use crate::utils::json_value_expr;
 use crate::{aliases, preserve_optional};
 use proc_macro2::{Ident, Span};
 use quote::quote;
+use serde_json::Value;
 use syn::spanned::Spanned;
 use syn::{Attribute, DataEnum, Fields, Generics, Meta};
 
@@ -33,73 +35,110 @@ pub fn to_implementation(
 ) -> Result<Implementation, Vec<syn::Error>> {
     let doc = preserve_optional(container_attrs.doc.as_ref());
     let enum_aliases = aliases(&container_attrs.aliases);
-    if data.variants.iter().all(|v| Fields::Unit == v.fields) {
-        let default_value = default_enum_variant(&data, input_span)?;
-        let default = preserve_optional(default_value);
-        let mut symbols = Vec::new();
-        for variant in data.variants {
-            let field_attrs = VariantOptions::new(&variant.attrs, variant.span())?;
-            let name = match (field_attrs.rename, container_attrs.rename_all) {
-                (Some(rename), _) => rename,
+
+    let mut errors = Vec::new();
+    let mut symbols = Vec::new();
+    let mut default = match &container_attrs.default {
+        None => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
+            errors.push(syn::Error::new(
+                input_span,
+                "Expected a JSON string for an enum default",
+            ));
+            None
+        }
+    };
+
+    for variant in data.variants {
+        let variant_attrs = match VariantOptions::new(&variant.attrs, variant.span()) {
+            Ok(attrs) => attrs,
+            Err(errs) => {
+                errors.extend(errs);
+                continue;
+            }
+        };
+
+        // Check the skip attribute before the check if it is a unit variant, because a skipped (un)named
+        // variant is not a problem
+        if variant_attrs.skip {
+            continue;
+        }
+
+        if !matches!(variant.fields, Fields::Unit) {
+            errors.push(syn::Error::new(
+                variant.span(),
+                "AvroSchema: derive does not work for enums with non unit structs",
+            ));
+            continue;
+        }
+
+        // When a variant has the `#[default]` attribute and we don't have a default yet, we assign
+        // it as the default. If an enum has multiple variants with the default attribute, the compiler
+        // throws an error anyway so we can ignore that situation. If the default attribute is on a
+        // skipped variant, we ignore it as Serde will throw an error if we try to deserialize that
+        // variant.
+        if default.is_none() && has_default_attr(&variant.attrs) {
+            let renamed = match (&variant_attrs.rename, container_attrs.rename_all) {
+                (Some(rename), _) => rename.clone(),
                 (None, rename_all) if !matches!(rename_all, RenameRule::None) => {
                     rename_all.apply_to_variant(&variant.ident.to_string())
                 }
                 _ => variant.ident.to_string(),
             };
-            symbols.push(name);
+            default = Some(renamed);
         }
-        let schema_expr = quote! {
-            ::apache_avro::schema::Schema::Enum(::apache_avro::schema::EnumSchema {
-                name,
-                aliases: #enum_aliases,
-                doc: #doc,
-                symbols: vec![#(#symbols.to_owned()),*],
-                default: #default,
-                attributes: ::std::collections::BTreeMap::new(),
-            })
+
+        let name = match (variant_attrs.rename, container_attrs.rename_all) {
+            (Some(rename), _) => rename,
+            (None, rename_all) if !matches!(rename_all, RenameRule::None) => {
+                rename_all.apply_to_variant(&variant.ident.to_string())
+            }
+            _ => variant.ident.to_string(),
         };
-
-        Ok(Implementation::named(
-            ident,
-            generics,
-            &container_attrs.name,
-            schema_expr,
-            None,
-            container_attrs.default,
-        ))
-    } else {
-        Err(vec![syn::Error::new(
-            input_span,
-            "AvroSchema: derive does not work for enums with non unit structs",
-        )])
+        symbols.push(name);
     }
-}
 
-fn default_enum_variant(
-    data_enum: &DataEnum,
-    error_span: Span,
-) -> Result<Option<String>, Vec<syn::Error>> {
-    match data_enum
-        .variants
-        .iter()
-        .filter(|v| v.attrs.iter().any(is_default_attr))
-        .collect::<Vec<_>>()
+    if let Some(default) = &default
+        && symbols.iter().all(|n| default != n)
     {
-        variants if variants.is_empty() => Ok(None),
-        single if single.len() == 1 => Ok(Some(single[0].ident.to_string())),
-        multiple => Err(vec![syn::Error::new(
-            error_span,
-            format!(
-                "AvroSchema: Multiple defaults defined: {:?}",
-                multiple
-                    .iter()
-                    .map(|v| v.ident.to_string())
-                    .collect::<Vec<String>>()
-            ),
-        )]),
+        errors.push(syn::Error::new(
+            input_span,
+            format!("The enum default {default} is not one of the variants: {symbols:?}"),
+        ));
     }
+
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+
+    let default = preserve_optional(default.map(|d| quote! { ::std::string::String::from(#d)}));
+    let schema_expr = quote! {
+        ::apache_avro::schema::Schema::Enum(::apache_avro::schema::EnumSchema {
+            name,
+            aliases: #enum_aliases,
+            doc: #doc,
+            symbols: vec![#(#symbols.to_owned()),*],
+            default: #default,
+            attributes: ::std::collections::BTreeMap::new(),
+        })
+    };
+
+    Ok(Implementation::named(
+        ident,
+        generics,
+        &container_attrs.name,
+        schema_expr,
+        None,
+        container_attrs
+            .default
+            .map(json_value_expr)
+            .map(|t| quote! { ::std::option::Option::Some(#t)}),
+    ))
 }
 
-fn is_default_attr(attr: &Attribute) -> bool {
-    matches!(attr, Attribute { meta: Meta::Path(path), .. } if path.get_ident().map(Ident::to_string).as_deref() == Some("default"))
+fn has_default_attr(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        matches!(attr, Attribute { meta: Meta::Path(path), .. } if path.get_ident().map(Ident::to_string).as_deref() == Some("default"))
+    })
 }

@@ -1,5 +1,3 @@
-use crate::attributes::{FieldOptions, NamedTypeOptions};
-use crate::case::RenameRule;
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -17,11 +15,13 @@ use crate::case::RenameRule;
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::attributes::{FieldOptions, NamedTypeOptions};
+use crate::case::RenameRule;
 use crate::fields::{
     field_to_field_default_expr, field_to_record_fields_expr, field_to_schema_expr,
 };
 use crate::implementation::Implementation;
-use crate::utils::{aliases, field_aliases, preserve_optional};
+use crate::utils::{aliases, field_aliases, json_value_expr, preserve_optional};
 use proc_macro2::{Ident, Span};
 use quote::quote;
 use syn::spanned::Spanned;
@@ -35,7 +35,7 @@ pub fn to_implementation(
     data: DataStruct,
 ) -> Result<Implementation, Vec<syn::Error>> {
     if container_attrs.transparent {
-        transparent(input_span, ident, generics, container_attrs, data)
+        transparent(input_span, ident, generics, data)
     } else {
         normal(input_span, ident, generics, container_attrs, data)
     }
@@ -159,7 +159,10 @@ fn normal(
         &container_attrs.name,
         schema_expr,
         Some(record_fields_expr),
-        container_attrs.default,
+        container_attrs
+            .default
+            .map(json_value_expr)
+            .map(|t| quote! { ::std::option::Option::Some(#t)}),
     ))
 }
 
@@ -167,7 +170,6 @@ fn transparent(
     input_span: Span,
     ident: Ident,
     generics: Generics,
-    container_attrs: NamedTypeOptions,
     data: DataStruct,
 ) -> Result<Implementation, Vec<syn::Error>> {
     match data.fields {
@@ -187,18 +189,14 @@ fn transparent(
             }
 
             if let Some((field, attrs)) = found {
-                let field_default_expr = if container_attrs.default.is_none() {
-                    Some(field_to_field_default_expr(&field, attrs.default)?)
-                } else {
-                    container_attrs.default
-                };
+                let field_default_expr = field_to_field_default_expr(&field, attrs.default)?;
 
                 Ok(Implementation::unnamed(
                     ident,
                     generics,
                     field_to_schema_expr(&field, &attrs.with)?,
                     Some(field_to_record_fields_expr(&field, &attrs.with)?),
-                    field_default_expr,
+                    Some(field_default_expr),
                 ))
             } else {
                 Err(vec![syn::Error::new(

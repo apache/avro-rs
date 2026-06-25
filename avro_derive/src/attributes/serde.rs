@@ -163,13 +163,13 @@ pub struct VariantAttributes {
     pub _rename_all: RenameAll,
     /// Do not serialize or deserialize this variant.
     #[darling(default, rename = "skip")]
-    pub _skip: bool,
+    pub skip: bool,
     /// Do not serialize this variant.
     #[darling(default, rename = "skip_serializing")]
-    pub _skip_serializing: bool,
+    pub skip_serializing: bool,
     /// Do not deserialize this variant.
     #[darling(default, rename = "skip_deserializing")]
-    pub _skip_deserializing: bool,
+    pub skip_deserializing: bool,
     /// Use this function for serializing.
     #[darling(rename = "serialize_with")]
     pub _serialize_with: Option<String>,

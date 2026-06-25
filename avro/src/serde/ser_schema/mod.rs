@@ -435,8 +435,12 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
         match self.schema {
             Schema::Enum(enum_schema) => {
                 // Plain enum
-                if variant.as_ptr() == SERIALIZING_SCHEMA_DEFAULT.as_ptr() || enum_schema.symbols[variant_index as usize] == variant {
+                if variant.as_ptr() == SERIALIZING_SCHEMA_DEFAULT.as_ptr() || enum_schema.symbols.get(variant_index as usize).map(String::as_str) == Some(variant) {
+                    // Fast path for when the index matches our symbol index
                     zig_i32(variant_index as i32, &mut *self.writer)
+                } else if let Some((index, _)) = enum_schema.symbols.iter().enumerate().find(|(_, s)| s.as_str() == variant) {
+                    // Slow path for when `#[serde(skip)]` is used
+                    zig_i32(index as i32, &mut *self.writer)
                 } else {
                     Err(self.error("unit variant", format!(r#"Expected symbol "{variant}" at index {variant_index} in enum"#)))
                 }

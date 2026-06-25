@@ -2575,24 +2575,13 @@ fn avro_rs_476_skip_serializing_fielddefault_trait_none() {
 fn avro_rs_561_transparent_struct_with_default_override() {
     #[derive(AvroSchema)]
     #[serde(transparent)]
-    struct Ta {
+    struct T {
         #[avro(default = "0")]
         _field: i32,
     }
-    #[derive(AvroSchema)]
-    #[serde(transparent)]
-    #[avro(default = "0")]
-    struct Tb {
-        _field: i32,
-    }
 
-    let schema = Ta::get_schema();
-    let field_default = Ta::field_default();
-    assert_eq!(schema, Schema::Int);
-    assert_eq!(field_default, Some(serde_json::Value::Number(0i32.into())));
-
-    let schema = Tb::get_schema();
-    let field_default = Tb::field_default();
+    let schema = T::get_schema();
+    let field_default = T::field_default();
     assert_eq!(schema, Schema::Int);
     assert_eq!(field_default, Some(serde_json::Value::Number(0i32.into())));
 }

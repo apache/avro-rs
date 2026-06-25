@@ -16,6 +16,7 @@
 // under the License.
 
 use crate::attributes::{FieldDefault, With};
+use crate::utils::json_value_expr;
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::spanned::Spanned;
@@ -88,14 +89,9 @@ pub fn field_to_field_default_expr(
         FieldDefault::Disabled => Ok(quote! { ::std::option::Option::None }),
         FieldDefault::Trait => type_to_field_default_expr(&field.ty),
         FieldDefault::Value(default_value) => {
-            let _: serde_json::Value = serde_json::from_str(&default_value[..]).map_err(|e| {
-                vec![syn::Error::new(
-                    field.span(),
-                    format!("Invalid avro default json: \n{e}"),
-                )]
-            })?;
+            let value = json_value_expr(default_value);
             Ok(quote! {
-                ::std::option::Option::Some(::serde_json::from_str(#default_value).expect("Unreachable! This parsed successfully at compile time!"))
+                ::std::option::Option::Some(#value)
             })
         }
     }

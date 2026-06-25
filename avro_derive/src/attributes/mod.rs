@@ -17,8 +17,8 @@
 
 use crate::case::RenameRule;
 use darling::{FromAttributes, FromMeta};
-use proc_macro2::{Span, TokenStream};
-use quote::quote;
+use proc_macro2::Span;
+use serde_json::Value;
 use syn::{AttrStyle, Attribute, Expr, Ident, Path, spanned::Spanned};
 
 mod avro;
@@ -31,7 +31,7 @@ pub struct NamedTypeOptions {
     pub aliases: Vec<String>,
     pub rename_all: RenameRule,
     pub transparent: bool,
-    pub default: Option<TokenStream>,
+    pub default: Option<Value>,
 }
 
 impl NamedTypeOptions {
@@ -88,6 +88,7 @@ impl NamedTypeOptions {
                 || avro.name.is_some()
                 || avro.namespace.is_some()
                 || avro.doc.is_some()
+                || avro.default.is_some()
                 || !avro.alias.is_empty()
                 || avro.rename_all != RenameRule::None
                 || serde.rename_all.serialize != RenameRule::None
@@ -113,16 +114,12 @@ impl NamedTypeOptions {
         let doc = avro.doc.or_else(|| extract_rustdoc(attributes));
 
         let default = if let Some(default_value) = avro.default {
-            let _: serde_json::Value =
-                serde_json::from_str(default_value.as_str()).map_err(|e| {
-                    vec![syn::Error::new(
-                        ident.span(),
-                        format!("Invalid Avro `default` JSON: \n{e}"),
-                    )]
-                })?;
-            Some(quote! {
-                ::std::option::Option::Some(::serde_json::from_str(#default_value).expect(format!("Invalid JSON: {:?}", #default_value).as_str()))
-            })
+            Some(serde_json::from_str(default_value.as_str()).map_err(|e| {
+                vec![syn::Error::new(
+                    ident.span(),
+                    format!("Invalid Avro `default` JSON: \n{e}"),
+                )]
+            })?)
         } else {
             None
         };
@@ -140,6 +137,7 @@ impl NamedTypeOptions {
 
 pub struct VariantOptions {
     pub rename: Option<String>,
+    pub skip: bool,
 }
 
 impl VariantOptions {
@@ -176,6 +174,9 @@ impl VariantOptions {
 
         Ok(Self {
             rename: serde.rename,
+            // For variants we don't care about defaults for skipping, as Serde will error if a skipped
+            // variant is serialized or deserialized.
+            skip: serde.skip || (serde.skip_serializing && serde.skip_deserializing),
         })
     }
 }
@@ -231,12 +232,14 @@ pub enum FieldDefault {
     /// Don't set a default.
     Disabled,
     /// Use this JSON value.
-    Value(String),
+    Value(Value),
 }
 
 impl FromMeta for FieldDefault {
     fn from_string(value: &str) -> darling::Result<Self> {
-        Ok(Self::Value(value.to_string()))
+        Ok(Self::Value(serde_json::from_str(value).map_err(|e| {
+            darling::Error::custom(format!("Failed to parse field default: {e:?}"))
+        })?))
     }
 
     fn from_bool(value: bool) -> darling::Result<Self> {
