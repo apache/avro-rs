@@ -67,7 +67,7 @@ jobs:
           tool: cargo-expand
 
       - uses: taiki-e/install-action@v2
-        if: matrix.rust == 'stable' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
+        if: matrix.rust == 'nightly' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
         with:
           tool: cargo-rdme
 
@@ -99,7 +99,7 @@ jobs:
       # Check if the doc cumment in avro/src/lib.rs and avro/README.md are in sync.
       - name: Run cargo-rdme
         # The result is environment independent, so one test pattern is enough.
-        if: matrix.rust == 'stable' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
+        if: matrix.rust == 'nightly' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
         run: cargo rdme --check
 
       - name: Run cargo doc
