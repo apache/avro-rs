@@ -30,10 +30,9 @@ impl ::apache_avro::AvroSchemaComponent for A {
                         name: "a3".to_string(),
                         doc: ::std::option::Option::Some("a doc".into()),
                         default: ::std::option::Option::Some(
-                            ::serde_json::from_str("123")
-                                .expect(
-                                    "Unreachable! This parsed successfully at compile time!",
-                                ),
+                            ::serde_json::Value::Number(
+                                ::serde_json::Number::from(123u64),
+                            ),
                         ),
                         aliases: ::alloc::boxed::box_assume_init_into_vec_unsafe(
                             ::alloc::intrinsics::write_box_via_move(
@@ -109,8 +108,7 @@ impl ::apache_avro::AvroSchemaComponent for A {
                 name: "a3".to_string(),
                 doc: ::std::option::Option::Some("a doc".into()),
                 default: ::std::option::Option::Some(
-                    ::serde_json::from_str("123")
-                        .expect("Unreachable! This parsed successfully at compile time!"),
+                    ::serde_json::Value::Number(::serde_json::Number::from(123u64)),
                 ),
                 aliases: ::alloc::boxed::box_assume_init_into_vec_unsafe(
                     ::alloc::intrinsics::write_box_via_move(

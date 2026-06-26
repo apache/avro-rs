@@ -17,51 +17,43 @@
 
 mod plain;
 
-use crate::attributes::NamedTypeOptions;
-use proc_macro2::{Ident, Span, TokenStream};
-use syn::{Attribute, DataEnum, Fields, Meta};
+use crate::attributes::{NamedTypeOptions, VariantOptions};
+use crate::implementation::Implementation;
+use proc_macro2::{Ident, Span};
+use syn::spanned::Spanned;
+use syn::{DataEnum, Fields, Generics};
 
 /// Generate a schema definition for a enum.
-pub fn get_data_enum_schema_def(
-    container_attrs: &NamedTypeOptions,
-    data_enum: &DataEnum,
-    ident_span: Span,
-) -> Result<TokenStream, Vec<syn::Error>> {
-    if data_enum.variants.iter().all(|v| Fields::Unit == v.fields) {
-        plain::schema_def(container_attrs, data_enum, ident_span)
+pub fn to_implementation(
+    input_span: Span,
+    ident: Ident,
+    generics: Generics,
+    container_attrs: NamedTypeOptions,
+    data: DataEnum,
+) -> Result<Implementation, Vec<syn::Error>> {
+    if container_attrs.transparent {
+        return Err(vec![syn::Error::new(
+            input_span,
+            "AvroSchema: `#[serde(transparent)]` is only supported on structs",
+        )]);
+    }
+    if data
+        .variants
+        .iter()
+        .filter(|v| {
+            // Filter skipped variants, if the attributes fail to parse we'll also filter them out
+            // `plain` will throw proper errors for that.
+            VariantOptions::new(&v.attrs, v.span())
+                .map(|o| !o.skip)
+                .unwrap_or(false)
+        })
+        .all(|v| Fields::Unit == v.fields)
+    {
+        plain::to_implementation(input_span, ident, generics, container_attrs, data)
     } else {
         Err(vec![syn::Error::new(
-            ident_span,
+            input_span,
             "AvroSchema: derive does not work for enums with non unit structs",
         )])
     }
-}
-
-fn default_enum_variant(
-    data_enum: &DataEnum,
-    error_span: Span,
-) -> Result<Option<String>, Vec<syn::Error>> {
-    match data_enum
-        .variants
-        .iter()
-        .filter(|v| v.attrs.iter().any(is_default_attr))
-        .collect::<Vec<_>>()
-    {
-        variants if variants.is_empty() => Ok(None),
-        single if single.len() == 1 => Ok(Some(single[0].ident.to_string())),
-        multiple => Err(vec![syn::Error::new(
-            error_span,
-            format!(
-                "Multiple defaults defined: {:?}",
-                multiple
-                    .iter()
-                    .map(|v| v.ident.to_string())
-                    .collect::<Vec<String>>()
-            ),
-        )]),
-    }
-}
-
-fn is_default_attr(attr: &Attribute) -> bool {
-    matches!(attr, Attribute { meta: Meta::Path(path), .. } if path.get_ident().map(Ident::to_string).as_deref() == Some("default"))
 }

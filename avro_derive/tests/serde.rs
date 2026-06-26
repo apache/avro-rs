@@ -508,7 +508,7 @@ mod variant_attributes {
             "type":"enum",
             "name":"Foo",
             "symbols": [
-                "One", "Two"
+                "Two"
             ]
         }
         "#;

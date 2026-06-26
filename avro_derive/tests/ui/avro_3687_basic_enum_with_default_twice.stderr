@@ -1,9 +1,3 @@
-error: Multiple defaults defined: ["A", "C"]
-  --> tests/ui/avro_3687_basic_enum_with_default_twice.rs:21:6
-   |
-21 | enum Basic {
-   |      ^^^^^
-
 error: multiple declared defaults
   --> tests/ui/avro_3687_basic_enum_with_default_twice.rs:20:22
    |

@@ -20,20 +20,36 @@ use crate::case::RenameRule;
 use crate::fields::{
     field_to_field_default_expr, field_to_record_fields_expr, field_to_schema_expr,
 };
-use crate::utils::{aliases, field_aliases, preserve_optional};
-use proc_macro2::{Span, TokenStream};
+use crate::implementation::Implementation;
+use crate::utils::{aliases, field_aliases, json_value_expr, preserve_optional};
+use proc_macro2::{Ident, Span};
 use quote::quote;
 use syn::spanned::Spanned;
-use syn::{DataStruct, Fields};
+use syn::{DataStruct, Fields, Generics};
 
-/// Generate a schema definition for a struct.
-pub fn get_struct_schema_def(
-    container_attrs: &NamedTypeOptions,
-    data_struct: DataStruct,
-    ident_span: Span,
-) -> Result<(TokenStream, TokenStream), Vec<syn::Error>> {
+pub fn to_implementation(
+    input_span: Span,
+    ident: Ident,
+    generics: Generics,
+    container_attrs: NamedTypeOptions,
+    data: DataStruct,
+) -> Result<Implementation, Vec<syn::Error>> {
+    if container_attrs.transparent {
+        transparent(input_span, ident, generics, data)
+    } else {
+        normal(input_span, ident, generics, container_attrs, data)
+    }
+}
+
+fn normal(
+    input_span: Span,
+    ident: Ident,
+    generics: Generics,
+    container_attrs: NamedTypeOptions,
+    data: DataStruct,
+) -> Result<Implementation, Vec<syn::Error>> {
     let mut record_field_exprs = vec![];
-    match data_struct.fields {
+    match data.fields {
         Fields::Named(a) => {
             for field in a.named {
                 let mut name = field
@@ -60,7 +76,7 @@ pub fn get_struct_schema_def(
                 } else if field_attrs.flatten {
                     // Inline the fields of the child record at runtime, as we don't have access to
                     // the schema here.
-                    let get_record_fields = field_to_record_fields_expr(&field, field_attrs.with)?;
+                    let get_record_fields = field_to_record_fields_expr(&field, &field_attrs.with)?;
                     record_field_exprs.push(quote! {
                         if let Some(flattened_fields) = #get_record_fields {
                             schema_fields.extend(flattened_fields);
@@ -74,7 +90,7 @@ pub fn get_struct_schema_def(
                 }
                 let default_value = field_to_field_default_expr(&field, field_attrs.default)?;
                 let aliases = field_aliases(&field_attrs.alias);
-                let schema_expr = field_to_schema_expr(&field, field_attrs.with)?;
+                let schema_expr = field_to_schema_expr(&field, &field_attrs.with)?;
                 record_field_exprs.push(quote! {
                     schema_fields.push(::apache_avro::schema::RecordField {
                         name: #name.to_string(),
@@ -89,13 +105,13 @@ pub fn get_struct_schema_def(
         }
         Fields::Unnamed(_) => {
             return Err(vec![syn::Error::new(
-                ident_span,
+                input_span,
                 "AvroSchema derive does not work for tuple structs",
             )]);
         }
         Fields::Unit => {
             return Err(vec![syn::Error::new(
-                ident_span,
+                input_span,
                 "AvroSchema derive does not work for unit structs",
             )]);
         }
@@ -109,7 +125,7 @@ pub fn get_struct_schema_def(
     // the most common case where there is no flatten.
     let minimum_fields = record_field_exprs.len();
 
-    let schema_def = quote! {
+    let schema_expr = quote! {
         {
             let mut schema_fields = ::std::vec::Vec::with_capacity(#minimum_fields);
             #(#record_field_exprs)*
@@ -131,21 +147,32 @@ pub fn get_struct_schema_def(
             })
         }
     };
-    let record_fields = quote! {
+    let record_fields_expr = quote! {
         let mut schema_fields = ::std::vec::Vec::with_capacity(#minimum_fields);
         #(#record_field_exprs)*
         ::std::option::Option::Some(schema_fields)
     };
 
-    Ok((schema_def, record_fields))
+    Ok(Implementation::named(
+        ident,
+        generics,
+        &container_attrs.name,
+        schema_expr,
+        Some(record_fields_expr),
+        container_attrs
+            .default
+            .map(json_value_expr)
+            .map(|t| quote! { ::std::option::Option::Some(#t)}),
+    ))
 }
 
-/// Use the schema definition of the only field in the struct as the schema
-pub fn get_transparent_struct_schema_def(
-    fields: Fields,
+fn transparent(
     input_span: Span,
-) -> Result<(TokenStream, TokenStream), Vec<syn::Error>> {
-    match fields {
+    ident: Ident,
+    generics: Generics,
+    data: DataStruct,
+) -> Result<Implementation, Vec<syn::Error>> {
+    match data.fields {
         Fields::Named(fields_named) => {
             let mut found = None;
             for field in fields_named.named {
@@ -162,9 +189,14 @@ pub fn get_transparent_struct_schema_def(
             }
 
             if let Some((field, attrs)) = found {
-                Ok((
-                    field_to_schema_expr(&field, attrs.with.clone())?,
-                    field_to_record_fields_expr(&field, attrs.with)?,
+                let field_default_expr = field_to_field_default_expr(&field, attrs.default)?;
+
+                Ok(Implementation::unnamed(
+                    ident,
+                    generics,
+                    field_to_schema_expr(&field, &attrs.with)?,
+                    Some(field_to_record_fields_expr(&field, &attrs.with)?),
+                    Some(field_default_expr),
                 ))
             } else {
                 Err(vec![syn::Error::new(
