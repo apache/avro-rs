@@ -55,20 +55,22 @@ impl<'a> ::apache_avro::AvroSchemaComponent for A<'a> {
                     .iter()
                     .map(|rf| &rf.name)
                     .collect();
-                match (&schema_fields.len(), &schema_field_set.len()) {
-                    (left_val, right_val) => {
-                        if !(*left_val == *right_val) {
-                            let kind = ::core::panicking::AssertKind::Eq;
-                            ::core::panicking::assert_failed(
-                                kind,
-                                &*left_val,
-                                &*right_val,
-                                ::core::option::Option::Some(
-                                    format_args!(
-                                        "Duplicate field names found: {0:?}", schema_fields,
+                {
+                    match (&schema_fields.len(), &schema_field_set.len()) {
+                        (left_val, right_val) => {
+                            if !(*left_val == *right_val) {
+                                let kind = ::core::panicking::AssertKind::Eq;
+                                ::core::panicking::assert_failed(
+                                    kind,
+                                    &*left_val,
+                                    &*right_val,
+                                    ::core::option::Option::Some(
+                                        format_args!(
+                                            "Duplicate field names found: {0:?}", schema_fields,
+                                        ),
                                     ),
-                                ),
-                            );
+                                );
+                            }
                         }
                     }
                 };
