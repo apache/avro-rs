@@ -121,7 +121,7 @@ pub fn json_value_expr(value: Value) -> TokenStream {
             quote! {
                 ::serde_json::Value::Object({
                     let mut map = ::serde_json::Map::with_capacity(#len);
-                    #(map.insert(::std::string::String::from(#keys), #values));*;
+                    #(map.insert(::std::string::String::from(#keys), #values);)*
                     map
                 })
             }

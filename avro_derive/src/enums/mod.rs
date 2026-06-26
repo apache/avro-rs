@@ -17,9 +17,10 @@
 
 mod plain;
 
-use crate::attributes::NamedTypeOptions;
+use crate::attributes::{NamedTypeOptions, VariantOptions};
 use crate::implementation::Implementation;
 use proc_macro2::{Ident, Span};
+use syn::spanned::Spanned;
 use syn::{DataEnum, Fields, Generics};
 
 /// Generate a schema definition for a enum.
@@ -36,7 +37,18 @@ pub fn to_implementation(
             "AvroSchema: `#[serde(transparent)]` is only supported on structs",
         )]);
     }
-    if data.variants.iter().all(|v| Fields::Unit == v.fields) {
+    if data
+        .variants
+        .iter()
+        .filter(|v| {
+            // Filter skipped variants, if the attributes fail to parse we'll also filter them out
+            // `plain` will throw proper errors for that.
+            VariantOptions::new(&v.attrs, v.span())
+                .map(|o| !o.skip)
+                .unwrap_or(false)
+        })
+        .all(|v| Fields::Unit == v.fields)
+    {
         plain::to_implementation(input_span, ident, generics, container_attrs, data)
     } else {
         Err(vec![syn::Error::new(
