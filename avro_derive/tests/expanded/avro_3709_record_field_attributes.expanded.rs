@@ -15,7 +15,7 @@ impl ::apache_avro::AvroSchemaComponent for A {
                 "A",
                 enclosing_namespace,
             )
-            .expect("Unable to parse schema name A");
+            .expect("Unable to parse `A` as a Name");
         if named_schemas.contains(&name) {
             ::apache_avro::schema::Schema::Ref {
                 name,
@@ -23,109 +23,75 @@ impl ::apache_avro::AvroSchemaComponent for A {
         } else {
             let enclosing_namespace = name.namespace();
             named_schemas.insert(name.clone());
-            {
-                let mut schema_fields = ::std::vec::Vec::with_capacity(1usize);
-                schema_fields
-                    .push(::apache_avro::schema::RecordField {
-                        name: "a3".to_string(),
-                        doc: ::std::option::Option::Some("a doc".into()),
-                        default: ::std::option::Option::Some(
-                            ::serde_json::Value::Number(
-                                ::serde_json::Number::from(123u64),
-                            ),
-                        ),
-                        aliases: ::alloc::boxed::box_assume_init_into_vec_unsafe(
-                            ::alloc::intrinsics::write_box_via_move(
-                                ::alloc::boxed::Box::new_uninit(),
-                                [
-                                    ::std::string::String::from("a1"),
-                                    ::std::string::String::from("a2"),
-                                ],
-                            ),
-                        ),
-                        schema: <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
-                            named_schemas,
-                            enclosing_namespace,
-                        ),
-                        custom_attributes: ::std::collections::BTreeMap::new(),
-                    });
-                let schema_field_set: ::std::collections::HashSet<_> = schema_fields
-                    .iter()
-                    .map(|rf| &rf.name)
-                    .collect();
-                {
-                    match (&schema_fields.len(), &schema_field_set.len()) {
-                        (left_val, right_val) => {
-                            if !(*left_val == *right_val) {
-                                let kind = ::core::panicking::AssertKind::Eq;
-                                ::core::panicking::assert_failed(
-                                    kind,
-                                    &*left_val,
-                                    &*right_val,
-                                    ::core::option::Option::Some(
-                                        format_args!(
-                                            "Duplicate field names found: {0:?}", schema_fields,
-                                        ),
-                                    ),
-                                );
-                            }
-                        }
-                    }
-                };
-                let name = ::apache_avro::schema::Name::new("A")
-                    .expect(
-                        &::alloc::__export::must_use({
-                            ::alloc::fmt::format(
-                                format_args!(
-                                    "Unable to parse struct name for schema {0}", "A",
+            ::apache_avro::schema::Schema::Record(
+                ::apache_avro::schema::RecordSchema::builder()
+                    .aliases(::std::option::Option::None)
+                    .maybe_doc(::std::option::Option::None)
+                    .fields({
+                        let mut fields = ::std::vec::Vec::with_capacity(1usize);
+                        fields
+                            .push(::apache_avro::schema::RecordField {
+                                name: "a3".to_string(),
+                                doc: ::std::option::Option::Some(
+                                    "a doc".to_string().into(),
                                 ),
-                            )
-                        })[..],
-                    );
-                let lookup: ::std::collections::BTreeMap<String, usize> = schema_fields
-                    .iter()
-                    .enumerate()
-                    .map(|(position, field)| (field.name.to_owned(), position))
-                    .collect();
-                ::apache_avro::schema::Schema::Record(::apache_avro::schema::RecordSchema {
-                    name,
-                    aliases: ::std::option::Option::None,
-                    doc: ::std::option::Option::None,
-                    fields: schema_fields,
-                    lookup,
-                    attributes: ::std::collections::BTreeMap::new(),
-                })
-            }
+                                default: ::std::option::Option::Some(
+                                    ::serde_json::Value::Number(
+                                        ::serde_json::Number::from(123u64),
+                                    ),
+                                ),
+                                aliases: ::alloc::boxed::box_assume_init_into_vec_unsafe(
+                                    ::alloc::intrinsics::write_box_via_move(
+                                        ::alloc::boxed::Box::new_uninit(),
+                                        [
+                                            ::std::string::String::from("a1"),
+                                            ::std::string::String::from("a2"),
+                                        ],
+                                    ),
+                                ),
+                                schema: <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
+                                    named_schemas,
+                                    enclosing_namespace,
+                                ),
+                                custom_attributes: ::std::collections::BTreeMap::new(),
+                            });
+                        fields
+                    })
+                    .name(name)
+                    .build(),
+            )
         }
     }
     fn get_record_fields_in_ctxt(
         named_schemas: &mut ::std::collections::HashSet<::apache_avro::schema::Name>,
         enclosing_namespace: ::apache_avro::schema::NamespaceRef,
     ) -> ::std::option::Option<::std::vec::Vec<::apache_avro::schema::RecordField>> {
-        let mut schema_fields = ::std::vec::Vec::with_capacity(1usize);
-        schema_fields
-            .push(::apache_avro::schema::RecordField {
-                name: "a3".to_string(),
-                doc: ::std::option::Option::Some("a doc".into()),
-                default: ::std::option::Option::Some(
-                    ::serde_json::Value::Number(::serde_json::Number::from(123u64)),
-                ),
-                aliases: ::alloc::boxed::box_assume_init_into_vec_unsafe(
-                    ::alloc::intrinsics::write_box_via_move(
-                        ::alloc::boxed::Box::new_uninit(),
-                        [
-                            ::std::string::String::from("a1"),
-                            ::std::string::String::from("a2"),
-                        ],
+        ::std::option::Option::Some({
+            let mut fields = ::std::vec::Vec::with_capacity(1usize);
+            fields
+                .push(::apache_avro::schema::RecordField {
+                    name: "a3".to_string(),
+                    doc: ::std::option::Option::Some("a doc".to_string().into()),
+                    default: ::std::option::Option::Some(
+                        ::serde_json::Value::Number(::serde_json::Number::from(123u64)),
                     ),
-                ),
-                schema: <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
-                    named_schemas,
-                    enclosing_namespace,
-                ),
-                custom_attributes: ::std::collections::BTreeMap::new(),
-            });
-        ::std::option::Option::Some(schema_fields)
+                    aliases: ::alloc::boxed::box_assume_init_into_vec_unsafe(
+                        ::alloc::intrinsics::write_box_via_move(
+                            ::alloc::boxed::Box::new_uninit(),
+                            [
+                                ::std::string::String::from("a1"),
+                                ::std::string::String::from("a2"),
+                            ],
+                        ),
+                    ),
+                    schema: <i32 as ::apache_avro::AvroSchemaComponent>::get_schema_in_ctxt(
+                        named_schemas,
+                        enclosing_namespace,
+                    ),
+                    custom_attributes: ::std::collections::BTreeMap::new(),
+                });
+            fields
+        })
     }
     fn field_default() -> ::std::option::Option<::serde_json::Value> {
         ::std::option::Option::None
@@ -145,7 +111,7 @@ impl ::apache_avro::AvroSchemaComponent for B {
                 "B",
                 enclosing_namespace,
             )
-            .expect("Unable to parse schema name B");
+            .expect("Unable to parse `B` as a Name");
         if named_schemas.contains(&name) {
             ::apache_avro::schema::Schema::Ref {
                 name,

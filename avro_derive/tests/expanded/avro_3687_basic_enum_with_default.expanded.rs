@@ -17,7 +17,7 @@ impl ::apache_avro::AvroSchemaComponent for Basic {
                 "Basic",
                 enclosing_namespace,
             )
-            .expect("Unable to parse schema name Basic");
+            .expect("Unable to parse `Basic` as a Name");
         if named_schemas.contains(&name) {
             ::apache_avro::schema::Schema::Ref {
                 name,

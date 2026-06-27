@@ -1791,7 +1791,7 @@ fn avro_rs_247_serde_flatten_support_duplicate_field_name() {
         a: i32,
     }
 
-    Foo::get_schema();
+    panic!("{:?}", Foo::get_schema());
 }
 
 #[test]

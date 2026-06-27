@@ -15,11 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::attributes::{NamedTypeOptions, VariantOptions};
+use crate::attributes::{NamedTypeOptions, VariantOptions, With};
 use crate::case::RenameRule;
 use crate::implementation::Implementation;
-use crate::utils::json_value_expr;
-use crate::{aliases, preserve_optional};
+use crate::utils::{aliases, json_value_expr, preserve_optional, rename_ident};
 use proc_macro2::{Ident, Span};
 use quote::quote;
 use serde_json::Value;
@@ -33,7 +32,12 @@ pub fn to_implementation(
     container_attrs: NamedTypeOptions,
     data: DataEnum,
 ) -> Result<Implementation, Vec<syn::Error>> {
-    let doc = preserve_optional(container_attrs.doc.as_ref());
+    let doc = preserve_optional(
+        container_attrs
+            .doc
+            .as_ref()
+            .map(|s| quote! { #s.to_string() }),
+    );
     let enum_aliases = aliases(&container_attrs.aliases);
 
     let mut errors = Vec::new();
@@ -71,6 +75,12 @@ pub fn to_implementation(
                 "AvroSchema: derive does not work for enums with non unit structs",
             ));
             continue;
+        } else if variant_attrs.with != With::Trait {
+            errors.push(syn::Error::new(
+                variant.span(),
+                r#"AvroSchema: `#[avro(repr = "enum")]` does not support `#[serde(with)]`"#,
+            ));
+            continue;
         }
 
         // When a variant has the `#[default]` attribute and we don't have a default yet, we assign
@@ -89,13 +99,12 @@ pub fn to_implementation(
             default = Some(renamed);
         }
 
-        let name = match (variant_attrs.rename, container_attrs.rename_all) {
-            (Some(rename), _) => rename,
-            (None, rename_all) if !matches!(rename_all, RenameRule::None) => {
-                rename_all.apply_to_variant(&variant.ident.to_string())
-            }
-            _ => variant.ident.to_string(),
-        };
+        let name = rename_ident(
+            &variant.ident,
+            variant_attrs.rename,
+            container_attrs.rename_all,
+            RenameRule::apply_to_variant,
+        );
         symbols.push(name);
     }
 

@@ -16,12 +16,12 @@
 // under the License.
 
 use crate::attributes::{FieldOptions, NamedTypeOptions};
-use crate::case::RenameRule;
 use crate::fields::{
     field_to_field_default_expr, field_to_record_fields_expr, field_to_schema_expr,
+    named_fields_to_record_fields, unnamed_fields_to_record_fields,
 };
 use crate::implementation::Implementation;
-use crate::utils::{aliases, field_aliases, json_value_expr, preserve_optional};
+use crate::utils::{aliases, json_value_expr, preserve_optional};
 use proc_macro2::{Ident, Span};
 use quote::quote;
 use syn::spanned::Spanned;
@@ -37,120 +37,42 @@ pub fn to_implementation(
     if container_attrs.transparent {
         transparent(input_span, ident, generics, data)
     } else {
-        normal(input_span, ident, generics, container_attrs, data)
+        normal(ident, generics, container_attrs, data)
     }
 }
 
 fn normal(
-    input_span: Span,
     ident: Ident,
     generics: Generics,
     container_attrs: NamedTypeOptions,
     data: DataStruct,
 ) -> Result<Implementation, Vec<syn::Error>> {
-    let mut record_field_exprs = vec![];
-    match data.fields {
-        Fields::Named(a) => {
-            for field in a.named {
-                let mut name = field
-                    .ident
-                    .as_ref()
-                    .expect("Field must have a name")
-                    .to_string();
-                if let Some(raw_name) = name.strip_prefix("r#") {
-                    name = raw_name.to_string();
-                }
-                let field_attrs = FieldOptions::new(&field.attrs, field.span())?;
-                let doc = preserve_optional(field_attrs.doc);
-                match (field_attrs.rename, container_attrs.rename_all) {
-                    (Some(rename), _) => {
-                        name = rename;
-                    }
-                    (None, rename_all) if rename_all != RenameRule::None => {
-                        name = rename_all.apply_to_field(&name);
-                    }
-                    _ => {}
-                }
-                if field_attrs.skip {
-                    continue;
-                } else if field_attrs.flatten {
-                    // Inline the fields of the child record at runtime, as we don't have access to
-                    // the schema here.
-                    let get_record_fields = field_to_record_fields_expr(&field, &field_attrs.with)?;
-                    record_field_exprs.push(quote! {
-                        if let Some(flattened_fields) = #get_record_fields {
-                            schema_fields.extend(flattened_fields);
-                        } else {
-                            panic!("{} does not have any fields to flatten to", stringify!(#field));
-                        }
-                    });
-
-                    // Don't add this field as it's been replaced by the child record fields
-                    continue;
-                }
-                let default_value = field_to_field_default_expr(&field, field_attrs.default)?;
-                let aliases = field_aliases(&field_attrs.alias);
-                let schema_expr = field_to_schema_expr(&field, &field_attrs.with)?;
-                record_field_exprs.push(quote! {
-                    schema_fields.push(::apache_avro::schema::RecordField {
-                        name: #name.to_string(),
-                        doc: #doc,
-                        default: #default_value,
-                        aliases: #aliases,
-                        schema: #schema_expr,
-                        custom_attributes: ::std::collections::BTreeMap::new(),
-                    });
-                });
+    let record_fields_expr = match data.fields {
+        Fields::Named(fields) => named_fields_to_record_fields(fields, container_attrs.rename_all)?,
+        Fields::Unnamed(fields) => unnamed_fields_to_record_fields(fields)?,
+        Fields::Unit => {
+            quote! {
+                ::std::vec::Vec::new()
             }
         }
-        Fields::Unnamed(_) => {
-            return Err(vec![syn::Error::new(
-                input_span,
-                "AvroSchema derive does not work for tuple structs",
-            )]);
-        }
-        Fields::Unit => {
-            return Err(vec![syn::Error::new(
-                input_span,
-                "AvroSchema derive does not work for unit structs",
-            )]);
-        }
-    }
+    };
 
-    let record_doc = preserve_optional(container_attrs.doc.as_ref());
+    let record_doc = preserve_optional(container_attrs.doc.map(|s| quote! { #s.to_string() }));
     let record_aliases = aliases(&container_attrs.aliases);
-    let full_schema_name = &container_attrs.name;
-
-    // When flatten is involved, there will be more but we don't know how many. This optimises for
-    // the most common case where there is no flatten.
-    let minimum_fields = record_field_exprs.len();
 
     let schema_expr = quote! {
-        {
-            let mut schema_fields = ::std::vec::Vec::with_capacity(#minimum_fields);
-            #(#record_field_exprs)*
-            let schema_field_set: ::std::collections::HashSet<_> = schema_fields.iter().map(|rf| &rf.name).collect();
-            assert_eq!(schema_fields.len(), schema_field_set.len(), "Duplicate field names found: {schema_fields:?}");
-            let name = ::apache_avro::schema::Name::new(#full_schema_name).expect(&format!("Unable to parse struct name for schema {}", #full_schema_name)[..]);
-            let lookup: ::std::collections::BTreeMap<String, usize> = schema_fields
-                .iter()
-                .enumerate()
-                .map(|(position, field)| (field.name.to_owned(), position))
-                .collect();
-            ::apache_avro::schema::Schema::Record(::apache_avro::schema::RecordSchema {
-                name,
-                aliases: #record_aliases,
-                doc: #record_doc,
-                fields: schema_fields,
-                lookup,
-                attributes: ::std::collections::BTreeMap::new(),
-            })
-        }
+        ::apache_avro::schema::Schema::Record(
+            ::apache_avro::schema::RecordSchema::builder()
+                .aliases(#record_aliases)
+                .maybe_doc(#record_doc)
+                .fields(#record_fields_expr)
+                .name(name)
+                .build()
+        )
     };
+
     let record_fields_expr = quote! {
-        let mut schema_fields = ::std::vec::Vec::with_capacity(#minimum_fields);
-        #(#record_field_exprs)*
-        ::std::option::Option::Some(schema_fields)
+        ::std::option::Option::Some(#record_fields_expr)
     };
 
     Ok(Implementation::named(

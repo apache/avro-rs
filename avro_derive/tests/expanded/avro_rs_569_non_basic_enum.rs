@@ -22,7 +22,7 @@ enum NonBasic {
     A(i32),
     B,
     C,
-    D
+    D,
 }
 
 fn main() {}
