@@ -20,12 +20,14 @@ use crate::case::RenameRule;
 use crate::enums::variant_to_schema_expr;
 use crate::implementation::Implementation;
 use crate::utils::{aliases, json_value_expr, name_expr, preserve_optional, rename_ident};
-use proc_macro2::Ident;
+use proc_macro2::{Ident, Span};
 use quote::quote;
+use std::collections::HashSet;
 use syn::spanned::Spanned;
 use syn::{DataEnum, Generics};
 
 pub fn to_implementation(
+    input_span: Span,
     ident: Ident,
     generics: Generics,
     container_attrs: NamedTypeOptions,
@@ -59,12 +61,20 @@ pub fn to_implementation(
             container_attrs.rename_all_fields,
             true,
             true,
+            |_| Ok(()),
         ) {
             Ok(expr) => variant_exprs.push(expr),
             Err(errs) => errors.extend(errs),
         }
 
         symbols.push(name);
+    }
+
+    if symbols.iter().collect::<HashSet<_>>().len() != symbols.len() {
+        errors.push(syn::Error::new(
+            input_span,
+            format!("AvroSchema: Duplicate variant names detected: {symbols:?}"),
+        ));
     }
 
     if !errors.is_empty() {

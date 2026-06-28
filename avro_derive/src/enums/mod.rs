@@ -68,15 +68,19 @@ pub fn to_implementation(
         Some(Repr::Enum) => {
             plain::to_implementation(input_span, ident, generics, container_attrs, data)
         }
-        Some(Repr::BareUnion) => {
+        Some(Repr::BareUnion { .. }) => {
             bare_union::to_implementation(ident, generics, container_attrs, data)
         }
         Some(Repr::UnionOfRecords) => {
             union_of_records::to_implementation(ident, generics, container_attrs, data)
         }
-        Some(Repr::RecordTagContent { .. }) => {
-            record_tag_content::to_implementation(ident, generics, container_attrs, data)
-        }
+        Some(Repr::RecordTagContent { .. }) => record_tag_content::to_implementation(
+            input_span,
+            ident,
+            generics,
+            container_attrs,
+            data,
+        ),
         Some(Repr::RecordInternallyTagged { .. }) => {
             record_internally_tagged::to_implementation(ident, generics, container_attrs, data)
         }
@@ -133,7 +137,10 @@ fn variant_to_schema_expr(
     rename_all_fields: RenameRule,
     transparent_newtype: bool,
     unit_is_null: bool,
+    mut check_fn: impl FnMut(FieldInfo) -> Result<(), String>,
 ) -> Result<TokenStream, Vec<syn::Error>> {
+    let only_skip_rename_and_alias_can_be_set =
+        variant_attrs.only_skip_rename_and_alias_can_be_set();
     match variant_attrs.with {
         With::Serde(path) => {
             Ok(quote! { #path::get_schema_in_ctxt(named_schemas, enclosing_namespace) })
@@ -161,30 +168,74 @@ fn variant_to_schema_expr(
                 RenameRule::apply_to_variant,
             );
 
+            let variant_span = variant.span();
             match variant.fields {
-                Fields::Named(fields) => named_fields_to_schema(
-                    &name,
-                    fields,
-                    variant_attrs.rename_all.or(rename_all_fields),
-                    variant_attrs.doc,
-                    &variant_attrs.aliases,
-                ),
+                Fields::Named(fields) => {
+                    check_fn(FieldInfo {
+                        variant: FieldVariants::Named(fields.named.len()),
+                        schema_type: SchemaType::Named(&name),
+                    })
+                    .map_err(|m| vec![syn::Error::new(variant_span, m)])?;
+                    named_fields_to_schema(
+                        &name,
+                        fields,
+                        variant_attrs.rename_all.or(rename_all_fields),
+                        variant_attrs.doc,
+                        &variant_attrs.aliases,
+                    )
+                }
                 Fields::Unnamed(mut fields) if transparent_newtype && fields.unnamed.len() == 1 => {
+                    check_fn(FieldInfo {
+                        variant: FieldVariants::Unnamed(1),
+                        schema_type: SchemaType::Transparent,
+                    })
+                    .map_err(|m| vec![syn::Error::new(variant_span, m)])?;
                     let pair = fields.unnamed.pop().expect("There is one field");
                     let field = pair.into_value();
                     let field_attributes = FieldOptions::new(&field.attrs, field.span())?;
                     field_to_schema_expr(&field, &field_attributes.with)
                 }
-                Fields::Unnamed(fields) => unnamed_fields_to_schema(
-                    &name,
-                    fields,
-                    variant_attrs.doc,
-                    &variant_attrs.aliases,
-                ),
-                Fields::Unit if unit_is_null => Ok(quote! {
-                    ::apache_avro::schema::Schema::Null
-                }),
+                Fields::Unnamed(fields) => {
+                    check_fn(FieldInfo {
+                        variant: FieldVariants::Unnamed(fields.unnamed.len()),
+                        schema_type: SchemaType::Named(&name),
+                    })
+                    .map_err(|m| vec![syn::Error::new(variant_span, m)])?;
+                    unnamed_fields_to_schema(
+                        &name,
+                        fields,
+                        variant_attrs.doc,
+                        &variant_attrs.aliases,
+                    )
+                }
+                Fields::Unit if unit_is_null => {
+                    if !only_skip_rename_and_alias_can_be_set {
+                        return Err(vec![syn::Error::new(
+                            variant_span,
+                            "AvroSchema: On unit variants, only the `skip`, `rename` and `alias` attributes are allowed to be set",
+                        )]);
+                    }
+                    check_fn(FieldInfo {
+                        variant: FieldVariants::Unit,
+                        schema_type: SchemaType::Null,
+                    })
+                    .map_err(|m| vec![syn::Error::new(variant_span, m)])?;
+                    Ok(quote! {
+                        ::apache_avro::schema::Schema::Null
+                    })
+                }
                 Fields::Unit => {
+                    if !only_skip_rename_and_alias_can_be_set {
+                        return Err(vec![syn::Error::new(
+                            variant_span,
+                            "AvroSchema: On unit variants, only the `skip`, `rename` and `alias` attributes are allowed to be set",
+                        )]);
+                    }
+                    check_fn(FieldInfo {
+                        variant: FieldVariants::Unit,
+                        schema_type: SchemaType::Named(&name),
+                    })
+                    .map_err(|m| vec![syn::Error::new(variant_span, m)])?;
                     let name_expr = name_expr(&name);
                     Ok(quote! {
                         ::apache_avro::schema::Schema::record(#name_expr).build()
@@ -193,4 +244,24 @@ fn variant_to_schema_expr(
             }
         }
     }
+}
+
+#[derive(Debug)]
+struct FieldInfo<'n> {
+    variant: FieldVariants,
+    schema_type: SchemaType<'n>,
+}
+
+#[derive(Debug)]
+enum FieldVariants {
+    Unit,
+    Unnamed(usize),
+    Named(usize),
+}
+
+#[derive(Debug)]
+enum SchemaType<'n> {
+    Null,
+    Transparent,
+    Named(&'n str),
 }

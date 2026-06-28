@@ -15,12 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::attributes::{NamedTypeOptions, VariantOptions};
-use crate::enums::variant_to_schema_expr;
+use crate::attributes::{NamedTypeOptions, Repr, VariantOptions};
+use crate::enums::{FieldVariants, SchemaType, variant_to_schema_expr};
 use crate::implementation::Implementation;
 use crate::utils::json_value_expr;
 use proc_macro2::Ident;
 use quote::quote;
+use std::collections::HashSet;
 use syn::spanned::Spanned;
 use syn::{DataEnum, Generics};
 
@@ -30,8 +31,18 @@ pub fn to_implementation(
     container_attrs: NamedTypeOptions,
     data: DataEnum,
 ) -> Result<Implementation, Vec<syn::Error>> {
+    let Some(Repr::BareUnion { untagged }) = container_attrs.repr else {
+        unreachable!()
+    };
+
     let mut errors = Vec::new();
     let mut variant_exprs = Vec::new();
+
+    // Used for checking that the resulting schema is usefull
+    let mut have_null = false;
+    let mut names = HashSet::new();
+    let mut tuple_sizes = HashSet::new();
+
     for variant in data.variants {
         let variant_span = variant.span();
         let variant_attrs = match VariantOptions::new(&variant.attrs, variant_span) {
@@ -52,10 +63,28 @@ pub fn to_implementation(
             container_attrs.rename_all_fields,
             true,
             true,
+            |info| {
+                match (info.schema_type, info.variant) {
+                    (_, FieldVariants::Named(0)) if untagged => {
+                        Err("AvroSchema: Empty struct variants are not allowed for `#[serde(untagged)]`".to_string())
+                    }
+                    (_, FieldVariants::Unnamed(len)) if untagged && len >= 2 && !tuple_sizes.insert(len) => {
+                        Err(format!("AvroSchema: Duplicate tuple sizes detected which is incompatible with `#[serde(untagged)]`: new: {len}, already seen: {tuple_sizes:?}"))
+                    }
+                    (SchemaType::Null, _) if have_null => Err(r#"AvroSchema: Two variants resolve to Schema::Null, this is not supported for `#[avro(repr = "bare_union")]"#.to_string()),
+                    (SchemaType::Null, _) => { have_null = true; Ok(()) },
+                    (SchemaType::Named(name), _) if !names.insert(name.to_string())=> Err(format!("AvroSchema: Duplicate variant names detected: {name}")),
+                    _ => Ok(())
+                }
+            },
         ) {
             Ok(expr) => variant_exprs.push(expr),
             Err(errs) => errors.extend(errs),
         }
+    }
+
+    if !errors.is_empty() {
+        return Err(errors);
     }
 
     let schema_expr = quote! {{

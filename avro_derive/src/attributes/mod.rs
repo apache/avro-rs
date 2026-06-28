@@ -33,10 +33,8 @@ pub enum Repr {
     Enum,
     /// Generate a `Schema::Union` for a `enum`.
     ///
-    /// Requires `#[serde(untagged)]`
-    ///
     /// There can only be one unit variant and every newtype/struct/tuple variant must be unique.
-    BareUnion,
+    BareUnion { untagged: bool },
     /// Generate a `Schema::Union` with a `Schema::Record`  for a `enum`.
     ///
     /// This works for every enum as the records will have unique names for every variant.
@@ -77,7 +75,7 @@ impl Repr {
                         r#"AvroSchema: `#[avro(repr = "bare_union")]` is incompatible with `#[serde(tag = "..")]` and `#[serde(content = "..")]`"#,
                     ))
                 } else {
-                    Ok(Some(Self::BareUnion))
+                    Ok(Some(Self::BareUnion { untagged }))
                 }
             }
             Some(avro::Repr::UnionOfRecords) => {
@@ -121,7 +119,7 @@ impl Repr {
                 content: content.unwrap(),
             })),
             None if tag.is_some() => Ok(Some(Self::RecordInternallyTagged { tag: tag.unwrap() })),
-            None if untagged => Ok(Some(Self::BareUnion)),
+            None if untagged => Ok(Some(Self::BareUnion { untagged })),
             None => Ok(None),
         }
     }
@@ -378,6 +376,13 @@ impl VariantOptions {
             skip: serde.skip || (serde.skip_serializing && serde.skip_deserializing),
             with,
         })
+    }
+
+    /// Check that only the `skip`, `rename` and `alias` attributes are set.
+    ///
+    /// This is used for variants where the other attributes are not allowed.
+    pub fn only_skip_rename_and_alias_can_be_set(&self) -> bool {
+        self.doc.is_none() && self.rename_all == RenameRule::None && self.with == With::Trait
     }
 }
 

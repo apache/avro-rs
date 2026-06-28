@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::attributes::{NamedTypeOptions, VariantOptions, With};
+use crate::attributes::{NamedTypeOptions, VariantOptions};
 use crate::case::RenameRule;
 use crate::implementation::Implementation;
 use crate::utils::{aliases, json_value_expr, preserve_optional, rename_ident};
@@ -75,10 +75,10 @@ pub fn to_implementation(
                 "AvroSchema: derive does not work for enums with non unit structs",
             ));
             continue;
-        } else if variant_attrs.with != With::Trait {
+        } else if !variant_attrs.only_skip_rename_and_alias_can_be_set() {
             errors.push(syn::Error::new(
                 variant.span(),
-                r#"AvroSchema: `#[avro(repr = "enum")]` does not support `#[serde(with)]`"#,
+                "AvroSchema: On unit variants, only the `skip`, `rename` and `alias` attributes are allowed to be set",
             ));
             continue;
         }

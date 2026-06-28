@@ -1,0 +1,5 @@
+error: AvroSchema: Two variants resolve to Schema::Null, this is not supported for `#[avro(repr = "bare_union")]
+  --> tests/ui/avro_rs_569_untagged_enum_multiple_null.rs:24:5
+   |
+24 |     Two,
+   |     ^^^

@@ -16,11 +16,12 @@
 // under the License.
 
 use crate::attributes::{NamedTypeOptions, VariantOptions};
-use crate::enums::variant_to_schema_expr;
+use crate::enums::{SchemaType, variant_to_schema_expr};
 use crate::implementation::Implementation;
 use crate::utils::json_value_expr;
 use proc_macro2::Ident;
 use quote::quote;
+use std::collections::HashSet;
 use syn::spanned::Spanned;
 use syn::{DataEnum, Generics};
 
@@ -32,6 +33,8 @@ pub fn to_implementation(
 ) -> Result<Implementation, Vec<syn::Error>> {
     let mut errors = Vec::new();
     let mut variant_exprs = Vec::new();
+
+    let mut names = HashSet::new();
 
     for variant in data.variants {
         let variant_attrs = match VariantOptions::new(&variant.attrs, variant.span()) {
@@ -53,6 +56,17 @@ pub fn to_implementation(
             container_attrs.rename_all_fields,
             false,
             false,
+            |info| {
+                if let SchemaType::Named(name) = info.schema_type
+                    && !names.insert(name.to_string())
+                {
+                    Err(format!(
+                        "AvroSchema: Duplicate variant names detected: {name}"
+                    ))
+                } else {
+                    Ok(())
+                }
+            },
         ) {
             Ok(expr) => variant_exprs.push(expr),
             Err(errs) => errors.extend(errs),

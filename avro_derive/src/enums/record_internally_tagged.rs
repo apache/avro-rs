@@ -49,14 +49,20 @@ pub fn to_implementation(
 
         if variant_attrs.skip {
             continue;
+        } else if !variant_attrs.only_skip_rename_and_alias_can_be_set() {
+            errors.push(syn::Error::new(
+                variant.span(),
+                "AvroSchema: On unit variants, only the `skip`, `rename` and `alias` attributes are allowed to be set",
+            ));
+            continue;
         }
 
         match variant_attrs.with {
             With::Serde(path) => field_exprs.push(quote! {
                 fields.extend(
                     #path::get_record_fields_in_ctxt(named_schemas, enclosing_namespace)
-                        .expect("Expected record fields for internally tagged enum");
-                )
+                        .expect("Expected record fields for internally tagged enum")
+                );
             }),
             With::Expr(Expr::Closure(closure)) => {
                 if closure.inputs.is_empty() {
@@ -66,8 +72,8 @@ pub fn to_implementation(
                                 named_schemas,
                                 enclosing_namespace,
                                 |_, _| (#closure)(),
-                            ).expect("Expected record fields for internally tagged enum");
-                        )
+                            ).expect("Expected record fields for internally tagged enum")
+                        );
                     });
                 } else {
                     errors.push(syn::Error::new(
@@ -80,8 +86,8 @@ pub fn to_implementation(
                 field_exprs.push(quote! {
                     fields.extend(
                         ::apache_avro::serde::get_record_fields_in_ctxt(named_schemas, enclosing_namespace, #path)
-                            .expect("Expected record fields for internally tagged enum");
-                    )
+                            .expect("Expected record fields for internally tagged enum")
+                    );
                 });
             }
             With::Expr(_expr) => errors.push(syn::Error::new(
@@ -104,7 +110,7 @@ pub fn to_implementation(
                             }
                         };
                         field_exprs.push(quote! {
-                            fields.extend(#record_fields_expr)
+                            fields.extend(#record_fields_expr);
                         });
                     }
                     Fields::Unnamed(mut fields) => {
@@ -134,9 +140,9 @@ pub fn to_implementation(
                                 };
                             field_exprs.push(quote! {
                         if let Some(record_fields) = #record_fields_expr {
-                            fields.extend(record_fields)
+                            fields.extend(record_fields);
                         } else {
-                            panic!("Newtype variant type must implement `get_record_fields` for internally tagged enums")
+                            panic!("Newtype variant type must implement `get_record_fields` for internally tagged enums");
                         }
                     });
                         } else {
