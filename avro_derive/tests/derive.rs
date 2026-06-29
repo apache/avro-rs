@@ -2573,15 +2573,30 @@ fn avro_rs_476_skip_serializing_fielddefault_trait_none() {
 
 #[test]
 fn avro_rs_561_transparent_struct_with_default_override() {
-    #[derive(AvroSchema)]
+    #[derive(Debug, Eq, PartialEq, AvroSchema, Serialize, Deserialize)]
     #[serde(transparent)]
     struct T {
         #[avro(default = "42")]
-        _field: i32,
+        field: i32,
     }
 
     let schema = T::get_schema();
     let field_default = T::field_default();
     assert_eq!(schema, Schema::Int);
     assert_eq!(field_default, Some(serde_json::Value::Number(42i32.into())));
+    serde_assert(T { field: 777 });
+}
+
+#[test]
+fn avro_rs_569_tuple_struct() {
+    #[derive(AvroSchema, Debug, PartialEq, Eq, Deserialize, Serialize)]
+    struct T(i32, String);
+
+    let schema = T::get_schema();
+    assert_eq!(
+        serde_json::to_string(&schema).unwrap(),
+        r#"{"type":"record","name":"T","fields":[{"name":"field_0","type":"int"},{"name":"field_1","type":"string"}]}"#
+    );
+
+    serde_assert(T(42, "42".into()));
 }

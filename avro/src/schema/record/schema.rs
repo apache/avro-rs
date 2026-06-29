@@ -82,11 +82,13 @@ impl<S: record_schema_builder::State> RecordSchemaBuilder<S> {
 
 /// Calculate the lookup table for the given fields.
 fn calculate_lookup_table(fields: &[RecordField]) -> BTreeMap<String, usize> {
-    fields
+    let map: BTreeMap<_, _> = fields
         .iter()
         .enumerate()
         .map(|(i, field)| (field.name.clone(), i))
-        .collect()
+        .collect();
+    assert_eq!(map.len(), fields.len(), "Duplicate field names found");
+    map
 }
 
 #[cfg(test)]

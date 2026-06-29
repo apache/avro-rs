@@ -413,13 +413,12 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
     }
 
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
-        if len == 0 {
-            if let Some(index) = self.union.index_of_schema_kind(SchemaKind::Null) {
-                let bytes_written = zig_i32(index as i32, &mut *self.writer)?;
-                Ok(TupleSerializer::unit(Some(bytes_written)))
-            } else {
-                Err(self.error("tuple", "Expected Schema::Null in variants for 0-tuple"))
-            }
+        // A empty tuple can also be represented as a struct with no fields
+        if len == 0
+            && let Some(index) = self.union.index_of_schema_kind(SchemaKind::Null)
+        {
+            let bytes_written = zig_i32(index as i32, &mut *self.writer)?;
+            Ok(TupleSerializer::unit(Some(bytes_written)))
         } else if len == 1 {
             Ok(TupleSerializer::one_union(
                 self.writer,

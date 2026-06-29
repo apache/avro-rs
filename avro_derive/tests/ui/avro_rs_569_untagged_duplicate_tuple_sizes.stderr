@@ -1,0 +1,5 @@
+error: AvroSchema: Duplicate tuple sizes detected which is incompatible with `#[serde(untagged)]`: new: 2, already seen: {2}
+  --> tests/ui/avro_rs_569_untagged_duplicate_tuple_sizes.rs:25:5
+   |
+25 |     B(i32, i32)
+   |     ^^^^^^^^^^^

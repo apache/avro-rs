@@ -88,7 +88,8 @@
 //! This enum representation is used by Serde if the attributes `#[serde(tag = "...", content = "...")]` are used.
 //! It maps to a [`Schema::Record`] with two fields. One field must be named as the value of the `tag`
 //! attribute and use the [`Schema::Enum`] schema. The other field must be named as the value of the
-//! `content` tag and use the [`Schema::Union`] schema.
+//! `content` tag and use the [`Schema::Union`] schema. The content of the union schema is equivalent
+//! to the untagged representation.
 //!
 //! ### Untagged
 //! This enum representation is used by Serde if the attribute `#[serde(untagged)]` is used. It maps

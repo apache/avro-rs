@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::utils::name_expr;
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 use syn::Generics;
@@ -49,8 +50,9 @@ impl Implementation {
         record_fields_expr: Option<TokenStream>,
         field_default_expr: Option<TokenStream>,
     ) -> Implementation {
+        let name_expr = name_expr(name);
         let schema_expr = quote! {
-            let name = ::apache_avro::schema::Name::new_with_enclosing_namespace(#name, enclosing_namespace).expect(concat!("Unable to parse schema name ", #name));
+            let name = #name_expr;
             if named_schemas.contains(&name) {
                 ::apache_avro::schema::Schema::Ref{name}
             } else {

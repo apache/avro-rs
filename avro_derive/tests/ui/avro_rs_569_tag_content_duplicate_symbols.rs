@@ -18,12 +18,11 @@
 use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
-#[serde(rename_all_fields = "UPPERCASE")]
+#[serde(tag = "tag", content = "content")]
 enum Foo {
-    Bar {
-        a: String,
-        b: i32,
-    }
+    One,
+    #[serde(rename = "One")]
+    Two,
 }
 
 pub fn main() {}

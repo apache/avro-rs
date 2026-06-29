@@ -1,0 +1,5 @@
+error: AvroSchema: Empty struct variants are not allowed for `#[serde(untagged)]`
+  --> tests/ui/avro_rs_569_bare_union_struct_variant.rs:23:5
+   |
+23 |     A{}
+   |     ^^^

@@ -41,7 +41,7 @@ use syn::{DeriveInput, parse_macro_input, spanned::Spanned};
 
 use crate::attributes::NamedTypeOptions;
 use crate::implementation::Implementation;
-use crate::utils::{aliases, preserve_optional, to_compile_errors};
+use crate::utils::to_compile_errors;
 
 #[proc_macro_derive(AvroSchema, attributes(avro, serde))]
 // Templated from Serde
