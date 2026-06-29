@@ -49,12 +49,6 @@ pub fn to_implementation(
 
         if variant_attrs.skip {
             continue;
-        } else if !variant_attrs.only_skip_rename_and_alias_can_be_set() {
-            errors.push(syn::Error::new(
-                variant.span(),
-                "AvroSchema: On unit variants, only the `skip`, `rename` and `alias` attributes are allowed to be set",
-            ));
-            continue;
         }
 
         match variant_attrs.with {
@@ -150,7 +144,14 @@ pub fn to_implementation(
                         }
                     }
                     Fields::Unit => {
-                        // No fields to add to the struct
+                        // No fields to add to the struct but do check that there no unwanted attributes set
+                        if !variant_attrs.only_skip_rename_and_alias_can_be_set() {
+                            errors.push(syn::Error::new(
+                                variant.span(),
+                                "AvroSchema: On unit variants, only the `skip`, `rename` and `alias` attributes are allowed to be set",
+                            ));
+                            continue;
+                        }
                     }
                 }
             }

@@ -18,9 +18,9 @@
 use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
-#[serde(transparent)]
-enum D {
-    A(String)
+#[serde(tag = "t", content = "c")]
+enum Foo {
+    One(),
 }
 
-fn main() {}
+pub fn main() {}

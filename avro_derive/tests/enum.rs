@@ -194,7 +194,7 @@ fn avro_rs_569_enum_repr_record_tag_content_tuple() {
     #[serde(tag = "type", content = "value")]
     enum Foo {
         A,
-        Alt(),
+        Alt {},
         B(String),
         #[serde(rename = "D")]
         C(
@@ -245,6 +245,7 @@ fn avro_rs_569_enum_repr_record_tag_content_tuple() {
 
     assert_eq!(Foo::get_schema(), schema);
     serde_assert(Foo::A);
+    serde_assert(Foo::Alt {});
     serde_assert(Foo::B("Something".to_string()));
     serde_assert(Foo::C("Something".to_string(), true));
 }
@@ -717,5 +718,47 @@ fn avro_rs_569_enum_repr_bare_union_without_untagged_tuple_same_len() {
 
     assert_eq!(Foo::get_schema(), schema);
     serde_assert(Foo::A("32".to_string(), "64".to_string()));
+    serde_assert(Foo::B(32, 64));
+}
+
+#[test]
+fn avro_rs_569_enum_repr_bare_union_without_untagged_tuple_and_struct_same_len() {
+    #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
+    #[avro(repr = "bare_union")]
+    enum Foo {
+        A { a: String, b: String },
+        B(i32, i32),
+    }
+
+    let schema = Schema::parse_str(
+        r#"[
+        {
+            "type": "record",
+            "name": "A",
+            "default": "null",
+            "fields": [
+                { "name": "a", "type": "string" },
+                { "name": "b", "type": "string" }
+            ]
+        },
+        {
+            "type": "record",
+            "name": "B",
+            "default": "null",
+            "fields": [
+                { "name": "field_0", "type": "int" },
+                { "name": "field_1", "type": "int" }
+            ],
+            "org.apache.avro.rust.tuple": true
+        }
+    ]"#,
+    )
+    .unwrap();
+
+    assert_eq!(Foo::get_schema(), schema);
+    serde_assert(Foo::A {
+        a: "32".to_string(),
+        b: "64".to_string(),
+    });
     serde_assert(Foo::B(32, 64));
 }

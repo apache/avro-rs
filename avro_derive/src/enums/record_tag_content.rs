@@ -17,7 +17,7 @@
 
 use crate::attributes::{NamedTypeOptions, Repr, VariantOptions};
 use crate::case::RenameRule;
-use crate::enums::variant_to_schema_expr;
+use crate::enums::{FieldVariants, variant_to_schema_expr};
 use crate::implementation::Implementation;
 use crate::utils::{aliases, json_value_expr, name_expr, preserve_optional, rename_ident};
 use proc_macro2::{Ident, Span};
@@ -41,7 +41,13 @@ pub fn to_implementation(
     let mut variant_exprs = Vec::new();
 
     for variant in data.variants {
-        let variant_attrs = VariantOptions::new(&variant.attrs, variant.span())?;
+        let variant_attrs = match VariantOptions::new(&variant.attrs, variant.span()) {
+            Ok(attrs) => attrs,
+            Err(errs) => {
+                errors.extend(errs);
+                continue;
+            }
+        };
 
         if variant_attrs.skip {
             continue;
@@ -54,6 +60,8 @@ pub fn to_implementation(
             RenameRule::apply_to_variant,
         );
 
+        symbols.push(name);
+
         match variant_to_schema_expr(
             variant,
             variant_attrs,
@@ -61,13 +69,16 @@ pub fn to_implementation(
             container_attrs.rename_all_fields,
             true,
             true,
-            |_| Ok(()),
+            |info| {
+                match info.variant {
+                FieldVariants::Unnamed(0) => Err(r#"AvroSchema: Empty tuple variants are not supported for `#[serde(tag = "..", content = "..")]` enums"#.into()),
+                _ => Ok(())
+            }
+            },
         ) {
             Ok(expr) => variant_exprs.push(expr),
             Err(errs) => errors.extend(errs),
         }
-
-        symbols.push(name);
     }
 
     if symbols.iter().collect::<HashSet<_>>().len() != symbols.len() {

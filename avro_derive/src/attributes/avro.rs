@@ -36,8 +36,6 @@ pub enum Repr {
     Enum,
     /// Generate a `Schema::Union` for a `enum`.
     ///
-    /// Requires `#[serde(untagged)]`
-    ///
     /// There can only be one unit variant and every newtype/struct/tuple variant must be unique.
     BareUnion,
     /// Generate a `Schema::Union` with a `Schema::Record`  for a `enum`.

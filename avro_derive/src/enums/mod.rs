@@ -113,7 +113,7 @@ fn newtype_extra_attribute_checks(
     if options.rename.is_some() {
         errors.push(syn::Error::new(
             span,
-            r#"AvroSchema: `#[avro(alias = "..")]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")`"#
+            r#"AvroSchema: `#[avro(rename = "..")]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")`"#
         ));
     }
     if options.flatten {
@@ -192,7 +192,8 @@ fn variant_to_schema_expr(
                     .map_err(|m| vec![syn::Error::new(variant_span, m)])?;
                     let pair = fields.unnamed.pop().expect("There is one field");
                     let field = pair.into_value();
-                    let field_attributes = FieldOptions::new(&field.attrs, field.span())?;
+                    let field_attributes = FieldOptions::new(&field.attrs, field.span())
+                        .and_then(|o| newtype_extra_attribute_checks(o, field.span()))?;
                     field_to_schema_expr(&field, &field_attributes.with)
                 }
                 Fields::Unnamed(fields) => {

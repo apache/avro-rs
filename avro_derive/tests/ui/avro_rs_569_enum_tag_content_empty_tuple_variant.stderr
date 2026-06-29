@@ -1,0 +1,5 @@
+error: AvroSchema: Empty tuple variants are not supported for `#[serde(tag = "..", content = "..")]` enums
+  --> tests/ui/avro_rs_569_enum_tag_content_empty_tuple_variant.rs:23:5
+   |
+23 |     One(),
+   |     ^^^^^

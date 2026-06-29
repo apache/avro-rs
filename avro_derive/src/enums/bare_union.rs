@@ -21,7 +21,7 @@ use crate::implementation::Implementation;
 use crate::utils::json_value_expr;
 use proc_macro2::Ident;
 use quote::quote;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use syn::spanned::Spanned;
 use syn::{DataEnum, Generics};
 
@@ -38,10 +38,11 @@ pub fn to_implementation(
     let mut errors = Vec::new();
     let mut variant_exprs = Vec::new();
 
-    // Used for checking that the resulting schema is usefull
+    // Used for checking that the resulting schema is useful
     let mut have_null = false;
     let mut names = HashSet::new();
-    let mut tuple_sizes = HashSet::new();
+    // This is a BTreeSet so the error output is deterministic for our UI tests
+    let mut tuple_sizes = BTreeSet::new();
 
     for variant in data.variants {
         let variant_span = variant.span();
@@ -69,9 +70,14 @@ pub fn to_implementation(
                         Err("AvroSchema: Empty struct variants are not allowed for `#[serde(untagged)]`".to_string())
                     }
                     (_, FieldVariants::Unnamed(len)) if untagged && len >= 2 && !tuple_sizes.insert(len) => {
+                        // Tuples of size 2 or larger are represented as a Schema::Record with an "org.apache.avro.rust.tuple" attribute.
+                        // As the only information Serde provides for untagged enums is the size of the tuple, the amount of fields in
+                        // records with the tuple tag must be unique for it to find the correct variant.
+                        // This check is not watertight as it will fail for `enum Abc { A((i32, i32)), B(i64, i64) }`
+                        // as we don't know the schema for the newtype inside Abc::A.
                         Err(format!("AvroSchema: Duplicate tuple sizes detected which is incompatible with `#[serde(untagged)]`: new: {len}, already seen: {tuple_sizes:?}"))
                     }
-                    (SchemaType::Null, _) if have_null => Err(r#"AvroSchema: Two variants resolve to Schema::Null, this is not supported for `#[avro(repr = "bare_union")]"#.to_string()),
+                    (SchemaType::Null, _) if have_null => Err(r#"AvroSchema: Two variants resolve to Schema::Null, this is not supported for `#[avro(repr = "bare_union")]`"#.to_string()),
                     (SchemaType::Null, _) => { have_null = true; Ok(()) },
                     (SchemaType::Named(name), _) if !names.insert(name.to_string())=> Err(format!("AvroSchema: Duplicate variant names detected: {name}")),
                     _ => Ok(())

@@ -3,6 +3,6 @@ error: AvroSchema: `#[serde(transparent)]` is only supported on structs
    |
 21 | / #[serde(transparent)]
 22 | | enum D {
-23 | |     A(A)
+23 | |     A(String)
 24 | | }
    | |_^

@@ -83,28 +83,22 @@ pub fn to_implementation(
             continue;
         }
 
-        // When a variant has the `#[default]` attribute and we don't have a default yet, we assign
-        // it as the default. If an enum has multiple variants with the default attribute, the compiler
-        // throws an error anyway so we can ignore that situation. If the default attribute is on a
-        // skipped variant, we ignore it as Serde will throw an error if we try to deserialize that
-        // variant.
-        if default.is_none() && has_default_attr(&variant.attrs) {
-            let renamed = match (&variant_attrs.rename, container_attrs.rename_all) {
-                (Some(rename), _) => rename.clone(),
-                (None, rename_all) if !matches!(rename_all, RenameRule::None) => {
-                    rename_all.apply_to_variant(&variant.ident.to_string())
-                }
-                _ => variant.ident.to_string(),
-            };
-            default = Some(renamed);
-        }
-
         let name = rename_ident(
             &variant.ident,
             variant_attrs.rename,
             container_attrs.rename_all,
             RenameRule::apply_to_variant,
         );
+
+        // When a variant has the `#[default]` attribute and we don't have a default yet, we assign
+        // it as the default. If an enum has multiple variants with the default attribute, the compiler
+        // throws an error anyway so we can ignore that situation. If the default attribute is on a
+        // skipped variant, we ignore it as Serde will throw an error if we try to deserialize that
+        // variant.
+        if default.is_none() && has_default_attr(&variant.attrs) {
+            default = Some(name.clone());
+        }
+
         symbols.push(name);
     }
 

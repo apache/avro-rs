@@ -32,4 +32,5 @@ mod avro_rs_569_rename_all_fields;
 mod avro_rs_569_tag_content_enum;
 mod avro_rs_569_tag_enum;
 mod avro_rs_569_tag_struct;
+mod avro_rs_569_tuple_struct;
 mod avro_rs_569_unit_struct;
