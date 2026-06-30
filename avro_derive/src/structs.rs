@@ -35,7 +35,7 @@ pub fn to_implementation(
     data: DataStruct,
 ) -> Result<Implementation, Vec<syn::Error>> {
     if container_attrs.transparent {
-        transparent(input_span, ident, generics, data)
+        transparent(input_span, ident, generics, &container_attrs, data)
     } else {
         normal(ident, generics, container_attrs, data)
     }
@@ -85,6 +85,7 @@ fn normal(
             .default
             .map(json_value_expr)
             .map(|t| quote! { ::std::option::Option::Some(#t)}),
+        container_attrs.tests,
     ))
 }
 
@@ -92,6 +93,7 @@ fn transparent(
     input_span: Span,
     ident: Ident,
     generics: Generics,
+    container_attrs: &NamedTypeOptions,
     data: DataStruct,
 ) -> Result<Implementation, Vec<syn::Error>> {
     match data.fields {
@@ -119,6 +121,7 @@ fn transparent(
                     field_to_schema_expr(&field, &attrs.with)?,
                     Some(field_to_record_fields_expr(&field, &attrs.with)?),
                     Some(field_default_expr),
+                    container_attrs.tests,
                 ))
             } else {
                 Err(vec![syn::Error::new(

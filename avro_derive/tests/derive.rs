@@ -209,7 +209,7 @@ fn test_complex_namespace() {
 #[test]
 fn avro_rs_239_test_named_record() {
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
-    #[avro(namespace = "com.testing.namespace")]
+    #[avro(namespace = "com.testing.namespace", tests = false)]
     #[serde(rename = "Other")]
     struct TestNamedRecord {
         a: i32,
@@ -658,6 +658,7 @@ fn test_enum() {
 fn avro_rs_239_test_enum_named() {
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
     #[serde(rename = "Other", rename_all = "snake_case")]
+    #[avro(tests = false)]
     enum TestNamedEnum {
         A,
         B,
@@ -667,6 +668,7 @@ fn avro_rs_239_test_enum_named() {
     }
 
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq, Eq)]
+    #[avro(tests = false)]
     struct TestNamedEnumNested {
         a: TestNamedEnum,
         b: String,
@@ -1361,6 +1363,7 @@ fn test_basic_enum_with_aliases2() {
 #[test]
 fn test_basic_struct_with_defaults() {
     #[derive(Debug, Deserialize, Serialize, AvroSchema, Clone, PartialEq, Eq)]
+    #[avro(tests = false)]
     enum MyEnum {
         Foo,
         Bar,
@@ -1368,6 +1371,7 @@ fn test_basic_struct_with_defaults() {
     }
 
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+    #[avro(tests = false)]
     struct TestBasicStructWithDefaultValues {
         #[avro(default = "123")]
         a: i32,
@@ -1502,15 +1506,13 @@ fn test_basic_struct_with_defaults() {
 
 #[test]
 fn avro_3633_test_basic_struct_with_skip_attribute() {
-    // Note: If using the skip attribute together with serialization,
-    // the serde's skip attribute needs also to be added
-
     #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq)]
     struct TestBasicStructNoSchema {
         field: bool,
     }
 
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+    #[avro(tests = false)]
     struct TestBasicStructWithSkipAttribute {
         #[serde(skip)]
         condition: bool,
@@ -1583,6 +1585,7 @@ fn avro_3633_test_basic_struct_with_skip_attribute() {
 #[test]
 fn avro_3633_test_basic_struct_with_rename_attribute() {
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+    #[avro(tests = false)]
     struct TestBasicStructWithRenameAttribute {
         #[serde(rename = "a1")]
         a: bool,
@@ -1640,6 +1643,7 @@ fn avro_3633_test_basic_struct_with_rename_attribute() {
 #[test]
 fn test_avro_3663_raw_identifier_field_name() {
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+    #[avro(tests = false)]
     struct TestRawIdent {
         r#type: bool,
     }
@@ -1657,6 +1661,7 @@ fn test_avro_3663_raw_identifier_field_name() {
 fn avro_3962_fields_documentation() {
     /// Foo docs
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     #[allow(dead_code)]
     struct Foo {
         /// a's Rustdoc
@@ -1680,11 +1685,13 @@ fn avro_3962_fields_documentation() {
 #[test]
 fn avro_rs_247_serde_flatten_support() {
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+    #[avro(tests = false)]
     struct Nested {
         a: bool,
     }
 
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+    #[avro(tests = false)]
     struct Foo {
         #[serde(flatten)]
         nested: Nested,
@@ -1723,17 +1730,20 @@ fn avro_rs_247_serde_nested_flatten_support() {
     use serde::{Deserialize, Serialize};
 
     #[derive(AvroSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[avro(tests = false)]
     pub struct NestedFoo {
         one: u32,
     }
 
     #[derive(AvroSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[avro(tests = false)]
     pub struct Foo {
         #[serde(flatten)]
         nested_foo: NestedFoo,
     }
 
     #[derive(AvroSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[avro(tests = false)]
     struct Bar {
         foo: Foo,
         two: u32,
@@ -1780,11 +1790,13 @@ fn avro_rs_247_serde_nested_flatten_support() {
 #[should_panic(expected = "Duplicate field names found")]
 fn avro_rs_247_serde_flatten_support_duplicate_field_name() {
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+    #[avro(tests = false)]
     struct Nested {
         a: i32,
     }
 
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+    #[avro(tests = false)]
     struct Foo {
         #[serde(flatten)]
         nested: Nested,
@@ -1797,6 +1809,7 @@ fn avro_rs_247_serde_flatten_support_duplicate_field_name() {
 #[test]
 fn avro_rs_247_serde_flatten_support_with_skip() {
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+    #[avro(tests = false)]
     struct Nested {
         a: bool,
         #[serde(skip)]
@@ -1804,6 +1817,7 @@ fn avro_rs_247_serde_flatten_support_with_skip() {
     }
 
     #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+    #[avro(tests = false)]
     struct Foo {
         #[serde(flatten)]
         nested: Nested,
@@ -1883,6 +1897,7 @@ fn avro_rs_397_with() {
 
     #[allow(dead_code)]
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     struct Foo {
         #[avro(with)]
         #[serde(with = "module")]
@@ -1933,6 +1948,7 @@ fn avro_rs_397_with_generic() {
 
     #[allow(dead_code)]
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     struct Foo {
         #[avro(with = generic::<15>)]
         a: [u8; 15],
@@ -1966,6 +1982,7 @@ fn avro_rs_397_uuid() {
     .unwrap();
 
     #[derive(AvroSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[avro(tests = false)]
     struct Foo {
         #[serde(rename = "baz")]
         bar: uuid::Uuid,
@@ -1998,6 +2015,7 @@ fn avro_rs_397_derive_with_expr_lambda() {
     let expected_schema = Schema::parse_str(schema).unwrap();
 
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     struct Foo {
         #[avro(with = || Schema::Bytes)]
         _a: String,
@@ -2021,6 +2039,7 @@ fn avro_rs_398_transparent_with_skip() {
     #[allow(dead_code)]
     #[derive(AvroSchema)]
     #[serde(transparent)]
+    #[avro(tests = false)]
     struct Foo {
         #[serde(skip)]
         a: String,
@@ -2040,6 +2059,7 @@ fn avro_rs_401_do_not_match_typename() {
 
     #[expect(dead_code, reason = "We only check the schema")]
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     struct Foo {
         field: f32,
     }
@@ -2065,6 +2085,7 @@ fn avro_rs_401_do_not_match_typename() {
 fn avro_rs_401_supported_type_variants() {
     #[expect(dead_code, reason = "We only check the schema")]
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     struct Foo<'a> {
         one: f32,
         two: std::string::String,
@@ -2169,6 +2190,7 @@ fn avro_rs_414_round_trip_char_u64_u128_i128() {
     .unwrap();
 
     #[derive(AvroSchema, Serialize, Deserialize, PartialEq, Debug, Clone)]
+    #[avro(tests = false)]
     struct Foo {
         a: char,
         b: u64,
@@ -2188,23 +2210,27 @@ fn avro_rs_414_round_trip_char_u64_u128_i128() {
 #[test]
 fn avro_rs_448_flatten_recurring_type() {
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     #[expect(dead_code, reason = "Only testing derived schema")]
     pub enum Color {
         G,
     }
 
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     pub struct A {
         pub _color: Color,
     }
 
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     pub struct C {
         #[serde(flatten)]
         pub _a: A,
     }
 
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     pub struct TestStruct {
         pub _a: Color,
         pub _c: C,
@@ -2247,29 +2273,34 @@ fn avro_rs_448_flatten_recurring_type() {
 #[test]
 fn avro_rs_448_flatten_transparent_sandwich() {
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     #[expect(dead_code, reason = "Only testing derived schema")]
     pub enum Color {
         G,
     }
 
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     pub struct A {
         pub _color: Color,
     }
 
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     pub struct C {
         #[serde(flatten)]
         pub _a: A,
     }
 
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     #[serde(transparent)]
     pub struct B {
         pub _c: C,
     }
 
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     pub struct TestStruct {
         pub _a: Color,
         pub _b: B,
@@ -2317,6 +2348,7 @@ fn avro_rs_448_flatten_transparent_sandwich() {
 #[test]
 fn avro_rs_448_transparent_with() {
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     #[serde(transparent)]
     pub struct TestStruct {
         #[avro(with = || Schema::Long)]
@@ -2337,12 +2369,14 @@ fn avro_rs_448_transparent_with() {
 #[test]
 fn avro_rs_448_transparent_with_2() {
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     pub struct Foo {
         _field: i32,
         _a: String,
     }
 
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     #[serde(transparent)]
     pub struct TestStruct {
         #[avro(with = Foo::get_schema_in_ctxt)]
@@ -2376,17 +2410,20 @@ fn avro_rs_448_transparent_with_2() {
 #[test]
 fn avro_rs_476_field_default() {
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     struct Bar {
         _field: Box<Bar>,
     }
 
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     #[avro(default = r#"{"_field": true}"#)]
     struct Spam {
         _field: bool,
     }
 
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     struct Foo {
         _a: bool,
         _b: i8,
@@ -2430,12 +2467,14 @@ fn avro_rs_476_field_default() {
 #[test]
 fn avro_rs_476_field_default_false() {
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     #[avro(default = r#"{"_field": true}"#)]
     struct Spam {
         _field: bool,
     }
 
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     struct Foo {
         #[avro(default = false)]
         _a: bool,
@@ -2459,12 +2498,14 @@ fn avro_rs_476_field_default_false() {
 #[test]
 fn avro_rs_476_field_default_provided() {
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     #[avro(default = r#"{"_field": true}"#)]
     struct Spam {
         _field: bool,
     }
 
     #[derive(AvroSchema)]
+    #[avro(tests = false)]
     struct Foo {
         #[avro(default = "true")]
         _a: bool,
@@ -2541,6 +2582,7 @@ fn avro_rs_476_field_default_provided() {
 #[test]
 fn avro_rs_476_skip_serializing_fielddefault_trait_none() {
     #[derive(AvroSchema, Debug, Deserialize, Serialize)]
+    #[avro(tests = false)]
     struct T {
         x: Option<i8>,
         #[serde(skip_serializing)]
@@ -2573,6 +2615,7 @@ fn avro_rs_476_skip_serializing_fielddefault_trait_none() {
 #[test]
 fn avro_rs_561_transparent_struct_with_default_override() {
     #[derive(Debug, Eq, PartialEq, AvroSchema, Serialize, Deserialize)]
+    #[avro(tests = false)]
     #[serde(transparent)]
     struct T {
         #[avro(default = "42")]
@@ -2589,6 +2632,7 @@ fn avro_rs_561_transparent_struct_with_default_override() {
 #[test]
 fn avro_rs_569_tuple_struct() {
     #[derive(AvroSchema, Debug, PartialEq, Eq, Deserialize, Serialize)]
+    #[avro(tests = false)]
     struct T(i32, String);
 
     let schema = T::get_schema();

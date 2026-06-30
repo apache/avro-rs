@@ -109,5 +109,6 @@ pub fn to_implementation(
             .default
             .map(json_value_expr)
             .map(|t| quote! { ::std::option::Option::Some(#t)}),
+        container_attrs.tests,
     ))
 }
