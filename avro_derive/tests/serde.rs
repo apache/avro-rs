@@ -68,6 +68,7 @@ mod container_attributes {
     #[test]
     fn avro_rs_373_rename() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         #[serde(rename = "Bar")]
         struct Foo {
             a: String,
@@ -103,6 +104,7 @@ mod container_attributes {
     #[test]
     fn avro_rs_373_nested_rename() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         #[serde(rename = "Bar")]
         struct Foo {
             a: String,
@@ -110,6 +112,7 @@ mod container_attributes {
         }
 
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         struct Outer {
             bar: Foo,
         }
@@ -154,6 +157,7 @@ mod container_attributes {
     #[test]
     fn avro_rs_373_rename_all() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         #[serde(rename_all = "UPPERCASE")]
         struct Foo {
             a: String,
@@ -191,12 +195,14 @@ mod container_attributes {
     #[should_panic(expected = "Expected Schema::Record(name: FooFromInto)")]
     fn avro_rs_373_from_into() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         #[serde(from = "FooFromInto", into = "FooFromInto")]
         struct Foo {
             a: String,
             b: i32,
         }
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         struct FooFromInto {
             a: String,
             b: i32,
@@ -251,12 +257,14 @@ mod container_attributes {
     #[should_panic(expected = r#"Missing field in record: "c""#)]
     fn avro_rs_373_from_into_different() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         #[serde(from = "FooFromInto", into = "FooFromInto")]
         struct Foo {
             a: String,
             b: i32,
         }
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         struct FooFromInto {
             a: String,
             b: i32,
@@ -311,6 +319,7 @@ mod container_attributes {
     #[test]
     fn avro_rs_398_transparent() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         #[serde(transparent)]
         struct Foo {
             a: String,
@@ -333,6 +342,7 @@ mod container_attributes {
     #[test]
     fn avro_rs_398_transparent_ref() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         #[serde(transparent)]
         struct Foo<'a> {
             a: &'a str,
@@ -351,6 +361,7 @@ mod container_attributes {
     #[test]
     fn avro_rs_398_transparent_array() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         #[serde(transparent)]
         struct Foo {
             a: Vec<String>,
@@ -409,6 +420,7 @@ mod container_attributes {
         // Provide getters for every private field of the remote struct. The getter must
         // return either `T` or `&T` where `T` is the type of the field.
         #[derive(Serialize, Deserialize, AvroSchema)]
+        #[avro(tests = false)]
         #[serde(remote = "Duration")]
         struct DurationDef {
             #[serde(getter = "Duration::seconds")]
@@ -425,6 +437,7 @@ mod container_attributes {
         }
 
         #[derive(Serialize, Deserialize, AvroSchema, Debug, PartialEq, Eq)]
+        #[avro(tests = false)]
         struct Process {
             command_line: String,
 
@@ -446,6 +459,7 @@ mod variant_attributes {
     #[test]
     fn avro_rs_373_rename() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         enum Foo {
             #[serde(rename = "Three")]
             One,
@@ -471,6 +485,7 @@ mod variant_attributes {
     #[test]
     fn avro_rs_373_alias() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         enum Foo {
             #[serde(rename = "Three", alias = "One")]
             One,
@@ -496,6 +511,7 @@ mod variant_attributes {
     #[test]
     fn avro_rs_373_skip() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         enum Foo {
             #[allow(dead_code)]
             #[serde(skip)]
@@ -526,6 +542,7 @@ mod field_attributes {
     #[test]
     fn avro_rs_373_rename() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         struct Foo {
             #[serde(rename = "c")]
             a: String,
@@ -561,11 +578,13 @@ mod field_attributes {
     #[test]
     fn avro_rs_373_flatten() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         struct Nested {
             a: bool,
         }
 
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         struct Foo {
             #[serde(flatten)]
             nested: Nested,
@@ -601,6 +620,7 @@ mod field_attributes {
     #[test]
     fn avro_rs_373_skip() {
         #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[avro(tests = false)]
         struct Foo {
             #[serde(skip)]
             a: String,
@@ -633,6 +653,7 @@ mod field_attributes {
     fn avro_rs_397_avroschema_with_bytes() {
         #[expect(dead_code, reason = "We only care about the schema")]
         #[derive(AvroSchema)]
+        #[avro(tests = false)]
         struct TestStructWithBytes<'a> {
             #[avro(with)]
             #[serde(with = "apache_avro::serde::bytes")]

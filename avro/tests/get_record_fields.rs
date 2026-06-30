@@ -26,6 +26,7 @@ use apache_avro_test_helper::TestResult;
 #[test]
 fn avro_rs_448_default_get_record_fields_no_recursion() -> TestResult {
     #[derive(apache_avro_derive::AvroSchema)]
+    #[avro(tests = false)]
     struct Foo {
         _a: i32,
         _b: String,
@@ -67,6 +68,7 @@ fn avro_rs_448_default_get_record_fields_no_recursion() -> TestResult {
 #[test]
 fn avro_rs_448_default_get_record_fields_recursion() -> TestResult {
     #[derive(apache_avro_derive::AvroSchema)]
+    #[avro(tests = false)]
     struct Foo {
         _a: i32,
         _b: Option<Box<Foo>>,

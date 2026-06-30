@@ -64,6 +64,7 @@ fn avro_rs_53_uuid_with_string_true() -> TestResult {
 #[test]
 fn avro_rs_440_uuid_string() -> TestResult {
     #[derive(apache_avro_derive::AvroSchema, Serialize, Deserialize)]
+    #[avro(tests = false)]
     #[serde(transparent)]
     struct CustomUuid {
         #[avro(with = || Schema::Uuid(UuidSchema::String))]
@@ -89,6 +90,7 @@ fn avro_rs_440_uuid_string() -> TestResult {
 #[test]
 fn avro_rs_440_uuid_bytes() -> TestResult {
     #[derive(apache_avro_derive::AvroSchema, Serialize, Deserialize)]
+    #[avro(tests = false)]
     #[serde(transparent)]
     struct CustomUuid {
         #[avro(with = || Schema::Uuid(UuidSchema::Bytes))]
@@ -112,6 +114,7 @@ fn avro_rs_440_uuid_bytes() -> TestResult {
 #[test]
 fn avro_rs_440_uuid_fixed() -> TestResult {
     #[derive(apache_avro_derive::AvroSchema, Serialize, Deserialize)]
+    #[avro(tests = false)]
     #[serde(transparent)]
     struct CustomUuid {
         inner: Uuid,

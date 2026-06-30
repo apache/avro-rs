@@ -72,7 +72,7 @@ where
 #[test]
 fn avro_rs_561_bare_union_untagged_empty_tuple_variant() {
     #[derive(Debug, Eq, PartialEq, AvroSchema, Serialize, Deserialize)]
-    #[avro(repr = "bare_union")]
+    #[avro(repr = "bare_union", tests = false)]
     #[serde(untagged)]
     enum C {
         A(),
@@ -84,7 +84,7 @@ fn avro_rs_561_bare_union_untagged_empty_tuple_variant() {
 #[test]
 fn avro_rs_561_bare_union_empty_tuple_variant() {
     #[derive(Debug, Eq, PartialEq, AvroSchema, Serialize, Deserialize)]
-    #[avro(repr = "bare_union")]
+    #[avro(repr = "bare_union", tests = false)]
     enum C {
         A(),
         B {},
@@ -97,6 +97,7 @@ fn avro_rs_561_bare_union_empty_tuple_variant() {
 #[test]
 fn avro_rs_569_enum_repr_default() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
+    #[avro(tests = false)]
     enum Foo {
         A,
         B,
@@ -122,7 +123,7 @@ fn avro_rs_569_enum_repr_default() {
 #[test]
 fn avro_rs_569_enum_repr_enum() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "enum")]
+    #[avro(repr = "enum", tests = false)]
     enum Foo {
         A,
         B,
@@ -148,7 +149,7 @@ fn avro_rs_569_enum_repr_enum() {
 #[test]
 fn avro_rs_569_enum_repr_record_tag_content_plain() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "record_tag_content")]
+    #[avro(repr = "record_tag_content", tests = false)]
     #[serde(tag = "type", content = "value")]
     enum Foo {
         A,
@@ -190,7 +191,7 @@ fn avro_rs_569_enum_repr_record_tag_content_plain() {
 #[test]
 fn avro_rs_569_enum_repr_record_tag_content_tuple() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "record_tag_content")]
+    #[avro(repr = "record_tag_content", tests = false)]
     #[serde(tag = "type", content = "value")]
     enum Foo {
         A,
@@ -253,7 +254,7 @@ fn avro_rs_569_enum_repr_record_tag_content_tuple() {
 #[test]
 fn avro_rs_569_enum_repr_record_tag_content_struct() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "record_tag_content")]
+    #[avro(repr = "record_tag_content", tests = false)]
     #[serde(tag = "type", content = "value")]
     enum Foo {
         A {},
@@ -316,7 +317,7 @@ fn avro_rs_569_enum_repr_record_tag_content_struct() {
 #[test]
 fn avro_rs_569_enum_repr_bare_union_plain() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "bare_union")]
+    #[avro(repr = "bare_union", tests = false)]
     #[serde(untagged)]
     enum Foo {
         A,
@@ -331,7 +332,7 @@ fn avro_rs_569_enum_repr_bare_union_plain() {
 #[test]
 fn avro_rs_569_enum_repr_bare_union_tuple() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "bare_union")]
+    #[avro(repr = "bare_union", tests = false)]
     #[serde(untagged)]
     enum Foo {
         B(String),
@@ -367,7 +368,7 @@ fn avro_rs_569_enum_repr_bare_union_tuple() {
 #[test]
 fn avro_rs_569_enum_repr_record_internally_tagged_plain() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "record_internally_tagged")]
+    #[avro(repr = "record_internally_tagged", tests = false)]
     #[serde(tag = "type")]
     enum Foo {
         A,
@@ -402,7 +403,7 @@ fn avro_rs_569_enum_repr_record_internally_tagged_plain() {
 )]
 fn avro_rs_569_enum_repr_record_internally_tagged_tuple_no_get_record_fields() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "record_internally_tagged")]
+    #[avro(repr = "record_internally_tagged", tests = false)]
     #[serde(tag = "type")]
     enum Foo {
         B(String),
@@ -414,13 +415,14 @@ fn avro_rs_569_enum_repr_record_internally_tagged_tuple_no_get_record_fields() {
 #[test]
 fn avro_rs_569_enum_repr_record_internally_tagged_tuple() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "record_internally_tagged")]
+    #[avro(repr = "record_internally_tagged", tests = false)]
     #[serde(tag = "type")]
     enum Foo {
         B(Bar),
     }
 
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
+    #[avro(tests = false)]
     struct Bar {
         spam: String,
     }
@@ -452,7 +454,7 @@ fn avro_rs_569_enum_repr_record_internally_tagged_tuple() {
 #[test]
 fn avro_rs_569_enum_repr_record_internally_tagged_struct() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "record_internally_tagged")]
+    #[avro(repr = "record_internally_tagged", tests = false)]
     #[serde(tag = "type")]
     enum Foo {
         A {},
@@ -512,7 +514,7 @@ fn avro_rs_569_enum_repr_record_internally_tagged_struct() {
 #[should_panic(expected = "Missing default for skipped field 'spam' of schema")]
 fn avro_rs_569_enum_repr_record_internally_tagged_struct_no_defaults() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "record_internally_tagged")]
+    #[avro(repr = "record_internally_tagged", tests = false)]
     #[serde(tag = "type")]
     enum Foo {
         A {},
@@ -533,7 +535,7 @@ fn avro_rs_569_enum_repr_record_internally_tagged_struct_no_defaults() {
 #[test]
 fn avro_rs_569_enum_repr_union_of_records_plain() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "union_of_records")]
+    #[avro(repr = "union_of_records", tests = false)]
     enum Foo {
         A,
         B,
@@ -559,7 +561,7 @@ fn avro_rs_569_enum_repr_union_of_records_plain() {
 #[test]
 fn avro_rs_569_enum_repr_union_of_records_tuple() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "union_of_records")]
+    #[avro(repr = "union_of_records", tests = false)]
     enum Foo {
         A(),
         B(String),
@@ -593,7 +595,7 @@ fn avro_rs_569_enum_repr_union_of_records_tuple() {
 #[test]
 fn avro_rs_569_enum_repr_union_of_records_struct() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "union_of_records")]
+    #[avro(repr = "union_of_records", tests = false)]
     enum Foo {
         A {},
         B {
@@ -635,7 +637,7 @@ fn avro_rs_569_enum_repr_union_of_records_struct() {
 #[test]
 fn avro_rs_569_enum_repr_bare_union_without_untagged_plain() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "bare_union")]
+    #[avro(repr = "bare_union", tests = false)]
     enum Foo {
         A,
     }
@@ -649,7 +651,7 @@ fn avro_rs_569_enum_repr_bare_union_without_untagged_plain() {
 #[test]
 fn avro_rs_569_enum_repr_bare_union_without_untagged_tuple() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "bare_union")]
+    #[avro(repr = "bare_union", tests = false)]
     enum Foo {
         B(String),
         #[serde(rename = "D")]
@@ -684,7 +686,7 @@ fn avro_rs_569_enum_repr_bare_union_without_untagged_tuple() {
 #[test]
 fn avro_rs_569_enum_repr_bare_union_without_untagged_tuple_same_len() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "bare_union")]
+    #[avro(repr = "bare_union", tests = false)]
     enum Foo {
         A(String, String),
         B(i32, i32),
@@ -724,7 +726,7 @@ fn avro_rs_569_enum_repr_bare_union_without_untagged_tuple_same_len() {
 #[test]
 fn avro_rs_569_enum_repr_bare_union_without_untagged_tuple_and_struct_same_len() {
     #[derive(AvroSchema, Debug, Serialize, Deserialize, Clone, PartialEq)]
-    #[avro(repr = "bare_union")]
+    #[avro(repr = "bare_union", tests = false)]
     enum Foo {
         A { a: String, b: String },
         B(i32, i32),
