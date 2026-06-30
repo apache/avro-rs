@@ -135,6 +135,7 @@ pub struct NamedTypeOptions {
     pub transparent: bool,
     pub default: Option<Value>,
     pub repr: Option<Repr>,
+    pub tests: bool,
 }
 
 impl NamedTypeOptions {
@@ -261,6 +262,7 @@ impl NamedTypeOptions {
             transparent: serde.transparent,
             default,
             repr,
+            tests: avro.tests,
         })
     }
 }

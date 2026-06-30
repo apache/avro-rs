@@ -46,6 +46,7 @@ where
 #[test]
 fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_middle_field() -> TestResult {
     #[derive(AvroSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[avro(tests = false)]
     struct T {
         x: Option<i8>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -67,6 +68,7 @@ fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_middle_field
 #[test]
 fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_first_field() -> TestResult {
     #[derive(AvroSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[avro(tests = false)]
     struct T {
         #[serde(skip_serializing_if = "Option::is_none")]
         #[avro(default = "null")]
@@ -88,6 +90,7 @@ fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_first_field(
 #[test]
 fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_last_field() -> TestResult {
     #[derive(AvroSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[avro(tests = false)]
     struct T {
         x: Option<i8>,
         y: Option<String>,
@@ -109,6 +112,7 @@ fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_last_field()
 #[test]
 fn avro_rs_226_index_out_of_bounds_with_serde_skip_multiple_fields() -> TestResult {
     #[derive(AvroSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[avro(tests = false)]
     struct T {
         no_skip1: Option<i8>,
         #[serde(skip_serializing)]
