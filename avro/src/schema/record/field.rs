@@ -146,7 +146,7 @@ impl RecordField {
                 let resolved = schemas.iter().any(|schema| {
                     avro_value
                         .to_owned()
-                        .resolve_internal(schema, names, schema.namespace(), &None)
+                        .resolve_internal(schema, names, schema.namespace(), None)
                         .is_ok()
                 });
 
@@ -163,7 +163,7 @@ impl RecordField {
                 }
             } else {
                 let resolved = avro_value
-                    .resolve_internal(field_schema, names, field_schema.namespace(), &None)
+                    .resolve_internal(field_schema, names, field_schema.namespace(), None)
                     .is_ok();
 
                 if !resolved {
