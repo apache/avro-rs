@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+---
 name: Rust Continuous Integration
 on:
   workflow_dispatch:
@@ -37,11 +38,13 @@ jobs:
   license-check:
     runs-on: ubuntu-24.04
     steps:
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
         with:
           tool: hawkeye@6.3
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - name: Check License Header
         run: hawkeye check
   ci:
@@ -61,28 +64,30 @@ jobs:
             target: aarch64-unknown-linux-gnu
 
     steps:
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
         if: matrix.rust == 'nightly'
         with:
           tool: cargo-expand
 
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
         if: matrix.rust == 'stable' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
         with:
           tool: cargo-rdme@1.4.2
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Cache Cargo
-        uses: actions/cache@v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # these represent dependencies downloaded by cargo
           # and thus do not depend on the OS, arch nor rust version.
           path: ~/.cargo
           key: ${{ runner.os }}-${{ matrix.runner.name }}-${{ matrix.runner.target }}-${{ matrix.rust }}-cache1-${{ hashFiles('**/Cargo.lock') }}
       - name: Cache Rust dependencies
-        uses: actions/cache@v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # these represent compiled steps of both dependencies and avro
           # and thus are specific for a particular OS, arch and rust version.
@@ -134,13 +139,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Checkout other SDKs
-        uses: actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: apache/avro
           path: main-repo
+          persist-credentials: false
 
       - name: Rust Toolchain
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
@@ -148,14 +156,14 @@ jobs:
           toolchain: stable
 
       - name: Cache Cargo
-        uses: actions/cache@v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # these represent dependencies downloaded by cargo
           # and thus do not depend on the OS, arch nor rust version.
           path: ~/.cargo
           key: ${{ runner.os }}-target-cache1-${{ hashFiles('**/Cargo.lock') }}
       - name: Cache Rust dependencies
-        uses: actions/cache@v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # these represent compiled steps of both dependencies and avro
           # and thus are specific for a particular OS, arch and rust version.
@@ -163,7 +171,7 @@ jobs:
           key: ${{ runner.os }}-target-cache1-stable-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache Local Maven Repository
-        uses: actions/cache@v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -203,7 +211,7 @@ jobs:
       - name: Rust reads interop files created by Java and Rust
         run: INTEROP_ROOT_FOLDER="main-repo" ./build.sh interop-data-test
 
-      - uses: shogo82148/actions-setup-perl@v1
+      - uses: shogo82148/actions-setup-perl@a198315ec4e9244f206879ea7b63078003aec8a6 # v1.41.1
         with:
           perl-version: 5.32
 
@@ -238,7 +246,9 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Rust Toolchain
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
@@ -247,7 +257,7 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Cache Cargo
-        uses: actions/cache@v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # these represent dependencies downloaded by cargo
           # and thus do not depend on the OS, arch nor rust version.
@@ -255,7 +265,7 @@ jobs:
           key: ${{ runner.os }}-target-cache1-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache Rust dependencies
-        uses: actions/cache@v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # these represent compiled steps of both dependencies and avro
           # and thus are specific for a particular OS, arch and rust version.

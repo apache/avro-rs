@@ -16,26 +16,10 @@
 # under the License.
 
 ---
-name: "ASF Allowlist Check"
-
-on:
-  workflow_dispatch:
-  pull_request:
-    paths:
-      - ".github/**"
-  push:
-    # Always run on every commit on the main branch in case of expired allows
-    branches:
-      - main
-
-permissions:
-  contents: read
-
-jobs:
-  asf-allowlist-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-      - uses: apache/infrastructure-actions/allowlist-check@main
+rules:
+  secrets-outside-env:
+    disable: true
+  unpinned-uses:
+    config:
+      policies:
+        "apache/*": ref-pin
