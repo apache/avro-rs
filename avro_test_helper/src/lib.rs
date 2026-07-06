@@ -22,7 +22,7 @@ use core::any::type_name;
 use core::cell::RefCell;
 use core::fmt::{Debug, Display};
 #[cfg(not(target_arch = "wasm32"))]
-use ctor::{ctor, dtor};
+use linktime::{ctor, dtor};
 
 thread_local! {
     // The unit tests run in parallel

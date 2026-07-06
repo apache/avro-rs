@@ -16,59 +16,47 @@
 # under the License.
 
 ---
-name: Rust Security Audit
+name: "CodeQL"
+
 on:
-  workflow_dispatch:
-  push:
-    branches: [ main ]
-    paths:
-      - .github/workflows/test-lang-rust-audit.yml
-      - '**/Cargo.toml'
-      - Cargo.lock
-      - deny.toml
   pull_request:
-    branches: [ main ]
-    paths:
-      - .github/workflows/test-lang-rust-audit.yml
-      - '**/Cargo.toml'
-      - Cargo.lock
-      - deny.toml
+    branches: ['main']
+  push:
+    branches: ['main']
+  schedule:
+    - cron: '0 2 * * *'
 
 permissions:
   contents: read
-
-env:
-  RUSTFLAGS: -Dwarnings
-
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: codeql-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  audit:
+  analyze:
+    name: Analyze
     runs-on: ubuntu-latest
+    strategy:
+      # Keep checking the other language if one fails
+      fail-fast: false
+      matrix:
+        language: ['rust', 'actions']
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+      security-events: write
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - name: Dependency Review
-        if: github.event_name == 'pull_request'
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
-      - name: Install Cargo Audit
-        run: cargo install cargo-audit
-      - name: Audit
-        run: cargo audit
 
-  deny:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
         with:
-          persist-credentials: false
-      - name: Install Cargo Deny
-        run: cargo install cargo-deny
-      - name: Check
-        run: cargo deny check
-      
+          languages: ${{ matrix.language }}
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+

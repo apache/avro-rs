@@ -16,37 +16,26 @@
 # under the License.
 
 ---
-name: Rust Clippy Check
+name: "ASF Allowlist Check"
+
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
+    paths:
+      - ".github/**"
+  push:
+    # Always run on every commit on the main branch in case of expired allows
+    branches:
+      - main
 
 permissions:
   contents: read
 
-env:
-  RUSTFLAGS: -Dwarnings
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  clippy_check:
+  asf-allowlist-check:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        rust:
-          - "stable"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
-        with:
-          toolchain: ${{ matrix.rust }}
-          components: clippy
-      - run: cargo clippy --all-features --all-targets --workspace
+      - uses: apache/infrastructure-actions/allowlist-check@main
