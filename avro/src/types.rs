@@ -846,6 +846,26 @@ impl Value {
                     Ok(Value::Decimal(Decimal::from(bytes)))
                 }
             }
+
+            // Per spec §Records, a decimal value can be encoded as a JSON string
+            // whose codepoints (0-255) map directly to byte values. This applies
+            // to defaults and any other String → Decimal resolution. No precision
+            // check is performed — the bytes only need to be valid, not fit the
+            // declared precision.
+            Value::String(s) => {
+                let bytes = s
+                    .chars()
+                    .map(|c| {
+                        let cp = c as u32;
+                        if cp > 0xFF {
+                            Err(Details::ResolveDecimal(Value::String(s.clone())).into())
+                        } else {
+                            Ok(cp as u8)
+                        }
+                    })
+                    .collect::<Result<Vec<u8>, Error>>()?;
+                Ok(Value::Decimal(Decimal::from(bytes)))
+            }
             other => Err(Details::ResolveDecimal(other).into()),
         }
     }
@@ -1773,6 +1793,69 @@ Field with name '"b"' is not a member of the map items"#,
         }))?;
         assert!(value.resolve(&Schema::String).is_err());
 
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_580_resolve_decimal_from_string_default() -> TestResult {
+        let value = Value::String("\u{0000}".to_string());
+        let resolved = value.resolve(&Schema::Decimal(DecimalSchema {
+            precision: 10,
+            scale: 4,
+            inner: InnerDecimalSchema::Bytes,
+        }))?;
+        assert_eq!(resolved, Value::Decimal(Decimal::from(vec![0u8])));
+
+        let mut all_bytes_str = String::new();
+        for b in 0u8..=255u8 {
+            all_bytes_str.push(char::from_u32(b as u32).unwrap());
+        }
+        let resolved = Value::String(all_bytes_str).resolve(&Schema::Decimal(DecimalSchema {
+            precision: 10,
+            scale: 0,
+            inner: InnerDecimalSchema::Bytes,
+        }))?;
+        assert_eq!(
+            resolved,
+            Value::Decimal(Decimal::from((0u8..=255u8).collect::<Vec<_>>()))
+        );
+
+        let value = Value::String("\u{0100}".to_string());
+        assert!(
+            value
+                .resolve(&Schema::Decimal(DecimalSchema {
+                    precision: 10,
+                    scale: 4,
+                    inner: InnerDecimalSchema::Bytes,
+                }))
+                .is_err()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_580_parse_schema_with_nullable_decimal_string_default() -> TestResult {
+        let schema_json = r#"{
+            "type": "record",
+            "name": "NullableDecimal",
+            "fields": [
+                {
+                    "name": "amount",
+                    "type": [
+                        {
+                            "type": "bytes",
+                            "scale": 4,
+                            "precision": 10,
+                            "logicalType": "decimal"
+                        },
+                        "null"
+                    ],
+                    "default": "\u0000"
+                }
+            ]
+        }"#;
+        Schema::parse_str(schema_json)?;
         Ok(())
     }
 
@@ -3326,7 +3409,7 @@ Field with name '"b"' is not a member of the map items"#,
             (
                 r#"{ "name": "NAME", "type": "bytes", "logicalType": "decimal", "precision": 4, "scale": 3 }"#,
                 Value::Float(123_f32),
-                "Expected Value::Decimal, Value::Bytes or Value::Fixed, got: Float(123.0)",
+                "Expected Value::Decimal, Value::Bytes, Value::Fixed or Value::String, got: Float(123.0)",
             ),
             (
                 r#"{ "name": "NAME", "type": "bytes" }"#,
