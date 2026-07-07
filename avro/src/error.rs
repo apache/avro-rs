@@ -188,7 +188,7 @@ pub enum Details {
     #[error("Expected Value::Duration or Value::Fixed(12), got: {0:?}")]
     ResolveDuration(Value),
 
-    #[error("Expected Value::Decimal, Value::Bytes or Value::Fixed, got: {0:?}")]
+    #[error("Expected Value::Decimal, Value::Bytes, Value::Fixed or Value::String, got: {0:?}")]
     ResolveDecimal(Value),
 
     #[error("Missing field in record: {0:?}")]

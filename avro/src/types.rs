@@ -846,18 +846,24 @@ impl Value {
                     Ok(Value::Decimal(Decimal::from(bytes)))
                 }
             }
-            // JSON string defaults per spec §Records: codepoints 0-255
-            // map to byte values 0-255. No precision check — defaults
-            // need only be valid `bytes`, not fit the declared precision.
+
+            // Per spec §Records, a decimal value can be encoded as a JSON string
+            // whose codepoints (0-255) map directly to byte values. This applies
+            // to defaults and any other String → Decimal resolution. No precision
+            // check is performed — the bytes only need to be valid, not fit the
+            // declared precision.
             Value::String(s) => {
-                let mut bytes = Vec::with_capacity(s.len());
-                for c in s.chars() {
-                    let cp = c as u32;
-                    if cp > 0xFF {
-                        return Err(Details::ResolveDecimal(Value::String(s)).into());
-                    }
-                    bytes.push(cp as u8);
-                }
+                let bytes = s
+                    .chars()
+                    .map(|c| {
+                        let cp = c as u32;
+                        if cp > 0xFF {
+                            Err(Details::ResolveDecimal(Value::String(s.clone())).into())
+                        } else {
+                            Ok(cp as u8)
+                        }
+                    })
+                    .collect::<Result<Vec<u8>, Error>>()?;
                 Ok(Value::Decimal(Decimal::from(bytes)))
             }
             other => Err(Details::ResolveDecimal(other).into()),
@@ -1791,7 +1797,7 @@ Field with name '"b"' is not a member of the map items"#,
     }
 
     #[test]
-    fn resolve_decimal_from_string_default() -> TestResult {
+    fn avro_rs_580_resolve_decimal_from_string_default() -> TestResult {
         let value = Value::String("\u{0000}".to_string());
         let resolved = value.resolve(&Schema::Decimal(DecimalSchema {
             precision: 10,
@@ -1829,7 +1835,7 @@ Field with name '"b"' is not a member of the map items"#,
     }
 
     #[test]
-    fn parse_schema_with_nullable_decimal_string_default() -> TestResult {
+    fn avro_rs_580_parse_schema_with_nullable_decimal_string_default() -> TestResult {
         let schema_json = r#"{
             "type": "record",
             "name": "NullableDecimal",
