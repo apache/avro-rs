@@ -3409,7 +3409,7 @@ Field with name '"b"' is not a member of the map items"#,
             (
                 r#"{ "name": "NAME", "type": "bytes", "logicalType": "decimal", "precision": 4, "scale": 3 }"#,
                 Value::Float(123_f32),
-                "Expected Value::Decimal, Value::Bytes or Value::Fixed, got: Float(123.0)",
+                "Expected Value::Decimal, Value::Bytes, Value::Fixed or Value::String, got: Float(123.0)",
             ),
             (
                 r#"{ "name": "NAME", "type": "bytes" }"#,
