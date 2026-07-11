@@ -223,8 +223,7 @@ fn avro_rs_569_enum_repr_record_tag_content_tuple() {
                     {
                         "type": "record",
                         "name": "Alt",
-                        "fields": [],
-                        "org.apache.avro.rust.tuple": true
+                        "fields": []
                     },
                     "string",
                     {
@@ -289,7 +288,6 @@ fn avro_rs_569_enum_repr_record_tag_content_struct() {
                     {
                         "type": "record",
                         "name": "D",
-                        "default": "null",
                         "fields": [
                             { "name": "bar", "type": "string" },
                             { "name": "is_it_true", "aliases": ["is_it_false"], "type": "boolean" }
@@ -348,7 +346,6 @@ fn avro_rs_569_enum_repr_bare_union_tuple() {
         {
             "type": "record",
             "name": "D",
-            "default": "null",
             "fields": [
                 { "name": "field_0", "type": "string" },
                 { "name": "is_it_true", "aliases": ["is_it_false"], "type": "boolean" }
@@ -612,7 +609,7 @@ fn avro_rs_569_enum_repr_union_of_records_struct() {
         {"type": "record", "name": "A", "fields": []},
         {"type": "record", "name": "B", "fields": [{
             "name": "spam", "type": "string"
-        }], "org.apache.avro.rust.union_of_records": true },
+        }]},
         {"type": "record", "name": "D", "fields": [
             {"name": "bar", "type": "string"},
             {"name": "is_it_true", "aliases": ["is_it_false"], "type": "boolean"}
@@ -665,7 +662,6 @@ fn avro_rs_569_enum_repr_bare_union_without_untagged_tuple() {
         {
             "type": "record",
             "name": "D",
-            "default": "null",
             "fields": [
                 { "name": "field_0", "type": "string" },
                 { "name": "is_it_true", "aliases": ["is_it_false"], "type": "boolean" }
@@ -695,7 +691,6 @@ fn avro_rs_569_enum_repr_bare_union_without_untagged_tuple_same_len() {
         {
             "type": "record",
             "name": "A",
-            "default": "null",
             "fields": [
                 { "name": "field_0", "type": "string" },
                 { "name": "field_1", "type": "string" }
@@ -705,7 +700,6 @@ fn avro_rs_569_enum_repr_bare_union_without_untagged_tuple_same_len() {
         {
             "type": "record",
             "name": "B",
-            "default": "null",
             "fields": [
                 { "name": "field_0", "type": "int" },
                 { "name": "field_1", "type": "int" }
@@ -735,7 +729,6 @@ fn avro_rs_569_enum_repr_bare_union_without_untagged_tuple_and_struct_same_len()
         {
             "type": "record",
             "name": "A",
-            "default": "null",
             "fields": [
                 { "name": "a", "type": "string" },
                 { "name": "b", "type": "string" }
@@ -744,7 +737,6 @@ fn avro_rs_569_enum_repr_bare_union_without_untagged_tuple_and_struct_same_len()
         {
             "type": "record",
             "name": "B",
-            "default": "null",
             "fields": [
                 { "name": "field_0", "type": "int" },
                 { "name": "field_1", "type": "int" }

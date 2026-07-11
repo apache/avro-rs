@@ -1956,7 +1956,6 @@ fn avro_rs_397_uuid() {
                     "logicalType":"uuid",
                     "name":"Uuid",
                     "namespace": "org.apache.avro.rust",
-                    "default":"\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
                     "size":16
                 }
             }
