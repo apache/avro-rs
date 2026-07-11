@@ -426,9 +426,7 @@ impl Value {
     ) -> bool {
         match self.validate_internal(schema, names, None) {
             Some(reason) => {
-                let log_message =
-                    format!("Invalid value: {self:?} for schema: {schema:?}. Reason: {reason}");
-                error!("{log_message}");
+                error!("Invalid value: {self:?} for schema: {schema:?}. Reason: {reason}");
                 false
             }
             None => true,
