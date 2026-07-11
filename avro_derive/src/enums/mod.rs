@@ -95,31 +95,31 @@ fn newtype_extra_attribute_checks(
     if options.doc.is_some() {
         errors.push(syn::Error::new(
             span,
-            r#"AvroSchema: `#[avro(doc = "..")]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")`"#
+            r#"AvroSchema: `#[avro(doc = "..")]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")]`"#
         ));
     }
     if !matches!(options.default, FieldDefault::Trait) {
         errors.push(syn::Error::new(
             span,
-            r#"AvroSchema: `#[avro(default = ..)]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")`"#
+            r#"AvroSchema: `#[avro(default = ..)]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")]`"#
         ));
     }
     if !options.alias.is_empty() {
         errors.push(syn::Error::new(
             span,
-            r#"AvroSchema: `#[avro(alias = "..")]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")`"#
+            r#"AvroSchema: `#[avro(alias = "..")]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")]`"#
         ));
     }
     if options.rename.is_some() {
         errors.push(syn::Error::new(
             span,
-            r#"AvroSchema: `#[avro(rename = "..")]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")`"#
+            r#"AvroSchema: `#[avro(rename = "..")]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")]`"#
         ));
     }
     if options.flatten {
         errors.push(syn::Error::new(
             span,
-            r#"AvroSchema: `#[avro(flatten)]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")`"#,
+            r#"AvroSchema: `#[avro(flatten)]` only works on newtype variants when the enum uses `#[avro(repr = "union_of_records")]`"#,
         ));
     }
 

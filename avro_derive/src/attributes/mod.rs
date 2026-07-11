@@ -114,13 +114,18 @@ impl Repr {
                     ))
                 }
             }
-            None if tag.is_some() && content.is_some() => Ok(Some(Self::RecordTagContent {
-                tag: tag.unwrap(),
-                content: content.unwrap(),
-            })),
-            None if tag.is_some() => Ok(Some(Self::RecordInternallyTagged { tag: tag.unwrap() })),
-            None if untagged => Ok(Some(Self::BareUnion { untagged })),
-            None => Ok(None),
+            None => match (tag, content, untagged) {
+                (Some(tag), Some(content), false) => {
+                    Ok(Some(Self::RecordTagContent { tag, content }))
+                }
+                (Some(tag), None, false) => Ok(Some(Self::RecordInternallyTagged { tag })),
+                (None, None, true) => Ok(Some(Self::BareUnion { untagged: true })),
+                (None, None, false) => Ok(None),
+                _ => Err(syn::Error::new(
+                    span,
+                    "AvroSchema: incompatible Serde tagging attributes",
+                )),
+            },
         }
     }
 }
