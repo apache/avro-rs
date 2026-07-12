@@ -178,18 +178,24 @@ impl Codec {
             })?,
             #[cfg(feature = "snappy")]
             Codec::Snappy => {
-                let decompressed_size = snap::raw::decompress_len(&stream[..stream.len() - 4])
+                // The block ends with a 4-byte CRC32; a truncated/corrupt block
+                // shorter than that must error rather than underflow the slice.
+                let data_end = stream
+                    .len()
+                    .checked_sub(4)
+                    .ok_or(Details::BadSnappyLength(stream.len()))?;
+                let decompressed_size = snap::raw::decompress_len(&stream[..data_end])
                     .map_err(Details::GetSnappyDecompressLen)?;
                 // The decompressed size is taken from the (untrusted) block
                 // header, so bound it before allocating for it.
                 let decompressed_size = crate::util::safe_len(decompressed_size)?;
                 let mut decoded = vec![0; decompressed_size];
                 snap::raw::Decoder::new()
-                    .decompress(&stream[..stream.len() - 4], &mut decoded[..])
+                    .decompress(&stream[..data_end], &mut decoded[..])
                     .map_err(Details::SnappyDecompress)?;
 
                 let mut last_four: [u8; 4] = [0; 4];
-                last_four.copy_from_slice(&stream[(stream.len() - 4)..]);
+                last_four.copy_from_slice(&stream[data_end..]);
                 let expected: u32 = u32::from_be_bytes(last_four);
 
                 let mut hasher = crc32fast::Hasher::new();
@@ -353,6 +359,18 @@ mod tests {
     #[test]
     fn snappy_compress_and_decompress() -> TestResult {
         compress_and_decompress(Codec::Snappy)
+    }
+
+    #[cfg(feature = "snappy")]
+    #[test]
+    fn snappy_decompress_short_block_errors_without_panicking() {
+        // A block shorter than the trailing 4-byte CRC must return an error
+        // rather than underflowing `stream.len() - 4` and panicking.
+        for len in 0..4usize {
+            let mut stream = vec![0u8; len];
+            let result = Codec::Snappy.decompress(&mut stream);
+            assert!(result.is_err(), "len={len} should error, got {result:?}");
+        }
     }
 
     #[cfg(feature = "zstandard")]

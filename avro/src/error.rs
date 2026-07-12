@@ -504,6 +504,10 @@ pub enum Details {
     GetSnappyDecompressLen(#[source] snap::Error),
 
     #[cfg(feature = "snappy")]
+    #[error("Snappy-compressed block is {0} bytes, too short to contain the trailing CRC32")]
+    BadSnappyLength(usize),
+
+    #[cfg(feature = "snappy")]
     #[error("Failed to decompress with snappy: {0}")]
     SnappyDecompress(#[source] snap::Error),
 
