@@ -144,21 +144,34 @@ impl Codec {
 
     /// Decompress a stream of bytes in-place.
     pub fn decompress(self, stream: &mut Vec<u8>) -> AvroResult<()> {
+        // Cap the decompressed output at the configured allocation budget so a
+        // small compressed block cannot inflate to an enormous buffer (a
+        // "decompression bomb") and exhaust memory.
+        let max_bytes =
+            crate::util::max_allocation_bytes(crate::util::DEFAULT_MAX_ALLOCATION_BYTES);
         *stream = match self {
             Codec::Null => return Ok(()),
-            Codec::Deflate(_settings) => miniz_oxide::inflate::decompress_to_vec(stream).map_err(|e| {
+            Codec::Deflate(_settings) => miniz_oxide::inflate::decompress_to_vec_with_limit(stream, max_bytes).map_err(|e| {
+                use miniz_oxide::inflate::TINFLStatus::{FailedCannotMakeProgress, BadParam, Adler32Mismatch, Failed, Done, NeedsMoreInput, HasMoreOutput};
+                // The output would grow past the allocation budget: reject it as
+                // a decompression bomb rather than allocating without bound.
+                if let HasMoreOutput = e.status {
+                    return Error::new(Details::MemoryAllocation {
+                        desired: max_bytes.saturating_add(1),
+                        maximum: max_bytes,
+                    });
+                }
                 let err = {
-                    use miniz_oxide::inflate::TINFLStatus::{FailedCannotMakeProgress, BadParam, Adler32Mismatch, Failed, Done, NeedsMoreInput, HasMoreOutput};
-                    use std::io::{Error,ErrorKind};
+                    use std::io::{Error as IoError, ErrorKind};
                     match e.status {
-                        FailedCannotMakeProgress => Error::from(ErrorKind::UnexpectedEof),
-                        BadParam => Error::other("Unexpected error: miniz_oxide reported invalid output buffer size. Please report this to avro-rs developers."), // not possible for _to_vec()
-                        Adler32Mismatch => Error::from(ErrorKind::InvalidData),
-                        Failed => Error::from(ErrorKind::InvalidData),
-                        Done => Error::other("Unexpected error: miniz_oxide reported an error with a success status. Please report this to avro-rs developers."),
-                        NeedsMoreInput => Error::from(ErrorKind::UnexpectedEof),
-                        HasMoreOutput => Error::other("Unexpected error: miniz_oxide has more data than the output buffer can hold. Please report this to avro-rs developers."), // not possible for _to_vec()
-                        other => Error::other(format!("Unexpected error: {other:?}"))
+                        FailedCannotMakeProgress => IoError::from(ErrorKind::UnexpectedEof),
+                        BadParam => IoError::other("Unexpected error: miniz_oxide reported invalid output buffer size. Please report this to avro-rs developers."), // not possible for _to_vec()
+                        Adler32Mismatch => IoError::from(ErrorKind::InvalidData),
+                        Failed => IoError::from(ErrorKind::InvalidData),
+                        Done => IoError::other("Unexpected error: miniz_oxide reported an error with a success status. Please report this to avro-rs developers."),
+                        NeedsMoreInput => IoError::from(ErrorKind::UnexpectedEof),
+                        HasMoreOutput => unreachable!("handled above"),
+                        other => IoError::other(format!("Unexpected error: {other:?}"))
                     }
                 };
                 Error::new(Details::DeflateDecompress(err))
@@ -167,6 +180,9 @@ impl Codec {
             Codec::Snappy => {
                 let decompressed_size = snap::raw::decompress_len(&stream[..stream.len() - 4])
                     .map_err(Details::GetSnappyDecompressLen)?;
+                // The decompressed size is taken from the (untrusted) block
+                // header, so bound it before allocating for it.
+                let decompressed_size = crate::util::safe_len(decompressed_size)?;
                 let mut decoded = vec![0; decompressed_size];
                 snap::raw::Decoder::new()
                     .decompress(&stream[..stream.len() - 4], &mut decoded[..])
@@ -187,14 +203,22 @@ impl Codec {
             }
             #[cfg(feature = "zstandard")]
             Codec::Zstandard(_settings) => {
-                use std::io::BufReader;
+                use std::io::{BufReader, Read};
                 use zstd::zstd_safe;
 
                 let mut decoded = Vec::new();
                 let buffer_size = zstd_safe::DCtx::in_size();
                 let buffer = BufReader::with_capacity(buffer_size, &stream[..]);
-                let mut decoder = zstd::Decoder::new(buffer).map_err(Details::ZstdDecompress)?;
-                std::io::copy(&mut decoder, &mut decoded).map_err(Details::ZstdDecompress)?;
+                let decoder = zstd::Decoder::new(buffer).map_err(Details::ZstdDecompress)?;
+                // Read one byte past the budget so an output that exactly fills
+                // it is allowed, while a larger (bomb) output is detected.
+                decoder
+                    .take((max_bytes as u64).saturating_add(1))
+                    .read_to_end(&mut decoded)
+                    .map_err(Details::ZstdDecompress)?;
+                if decoded.len() > max_bytes {
+                    return Err(Details::MemoryAllocation { desired: decoded.len(), maximum: max_bytes }.into());
+                }
                 decoded
             }
             #[cfg(feature = "bzip")]
@@ -202,9 +226,14 @@ impl Codec {
                 use bzip2::read::BzDecoder;
                 use std::io::Read;
 
-                let mut decoder = BzDecoder::new(&stream[..]);
                 let mut decoded = Vec::new();
-                decoder.read_to_end(&mut decoded).unwrap_or_else(|_| unreachable!("No I/O errors possible with Vec<u8>"));
+                BzDecoder::new(&stream[..])
+                    .take((max_bytes as u64).saturating_add(1))
+                    .read_to_end(&mut decoded)
+                    .unwrap_or_else(|_| unreachable!("No I/O errors possible with Vec<u8>"));
+                if decoded.len() > max_bytes {
+                    return Err(Details::MemoryAllocation { desired: decoded.len(), maximum: max_bytes }.into());
+                }
                 decoded
             }
             #[cfg(feature = "xz")]
@@ -212,9 +241,14 @@ impl Codec {
                 use liblzma::read::XzDecoder;
                 use std::io::Read;
 
-                let mut decoder = XzDecoder::new(&stream[..]);
                 let mut decoded: Vec<u8> = Vec::new();
-                decoder.read_to_end(&mut decoded).unwrap_or_else(|_| unreachable!("No I/O errors possible with Vec<u8>"));
+                XzDecoder::new(&stream[..])
+                    .take((max_bytes as u64).saturating_add(1))
+                    .read_to_end(&mut decoded)
+                    .unwrap_or_else(|_| unreachable!("No I/O errors possible with Vec<u8>"));
+                if decoded.len() > max_bytes {
+                    return Err(Details::MemoryAllocation { desired: decoded.len(), maximum: max_bytes }.into());
+                }
                 decoded
             }
         };
