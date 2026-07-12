@@ -230,7 +230,7 @@ impl Codec {
                 BzDecoder::new(&stream[..])
                     .take((max_bytes as u64).saturating_add(1))
                     .read_to_end(&mut decoded)
-                    .unwrap_or_else(|_| unreachable!("No I/O errors possible with Vec<u8>"));
+                    .map_err(Details::Bzip2Decompress)?;
                 if decoded.len() > max_bytes {
                     return Err(Details::MemoryAllocation { desired: decoded.len(), maximum: max_bytes }.into());
                 }
@@ -245,7 +245,7 @@ impl Codec {
                 XzDecoder::new(&stream[..])
                     .take((max_bytes as u64).saturating_add(1))
                     .read_to_end(&mut decoded)
-                    .unwrap_or_else(|_| unreachable!("No I/O errors possible with Vec<u8>"));
+                    .map_err(Details::XzDecompress)?;
                 if decoded.len() > max_bytes {
                     return Err(Details::MemoryAllocation { desired: decoded.len(), maximum: max_bytes }.into());
                 }

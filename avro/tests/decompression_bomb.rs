@@ -23,6 +23,7 @@
 //! are then only a few MiB, keeping the test cheap and deterministic.
 
 use apache_avro::Codec;
+use apache_avro::error::Details;
 
 const BUDGET: usize = 1024 * 1024; // 1 MiB
 const BOMB_PLAINTEXT: usize = 8 * 1024 * 1024; // 8 MiB, well over the budget
@@ -45,10 +46,15 @@ fn assert_bounded(codec: Codec) {
         bomb.len()
     );
     let result = codec.decompress(&mut bomb);
-    assert!(
-        result.is_err(),
-        "a decompressed output exceeding the budget must be rejected, got {result:?}"
-    );
+    // Assert it fails *specifically* because the output exceeded the budget, so
+    // a regression that fails decompression for another reason cannot pass.
+    match result {
+        Err(e) => assert!(
+            matches!(e.details(), Details::MemoryAllocation { .. }),
+            "expected a MemoryAllocation error, got {e:?}"
+        ),
+        Ok(()) => panic!("a decompressed output exceeding the budget must be rejected"),
+    }
 
     // A payload within the budget must still round-trip.
     let original = b"apache avro decompression within budget".to_vec();

@@ -513,6 +513,12 @@ pub enum Details {
     #[error("Failed to decompress with zstd: {0}")]
     ZstdDecompress(#[source] std::io::Error),
 
+    #[error("Failed to decompress with bzip2: {0}")]
+    Bzip2Decompress(#[source] std::io::Error),
+
+    #[error("Failed to decompress with xz: {0}")]
+    XzDecompress(#[source] std::io::Error),
+
     #[error("Failed to read header: {0}")]
     ReadHeader(#[source] std::io::Error),
 
