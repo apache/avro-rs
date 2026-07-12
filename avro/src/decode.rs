@@ -485,6 +485,25 @@ mod tests {
     }
 
     #[test]
+    fn test_decode_array_int64_min_block_count_is_rejected() -> TestResult {
+        // i64::MIN as a negative block count cannot be negated (checked_neg
+        // returns None); decoding must fail rather than wrap. i64::MIN zig-zag
+        // encodes as the 10-byte varint below, followed by a block byte-size.
+        let payload: &[u8] = &[
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, // i64::MIN
+            0x00, // block byte-size
+        ];
+        let mut input = payload;
+        let result = decode(&Schema::array(Schema::Int).build(), &mut input);
+        assert!(
+            result.is_err(),
+            "an i64::MIN array block count must be rejected, got {result:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn test_decode_map_without_size() -> TestResult {
         let mut input: &[u8] = &[0x02, 0x08, 0x74, 0x65, 0x73, 0x74, 0x02, 0x00];
         let result = decode(&Schema::map(Schema::Int).build(), &mut input);
