@@ -199,7 +199,12 @@ pub(crate) fn safe_len(len: usize) -> AvroResult<usize> {
 /// decoded element count rather than the bytes read.
 pub(crate) fn safe_collection_len(total_items: usize, item_size: usize) -> AvroResult<()> {
     let max_bytes = max_allocation_bytes(DEFAULT_MAX_ALLOCATION_BYTES);
-    let desired = total_items.saturating_mul(item_size.max(1));
+    // Use checked_mul (not saturating_mul): saturating to usize::MAX could pass
+    // the check below when max_bytes is configured to usize::MAX, letting the
+    // subsequent reserve() hit a capacity-overflow panic instead of erroring.
+    let desired = total_items
+        .checked_mul(item_size.max(1))
+        .ok_or(Details::IntegerOverflow)?;
 
     if desired <= max_bytes {
         Ok(())

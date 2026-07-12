@@ -411,19 +411,9 @@ mod tests {
     // allocation. Zero-byte elements (null) are the worst case: they consume no
     // input, so nothing else bounds the count.
     fn zig_zag(n: i64) -> Vec<u8> {
-        let mut zz = ((n << 1) ^ (n >> 63)) as u64;
+        // Reuse the crate's encoder so the tests cannot diverge from it.
         let mut out = Vec::new();
-        loop {
-            let mut b = (zz & 0x7f) as u8;
-            zz >>= 7;
-            if zz != 0 {
-                b |= 0x80;
-            }
-            out.push(b);
-            if zz == 0 {
-                break;
-            }
-        }
+        crate::util::zig_i64(n, &mut out).unwrap();
         out
     }
 
