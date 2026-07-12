@@ -242,16 +242,18 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                 }
 
                 // Bound the cumulative element count against the allocation
-                // budget before reserving: `reserve(len)` allocates
-                // `len * size_of::<Value>()` bytes, and a tiny block count could
-                // otherwise drive a huge allocation. This also caps zero-byte
-                // on-wire elements (e.g. `null`), which consume no input.
+                // budget before reserving: reserving for `len` elements
+                // allocates at least `len * size_of::<Value>()` bytes, and a
+                // tiny block count could otherwise drive a huge allocation. This
+                // also caps zero-byte on-wire elements (e.g. `null`), which
+                // consume no input. `reserve_exact` requests only what is needed,
+                // rather than the amortized (larger) capacity of `reserve`.
                 let total = items
                     .len()
                     .checked_add(len)
                     .ok_or(Details::IntegerOverflow)?;
                 safe_collection_len(total, std::mem::size_of::<Value>())?;
-                items.reserve(len);
+                items.reserve_exact(len);
                 for _ in 0..len {
                     items.push(decode_internal(
                         &inner.items,
@@ -275,6 +277,10 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
 
                 // See the array case above; a map entry additionally carries a
                 // String key, so bound by the size of a `(String, Value)` pair.
+                // This is a lower-bound estimate: `HashMap::reserve` also
+                // allocates hash-table metadata and spare capacity, so the
+                // budget is enforced approximately (not exactly) for maps. There
+                // is no `reserve_exact` for `HashMap`.
                 let total = items
                     .len()
                     .checked_add(len)
