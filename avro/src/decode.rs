@@ -24,7 +24,7 @@ use crate::{
     error::Details,
     schema::{DecimalSchema, EnumSchema, FixedSchema, Name, RecordSchema, ResolvedSchema, Schema},
     types::Value,
-    util::{safe_len, zag_i32, zag_i64},
+    util::{safe_collection_len, safe_len, zag_i32, zag_i64},
 };
 use std::{
     borrow::Borrow,
@@ -241,6 +241,16 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                     break;
                 }
 
+                // Bound the cumulative element count against the allocation
+                // budget before reserving: `reserve(len)` allocates
+                // `len * size_of::<Value>()` bytes, and a tiny block count could
+                // otherwise drive a huge allocation. This also caps zero-byte
+                // on-wire elements (e.g. `null`), which consume no input.
+                let total = items
+                    .len()
+                    .checked_add(len)
+                    .ok_or(Details::IntegerOverflow)?;
+                safe_collection_len(total, std::mem::size_of::<Value>())?;
                 items.reserve(len);
                 for _ in 0..len {
                     items.push(decode_internal(
@@ -263,6 +273,13 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                     break;
                 }
 
+                // See the array case above; a map entry additionally carries a
+                // String key, so bound by the size of a `(String, Value)` pair.
+                let total = items
+                    .len()
+                    .checked_add(len)
+                    .ok_or(Details::IntegerOverflow)?;
+                safe_collection_len(total, std::mem::size_of::<(String, Value)>())?;
                 items.reserve(len);
                 for _ in 0..len {
                     match decode_internal(&Schema::String, names, enclosing_namespace, reader)? {
@@ -384,6 +401,85 @@ mod tests {
         let mut input: &[u8] = &[5, 6, 2, 4, 6, 0];
         let result = decode(&Schema::array(Schema::Int).build(), &mut input);
         assert_eq!(Array(vec!(Int(1), Int(2), Int(3))), result?);
+
+        Ok(())
+    }
+
+    // A block count is decoded from a few bytes but drives `items.reserve(len)`,
+    // allocating `len * size_of::<Value>()` bytes. A tiny payload declaring a
+    // huge count must be rejected rather than driving a multi-gigabyte
+    // allocation. Zero-byte elements (null) are the worst case: they consume no
+    // input, so nothing else bounds the count.
+    fn zig_zag(n: i64) -> Vec<u8> {
+        let mut zz = ((n << 1) ^ (n >> 63)) as u64;
+        let mut out = Vec::new();
+        loop {
+            let mut b = (zz & 0x7f) as u8;
+            zz >>= 7;
+            if zz != 0 {
+                b |= 0x80;
+            }
+            out.push(b);
+            if zz == 0 {
+                break;
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn test_decode_array_of_null_huge_count_is_rejected() -> TestResult {
+        // 200,000,000 nulls => ~11 GiB reserve, far above the default budget.
+        let mut payload = zig_zag(200_000_000);
+        payload.push(0x00); // end-of-array marker (unreached)
+        let mut input: &[u8] = &payload;
+        let result = decode(&Schema::array(Schema::Null).build(), &mut input);
+        assert!(
+            result.is_err(),
+            "a huge array<null> block count must be rejected, got {result:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_array_of_long_huge_count_is_rejected() -> TestResult {
+        // Non-zero-byte elements are also affected: the reserve happens before
+        // any element is read.
+        let mut payload = zig_zag(200_000_000);
+        payload.push(0x00);
+        let mut input: &[u8] = &payload;
+        let result = decode(&Schema::array(Schema::Long).build(), &mut input);
+        assert!(
+            result.is_err(),
+            "a huge array<long> block count must be rejected, got {result:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_map_huge_count_is_rejected() -> TestResult {
+        let mut payload = zig_zag(200_000_000);
+        payload.push(0x00);
+        let mut input: &[u8] = &payload;
+        let result = decode(&Schema::map(Schema::Long).build(), &mut input);
+        assert!(
+            result.is_err(),
+            "a huge map block count must be rejected, got {result:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_small_array_of_null_still_decodes() -> TestResult {
+        // A modest array of nulls within the budget must still decode.
+        let mut payload = zig_zag(3);
+        payload.push(0x00);
+        let mut input: &[u8] = &payload;
+        let result = decode(&Schema::array(Schema::Null).build(), &mut input)?;
+        assert_eq!(Array(vec!(Value::Null, Value::Null, Value::Null)), result);
 
         Ok(())
     }

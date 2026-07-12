@@ -186,6 +186,32 @@ pub(crate) fn safe_len(len: usize) -> AvroResult<usize> {
     }
 }
 
+/// Bound the cumulative number of elements a collection (array or map) may hold.
+///
+/// [`safe_len`] guards byte-length allocations, but an array or map block is a
+/// count of elements, and reserving capacity for `n` elements allocates
+/// `n * item_size` bytes (`item_size` being the in-memory size of a decoded
+/// element). A malicious or truncated input can declare a huge block count in a
+/// few bytes, so the count must be validated against the allocation budget,
+/// accounting for the per-element size, before reserving or decoding. This also
+/// bounds zero-byte on-wire elements (e.g. `null`), which consume no input and
+/// so cannot be bounded by the bytes remaining, since the limit is on the
+/// decoded element count rather than the bytes read.
+pub(crate) fn safe_collection_len(total_items: usize, item_size: usize) -> AvroResult<()> {
+    let max_bytes = max_allocation_bytes(DEFAULT_MAX_ALLOCATION_BYTES);
+    let desired = total_items.saturating_mul(item_size.max(1));
+
+    if desired <= max_bytes {
+        Ok(())
+    } else {
+        Err(Details::MemoryAllocation {
+            desired,
+            maximum: max_bytes,
+        }
+        .into())
+    }
+}
+
 /// Set whether the serializer and deserializer should indicate to types that the format is human-readable.
 ///
 /// This function only changes the setting once. On subsequent calls the value will stay the same
