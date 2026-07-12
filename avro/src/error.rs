@@ -513,9 +513,11 @@ pub enum Details {
     #[error("Failed to decompress with zstd: {0}")]
     ZstdDecompress(#[source] std::io::Error),
 
+    #[cfg(feature = "bzip")]
     #[error("Failed to decompress with bzip2: {0}")]
     Bzip2Decompress(#[source] std::io::Error),
 
+    #[cfg(feature = "xz")]
     #[error("Failed to decompress with xz: {0}")]
     XzDecompress(#[source] std::io::Error),
 

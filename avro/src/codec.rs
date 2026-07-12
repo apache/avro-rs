@@ -165,7 +165,7 @@ impl Codec {
                     use std::io::{Error as IoError, ErrorKind};
                     match e.status {
                         FailedCannotMakeProgress => IoError::from(ErrorKind::UnexpectedEof),
-                        BadParam => IoError::other("Unexpected error: miniz_oxide reported invalid output buffer size. Please report this to avro-rs developers."), // not possible for _to_vec()
+                        BadParam => IoError::other("miniz_oxide reported an invalid parameter while decompressing"),
                         Adler32Mismatch => IoError::from(ErrorKind::InvalidData),
                         Failed => IoError::from(ErrorKind::InvalidData),
                         Done => IoError::other("Unexpected error: miniz_oxide reported an error with a success status. Please report this to avro-rs developers."),
