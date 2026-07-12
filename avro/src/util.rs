@@ -199,6 +199,10 @@ pub(crate) fn safe_len(len: usize) -> AvroResult<usize> {
 /// on-wire elements (e.g. `null`), which consume no input and so cannot be
 /// bounded by the bytes remaining, since the limit is on the decoded element
 /// count rather than the bytes read.
+///
+/// `item_size` is clamped to at least 1 (a zero-sized element type is treated as
+/// one byte), so the check still bounds the element count for such types; the
+/// reported `desired` allocation is therefore `total_items * max(item_size, 1)`.
 pub(crate) fn safe_collection_len(total_items: usize, item_size: usize) -> AvroResult<()> {
     let max_bytes = max_allocation_bytes(DEFAULT_MAX_ALLOCATION_BYTES);
     // Use checked_mul (not saturating_mul): saturating to usize::MAX could pass
