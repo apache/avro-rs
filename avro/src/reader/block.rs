@@ -146,7 +146,9 @@ impl<'r, R: Read> Block<'r, R> {
             Ok(block_len) => {
                 self.message_count = block_len as usize;
                 let block_bytes = util::read_long(&mut self.reader)?;
-                self.fill_buf(block_bytes as usize)?;
+                let block_bytes = usize::try_from(block_bytes)
+                    .map_err(|e| Details::ConvertI64ToUsize(e, block_bytes))?;
+                self.fill_buf(block_bytes)?;
                 let mut marker = [0u8; 16];
                 self.reader
                     .read_exact(&mut marker)
