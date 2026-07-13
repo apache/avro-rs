@@ -18,11 +18,9 @@
 use apache_avro::AvroSchema;
 
 #[derive(AvroSchema)]
-enum NonBasic {
-    A(i32),
-    B,
-    C,
-    D
+#[serde(untagged)]
+enum D {
+    A{}
 }
 
-fn main() {}
+pub fn main() {}

@@ -15,12 +15,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::attributes::{FieldDefault, With};
-use crate::utils::json_value_expr;
+use crate::attributes::{FieldDefault, FieldOptions, With};
+use crate::case::RenameRule;
+use crate::utils::{
+    aliases, field_aliases, json_value_expr, name_expr, preserve_optional, rename_ident,
+};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::spanned::Spanned;
-use syn::{Expr, Field, Type};
+use syn::{Expr, Field, FieldsNamed, FieldsUnnamed, Type};
 
 pub fn field_to_schema_expr(field: &Field, with: &With) -> Result<TokenStream, Vec<syn::Error>> {
     match with {
@@ -162,6 +165,232 @@ fn type_to_field_default_expr(ty: &Type) -> Result<TokenStream, Vec<syn::Error>>
             ),
         )]),
     }
+}
+
+pub fn named_fields_to_schema(
+    name: &str,
+    fields: FieldsNamed,
+    rename_all: RenameRule,
+    doc: Option<String>,
+    the_aliases: &[String],
+) -> Result<TokenStream, Vec<syn::Error>> {
+    let record_fields_expr = named_fields_to_record_fields(fields, rename_all)?;
+
+    let record_doc = preserve_optional(doc.map(|s| quote! { #s.to_string() }));
+    let record_aliases = aliases(the_aliases);
+    let name_expr = name_expr(name);
+
+    Ok(quote! {
+        ::apache_avro::schema::Schema::Record(
+            ::apache_avro::schema::RecordSchema::builder()
+                .aliases(#record_aliases)
+                .maybe_doc(#record_doc)
+                .fields(#record_fields_expr)
+                .name(#name_expr)
+                .build()
+        )
+    })
+}
+
+pub fn unnamed_fields_to_schema(
+    name: &str,
+    fields: FieldsUnnamed,
+    doc: Option<String>,
+    the_aliases: &[String],
+) -> Result<TokenStream, Vec<syn::Error>> {
+    let attributes_expr = if fields.unnamed.len() == 1 {
+        quote! {
+            [
+                ("org.apache.avro.rust.tuple".to_string(), ::serde_json::value::Value::Bool(true)),
+                ("org.apache.avro.rust.union_of_records".to_string(), ::serde_json::value::Value::Bool(true)),
+            ].into()
+        }
+    } else {
+        quote! {
+            [("org.apache.avro.rust.tuple".to_string(), ::serde_json::value::Value::Bool(true))].into()
+        }
+    };
+    let record_fields_expr = unnamed_fields_to_record_fields(fields)?;
+
+    let record_doc = preserve_optional(doc.map(|s| quote! { #s.to_string() }));
+    let record_aliases = aliases(the_aliases);
+    let name_expr = name_expr(name);
+
+    Ok(quote! {
+        ::apache_avro::schema::Schema::Record(
+            ::apache_avro::schema::RecordSchema::builder()
+                .aliases(#record_aliases)
+                .maybe_doc(#record_doc)
+                .fields(#record_fields_expr)
+                .attributes(#attributes_expr)
+                .name(#name_expr)
+                .build()
+        )
+    })
+}
+
+/// Returns an expression that resolves to a `Vec<RecordField>`.
+pub fn named_fields_to_record_fields(
+    fields: FieldsNamed,
+    rename_all: RenameRule,
+) -> Result<TokenStream, Vec<syn::Error>> {
+    let mut errors = Vec::new();
+    let mut field_exprs = Vec::with_capacity(fields.named.len());
+
+    for field in fields.named {
+        let field_attrs = match FieldOptions::new(&field.attrs, field.span()) {
+            Ok(attrs) => attrs,
+            Err(errs) => {
+                errors.extend(errs);
+                continue;
+            }
+        };
+
+        if field_attrs.skip {
+            continue;
+        } else if field_attrs.flatten {
+            // Inline the fields of the child record at runtime, as we don't have access to
+            // the schema here.
+            let get_record_fields = match field_to_record_fields_expr(&field, &field_attrs.with) {
+                Ok(fields) => fields,
+                Err(errs) => {
+                    errors.extend(errs);
+                    continue;
+                }
+            };
+            field_exprs.push(quote! {
+                if let Some(flattened_fields) = #get_record_fields {
+                    fields.extend(flattened_fields);
+                } else {
+                    panic!(concat!(stringify!(#field), " does not have any fields to flatten to"));
+                }
+            });
+
+            // Don't add this field as it's been replaced by the child record fields
+            continue;
+        }
+
+        let default_value = match field_to_field_default_expr(&field, field_attrs.default) {
+            Ok(default) => default,
+            Err(errs) => {
+                errors.extend(errs);
+                continue;
+            }
+        };
+
+        let name = rename_ident(
+            field.ident.as_ref().unwrap(),
+            field_attrs.rename,
+            rename_all,
+            RenameRule::apply_to_field,
+        );
+
+        let doc = preserve_optional(field_attrs.doc.map(|s| quote! { #s.to_string() }));
+        let aliases = field_aliases(&field_attrs.alias);
+        let schema_expr = match field_to_schema_expr(&field, &field_attrs.with) {
+            Ok(expr) => expr,
+            Err(errs) => {
+                errors.extend(errs);
+                continue;
+            }
+        };
+        field_exprs.push(quote! {
+            fields.push(::apache_avro::schema::RecordField {
+                name: #name.to_string(),
+                doc: #doc,
+                default: #default_value,
+                aliases: #aliases,
+                schema: #schema_expr,
+                custom_attributes: ::std::collections::BTreeMap::new(),
+            });
+        });
+    }
+
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+
+    // When fields are flattened there might be more fields, but this is good for the regular case
+    let minimum_length = field_exprs.len();
+    Ok(quote! {
+        {
+            let mut fields = ::std::vec::Vec::with_capacity(#minimum_length);
+            #(#field_exprs;)*
+            fields
+        }
+    })
+}
+
+/// Returns an expression that resolves to a `Vec<RecordField>`.
+pub fn unnamed_fields_to_record_fields(
+    fields: FieldsUnnamed,
+) -> Result<TokenStream, Vec<syn::Error>> {
+    let mut errors = Vec::new();
+    let mut field_exprs = Vec::with_capacity(fields.unnamed.len());
+
+    let mut index = 0;
+    for field in fields.unnamed {
+        let field_attrs = match FieldOptions::new(&field.attrs, field.span()) {
+            Ok(attrs) => attrs,
+            Err(errs) => {
+                errors.extend(errs);
+                continue;
+            }
+        };
+
+        if field_attrs.skip {
+            continue;
+        } else if field_attrs.flatten {
+            errors.push(syn::Error::new(
+                field.span(),
+                "AvroSchema: `#[serde(flatten)]` is not supported on tuple fields",
+            ));
+            continue;
+        }
+
+        let default_value = match field_to_field_default_expr(&field, field_attrs.default) {
+            Ok(default) => default,
+            Err(errs) => {
+                errors.extend(errs);
+                continue;
+            }
+        };
+
+        let name = if let Some(rename) = field_attrs.rename {
+            rename
+        } else {
+            format!("field_{index}")
+        };
+
+        let doc = preserve_optional(field_attrs.doc.map(|s| quote! { #s.to_string() }));
+        let aliases = field_aliases(&field_attrs.alias);
+        let schema_expr = match field_to_schema_expr(&field, &field_attrs.with) {
+            Ok(expr) => expr,
+            Err(errs) => {
+                errors.extend(errs);
+                continue;
+            }
+        };
+        field_exprs.push(quote! {
+            ::apache_avro::schema::RecordField {
+                name: #name.to_string(),
+                doc: #doc,
+                default: #default_value,
+                aliases: #aliases,
+                schema: #schema_expr,
+                custom_attributes: ::std::collections::BTreeMap::new(),
+            }
+        });
+        index += 1;
+    }
+
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+
+    Ok(quote! {
+        vec![#(#field_exprs,)*]
+    })
 }
 
 #[cfg(test)]

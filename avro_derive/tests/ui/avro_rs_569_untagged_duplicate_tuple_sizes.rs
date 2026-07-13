@@ -15,22 +15,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#![expect(dead_code, reason = "Only code generation is tested")]
+use apache_avro::AvroSchema;
 
-// Do not include the `.expanded` modules here, as that code won't compile
+#[derive(AvroSchema)]
+#[avro(repr = "bare_union")]
+#[serde(untagged)]
+enum Foo {
+    A(String, String),
+    B(i32, i32)
+}
 
-mod avro_3687_basic_enum_with_default;
-mod avro_3709_record_field_attributes;
-mod avro_rs_207_rename_all_attribute;
-mod avro_rs_207_rename_attr_over_rename_all_attribute;
-mod avro_rs_501_basic;
-mod avro_rs_501_namespace;
-mod avro_rs_501_reference;
-mod avro_rs_501_struct_with_optional;
-mod avro_rs_569_non_basic_enum;
-mod avro_rs_569_rename_all_fields;
-mod avro_rs_569_tag_content_enum;
-mod avro_rs_569_tag_enum;
-mod avro_rs_569_tag_struct;
-mod avro_rs_569_tuple_struct;
-mod avro_rs_569_unit_struct;
+fn main() {}
