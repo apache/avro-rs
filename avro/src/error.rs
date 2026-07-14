@@ -111,9 +111,17 @@ pub enum Details {
     },
 
     #[error(
-        "Unable to allocate {desired} bytes (maximum allowed: {maximum}). Change the limit using `apache_avro::util::max_allocation_bytes`"
+        "{} (maximum allowed: {maximum}). Change the limit using `apache_avro::util::max_allocation_bytes`",
+        if let Some(desired) = desired {
+            format!("Unable to allocate {desired} bytes")
+        } else {
+            "Allocation limit reached with unknown amount of bytes remaining".to_string()
+        },
     )]
-    MemoryAllocation { desired: usize, maximum: usize },
+    MemoryAllocation {
+        desired: Option<usize>,
+        maximum: usize,
+    },
 
     /// Describe a specific error happening with decimal representation
     #[error(
@@ -504,6 +512,10 @@ pub enum Details {
     GetSnappyDecompressLen(#[source] snap::Error),
 
     #[cfg(feature = "snappy")]
+    #[error("Snappy-compressed block is {0} bytes, too short to contain the trailing CRC32")]
+    BadSnappyLength(usize),
+
+    #[cfg(feature = "snappy")]
     #[error("Failed to decompress with snappy: {0}")]
     SnappyDecompress(#[source] snap::Error),
 
@@ -512,6 +524,14 @@ pub enum Details {
 
     #[error("Failed to decompress with zstd: {0}")]
     ZstdDecompress(#[source] std::io::Error),
+
+    #[cfg(feature = "bzip")]
+    #[error("Failed to decompress with bzip2: {0}")]
+    Bzip2Decompress(#[source] std::io::Error),
+
+    #[cfg(feature = "xz")]
+    #[error("Failed to decompress with xz: {0}")]
+    XzDecompress(#[source] std::io::Error),
 
     #[error("Failed to read header: {0}")]
     ReadHeader(#[source] std::io::Error),
