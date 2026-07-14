@@ -15,9 +15,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use proc_macro2::TokenStream;
+use crate::case::RenameRule;
+use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 use serde_json::Value;
+use syn::ext::IdentExt;
 
 /// Convert a list of errors into actual compiler errors.
 ///
@@ -126,5 +128,26 @@ pub fn json_value_expr(value: Value) -> TokenStream {
                 })
             }
         }
+    }
+}
+
+pub fn name_expr(name: &str) -> TokenStream {
+    quote! {
+        ::apache_avro::schema::Name::new_with_enclosing_namespace(#name, enclosing_namespace).expect(concat!("Unable to parse `", #name, "` as a Name"))
+    }
+}
+
+pub fn rename_ident(
+    ident: &Ident,
+    rename: Option<String>,
+    rename_all: RenameRule,
+    func: fn(RenameRule, &str) -> String,
+) -> String {
+    match (rename, rename_all) {
+        (Some(rename), _) => rename,
+        (None, rename_all) if !matches!(rename_all, RenameRule::None) => {
+            func(rename_all, &ident.unraw().to_string())
+        }
+        _ => ident.unraw().to_string(),
     }
 }

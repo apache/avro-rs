@@ -18,8 +18,7 @@
 use crate::attributes::{NamedTypeOptions, VariantOptions};
 use crate::case::RenameRule;
 use crate::implementation::Implementation;
-use crate::utils::json_value_expr;
-use crate::{aliases, preserve_optional};
+use crate::utils::{aliases, json_value_expr, preserve_optional, rename_ident};
 use proc_macro2::{Ident, Span};
 use quote::quote;
 use serde_json::Value;
@@ -33,7 +32,12 @@ pub fn to_implementation(
     container_attrs: NamedTypeOptions,
     data: DataEnum,
 ) -> Result<Implementation, Vec<syn::Error>> {
-    let doc = preserve_optional(container_attrs.doc.as_ref());
+    let doc = preserve_optional(
+        container_attrs
+            .doc
+            .as_ref()
+            .map(|s| quote! { #s.to_string() }),
+    );
     let enum_aliases = aliases(&container_attrs.aliases);
 
     let mut errors = Vec::new();
@@ -71,7 +75,20 @@ pub fn to_implementation(
                 "AvroSchema: derive does not work for enums with non unit structs",
             ));
             continue;
+        } else if !variant_attrs.only_skip_rename_and_alias_can_be_set() {
+            errors.push(syn::Error::new(
+                variant.span(),
+                "AvroSchema: On unit variants, only the `skip`, `rename` and `alias` attributes are allowed to be set",
+            ));
+            continue;
         }
+
+        let name = rename_ident(
+            &variant.ident,
+            variant_attrs.rename,
+            container_attrs.rename_all,
+            RenameRule::apply_to_variant,
+        );
 
         // When a variant has the `#[default]` attribute and we don't have a default yet, we assign
         // it as the default. If an enum has multiple variants with the default attribute, the compiler
@@ -79,23 +96,9 @@ pub fn to_implementation(
         // skipped variant, we ignore it as Serde will throw an error if we try to deserialize that
         // variant.
         if default.is_none() && has_default_attr(&variant.attrs) {
-            let renamed = match (&variant_attrs.rename, container_attrs.rename_all) {
-                (Some(rename), _) => rename.clone(),
-                (None, rename_all) if !matches!(rename_all, RenameRule::None) => {
-                    rename_all.apply_to_variant(&variant.ident.to_string())
-                }
-                _ => variant.ident.to_string(),
-            };
-            default = Some(renamed);
+            default = Some(name.clone());
         }
 
-        let name = match (variant_attrs.rename, container_attrs.rename_all) {
-            (Some(rename), _) => rename,
-            (None, rename_all) if !matches!(rename_all, RenameRule::None) => {
-                rename_all.apply_to_variant(&variant.ident.to_string())
-            }
-            _ => variant.ident.to_string(),
-        };
         symbols.push(name);
     }
 

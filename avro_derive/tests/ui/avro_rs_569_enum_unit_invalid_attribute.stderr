@@ -1,0 +1,6 @@
+error: AvroSchema: On unit variants, only the `skip`, `rename` and `alias` attributes are allowed to be set
+  --> tests/ui/avro_rs_569_enum_unit_invalid_attribute.rs:24:5
+   |
+24 | /     #[serde(rename_all = "UPPERCASE")]
+25 | |     Two,
+   | |_______^
