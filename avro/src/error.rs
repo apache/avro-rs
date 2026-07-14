@@ -111,9 +111,17 @@ pub enum Details {
     },
 
     #[error(
-        "Unable to allocate {desired} bytes (maximum allowed: {maximum}). Change the limit using `apache_avro::util::max_allocation_bytes`"
+        "{} (maximum allowed: {maximum}). Change the limit using `apache_avro::util::max_allocation_bytes`",
+        if let Some(desired) = desired {
+            format!("Unable to allocate {desired} bytes")
+        } else {
+            "Allocation limit reached with unknown amount of bytes remaining".to_string()
+        },
     )]
-    MemoryAllocation { desired: usize, maximum: usize },
+    MemoryAllocation {
+        desired: Option<usize>,
+        maximum: usize,
+    },
 
     /// Describe a specific error happening with decimal representation
     #[error(

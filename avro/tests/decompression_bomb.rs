@@ -25,8 +25,8 @@
 use apache_avro::Codec;
 use apache_avro::error::Details;
 
-const BUDGET: usize = 1024 * 1024; // 1 MiB
-const BOMB_PLAINTEXT: usize = 8 * 1024 * 1024; // 8 MiB, well over the budget
+const BUDGET: usize = 1024; // 1 KiB
+const BOMB_PLAINTEXT: usize = 8 * 1024; // 8 KiB, well over the budget
 
 fn set_budget() {
     apache_avro::util::max_allocation_bytes(BUDGET);

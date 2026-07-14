@@ -16,6 +16,7 @@
 // under the License.
 
 //! Logic for all supported compression codecs in Avro.
+
 use crate::{AvroResult, Error, error::Details, types::Value};
 use strum::{EnumIter, EnumString, IntoStaticStr};
 
@@ -152,29 +153,21 @@ impl Codec {
         *stream = match self {
             Codec::Null => return Ok(()),
             Codec::Deflate(_settings) => miniz_oxide::inflate::decompress_to_vec_with_limit(stream, max_bytes).map_err(|e| {
-                use miniz_oxide::inflate::TINFLStatus::{FailedCannotMakeProgress, BadParam, Adler32Mismatch, Failed, Done, NeedsMoreInput, HasMoreOutput};
-                // The output would grow past the allocation budget: reject it as
-                // a decompression bomb rather than allocating without bound.
-                if let HasMoreOutput = e.status {
-                    return Error::new(Details::MemoryAllocation {
-                        desired: max_bytes.saturating_add(1),
+                use std::io::ErrorKind;
+                use miniz_oxide::inflate::TINFLStatus;
+
+                let details = match e.status {
+                    TINFLStatus::FailedCannotMakeProgress | TINFLStatus::NeedsMoreInput => Details::DeflateDecompress(ErrorKind::UnexpectedEof.into()),
+                    TINFLStatus::Adler32Mismatch | TINFLStatus::Failed | TINFLStatus::BadParam => Details::DeflateDecompress(ErrorKind::InvalidData.into()),
+                    TINFLStatus::Done => Details::DeflateDecompress(std::io::Error::other("Unexpected error: miniz_oxide reported an error with a success status. Please report this to avro-rs developers.")),
+                    // Output is larger than max allocation allowed
+                    TINFLStatus::HasMoreOutput => Details::MemoryAllocation {
+                        desired: None,
                         maximum: max_bytes,
-                    });
-                }
-                let err = {
-                    use std::io::{Error as IoError, ErrorKind};
-                    match e.status {
-                        FailedCannotMakeProgress => IoError::from(ErrorKind::UnexpectedEof),
-                        BadParam => IoError::other("miniz_oxide reported an invalid parameter while decompressing"),
-                        Adler32Mismatch => IoError::from(ErrorKind::InvalidData),
-                        Failed => IoError::from(ErrorKind::InvalidData),
-                        Done => IoError::other("Unexpected error: miniz_oxide reported an error with a success status. Please report this to avro-rs developers."),
-                        NeedsMoreInput => IoError::from(ErrorKind::UnexpectedEof),
-                        HasMoreOutput => unreachable!("handled above"),
-                        other => IoError::other(format!("Unexpected error: {other:?}"))
-                    }
+                    },
+                    other => Details::DeflateDecompress(std::io::Error::other(format!("Unexpected error: {other:?}")))
                 };
-                Error::new(Details::DeflateDecompress(err))
+                Error::new(details)
             })?,
             #[cfg(feature = "snappy")]
             Codec::Snappy => {
@@ -223,7 +216,7 @@ impl Codec {
                     .read_to_end(&mut decoded)
                     .map_err(Details::ZstdDecompress)?;
                 if decoded.len() > max_bytes {
-                    return Err(Details::MemoryAllocation { desired: decoded.len(), maximum: max_bytes }.into());
+                    return Err(Details::MemoryAllocation { desired: None, maximum: max_bytes }.into());
                 }
                 decoded
             }
@@ -238,7 +231,7 @@ impl Codec {
                     .read_to_end(&mut decoded)
                     .map_err(Details::Bzip2Decompress)?;
                 if decoded.len() > max_bytes {
-                    return Err(Details::MemoryAllocation { desired: decoded.len(), maximum: max_bytes }.into());
+                    return Err(Details::MemoryAllocation { desired: None, maximum: max_bytes }.into());
                 }
                 decoded
             }
@@ -253,7 +246,7 @@ impl Codec {
                     .read_to_end(&mut decoded)
                     .map_err(Details::XzDecompress)?;
                 if decoded.len() > max_bytes {
-                    return Err(Details::MemoryAllocation { desired: decoded.len(), maximum: max_bytes }.into());
+                    return Err(Details::MemoryAllocation { desired: None, maximum: max_bytes }.into());
                 }
                 decoded
             }

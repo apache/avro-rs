@@ -177,7 +177,7 @@ pub(crate) fn safe_len(len: usize) -> AvroResult<usize> {
         Ok(len)
     } else {
         Err(Details::MemoryAllocation {
-            desired: len,
+            desired: Some(len),
             maximum: max_bytes,
         }
         .into())
