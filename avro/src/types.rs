@@ -370,6 +370,10 @@ impl TryFrom<Value> for JsonValue {
 impl Value {
     /// Validate the value against the given [`Schema`].
     ///
+    /// Note: This will first build a reference map from the schema (see [`ResolvedSchema`]). If this
+    /// function is called more than once for the same schema, it is recommended to use
+    /// [`validate_with_names`](Self::validate_with_names) instead.
+    ///
     /// See the [Avro specification](https://avro.apache.org/docs/++version++/specification)
     /// for the full set of rules of schema validation.
     ///
@@ -380,6 +384,13 @@ impl Value {
     }
 
     /// Validate the value against the given schemata.
+    ///
+    /// Note: This will first build a reference map from the schema (see [`ResolvedSchema`]). If this
+    /// function is called more than once for the same schema, it is recommended to use
+    /// [`validate_with_names`](Self::validate_with_names) instead.
+    ///
+    /// See the [Avro specification](https://avro.apache.org/docs/++version++/specification)
+    /// for the full set of rules of schema validation.
     ///
     /// # Panics
     /// Will panic if the schemata contain unresolved references or duplicate schemas.
@@ -402,6 +413,24 @@ impl Value {
                 None => true,
             },
         )
+    }
+
+    /// Validate the value against the given schema using `names` to resolve any references.
+    ///
+    /// See the [Avro specification](https://avro.apache.org/docs/++version++/specification)
+    /// for the full set of rules of schema validation.
+    pub fn validate_with_names<S: Borrow<Schema> + Debug>(
+        &self,
+        schema: &Schema,
+        names: &HashMap<Name, S>,
+    ) -> bool {
+        match self.validate_internal(schema, names, None) {
+            Some(reason) => {
+                error!("Invalid value: {self:?} for schema: {schema:?}. Reason: {reason}");
+                false
+            }
+            None => true,
+        }
     }
 
     fn accumulate(accumulator: Option<String>, other: Option<String>) -> Option<String> {
@@ -656,30 +685,62 @@ impl Value {
         }
     }
 
-    /// Attempt to perform schema resolution on the value, with the given
-    /// [Schema](../schema/enum.Schema.html).
+    /// Resolve this value into a new schema.
+    ///
+    /// Note: This will first build a reference map from the schema (see [`ResolvedSchema`]). If this
+    /// function is called more than once for the same schema, it is recommended to use
+    /// [`resolve_with_names`](Self::resolve_with_names) instead.
     ///
     /// See [Schema Resolution](https://avro.apache.org/docs/++version++/specification/#schema-resolution)
-    /// in the Avro specification for the full set of rules of schema
-    /// resolution.
+    /// in the Avro specification for the full set of rules of schema resolution.
     pub fn resolve(self, schema: &Schema) -> AvroResult<Self> {
         self.resolve_schemata(schema, Vec::with_capacity(0))
     }
 
-    /// Attempt to perform schema resolution on the value, with the given
-    /// [Schema](../schema/enum.Schema.html) and set of schemas to use for Refs resolution.
+    /// Resolve this value into a new schema using `schemata` to resolve any references.
+    ///
+    /// `schemata` must contain all referenced schemas in `schema`, including references to parts of
+    /// `schema` itself.
+    ///
+    /// Note: This will first build a reference map from the schema (see [`ResolvedSchema`]). If this
+    /// function is called more than once for the same schema, it is recommended to use
+    /// [`resolve_with_names`](Self::resolve_with_names) instead.
     ///
     /// See [Schema Resolution](https://avro.apache.org/docs/++version++/specification/#schema-resolution)
-    /// in the Avro specification for the full set of rules of schema
-    /// resolution.
+    /// in the Avro specification for the full set of rules of schema resolution.
     pub fn resolve_schemata(self, schema: &Schema, schemata: Vec<&Schema>) -> AvroResult<Self> {
-        let enclosing_namespace = schema.namespace();
         let rs = if schemata.is_empty() {
             ResolvedSchema::try_from(schema)?
         } else {
             ResolvedSchema::try_from(schemata)?
         };
-        self.resolve_internal(schema, rs.get_names(), enclosing_namespace, &None)
+        self.resolve_internal(schema, rs.get_names(), None, None)
+    }
+
+    /// Resolve this value into a new schema using `names` to resolve any references.
+    ///
+    /// See [Schema Resolution](https://avro.apache.org/docs/++version++/specification/#schema-resolution)
+    /// in the Avro specification for the full set of rules of schema resolution.
+    ///
+    /// # Example
+    /// ```
+    /// # use apache_avro::{types::Value, Error, Schema, schema::ResolvedSchema};
+    /// # let values: [Value; 0] = [];
+    /// # let schema = Schema::Null;
+    /// let resolved_schema = ResolvedSchema::new(&schema)?;
+    ///
+    /// for value in values {
+    ///     let resolved = value.resolve_with_names(&schema, resolved_schema.get_names())?;
+    ///     // Do something with the resolved value
+    /// }
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn resolve_with_names<S: Borrow<Schema> + Debug>(
+        self,
+        schema: &Schema,
+        names: &HashMap<Name, S>,
+    ) -> AvroResult<Self> {
+        self.resolve_internal(schema, names, None, None)
     }
 
     pub(crate) fn resolve_internal<S: Borrow<Schema> + Debug>(
@@ -687,7 +748,7 @@ impl Value {
         schema: &Schema,
         names: &HashMap<Name, S>,
         enclosing_namespace: NamespaceRef,
-        field_default: &Option<JsonValue>,
+        field_default: Option<&JsonValue>,
     ) -> AvroResult<Self> {
         // Check if this schema is a union, and if the reader schema is not.
         if SchemaKind::from(&self) == SchemaKind::Union
@@ -729,8 +790,8 @@ impl Value {
             }) => self.resolve_enum(symbols, default, field_default),
             Schema::Array(inner) => self.resolve_array(&inner.items, names, enclosing_namespace),
             Schema::Map(inner) => self.resolve_map(&inner.types, names, enclosing_namespace),
-            Schema::Record(RecordSchema { fields, .. }) => {
-                self.resolve_record(fields, names, enclosing_namespace)
+            Schema::Record(RecordSchema { fields, name, .. }) => {
+                self.resolve_record(fields, names, name.namespace().or(enclosing_namespace))
             }
             Schema::Decimal(DecimalSchema {
                 scale,
@@ -1065,7 +1126,7 @@ impl Value {
         self,
         symbols: &[String],
         enum_default: &Option<String>,
-        _field_default: &Option<JsonValue>,
+        _field_default: Option<&JsonValue>,
     ) -> Result<Self, Error> {
         let validate_symbol = |symbol: String, symbols: &[String]| {
             if let Some(index) = symbols.iter().position(|item| item == &symbol) {
@@ -1104,7 +1165,7 @@ impl Value {
         schema: &UnionSchema,
         names: &HashMap<Name, S>,
         enclosing_namespace: NamespaceRef,
-        field_default: &Option<JsonValue>,
+        field_default: Option<&JsonValue>,
     ) -> Result<Self, Error> {
         let v = match self {
             // Both are unions case.
@@ -1135,7 +1196,7 @@ impl Value {
             Value::Array(items) => Ok(Value::Array(
                 items
                     .into_iter()
-                    .map(|item| item.resolve_internal(schema, names, enclosing_namespace, &None))
+                    .map(|item| item.resolve_internal(schema, names, enclosing_namespace, None))
                     .collect::<Result<_, _>>()?,
             )),
             other => Err(Details::GetArray {
@@ -1158,7 +1219,7 @@ impl Value {
                     .into_iter()
                     .map(|(key, value)| {
                         value
-                            .resolve_internal(schema, names, enclosing_namespace, &None)
+                            .resolve_internal(schema, names, enclosing_namespace, None)
                             .map(|value| (key, value))
                     })
                     .collect::<Result<_, _>>()?,
@@ -1203,7 +1264,7 @@ impl Value {
                             }) => Value::try_from(value.clone())?.resolve_enum(
                                 symbols,
                                 default,
-                                &field.default.clone(),
+                                field.default.as_ref(),
                             )?,
                             Schema::Union(ref union_schema) => {
                                 let first = &union_schema.variants()[0];
@@ -1218,7 +1279,7 @@ impl Value {
                                                 first,
                                                 names,
                                                 enclosing_namespace,
-                                                &field.default,
+                                                field.default.as_ref(),
                                             )?,
                                         ),
                                     ),
@@ -1232,7 +1293,12 @@ impl Value {
                     },
                 };
                 value
-                    .resolve_internal(&field.schema, names, enclosing_namespace, &field.default)
+                    .resolve_internal(
+                        &field.schema,
+                        names,
+                        enclosing_namespace,
+                        field.default.as_ref(),
+                    )
                     .map(|value| (field.name.clone(), value))
             })
             .collect::<Result<Vec<_>, _>>()?;

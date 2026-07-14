@@ -132,7 +132,7 @@ impl<'s> GenericDatumReader<'s> {
     pub fn read_value<R: Read>(&self, reader: &mut R) -> AvroResult<Value> {
         let value = decode_internal(self.writer, self.resolved.get_names(), None, reader)?;
         if let Some((reader, resolved)) = &self.reader {
-            value.resolve_internal(reader, resolved.get_names(), None, &None)
+            value.resolve_internal(reader, resolved.get_names(), None, None)
         } else {
             Ok(value)
         }
