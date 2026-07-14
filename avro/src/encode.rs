@@ -237,7 +237,9 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
             if let Schema::Map(ref inner) = *schema {
                 if !items.is_empty() {
                     encode_long(items.len() as i64, &mut *writer)?;
-                    for (key, value) in items {
+                    let mut entries = items.iter().collect::<Vec<_>>();
+                    entries.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
+                    for (key, value) in entries {
                         encode_bytes(key, &mut *writer)?;
                         encode_internal(
                             value,
@@ -387,6 +389,24 @@ pub(crate) mod tests {
         )
         .expect(&success(&Value::Map(empty), &Schema::map(Schema::Int)));
         assert_eq!(vec![0u8], buf);
+    }
+
+    #[test]
+    fn test_encode_map_orders_entries_by_key() {
+        let mut buf = Vec::new();
+        let values = HashMap::from([
+            ("b".to_string(), Value::Int(2)),
+            ("a".to_string(), Value::Int(1)),
+        ]);
+
+        encode(
+            &Value::Map(values.clone()),
+            &Schema::map(Schema::Int),
+            &mut buf,
+        )
+        .expect(&success(&Value::Map(values), &Schema::map(Schema::Int)));
+
+        assert_eq!(vec![4, 2, b'a', 2, 2, b'b', 4, 0], buf);
     }
 
     #[test]
