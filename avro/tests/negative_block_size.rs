@@ -22,7 +22,7 @@ use apache_avro::{Error, Reader, Schema, Writer, error::Details, types::Record};
 use apache_avro_test_helper::TestResult;
 
 #[test]
-fn negative_block_size_returns_conversion_error() -> TestResult {
+fn avro_rs_586_negative_block_size_returns_conversion_error() -> TestResult {
     let schema = Schema::parse_str(
         r#"{"type": "record", "name": "T", "fields": [{"name": "a", "type": "int"}]}"#,
     )?;
