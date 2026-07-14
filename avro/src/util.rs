@@ -188,35 +188,21 @@ pub(crate) fn safe_len(len: usize) -> AvroResult<usize> {
 
 /// Bound the cumulative number of elements a collection (array or map) may hold.
 ///
-/// [`safe_len`] guards byte-length allocations, but an array or map block is a
-/// count of elements, and reserving capacity for `n` elements allocates at
-/// least `n * item_size` bytes (`item_size` being the in-memory size of a
-/// decoded element; a collection may over-allocate beyond that for growth or
-/// internal metadata, so this is a lower-bound estimate). A malicious or
-/// truncated input can declare a huge block count in a few bytes, so the count
-/// must be validated against the allocation budget, accounting for the
-/// per-element size, before reserving or decoding. This also bounds zero-byte
-/// on-wire elements (e.g. `null`), which consume no input and so cannot be
-/// bounded by the bytes remaining, since the limit is on the decoded element
-/// count rather than the bytes read.
-///
-/// `item_size` is clamped to at least 1 (a zero-sized element type is treated as
-/// one byte), so the check still bounds the element count for such types; the
-/// reported `desired` allocation is therefore `total_items * max(item_size, 1)`.
-pub(crate) fn safe_collection_len(total_items: usize, item_size: usize) -> AvroResult<()> {
+/// This is equivalent to `safe_len(total_items * size_of::<T>)`
+pub(crate) fn safe_collection_len<T>(total_items: usize) -> AvroResult<()> {
     let max_bytes = max_allocation_bytes(DEFAULT_MAX_ALLOCATION_BYTES);
     // Use checked_mul (not saturating_mul): saturating to usize::MAX could pass
     // the check below when max_bytes is configured to usize::MAX, letting the
     // subsequent reserve() hit a capacity-overflow panic instead of erroring.
     let desired = total_items
-        .checked_mul(item_size.max(1))
+        .checked_mul(size_of::<T>())
         .ok_or(Details::IntegerOverflow)?;
 
     if desired <= max_bytes {
         Ok(())
     } else {
         Err(Details::MemoryAllocation {
-            desired,
+            desired: Some(desired),
             maximum: max_bytes,
         }
         .into())
