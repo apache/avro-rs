@@ -363,6 +363,7 @@ mod tests {
     #[test]
     fn avro_rs_586_negative_block_size() {
         let mut block = Block::<'_, &[u8]> {
+            // Block header with an object count of 1 and a block size of -1
             reader: &[0x02, 0x01],
             buf: vec![],
             buf_idx: 0,
@@ -383,6 +384,7 @@ mod tests {
     #[test]
     fn avro_rs_586_negative_block_len() {
         let mut block = Block::<'_, &[u8]> {
+            // Block header with an object count of -1 and a block size of 0
             reader: &[0x01, 0x00],
             buf: vec![],
             buf_idx: 0,
