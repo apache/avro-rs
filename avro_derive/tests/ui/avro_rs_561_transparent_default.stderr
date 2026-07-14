@@ -1,0 +1,9 @@
+error: AvroSchema: #[serde(transparent)] is incompatible with all other attributes
+  --> tests/ui/avro_rs_561_transparent_default.rs:21:1
+   |
+21 | / #[serde(transparent)]
+22 | | #[avro(default = "0")]
+23 | | struct T {
+24 | |     _field: i32,
+25 | | }
+   | |_^

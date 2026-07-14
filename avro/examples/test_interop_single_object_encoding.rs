@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{schema::AvroSchema, types::Value};
+use apache_avro::{serde::AvroSchema, types::Value};
 use std::error::Error;
 
 struct InteropMessage;
@@ -58,26 +58,27 @@ fn main() -> Result<(), Box<dyn Error>> {
     let single_object = std::fs::read(format!("{resource_folder}/test_message.bin"))
         .expect("File with single object not found or error occurred while reading it.");
     test_write(&single_object);
-    test_read(single_object);
+    test_read(&single_object);
 
     Ok(())
 }
 
 fn test_write(expected: &[u8]) {
     let mut encoded: Vec<u8> = Vec::new();
-    apache_avro::SpecificSingleObjectWriter::<InteropMessage>::with_capacity(1024)
+    apache_avro::SpecificSingleObjectWriter::<InteropMessage>::new()
         .expect("Resolving failed")
         .write_value(InteropMessage, &mut encoded)
         .expect("Encoding failed");
-    assert_eq!(expected, &encoded)
+    assert_eq!(expected, &encoded);
 }
 
-fn test_read(encoded: Vec<u8>) {
-    let mut encoded = &encoded[..];
-    let read_message = apache_avro::GenericSingleObjectReader::new(InteropMessage::get_schema())
+fn test_read(mut encoded: &[u8]) {
+    let read_message = apache_avro::GenericSingleObjectReader::builder()
+        .schema(InteropMessage::get_schema())
+        .build()
         .expect("Resolving failed")
         .read_value(&mut encoded)
         .expect("Decoding failed");
     let expected_value: Value = InteropMessage.into();
-    assert_eq!(expected_value, read_message)
+    assert_eq!(expected_value, read_message);
 }

@@ -29,23 +29,43 @@ exclude = [
 resolver = "2"
 
 [workspace.package]
-version = "0.21.0"
+version = "0.22.0"
 license = "Apache-2.0"
 repository = "https://github.com/apache/avro-rs"
 edition = "2024"
-rust-version = "1.85.0"
+rust-version = "1.88.0"
 keywords = ["avro", "data", "serialization"]
 categories = ["encoding"]
 documentation = "https://docs.rs/apache-avro"
 
 # dependencies used by more than one members
 [workspace.dependencies]
-log = { default-features = false, version = "0.4.28" }
-serde = { default-features = false, version = "1.0.228", features = ["derive"] }
-serde_bytes = { default-features = false, version = "0.11.19", features = ["std"] }
-serde_json = { default-features = false, version = "1.0.145", features = ["std"] }
+log = { default-features = false, version = "0.4.32" }
 pretty_assertions = { default-features = false, version = "1.4.1", features = ["std"] }
+serde = { default-features = false, version = "1.0.228", features = ["std", "derive"] }
+serde_bytes = { default-features = false, version = "0.11.19", features = ["std"] }
+serde_json = { default-features = false, version = "1.0.150", features = ["std"] }
+uuid = { default-features = false, version = "1.23.3", features = ["serde", "std"] }
 
 [profile.release.package.hello-wasm]
 # Tell `rustc` to optimize for small code size.
 opt-level = "s"
+
+[workspace.lints]
+# By setting the priority to -1, this lint group can be overridden for specific lints
+clippy.all = { level = "warn", priority = -1 }
+clippy.too_long_first_doc_paragraph = "warn"
+clippy.doc_markdown = "warn"
+# TODO: Needs more work
+#clippy.missing_errors_doc = "warn"
+clippy.missing_panics_doc = "warn"
+rust.unexpected_cfgs = { level = "warn", check-cfg = ['cfg(nightly)'] }
+clippy.cargo = { level = "warn", priority = -1 }
+clippy.multiple_crate_versions = "allow"
+clippy.needless_raw_string_hashes = "warn"
+clippy.semicolon_if_nothing_returned = "warn"
+clippy.manual_assert = "warn"
+clippy.enum_glob_use = "warn"
+clippy.needless_pass_by_value = "warn"
+clippy.single_match_else = "warn"
+clippy.uninlined_format_args = "warn"

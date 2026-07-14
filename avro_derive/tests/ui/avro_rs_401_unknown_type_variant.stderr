@@ -1,0 +1,5 @@
+error: AvroSchema: Unexpected type encountered! Please open an issue if this kind of type should be supported: Type::BareFn { lifetimes: None, unsafety: None, abi: None, fn_token: Fn, paren_token: Paren, inputs: [], variadic: None, output: ReturnType::Type(RArrow, Type::Path { qself: None, path: Path { leading_colon: None, segments: [PathSegment { ident: Ident { ident: "String", span: #0 bytes(882..888) }, arguments: PathArguments::None }] } }) }
+  --> tests/ui/avro_rs_401_unknown_type_variant.rs:22:8
+   |
+22 |     a: fn() -> String,
+   |        ^^^^^^^^^^^^^^

@@ -1,4 +1,3 @@
-#
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,10 +14,10 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#
+
+---
 version: 2
 updates:
-
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
@@ -26,9 +25,13 @@ updates:
     open-pull-requests-limit: 20
     commit-message:
       prefix: "chore(deps): "
-
-  - package-ecosystem: "github-actions"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "sunday"
+    commit-message:
+      prefix: "chore(ci): "
+    cooldown:
+      default-days: 7

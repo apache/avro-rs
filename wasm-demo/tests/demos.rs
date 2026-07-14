@@ -68,8 +68,9 @@ fn write_read() {
         &schema,
         BufWriter::new(Vec::with_capacity(200)),
         Codec::Null,
-    );
-    writer.append(record).unwrap();
+    )
+    .unwrap();
+    writer.append_value(record).unwrap();
     writer.flush().unwrap();
     let bytes = writer.into_inner().unwrap().into_inner().unwrap();
 

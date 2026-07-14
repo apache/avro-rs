@@ -15,13 +15,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::{
-    schema::{Name, Schema, SchemaKind, UnionSchema},
-    types::{Value, ValueKind},
-};
 use std::{error::Error as _, fmt};
 
-/// Errors encounterd by Avro.
+use crate::{
+    schema::{Name, RecordSchema, Schema, SchemaKind, UnionSchema},
+    types::{Value, ValueKind},
+};
+
+/// Errors encountered by Avro.
 ///
 /// To inspect the details of the error use [`details`](Self::details) or [`into_details`](Self::into_details)
 /// to get a [`Details`] which contains more precise error information.
@@ -109,7 +110,9 @@ pub enum Details {
         reason: String,
     },
 
-    #[error("Unable to allocate {desired} bytes (maximum allowed: {maximum})")]
+    #[error(
+        "Unable to allocate {desired} bytes (maximum allowed: {maximum}). Change the limit using `apache_avro::util::max_allocation_bytes`"
+    )]
     MemoryAllocation { desired: usize, maximum: usize },
 
     /// Describe a specific error happening with decimal representation
@@ -154,8 +157,9 @@ pub enum Details {
     #[error("Union index {index} out of bounds: {num_variants}")]
     GetUnionVariant { index: i64, num_variants: usize },
 
-    #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
-    #[error("Enum symbol index out of bounds: {num_variants}")]
+    #[error(
+        "Enum symbol index out of bounds: got {index} but there are only {num_variants} variants"
+    )]
     EnumSymbolIndex { index: usize, num_variants: usize },
 
     #[error("Enum symbol not found {0}")]
@@ -179,12 +183,12 @@ pub enum Details {
     GetBigDecimal(Value),
 
     #[error("Fixed bytes of size 12 expected, got Fixed of size {0}")]
-    GetDecimalFixedBytes(usize),
+    GetDurationFixedBytes(usize),
 
     #[error("Expected Value::Duration or Value::Fixed(12), got: {0:?}")]
     ResolveDuration(Value),
 
-    #[error("Expected Value::Decimal, Value::Bytes or Value::Fixed, got: {0:?}")]
+    #[error("Expected Value::Decimal, Value::Bytes, Value::Fixed or Value::String, got: {0:?}")]
     ResolveDecimal(Value),
 
     #[error("Missing field in record: {0:?}")]
@@ -298,14 +302,30 @@ pub enum Details {
     #[error("Unions may not directly contain a union")]
     GetNestedUnion,
 
-    #[error("Unions cannot contain duplicate types")]
-    GetUnionDuplicate,
+    #[error(
+        "Found two different maps while building Union: Schema::Map({0:?}), Schema::Map({1:?})"
+    )]
+    GetUnionDuplicateMap(Schema, Schema),
+
+    #[error(
+        "Found two different arrays while building Union: Schema::Array({0:?}), Schema::Array({1:?})"
+    )]
+    GetUnionDuplicateArray(Schema, Schema),
+
+    #[error("Unions cannot contain duplicate types, found at least two {0:?}")]
+    GetUnionDuplicate(SchemaKind),
+
+    #[error("Unions cannot contain more than one named schema with the same name: {0}")]
+    GetUnionDuplicateNamedSchemas(String),
 
     #[error("One union type {0:?} must match the `default`'s value type {1:?}")]
     GetDefaultUnion(SchemaKind, ValueKind),
 
-    #[error("`default`'s value type of field {0:?} in {1:?} must be {2:?}")]
-    GetDefaultRecordField(String, String, String),
+    #[error("`default`'s value type of field `{0}` in `{1}` must be a `{2:#}`. Got: {3:?}")]
+    GetDefaultRecordField(String, String, String, serde_json::Value),
+
+    #[error("JSON number {0} could not be converted into an Avro value as it's too large")]
+    JsonNumberTooLarge(serde_json::Number),
 
     #[error("JSON value {0} claims to be u64 but cannot be converted")]
     GetU64FromJson(serde_json::Number),
@@ -326,6 +346,21 @@ pub enum Details {
     #[error("Cannot convert i32 to usize: {1}")]
     ConvertI32ToUsize(#[source] std::num::TryFromIntError, i32),
 
+    #[error("Cannot convert i64 to u64: {1}")]
+    ConvertI64ToU64(#[source] std::num::TryFromIntError, i64),
+
+    #[error("Cannot convert i32 to u64: {1}")]
+    ConvertI32ToU64(#[source] std::num::TryFromIntError, i32),
+
+    #[error("Cannot convert i64 to u128: {1}")]
+    ConvertI64ToU128(#[source] std::num::TryFromIntError, i64),
+
+    #[error("Cannot convert i32 to u128: {1}")]
+    ConvertI32ToU128(#[source] std::num::TryFromIntError, i32),
+
+    #[error("Cannot convert usize to i64: {1}")]
+    ConvertUsizeToI64(#[source] std::num::TryFromIntError, usize),
+
     #[error("Invalid JSON value for decimal precision/scale integer: {0}")]
     GetPrecisionOrScaleFromJson(serde_json::Number),
 
@@ -340,6 +375,9 @@ pub enum Details {
 
     #[error("Unknown primitive type: {0}")]
     ParsePrimitive(String),
+
+    #[error("Unknown primitive type: '{0}'. Did you mean '{1}' ?")]
+    ParsePrimitiveSimilar(String, &'static str),
 
     #[error("invalid JSON for {key:?}: {value:?}")]
     GetDecimalMetadataValueFromJson {
@@ -379,6 +417,9 @@ pub enum Details {
     #[error("No `type` in complex type")]
     GetComplexTypeField,
 
+    #[error("No `type` in record field")]
+    GetRecordFieldTypeField,
+
     #[error("No `fields` in record")]
     GetRecordFieldsJson,
 
@@ -404,15 +445,27 @@ pub enum Details {
     InvalidNamespace(String, &'static str),
 
     #[error(
-        "Invalid schema: There is no type called '{0}', if you meant to define a non-primitive schema, it should be defined inside `type` attribute. Please review the specification"
+        "Invalid schema: There is no type called '{0}', if you meant to define a non-primitive schema, it should be defined inside `type` attribute."
     )]
     InvalidSchemaRecord(String),
 
     #[error("Duplicate enum symbol {0}")]
     EnumSymbolDuplicate(String),
 
-    #[error("Default value for enum must be a string! Got: {0}")]
+    #[error("Default value for an enum must be a string! Got: {0}")]
     EnumDefaultWrongType(serde_json::Value),
+
+    #[error("Default value for an array must be an array! Got: {0}")]
+    ArrayDefaultWrongType(serde_json::Value),
+
+    #[error("Default value for an array must be an array of {0}! Found: {1:?}")]
+    ArrayDefaultWrongInnerType(Schema, Value),
+
+    #[error("Default value for a map must be an object! Got: {0}")]
+    MapDefaultWrongType(serde_json::Value),
+
+    #[error("Default value for a map must be an object with (String, {0})! Found: (String, {1:?})")]
+    MapDefaultWrongInnerType(Schema, Value),
 
     #[error("No `items` in array")]
     GetArrayItemsField,
@@ -426,6 +479,7 @@ pub enum Details {
     #[error("Fixed schema has no `size`")]
     GetFixedSizeField,
 
+    #[deprecated(since = "0.22.0", note = "This error variant is not generated anymore")]
     #[error("Fixed schema's default value length ({0}) does not match its size ({1})")]
     FixedDefaultLenSizeMismatch(usize, u64),
 
@@ -501,28 +555,50 @@ pub enum Details {
     #[error("Decoded integer out of range for i32: {1}: {0}")]
     ZagI32(#[source] std::num::TryFromIntError, i64),
 
-    #[error("unable to read block")]
+    #[error("Did not read any bytes, block is corrupt")]
     ReadBlock,
 
     #[error("Failed to serialize value into Avro value: {0}")]
     SerializeValue(String),
 
-    #[error("Failed to serialize value of type {value_type} using schema {schema:?}: {value}")]
+    #[error("Failed to serialize value of type `{value_type}` using Schema::{schema:?}: {value}")]
     SerializeValueWithSchema {
         value_type: &'static str,
         value: String,
         schema: Schema,
     },
 
-    #[error("Failed to serialize field '{field_name}' for record {record_schema:?}: {error}")]
+    #[error("{position} is not a valid index for fields in {schema:?}")]
+    SerializeRecordUnknownFieldIndex {
+        position: usize,
+        schema: RecordSchema,
+    },
+
+    #[error("Failed to serialize field '{field_name}' of record {record_schema:?}: {error}")]
     SerializeRecordFieldWithSchema {
-        field_name: &'static str,
-        record_schema: Schema,
-        error: Box<Error>,
+        field_name: String,
+        record_schema: RecordSchema,
+        error: String,
+    },
+
+    #[error("Missing default for skipped field '{field_name}' of schema {schema:?}")]
+    MissingDefaultForSkippedField {
+        field_name: String,
+        schema: RecordSchema,
     },
 
     #[error("Failed to deserialize Avro value into value: {0}")]
     DeserializeValue(String),
+
+    #[error("Failed to deserialize value of type {value_type} using schema {schema:?}: {value}")]
+    DeserializeSchemaAware {
+        value_type: &'static str,
+        value: String,
+        schema: Schema,
+    },
+
+    #[error("Only expected `deserialize_identifier` to be called but `{0}` was called")]
+    DeserializeIdentifier(&'static str),
 
     #[error("Failed to write buffer bytes during flush: {0}")]
     WriteBytes(#[source] std::io::Error),
@@ -536,11 +612,11 @@ pub enum Details {
     #[error("Failed to convert JSON to string: {0}")]
     ConvertJsonToString(#[source] serde_json::Error),
 
-    /// Error while converting float to json value
+    /// Error while converting float to JSON value
     #[error("failed to convert avro float to json: {0}")]
     ConvertF64ToJson(f64),
 
-    /// Error while resolving Schema::Ref
+    /// Error while resolving [`Schema::Ref`]
     #[error("Unresolved schema reference: {0}")]
     SchemaResolutionError(Name),
 
@@ -576,6 +652,25 @@ pub enum Details {
 
     #[error("Cannot convert a slice to Uuid: {0}")]
     UuidFromSlice(#[source] uuid::Error),
+
+    #[error("Expected String for Map key when serializing a flattened struct")]
+    MapFieldExpectedString,
+
+    #[error("No key for value when serializing a map")]
+    MapNoKey,
+
+    #[error(
+        "The implementation of `SchemaNameValidator` is incorrect! It returned an out-of-bounds index or provided a regex that did not capture a group named `name`"
+    )]
+    InvalidSchemaNameValidatorImplementation,
+
+    #[error(
+        "Not all tuple fields were serialized, expected to serialize element at position {position} of a {total_elements}-tuple but `SerializeTuple::end()` was called"
+    )]
+    SerializeTupleMissingElements {
+        position: usize,
+        total_elements: usize,
+    },
 }
 
 #[derive(thiserror::Error, PartialEq)]
@@ -602,14 +697,27 @@ pub enum CompatibilityError {
     #[error("Incompatible schemata! Field '{0}' in reader schema must have a default value")]
     MissingDefaultValue(String),
 
-    #[error("Incompatible schemata! Reader's symbols must contain all writer's symbols")]
+    #[error("Incompatible schemata! Reader's symbols contain none of the writer's symbols")]
     MissingSymbols,
 
     #[error("Incompatible schemata! All elements in union must match for both schemas")]
     MissingUnionElements,
 
-    #[error("Incompatible schemata! Name and size don't match for fixed")]
+    #[error("Incompatible schemata! At least one element in the union must match the schema")]
+    SchemaMismatchAllUnionElements,
+
+    #[error("Incompatible schemata! Size doesn't match for fixed")]
     FixedMismatch,
+
+    #[error(
+        "Incompatible schemata! Decimal precision and/or scale don't match, reader: ({r_precision},{r_scale}), writer: ({w_precision},{w_scale})"
+    )]
+    DecimalMismatch {
+        r_precision: usize,
+        r_scale: usize,
+        w_precision: usize,
+        w_scale: usize,
+    },
 
     #[error(
         "Incompatible schemata! The name must be the same for both schemas. Writer's name {writer_name} and reader's name {reader_name}"

@@ -15,10 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{
-    Codec, Reader, Schema, Writer, from_avro_datum_reader_schemata, from_avro_datum_schemata,
-    to_avro_datum_schemata, types::Value,
-};
+use apache_avro::reader::datum::GenericDatumReader;
+use apache_avro::writer::datum::GenericDatumWriter;
+use apache_avro::{Codec, Reader, Schema, Writer, types::Value};
 use apache_avro_test_helper::{TestResult, init};
 
 static SCHEMA_A_STR: &str = r#"{
@@ -52,10 +51,16 @@ fn test_avro_3683_multiple_schemata_to_from_avro_datum() -> TestResult {
     // this is the Schema we want to use for write/read
     let schema_b = schemata[1];
     let expected: Vec<u8> = vec![0, 0, 128, 63];
-    let actual = to_avro_datum_schemata(schema_b, schemata.clone(), record.clone())?;
+    let actual = GenericDatumWriter::builder(schema_b)
+        .schemata(schemata.clone())?
+        .build()?
+        .write_value_to_vec(record.clone())?;
     assert_eq!(actual, expected);
 
-    let value = from_avro_datum_schemata(schema_b, schemata, &mut actual.as_slice(), None)?;
+    let value = GenericDatumReader::builder(schema_b)
+        .writer_schemata(schemata)?
+        .build()?
+        .read_value(&mut actual.as_slice())?;
     assert_eq!(value, record);
 
     Ok(())
@@ -76,16 +81,18 @@ fn avro_rs_106_test_multiple_schemata_to_from_avro_datum_with_resolution() -> Te
     // this is the Schema we want to use for write/read
     let schema_b = schemata[1];
     let expected: Vec<u8> = vec![0, 0, 128, 63];
-    let actual = to_avro_datum_schemata(schema_b, schemata.clone(), record.clone())?;
+    let actual = GenericDatumWriter::builder(schema_b)
+        .schemata(schemata.clone())?
+        .build()?
+        .write_value_to_vec(record.clone())?;
     assert_eq!(actual, expected);
 
-    let value = from_avro_datum_reader_schemata(
-        schema_b,
-        schemata.clone(),
-        &mut actual.as_slice(),
-        Some(schema_b),
-        schemata,
-    )?;
+    let value = GenericDatumReader::builder(schema_b)
+        .writer_schemata(schemata.clone())?
+        .reader_schema(schema_b)
+        .reader_schemata(schemata)?
+        .build()?
+        .read_value(&mut actual.as_slice())?;
     assert_eq!(value, record);
 
     Ok(())
@@ -107,12 +114,15 @@ fn test_avro_3683_multiple_schemata_writer_reader() -> TestResult {
     let schema_b = schemata[1];
     let mut output: Vec<u8> = Vec::new();
 
-    let mut writer = Writer::with_schemata(schema_b, schemata.clone(), &mut output, Codec::Null);
-    writer.append(record.clone())?;
+    let mut writer = Writer::with_schemata(schema_b, schemata.clone(), &mut output, Codec::Null)?;
+    writer.append_value(record.clone())?;
     writer.flush()?;
     drop(writer); //drop the writer so that `output` is no more referenced mutably
 
-    let reader = Reader::with_schemata(schema_b, schemata, output.as_slice())?;
+    let reader = Reader::builder(output.as_slice())
+        .reader_schema(schema_b)
+        .schemata(schemata)
+        .build()?;
     let value = reader.into_iter().next().unwrap()?;
     assert_eq!(value, record);
 

@@ -1,0 +1,5 @@
+error: AvroSchema: derive does not support tuples
+  --> tests/ui/avro_rs_401_tuple.rs:22:8
+   |
+22 |     a: (i32, String),
+   |        ^^^^^^^^^^^^^

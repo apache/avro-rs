@@ -15,26 +15,30 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{AvroSchema, Schema, Writer, from_value};
-use apache_avro_test_helper::TestResult;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::fmt::Debug;
 
+use apache_avro::{
+    AvroSchema, Schema, reader::datum::GenericDatumReader, writer::datum::GenericDatumWriter,
+};
+use apache_avro_test_helper::TestResult;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Significantly complicates the trait bounds"
+)]
+#[track_caller]
 fn ser_deser<T>(schema: &Schema, record: T) -> TestResult
 where
-    T: Serialize + DeserializeOwned + Debug + PartialEq + Clone,
+    T: Serialize + DeserializeOwned + Debug + PartialEq,
 {
-    let record2 = record.clone();
-    let mut writer = Writer::new(schema, vec![]);
-    writer.append_ser(record)?;
-    let bytes_written = writer.into_inner()?;
-
-    let reader = apache_avro::Reader::new(&bytes_written[..])?;
-    for value in reader {
-        let value = value?;
-        let deserialized = from_value::<T>(&value)?;
-        assert_eq!(deserialized, record2);
-    }
+    let serialized = GenericDatumWriter::builder(schema)
+        .build()?
+        .write_ser_to_vec(&record)?;
+    let deserialized: T = GenericDatumReader::builder(schema)
+        .build()?
+        .read_deser(&mut &serialized[..])?;
+    assert_eq!(deserialized, record);
 
     Ok(())
 }
@@ -45,6 +49,7 @@ fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_middle_field
     struct T {
         x: Option<i8>,
         #[serde(skip_serializing_if = "Option::is_none")]
+        #[avro(default = "null")]
         y: Option<String>,
         z: Option<i8>,
     }
@@ -64,6 +69,7 @@ fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_first_field(
     #[derive(AvroSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
     struct T {
         #[serde(skip_serializing_if = "Option::is_none")]
+        #[avro(default = "null")]
         x: Option<i8>,
         y: Option<String>,
         z: Option<i8>,
@@ -86,6 +92,7 @@ fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_last_field()
         x: Option<i8>,
         y: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
+        #[avro(default = "null")]
         z: Option<i8>,
     }
 
@@ -100,14 +107,15 @@ fn avro_rs_226_index_out_of_bounds_with_serde_skip_serializing_skip_last_field()
 }
 
 #[test]
-#[ignore = "This test should be re-enabled once the serde-driven deserialization is implemented! PR #227"]
 fn avro_rs_226_index_out_of_bounds_with_serde_skip_multiple_fields() -> TestResult {
     #[derive(AvroSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
     struct T {
         no_skip1: Option<i8>,
         #[serde(skip_serializing)]
+        #[avro(default = "null")]
         skip_serializing: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
+        #[avro(default = "null")]
         skip_serializing_if: Option<i8>,
         #[serde(skip_deserializing)]
         skip_deserializing: Option<String>,

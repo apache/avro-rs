@@ -1,0 +1,1307 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+//! Logic handling writing in Avro format at user level.
+use crate::{
+    AvroResult, Codec, Error,
+    encode::{encode, encode_internal, encode_to_vec},
+    error::Details,
+    schema::{ResolvedSchema, Schema},
+    serde::ser_schema::{Config, SchemaAwareSerializer},
+    types::Value,
+    util::is_human_readable,
+};
+use serde::Serialize;
+use std::{collections::HashMap, io::Write, mem::ManuallyDrop};
+
+pub mod datum;
+pub mod single_object;
+
+const DEFAULT_BLOCK_SIZE: usize = 16000;
+const AVRO_OBJECT_HEADER: &[u8] = b"Obj\x01";
+
+/// Main interface for writing Avro formatted values.
+///
+/// It is critical to call flush before `Writer<W>` is dropped. Though dropping will attempt to flush
+/// the contents of the buffer, any errors that happen in the process of dropping will be ignored.
+/// Calling flush ensures that the buffer is empty and thus dropping will not even attempt file operations.
+pub struct Writer<'a, W: Write> {
+    schema: &'a Schema,
+    writer: W,
+    resolved_schema: ResolvedSchema<'a>,
+    codec: Codec,
+    block_size: usize,
+    buffer: Vec<u8>,
+    num_values: usize,
+    marker: [u8; 16],
+    has_header: bool,
+    user_metadata: HashMap<String, Value>,
+    human_readable: bool,
+    map_array_target_block_size: Option<usize>,
+}
+
+#[bon::bon]
+impl<'a, W: Write> Writer<'a, W> {
+    #[builder]
+    pub fn builder(
+        schema: &'a Schema,
+        schemata: Option<Vec<&'a Schema>>,
+        writer: W,
+        #[builder(default = Codec::Null)] codec: Codec,
+        #[builder(default = DEFAULT_BLOCK_SIZE)] block_size: usize,
+        #[builder(default = generate_sync_marker())] marker: [u8; 16],
+        /// Has the header already been written.
+        ///
+        /// To disable writing the header, this can be set to `true`.
+        #[builder(default = false)]
+        has_header: bool,
+        #[builder(default)] user_metadata: HashMap<String, Value>,
+        /// Should [`Serialize`] implementations pick a human readable representation.
+        ///
+        /// It is recommended to set this to `false`.
+        #[builder(default = is_human_readable())]
+        human_readable: bool,
+        /// At what block size to start a new block (for arrays and maps).
+        ///
+        /// This is a minimum value, the block size will always be larger than this except for the last
+        /// block.
+        ///
+        /// When set to `None` all values will be written in a single block. This can be faster as no
+        /// intermediate buffer is used, but seeking through written data will be slower.
+        map_array_target_block_size: Option<usize>,
+    ) -> AvroResult<Self> {
+        let resolved_schema = if let Some(schemata) = schemata {
+            ResolvedSchema::try_from(schemata)?
+        } else {
+            ResolvedSchema::try_from(schema)?
+        };
+        Ok(Self {
+            schema,
+            writer,
+            resolved_schema,
+            codec,
+            block_size,
+            buffer: Vec::with_capacity(block_size),
+            num_values: 0,
+            marker,
+            has_header,
+            user_metadata,
+            human_readable,
+            map_array_target_block_size,
+        })
+    }
+}
+
+impl<'a, W: Write> Writer<'a, W> {
+    /// Creates a `Writer` given a `Schema` and something implementing the `io::Write` trait to write
+    /// to.
+    /// No compression `Codec` will be used.
+    pub fn new(schema: &'a Schema, writer: W) -> AvroResult<Self> {
+        Writer::with_codec(schema, writer, Codec::Null)
+    }
+
+    /// Creates a `Writer` with a specific `Codec` given a `Schema` and something implementing the
+    /// `io::Write` trait to write to.
+    pub fn with_codec(schema: &'a Schema, writer: W, codec: Codec) -> AvroResult<Self> {
+        Self::builder()
+            .schema(schema)
+            .writer(writer)
+            .codec(codec)
+            .build()
+    }
+
+    /// Creates a `Writer` with a specific `Codec` given a `Schema` and something implementing the
+    /// `io::Write` trait to write to.
+    /// If the `schema` is incomplete, i.e. contains `Schema::Ref`s then all dependencies must
+    /// be provided in `schemata`.
+    pub fn with_schemata(
+        schema: &'a Schema,
+        schemata: Vec<&'a Schema>,
+        writer: W,
+        codec: Codec,
+    ) -> AvroResult<Self> {
+        Self::builder()
+            .schema(schema)
+            .schemata(schemata)
+            .writer(writer)
+            .codec(codec)
+            .build()
+    }
+
+    /// Creates a `Writer` that will append values to already populated
+    /// `std::io::Write` using the provided `marker`
+    /// No compression `Codec` will be used.
+    pub fn append_to(schema: &'a Schema, writer: W, marker: [u8; 16]) -> AvroResult<Self> {
+        Writer::append_to_with_codec(schema, writer, Codec::Null, marker)
+    }
+
+    /// Creates a `Writer` that will append values to already populated
+    /// `std::io::Write` using the provided `marker`
+    pub fn append_to_with_codec(
+        schema: &'a Schema,
+        writer: W,
+        codec: Codec,
+        marker: [u8; 16],
+    ) -> AvroResult<Self> {
+        Self::builder()
+            .schema(schema)
+            .writer(writer)
+            .codec(codec)
+            .marker(marker)
+            .has_header(true)
+            .build()
+    }
+
+    /// Creates a `Writer` that will append values to already populated
+    /// `std::io::Write` using the provided `marker`
+    pub fn append_to_with_codec_schemata(
+        schema: &'a Schema,
+        schemata: Vec<&'a Schema>,
+        writer: W,
+        codec: Codec,
+        marker: [u8; 16],
+    ) -> AvroResult<Self> {
+        Self::builder()
+            .schema(schema)
+            .schemata(schemata)
+            .writer(writer)
+            .codec(codec)
+            .marker(marker)
+            .has_header(true)
+            .build()
+    }
+
+    /// Get a reference to the `Schema` associated to a `Writer`.
+    pub fn schema(&self) -> &'a Schema {
+        self.schema
+    }
+
+    /// Deprecated. Use [`Writer::append_value`] instead.
+    #[deprecated(since = "0.22.0", note = "Use `Writer::append_value` instead")]
+    pub fn append<T: Into<Value>>(&mut self, value: T) -> AvroResult<usize> {
+        self.append_value(value)
+    }
+
+    /// Append a value to the `Writer`, also performs schema validation.
+    ///
+    /// Returns the number of bytes written (it might be 0, see below).
+    ///
+    /// **NOTE**: This function is not guaranteed to perform any actual write, since it relies on
+    /// internal buffering for performance reasons. If you want to be sure the value has been
+    /// written, then call [`flush`](Writer::flush).
+    pub fn append_value<T: Into<Value>>(&mut self, value: T) -> AvroResult<usize> {
+        let avro = value.into();
+        self.append_value_ref(&avro)
+    }
+
+    /// Append a compatible value to a `Writer`, also performs schema validation.
+    ///
+    /// Returns the number of bytes written (it might be 0, see below).
+    ///
+    /// **NOTE**: This function is not guaranteed to perform any actual write, since it relies on
+    /// internal buffering for performance reasons. If you want to be sure the value has been
+    /// written, then call [`flush`](Writer::flush).
+    pub fn append_value_ref(&mut self, value: &Value) -> AvroResult<usize> {
+        if let Some(reason) = value.validate_internal(
+            self.schema,
+            self.resolved_schema.get_names(),
+            self.schema.namespace(),
+        ) {
+            return Err(Details::ValidationWithReason {
+                value: value.clone(),
+                schema: self.schema.clone(),
+                reason,
+            }
+            .into());
+        }
+        self.unvalidated_append_value_ref(value)
+    }
+
+    /// Append a compatible value to a `Writer`.
+    ///
+    /// This function does **not** validate that the provided value matches the schema. If it does
+    /// not match, the file will contain corrupt data. Use [`Writer::append_value`] to have the
+    /// value validated during write or use [`Value::validate`] to validate the value.
+    ///
+    /// Returns the number of bytes written (it might be 0, see below).
+    ///
+    /// **NOTE**: This function is not guaranteed to perform any actual write, since it relies on
+    /// internal buffering for performance reasons. If you want to be sure the value has been
+    /// written, then call [`flush`](Writer::flush).
+    pub fn unvalidated_append_value<T: Into<Value>>(&mut self, value: T) -> AvroResult<usize> {
+        let value = value.into();
+        self.unvalidated_append_value_ref(&value)
+    }
+
+    /// Append a compatible value to a `Writer`.
+    ///
+    /// This function does **not** validate that the provided value matches the schema. If it does
+    /// not match, the file will contain corrupt data. Use [`Writer::append_value_ref`] to have the
+    /// value validated during write or use [`Value::validate`] to validate the value.
+    ///
+    /// Returns the number of bytes written (it might be 0, see below).
+    ///
+    /// **NOTE**: This function is not guaranteed to perform any actual write, since it relies on
+    /// internal buffering for performance reasons. If you want to be sure the value has been
+    /// written, then call [`flush`](Writer::flush).
+    pub fn unvalidated_append_value_ref(&mut self, value: &Value) -> AvroResult<usize> {
+        let n = self.maybe_write_header()?;
+        encode_internal(
+            value,
+            self.schema,
+            self.resolved_schema.get_names(),
+            self.schema.namespace(),
+            &mut self.buffer,
+        )?;
+
+        self.num_values += 1;
+
+        if self.buffer.len() >= self.block_size {
+            return self.flush().map(|b| b + n);
+        }
+
+        Ok(n)
+    }
+
+    /// Append anything implementing the `Serialize` trait to a `Writer` for
+    /// [`serde`](https://docs.serde.rs/serde/index.html) compatibility, also performing schema
+    /// validation.
+    ///
+    /// Returns the number of bytes written.
+    ///
+    /// **NOTE**: This function is not guaranteed to perform any actual write, since it relies on
+    /// internal buffering for performance reasons. If you want to be sure the value has been
+    /// written, then call [`flush`](Writer::flush).
+    pub fn append_ser<S: Serialize>(&mut self, value: S) -> AvroResult<usize> {
+        let n = self.maybe_write_header()?;
+
+        let config = Config {
+            names: self.resolved_schema.get_names(),
+            target_block_size: self.map_array_target_block_size,
+            human_readable: self.human_readable,
+        };
+
+        value.serialize(SchemaAwareSerializer::new(
+            &mut self.buffer,
+            self.schema,
+            config,
+        )?)?;
+        self.num_values += 1;
+
+        if self.buffer.len() >= self.block_size {
+            return self.flush().map(|b| b + n);
+        }
+
+        Ok(n)
+    }
+
+    /// Extend a `Writer` with an `Iterator` of values, also performs schema validation.
+    ///
+    /// Returns the number of bytes written.
+    ///
+    /// **NOTE**: This function forces the written data to be flushed (an implicit
+    /// call to [`flush`](Writer::flush) is performed).
+    pub fn extend<I, T: Into<Value>>(&mut self, values: I) -> AvroResult<usize>
+    where
+        I: IntoIterator<Item = T>,
+    {
+        /*
+        https://github.com/rust-lang/rfcs/issues/811 :(
+        let mut stream = values
+            .filter_map(|value| value.serialize(&mut self.serializer).ok())
+            .map(|value| value.encode(self.schema))
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| err_msg("value does not match given schema"))?
+            .into_iter()
+            .fold(Vec::new(), |mut acc, stream| {
+                num_values += 1;
+                acc.extend(stream); acc
+            });
+        */
+
+        let mut num_bytes = 0;
+        for value in values {
+            num_bytes += self.append_value(value)?;
+        }
+        num_bytes += self.flush()?;
+
+        Ok(num_bytes)
+    }
+
+    /// Extend a `Writer` with an `Iterator` of anything implementing the `Serialize` trait for
+    /// [`serde`](https://docs.serde.rs/serde/index.html) compatibility, also performing schema
+    /// validation.
+    ///
+    /// Returns the number of bytes written.
+    ///
+    /// **NOTE**: This function forces the written data to be flushed (an implicit
+    /// call to [`flush`](Writer::flush) is performed).
+    pub fn extend_ser<I, T: Serialize>(&mut self, values: I) -> AvroResult<usize>
+    where
+        I: IntoIterator<Item = T>,
+    {
+        /*
+        https://github.com/rust-lang/rfcs/issues/811 :(
+        let mut stream = values
+            .filter_map(|value| value.serialize(&mut self.serializer).ok())
+            .map(|value| value.encode(self.schema))
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| err_msg("value does not match given schema"))?
+            .into_iter()
+            .fold(Vec::new(), |mut acc, stream| {
+                num_values += 1;
+                acc.extend(stream); acc
+            });
+        */
+
+        let mut num_bytes = 0;
+        for value in values {
+            num_bytes += self.append_ser(value)?;
+        }
+        num_bytes += self.flush()?;
+
+        Ok(num_bytes)
+    }
+
+    /// Extend a `Writer` by appending each `Value` from a slice, while also performing schema
+    /// validation on each value appended.
+    ///
+    /// Returns the number of bytes written.
+    ///
+    /// **NOTE**: This function forces the written data to be flushed (an implicit
+    /// call to [`flush`](Writer::flush) is performed).
+    pub fn extend_from_slice(&mut self, values: &[Value]) -> AvroResult<usize> {
+        let mut num_bytes = 0;
+        for value in values {
+            num_bytes += self.append_value_ref(value)?;
+        }
+        num_bytes += self.flush()?;
+
+        Ok(num_bytes)
+    }
+
+    /// Flush the content to the inner `Writer`.
+    ///
+    /// Call this function to make sure all the content has been written before releasing the `Writer`.
+    /// This will also write the header if it wasn't written yet and hasn't been disabled using
+    /// [`WriterBuilder::has_header`].
+    ///
+    /// Returns the number of bytes written.
+    pub fn flush(&mut self) -> AvroResult<usize> {
+        let mut num_bytes = self.maybe_write_header()?;
+        if self.num_values == 0 {
+            return Ok(num_bytes);
+        }
+
+        self.codec.compress(&mut self.buffer)?;
+
+        let num_values = self.num_values;
+        let stream_len = self.buffer.len();
+
+        num_bytes += self.append_raw(&num_values.try_into()?, &Schema::Long)?
+            + self.append_raw(&stream_len.try_into()?, &Schema::Long)?
+            + self
+                .writer
+                .write(self.buffer.as_ref())
+                .map_err(Details::WriteBytes)?
+            + self.append_marker()?;
+
+        self.buffer.clear();
+        self.num_values = 0;
+
+        self.writer.flush().map_err(Details::FlushWriter)?;
+
+        Ok(num_bytes)
+    }
+
+    /// Return what the `Writer` is writing to, consuming the `Writer` itself.
+    ///
+    /// **NOTE**: This function forces the written data to be flushed (an implicit
+    /// call to [`flush`](Writer::flush) is performed).
+    pub fn into_inner(mut self) -> AvroResult<W> {
+        self.maybe_write_header()?;
+        self.flush()?;
+
+        let mut this = ManuallyDrop::new(self);
+
+        // Extract every member that is not Copy and therefore should be dropped
+        let _buffer = std::mem::take(&mut this.buffer);
+        let _user_metadata = std::mem::take(&mut this.user_metadata);
+        // SAFETY: resolved schema is not accessed after this and won't be dropped because of ManuallyDrop
+        unsafe { std::ptr::drop_in_place(&mut this.resolved_schema) };
+
+        // SAFETY: double-drops are prevented by putting `this` in a ManuallyDrop that is never dropped
+        let writer = unsafe { std::ptr::read(&this.writer) };
+
+        Ok(writer)
+    }
+
+    /// Gets a reference to the underlying writer.
+    ///
+    /// **NOTE**: There is likely data still in the buffer. To have all the data
+    /// in the writer call [`flush`](Writer::flush) first.
+    pub fn get_ref(&self) -> &W {
+        &self.writer
+    }
+
+    /// Gets a mutable reference to the underlying writer.
+    ///
+    /// It is inadvisable to directly write to the underlying writer.
+    ///
+    /// **NOTE**: There is likely data still in the buffer. To have all the data
+    /// in the writer call [`flush`](Writer::flush) first.
+    pub fn get_mut(&mut self) -> &mut W {
+        &mut self.writer
+    }
+
+    /// Generate and append synchronization marker to the payload.
+    fn append_marker(&mut self) -> AvroResult<usize> {
+        // using .writer.write directly to avoid mutable borrow of self
+        // with ref borrowing of self.marker
+        self.writer
+            .write(&self.marker)
+            .map_err(|e| Details::WriteMarker(e).into())
+    }
+
+    /// Append a raw Avro Value to the payload avoiding to encode it again.
+    fn append_raw(&mut self, value: &Value, schema: &Schema) -> AvroResult<usize> {
+        self.append_bytes(encode_to_vec(value, schema)?.as_ref())
+    }
+
+    /// Append pure bytes to the payload.
+    fn append_bytes(&mut self, bytes: &[u8]) -> AvroResult<usize> {
+        self.writer
+            .write(bytes)
+            .map_err(|e| Details::WriteBytes(e).into())
+    }
+
+    /// Adds custom metadata to the file.
+    /// This method could be used only before adding the first record to the writer.
+    pub fn add_user_metadata<T: AsRef<[u8]>>(&mut self, key: String, value: T) -> AvroResult<()> {
+        if !self.has_header {
+            if key.starts_with("avro.") {
+                return Err(Details::InvalidMetadataKey(key).into());
+            }
+            self.user_metadata
+                .insert(key, Value::Bytes(value.as_ref().to_vec()));
+            Ok(())
+        } else {
+            Err(Details::FileHeaderAlreadyWritten.into())
+        }
+    }
+
+    /// Create an Avro header based on schema, codec and sync marker.
+    fn header(&self) -> Result<Vec<u8>, Error> {
+        let schema_bytes = serde_json::to_string(self.schema)
+            .map_err(Details::ConvertJsonToString)?
+            .into_bytes();
+
+        let mut metadata = HashMap::with_capacity(2);
+        metadata.insert("avro.schema", Value::Bytes(schema_bytes));
+        if self.codec != Codec::Null {
+            metadata.insert("avro.codec", self.codec.into());
+        }
+        match self.codec {
+            #[cfg(feature = "bzip")]
+            Codec::Bzip2(settings) => {
+                metadata.insert(
+                    "avro.codec.compression_level",
+                    Value::Bytes(vec![settings.compression_level]),
+                );
+            }
+            #[cfg(feature = "xz")]
+            Codec::Xz(settings) => {
+                metadata.insert(
+                    "avro.codec.compression_level",
+                    Value::Bytes(vec![settings.compression_level]),
+                );
+            }
+            #[cfg(feature = "zstandard")]
+            Codec::Zstandard(settings) => {
+                metadata.insert(
+                    "avro.codec.compression_level",
+                    Value::Bytes(vec![settings.compression_level]),
+                );
+            }
+            _ => {}
+        }
+
+        for (k, v) in &self.user_metadata {
+            metadata.insert(k.as_str(), v.clone());
+        }
+
+        let mut header = Vec::new();
+        header.extend_from_slice(AVRO_OBJECT_HEADER);
+        encode(
+            &metadata.into(),
+            &Schema::map(Schema::Bytes).build(),
+            &mut header,
+        )?;
+        header.extend_from_slice(&self.marker);
+
+        Ok(header)
+    }
+
+    fn maybe_write_header(&mut self) -> AvroResult<usize> {
+        if !self.has_header {
+            let header = self.header()?;
+            let n = self.append_bytes(header.as_ref())?;
+            self.has_header = true;
+            Ok(n)
+        } else {
+            Ok(0)
+        }
+    }
+}
+
+/// A buffer that can be cleared.
+pub trait Clearable {
+    /// Clear the buffer.
+    fn clear(&mut self);
+}
+
+impl Clearable for Vec<u8> {
+    fn clear(&mut self) {
+        Vec::clear(self);
+    }
+}
+
+impl<'a, W: Clearable + Write> Writer<'a, W> {
+    /// Reset the writer.
+    ///
+    /// This will clear the underlying writer, the internal buffer, and the user metadata.
+    /// It will also generate a new sync marker.
+    ///
+    /// # Example
+    /// ```
+    /// # use apache_avro::{Writer, Schema, Error};
+    /// # let schema = Schema::Boolean;
+    /// # let values = [true, false];
+    /// # fn send(_: &Vec<u8>) {}
+    /// let mut writer = Writer::new(&schema, Vec::new())?;
+    ///
+    /// // Write some values
+    /// for value in values {
+    ///     writer.append_value(value)?;
+    /// }
+    ///
+    /// // Flush the buffer and only then do something with buffer
+    /// writer.flush()?;
+    /// send(writer.get_ref());
+    ///
+    /// // Reset the writer
+    /// writer.reset();
+    ///
+    /// // Write some values again
+    /// for value in values {
+    ///     writer.append_value(value)?;
+    /// }
+    ///
+    /// # Ok::<(), Error>(())
+    /// ```
+    ///
+    /// # Warning
+    /// Any data that has been appended but not yet flushed will be silently
+    /// discarded. Call [`flush`](Writer::flush) before `reset()` if you need
+    /// to preserve in-flight records.
+    pub fn reset(&mut self) {
+        self.buffer.clear();
+        self.writer.clear();
+        self.has_header = false;
+        self.num_values = 0;
+        self.user_metadata.clear();
+        self.marker = generate_sync_marker();
+    }
+}
+
+impl<W: Write> Drop for Writer<'_, W> {
+    /// Drop the writer, will try to flush ignoring any errors.
+    fn drop(&mut self) {
+        let _ = self.maybe_write_header();
+        let _ = self.flush();
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn generate_sync_marker() -> [u8; 16] {
+    rand::random()
+}
+
+#[cfg(target_arch = "wasm32")]
+fn generate_sync_marker() -> [u8; 16] {
+    let mut marker = [0_u8; 16];
+    std::iter::repeat_with(quad_rand::rand)
+        .take(4)
+        .flat_map(|i| i.to_be_bytes())
+        .enumerate()
+        .for_each(|(i, n)| marker[i] = n);
+    marker
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::RefCell, rc::Rc};
+
+    use super::*;
+    use crate::{Reader, types::Record, util::zig_i64};
+    use pretty_assertions::assert_eq;
+    use serde::{Deserialize, Serialize};
+
+    use crate::{codec::DeflateSettings, error::Details};
+    use apache_avro_test_helper::TestResult;
+
+    const AVRO_OBJECT_HEADER_LEN: usize = AVRO_OBJECT_HEADER.len();
+
+    const SCHEMA: &str = r#"
+    {
+      "type": "record",
+      "name": "test",
+      "fields": [
+        {
+          "name": "a",
+          "type": "long",
+          "default": 42
+        },
+        {
+          "name": "b",
+          "type": "string"
+        }
+      ]
+    }
+    "#;
+
+    #[test]
+    fn avro_rs_220_flush_write_header() -> TestResult {
+        let schema = Schema::parse_str(SCHEMA)?;
+
+        // By default flush should write the header even if nothing was added yet
+        let mut writer = Writer::new(&schema, Vec::new())?;
+        writer.flush()?;
+        let result = writer.into_inner()?;
+        assert_eq!(result.len(), 147);
+
+        // Unless the user indicates via the builder that the header has already been written
+        let mut writer = Writer::builder()
+            .has_header(true)
+            .schema(&schema)
+            .writer(Vec::new())
+            .build()?;
+        writer.flush()?;
+        let result = writer.into_inner()?;
+        assert_eq!(result.len(), 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_writer_append() -> TestResult {
+        let schema = Schema::parse_str(SCHEMA)?;
+        let mut writer = Writer::new(&schema, Vec::new())?;
+
+        let mut record = Record::new(&schema).unwrap();
+        record.put("a", 27i64);
+        record.put("b", "foo");
+
+        let n1 = writer.append_value(record.clone())?;
+        let n2 = writer.append_value(record.clone())?;
+        let n3 = writer.flush()?;
+        let result = writer.into_inner()?;
+
+        assert_eq!(n1 + n2 + n3, result.len());
+
+        let mut data = Vec::new();
+        zig_i64(27, &mut data)?;
+        zig_i64(3, &mut data)?;
+        data.extend(b"foo");
+        data.extend(data.clone());
+
+        // starts with magic
+        assert_eq!(&result[..AVRO_OBJECT_HEADER_LEN], AVRO_OBJECT_HEADER);
+        // ends with data and sync marker
+        let last_data_byte = result.len() - 16;
+        assert_eq!(
+            &result[last_data_byte - data.len()..last_data_byte],
+            data.as_slice()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_writer_extend() -> TestResult {
+        let schema = Schema::parse_str(SCHEMA)?;
+        let mut writer = Writer::new(&schema, Vec::new())?;
+
+        let mut record = Record::new(&schema).unwrap();
+        record.put("a", 27i64);
+        record.put("b", "foo");
+        let record_copy = record.clone();
+        let records = vec![record, record_copy];
+
+        let n1 = writer.extend(records)?;
+        let n2 = writer.flush()?;
+        let result = writer.into_inner()?;
+
+        assert_eq!(n1 + n2, result.len());
+
+        let mut data = Vec::new();
+        zig_i64(27, &mut data)?;
+        zig_i64(3, &mut data)?;
+        data.extend(b"foo");
+        data.extend(data.clone());
+
+        // starts with magic
+        assert_eq!(&result[..AVRO_OBJECT_HEADER_LEN], AVRO_OBJECT_HEADER);
+        // ends with data and sync marker
+        let last_data_byte = result.len() - 16;
+        assert_eq!(
+            &result[last_data_byte - data.len()..last_data_byte],
+            data.as_slice()
+        );
+
+        Ok(())
+    }
+
+    #[derive(Debug, Clone, Deserialize, Serialize)]
+    struct TestSerdeSerialize {
+        a: i64,
+        b: String,
+    }
+
+    #[test]
+    fn test_writer_append_ser() -> TestResult {
+        let schema = Schema::parse_str(SCHEMA)?;
+        let mut writer = Writer::new(&schema, Vec::new())?;
+
+        let record = TestSerdeSerialize {
+            a: 27,
+            b: "foo".to_owned(),
+        };
+
+        let n1 = writer.append_ser(record)?;
+        let n2 = writer.flush()?;
+        let result = writer.into_inner()?;
+
+        assert_eq!(n1 + n2, result.len());
+
+        let mut data = Vec::new();
+        zig_i64(27, &mut data)?;
+        zig_i64(3, &mut data)?;
+        data.extend(b"foo");
+
+        // starts with magic
+        assert_eq!(&result[..AVRO_OBJECT_HEADER_LEN], AVRO_OBJECT_HEADER);
+        // ends with data and sync marker
+        let last_data_byte = result.len() - 16;
+        assert_eq!(
+            &result[last_data_byte - data.len()..last_data_byte],
+            data.as_slice()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_writer_extend_ser() -> TestResult {
+        let schema = Schema::parse_str(SCHEMA)?;
+        let mut writer = Writer::new(&schema, Vec::new())?;
+
+        let record = TestSerdeSerialize {
+            a: 27,
+            b: "foo".to_owned(),
+        };
+        let record_copy = record.clone();
+        let records = vec![record, record_copy];
+
+        let n1 = writer.extend_ser(records)?;
+        let n2 = writer.flush()?;
+        let result = writer.into_inner()?;
+
+        assert_eq!(n1 + n2, result.len());
+
+        let mut data = Vec::new();
+        zig_i64(27, &mut data)?;
+        zig_i64(3, &mut data)?;
+        data.extend(b"foo");
+        data.extend(data.clone());
+
+        // starts with magic
+        assert_eq!(&result[..AVRO_OBJECT_HEADER_LEN], AVRO_OBJECT_HEADER);
+        // ends with data and sync marker
+        let last_data_byte = result.len() - 16;
+        assert_eq!(
+            &result[last_data_byte - data.len()..last_data_byte],
+            data.as_slice()
+        );
+
+        Ok(())
+    }
+
+    fn make_writer_with_codec(schema: &Schema) -> AvroResult<Writer<'_, Vec<u8>>> {
+        Writer::with_codec(
+            schema,
+            Vec::new(),
+            Codec::Deflate(DeflateSettings::default()),
+        )
+    }
+
+    fn make_writer_with_builder(schema: &Schema) -> AvroResult<Writer<'_, Vec<u8>>> {
+        Writer::builder()
+            .writer(Vec::new())
+            .schema(schema)
+            .codec(Codec::Deflate(DeflateSettings::default()))
+            .block_size(100)
+            .build()
+    }
+
+    fn check_writer(mut writer: Writer<'_, Vec<u8>>, schema: &Schema) -> TestResult {
+        let mut record = Record::new(schema).unwrap();
+        record.put("a", 27i64);
+        record.put("b", "foo");
+
+        let n1 = writer.append_value(record.clone())?;
+        let n2 = writer.append_value(record.clone())?;
+        let n3 = writer.flush()?;
+        let result = writer.into_inner()?;
+
+        assert_eq!(n1 + n2 + n3, result.len());
+
+        let mut data = Vec::new();
+        zig_i64(27, &mut data)?;
+        zig_i64(3, &mut data)?;
+        data.extend(b"foo");
+        data.extend(data.clone());
+        Codec::Deflate(DeflateSettings::default()).compress(&mut data)?;
+
+        // starts with magic
+        assert_eq!(&result[..AVRO_OBJECT_HEADER_LEN], AVRO_OBJECT_HEADER);
+        // ends with data and sync marker
+        let last_data_byte = result.len() - 16;
+        assert_eq!(
+            &result[last_data_byte - data.len()..last_data_byte],
+            data.as_slice()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_writer_with_codec() -> TestResult {
+        let schema = Schema::parse_str(SCHEMA)?;
+        let writer = make_writer_with_codec(&schema)?;
+        check_writer(writer, &schema)
+    }
+
+    #[test]
+    fn test_writer_with_builder() -> TestResult {
+        let schema = Schema::parse_str(SCHEMA)?;
+        let writer = make_writer_with_builder(&schema)?;
+        check_writer(writer, &schema)
+    }
+
+    #[test]
+    fn test_logical_writer() -> TestResult {
+        const LOGICAL_TYPE_SCHEMA: &str = r#"
+        {
+          "type": "record",
+          "name": "logical_type_test",
+          "fields": [
+            {
+              "name": "a",
+              "type": [
+                "null",
+                {
+                  "type": "long",
+                  "logicalType": "timestamp-micros"
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+        let codec = Codec::Deflate(DeflateSettings::default());
+        let schema = Schema::parse_str(LOGICAL_TYPE_SCHEMA)?;
+        let mut writer = Writer::builder()
+            .schema(&schema)
+            .codec(codec)
+            .writer(Vec::new())
+            .build()?;
+
+        let mut record1 = Record::new(&schema).unwrap();
+        record1.put(
+            "a",
+            Value::Union(1, Box::new(Value::TimestampMicros(1234_i64))),
+        );
+
+        let mut record2 = Record::new(&schema).unwrap();
+        record2.put("a", Value::Union(0, Box::new(Value::Null)));
+
+        let n1 = writer.append_value(record1)?;
+        let n2 = writer.append_value(record2)?;
+        let n3 = writer.flush()?;
+        let result = writer.into_inner()?;
+
+        assert_eq!(n1 + n2 + n3, result.len());
+
+        let mut data = Vec::new();
+        // byte indicating not null
+        zig_i64(1, &mut data)?;
+        zig_i64(1234, &mut data)?;
+
+        // byte indicating null
+        zig_i64(0, &mut data)?;
+        codec.compress(&mut data)?;
+
+        // starts with magic
+        assert_eq!(&result[..AVRO_OBJECT_HEADER_LEN], AVRO_OBJECT_HEADER);
+        // ends with data and sync marker
+        let last_data_byte = result.len() - 16;
+        assert_eq!(
+            &result[last_data_byte - data.len()..last_data_byte],
+            data.as_slice()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_avro_3405_writer_add_metadata_success() -> TestResult {
+        let schema = Schema::parse_str(SCHEMA)?;
+        let mut writer = Writer::new(&schema, Vec::new())?;
+
+        writer.add_user_metadata("stringKey".to_string(), String::from("stringValue"))?;
+        writer.add_user_metadata("strKey".to_string(), "strValue")?;
+        writer.add_user_metadata("bytesKey".to_string(), b"bytesValue")?;
+        writer.add_user_metadata("vecKey".to_string(), vec![1, 2, 3])?;
+
+        let mut record = Record::new(&schema).unwrap();
+        record.put("a", 27i64);
+        record.put("b", "foo");
+
+        writer.append_value(record.clone())?;
+        writer.append_value(record.clone())?;
+        writer.flush()?;
+        let result = writer.into_inner()?;
+
+        assert_eq!(result.len(), 244);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_avro_3881_metadata_empty_body() -> TestResult {
+        let schema = Schema::parse_str(SCHEMA)?;
+        let mut writer = Writer::new(&schema, Vec::new())?;
+        writer.add_user_metadata("a".to_string(), "b")?;
+        let result = writer.into_inner()?;
+
+        let reader = Reader::builder(&result[..])
+            .reader_schema(&schema)
+            .build()?;
+        let mut expected = HashMap::new();
+        expected.insert("a".to_string(), vec![b'b']);
+        assert_eq!(reader.user_metadata(), &expected);
+        assert_eq!(reader.into_iter().count(), 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_avro_3405_writer_add_metadata_failure() -> TestResult {
+        let schema = Schema::parse_str(SCHEMA)?;
+        let mut writer = Writer::new(&schema, Vec::new())?;
+
+        let mut record = Record::new(&schema).unwrap();
+        record.put("a", 27i64);
+        record.put("b", "foo");
+        writer.append_value(record.clone())?;
+
+        match writer
+            .add_user_metadata("stringKey".to_string(), String::from("value2"))
+            .map_err(Error::into_details)
+        {
+            Err(e @ Details::FileHeaderAlreadyWritten) => {
+                assert_eq!(e.to_string(), "The file metadata is already flushed.");
+            }
+            Err(e) => panic!("Unexpected error occurred while writing user metadata: {e:?}"),
+            Ok(_) => panic!("Expected an error that metadata cannot be added after adding data"),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_avro_3405_writer_add_metadata_reserved_prefix_failure() -> TestResult {
+        let schema = Schema::parse_str(SCHEMA)?;
+        let mut writer = Writer::new(&schema, Vec::new())?;
+
+        let key = "avro.stringKey".to_string();
+        match writer
+            .add_user_metadata(key.clone(), "value")
+            .map_err(Error::into_details)
+        {
+            Err(ref e @ Details::InvalidMetadataKey(_)) => {
+                assert_eq!(
+                    e.to_string(),
+                    format!(
+                        "Metadata keys starting with 'avro.' are reserved for internal usage: {key}."
+                    )
+                );
+            }
+            Err(e) => panic!(
+                "Unexpected error occurred while writing user metadata with reserved prefix ('avro.'): {e:?}"
+            ),
+            Ok(_) => {
+                panic!("Expected an error that the metadata key cannot be prefixed with 'avro.'")
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_avro_3405_writer_add_metadata_with_builder_api_success() -> TestResult {
+        let schema = Schema::parse_str(SCHEMA)?;
+
+        let mut user_meta_data: HashMap<String, Value> = HashMap::new();
+        user_meta_data.insert(
+            "stringKey".to_string(),
+            Value::String("stringValue".to_string()),
+        );
+        user_meta_data.insert("bytesKey".to_string(), Value::Bytes(b"bytesValue".to_vec()));
+        user_meta_data.insert("vecKey".to_string(), Value::Bytes(vec![1, 2, 3]));
+
+        let writer: Writer<'_, Vec<u8>> = Writer::builder()
+            .writer(Vec::new())
+            .schema(&schema)
+            .user_metadata(user_meta_data.clone())
+            .build()?;
+
+        assert_eq!(writer.user_metadata, user_meta_data);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_3894_take_aliases_into_account_when_serializing() -> TestResult {
+        const SCHEMA: &str = r#"
+  {
+      "type": "record",
+      "name": "Conference",
+      "fields": [
+          {"type": "string", "name": "name"},
+          {"type": ["null", "long"], "name": "date", "aliases" : [ "time2", "time" ]}
+      ]
+  }"#;
+
+        #[derive(Debug, PartialEq, Eq, Clone, Serialize)]
+        pub struct Conference {
+            pub name: String,
+            pub time: Option<i64>,
+        }
+
+        let conf = Conference {
+            name: "RustConf".to_string(),
+            time: Some(1234567890),
+        };
+
+        let schema = Schema::parse_str(SCHEMA)?;
+        let mut writer = Writer::new(&schema, Vec::new())?;
+
+        let bytes = writer.append_ser(conf)?;
+
+        assert_eq!(182, bytes);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_4014_validation_returns_a_detailed_error() -> TestResult {
+        const SCHEMA: &str = r#"
+  {
+      "type": "record",
+      "name": "Conference",
+      "fields": [
+          {"type": "string", "name": "name"},
+          {"type": ["null", "long"], "name": "date", "aliases" : [ "time2", "time" ]}
+      ]
+  }"#;
+
+        #[derive(Debug, PartialEq, Clone, Serialize)]
+        pub struct Conference {
+            pub name: String,
+            pub time: Option<f64>, // wrong type: f64 instead of i64
+        }
+
+        let conf = Conference {
+            name: "RustConf".to_string(),
+            time: Some(12345678.90),
+        };
+
+        let schema = Schema::parse_str(SCHEMA)?;
+        let mut writer = Writer::new(&schema, Vec::new())?;
+
+        match writer.append_ser(conf) {
+            Ok(bytes) => panic!("Expected an error, but got {bytes} bytes written"),
+            Err(e) => {
+                assert_eq!(
+                    e.to_string(),
+                    r#"Failed to serialize field 'date' of record RecordSchema { name: Name { name: "Conference", .. }, fields: [RecordField { name: "name", schema: String, .. }, RecordField { name: "date", aliases: ["time2", "time"], schema: Union(UnionSchema { schemas: [Null, Long] }), .. }], .. }: Failed to serialize value of type `f64`: Expected Schema::Double"#
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn avro_4063_flush_applies_to_inner_writer() -> TestResult {
+        const SCHEMA: &str = r#"
+        {
+            "type": "record",
+            "name": "ExampleSchema",
+            "fields": [
+                {"name": "exampleField", "type": "string"}
+            ]
+        }
+        "#;
+
+        #[derive(Clone, Default)]
+        struct TestBuffer(Rc<RefCell<Vec<u8>>>);
+
+        impl TestBuffer {
+            fn len(&self) -> usize {
+                self.0.borrow().len()
+            }
+        }
+
+        impl Write for TestBuffer {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.0.borrow_mut().write(buf)
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let shared_buffer = TestBuffer::default();
+
+        let buffered_writer = std::io::BufWriter::new(shared_buffer.clone());
+
+        let schema = Schema::parse_str(SCHEMA)?;
+
+        let mut writer = Writer::new(&schema, buffered_writer)?;
+
+        let mut record = Record::new(writer.schema()).unwrap();
+        record.put("exampleField", "value");
+
+        writer.append_value(record)?;
+        writer.flush()?;
+
+        assert_eq!(
+            shared_buffer.len(),
+            151,
+            "the test buffer was not fully written to after Writer::flush was called"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_310_append_unvalidated_value() -> TestResult {
+        let schema = Schema::String;
+        let value = Value::Int(1);
+
+        let mut writer = Writer::new(&schema, Vec::new())?;
+        writer.unvalidated_append_value_ref(&value)?;
+        writer.unvalidated_append_value(value)?;
+        let buffer = writer.into_inner()?;
+
+        // Check the last two bytes for the sync marker
+        assert_eq!(&buffer[buffer.len() - 18..buffer.len() - 16], &[2, 2]);
+
+        let mut writer = Writer::new(&schema, Vec::new())?;
+        let value = Value::Int(1);
+        let err = writer.append_value_ref(&value).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Value Int(1) does not match schema String: Reason: Unsupported value-schema combination! Value: Int(1), schema: String"
+        );
+        let err = writer.append_value(value).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Value Int(1) does not match schema String: Reason: Unsupported value-schema combination! Value: Int(1), schema: String"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_469_reset_writer() -> TestResult {
+        let schema = Schema::Boolean;
+        let values = [true, false, true, false];
+        let mut writer = Writer::new(&schema, Vec::new())?;
+
+        for value in values {
+            writer.append_value(value)?;
+        }
+
+        writer.flush()?;
+        let first_buffer = writer.get_ref().clone();
+
+        writer.reset();
+        assert_eq!(writer.get_ref().len(), 0);
+
+        for value in values {
+            writer.append_value(value)?;
+        }
+
+        writer.flush()?;
+        let second_buffer = writer.get_ref().clone();
+        assert_eq!(first_buffer.len(), second_buffer.len());
+        // File structure:
+        // Header: ? bytes
+        // Sync marker: 16 bytes
+        // Data: 6 bytes
+        // Sync marker: 16 bytes
+        let len = first_buffer.len();
+        let header = len - 16 - 6 - 16;
+        let data = header + 16;
+        assert_eq!(
+            first_buffer[..header],
+            second_buffer[..header],
+            "Written header must be the same, excluding sync marker"
+        );
+        assert_ne!(
+            first_buffer[header..data],
+            second_buffer[header..data],
+            "Sync markers should be different"
+        );
+        assert_eq!(
+            first_buffer[data..data + 6],
+            second_buffer[data..data + 6],
+            "Written data must be the same"
+        );
+        assert_ne!(
+            first_buffer[len - 16..],
+            second_buffer[len - 16..],
+            "Sync markers should be different"
+        );
+
+        Ok(())
+    }
+}

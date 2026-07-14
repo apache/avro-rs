@@ -78,8 +78,7 @@ fn create_datum(schema: &Schema) -> Record<'_> {
 fn main() -> Result<(), Box<dyn Error>> {
     let interop_root_folder: String = std::env::var("INTEROP_ROOT_FOLDER")?;
     let schema_str = std::fs::read_to_string(format!(
-        "{}/share/test/schemas/interop.avsc",
-        &interop_root_folder
+        "{interop_root_folder}/share/test/schemas/interop.avsc",
     ))
     .expect("Unable to read the interop Avro schema");
     let schema = Schema::parse_str(schema_str.as_str())?;
@@ -94,14 +93,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             format!("_{codec_name}")
         };
 
-        let file_name = format!("{}/rust{suffix}.avro", &data_folder);
+        let file_name = format!("{data_folder}/rust{suffix}.avro");
         let output_file = std::fs::File::create(&file_name)?;
 
-        let mut writer = Writer::with_codec(&schema, BufWriter::new(output_file), codec);
+        let mut writer = Writer::with_codec(&schema, BufWriter::new(output_file), codec)?;
         write_user_metadata(&mut writer)?;
 
         let datum = create_datum(&schema);
-        writer.append(datum)?;
+        writer.append_value(datum)?;
         writer.flush()?;
         println!("Wrote {file_name}");
     }

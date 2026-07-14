@@ -46,32 +46,28 @@ name = "serde"
 
 [[bench]]
 harness = false
-name = "serde_json"
-
-[[bench]]
-harness = false
 name = "single"
 
 [dependencies]
-apache-avro-derive = { default-features = false, version = "0.21.0", path = "../avro_derive", optional = true }
-bigdecimal = { default-features = false, version = "0.4.9", features = ["std", "serde"] }
-bon = { default-features = false, version = "3.8.1" }
+apache-avro-derive = { default-features = false, version = "0.22.0", path = "../avro_derive", optional = true }
+bigdecimal = { default-features = false, version = "0.4.10", features = ["std", "serde"] }
+bon = { default-features = false, version = "3.9.1" }
 bzip2 = { version = "0.6.1", optional = true }
 crc32fast = { default-features = false, version = "1.5.0", optional = true }
-digest = { default-features = false, version = "0.10.7", features = ["core-api"] }
-miniz_oxide = { default-features = false, version = "0.8.9", features = ["with-alloc"] }
+digest = { default-features = false, version = "0.11.3", features = ["block-api"] }
+miniz_oxide = { default-features = false, version = "0.9.1", features = ["with-alloc"] }
 log = { workspace = true }
-num-bigint = { default-features = false, version = "0.4.6", features = ["std", "serde"] }
-regex-lite = { default-features = false, version = "0.1.8", features = ["std", "string"] }
+num-bigint = { default-features = false, version = "0.4.8", features = ["std", "serde"] }
+ouroboros = { default-features = false, version = "0.18.5", features = ["std"] }
+regex-lite = { default-features = false, version = "0.1.9", features = ["std", "string"] }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
-snap = { default-features = false, version = "1.1.0", optional = true }
-strum = { default-features = false, version = "0.27.2" }
-strum_macros = { default-features = false, version = "0.27.2" }
-thiserror = { default-features = false, version = "2.0.17" }
-uuid = { default-features = false, version = "1.18.1", features = ["serde", "std"] }
-liblzma = { default-features = false, version = "0.4.5", optional = true }
+snap = { default-features = false, version = "1.1.1", optional = true }
+strum = { default-features = false, version = "0.28.0", features = ["derive"] }
+thiserror = { default-features = false, version = "2.0.18" }
+uuid = { workspace = true }
+liblzma = { default-features = false, version = "0.4.6", optional = true }
 zstd = { default-features = false, version = "0.13.3", optional = true }
 
 
@@ -79,19 +75,22 @@ zstd = { default-features = false, version = "0.13.3", optional = true }
 quad-rand = { default-features = false, version = "0.2.3" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-rand = { default-features = false, version = "0.9.2", features = ["default"] }
+rand = { default-features = false, version = "0.10.1", features = ["default"] }
 
 [dev-dependencies]
-anyhow = { default-features = false, version = "1.0.100", features = ["std"] }
-apache-avro-test-helper = { default-features = false, version = "0.21.0", path = "../avro_test_helper" }
-criterion = { default-features = false, version = "0.7.0" }
-hex-literal = { default-features = false, version = "1.0.0" }
-md-5 = { default-features = false, version = "0.10.6" }
+apache-avro-derive = { default-features = false, version = "0.22.0", path = "../avro_derive" }
+apache-avro-test-helper = { default-features = false, version = "0.22.0", path = "../avro_test_helper" }
+criterion = { default-features = false, version = "0.8.2" }
+hex-literal = { default-features = false, version = "1.1.0" }
+md-5 = { default-features = false, version = "0.11.0" }
 pretty_assertions = { workspace = true }
-sha2 = { default-features = false, version = "0.10.9" }
+sha2 = { default-features = false, version = "0.11.0" }
 paste = { default-features = false, version = "1.0.15" }
 rstest = { default-features = false, version = "0.26.1" }
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

@@ -47,8 +47,7 @@ pub(crate) fn serialize_big_decimal(decimal: &BigDecimal) -> AvroResult<Vec<u8>>
     Ok(final_buffer)
 }
 
-pub(crate) fn deserialize_big_decimal(bytes: &Vec<u8>) -> AvroResult<BigDecimal> {
-    let mut bytes: &[u8] = bytes.as_slice();
+pub(crate) fn deserialize_big_decimal(mut bytes: &[u8]) -> AvroResult<BigDecimal> {
     let mut big_decimal_buffer = match decode_len(&mut bytes) {
         Ok(size) => vec![0u8; size],
         Err(err) => return Err(Details::BigDecimalLen(Box::new(err)).into()),
@@ -70,16 +69,21 @@ pub(crate) fn deserialize_big_decimal(bytes: &Vec<u8>) -> AvroResult<BigDecimal>
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{Codec, Reader, Schema, Writer, error::Error, types::Record};
-    use apache_avro_test_helper::TestResult;
-    use bigdecimal::{One, Zero};
-    use pretty_assertions::assert_eq;
     use std::{
         fs::File,
         io::BufReader,
         ops::{Div, Mul},
         str::FromStr,
+    };
+
+    use apache_avro_test_helper::TestResult;
+    use bigdecimal::{One, Zero};
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+    use crate::{
+        Codec, Reader, Schema, Writer, error::Error, reader::datum::GenericDatumReader,
+        types::Record, writer::datum::GenericDatumWriter,
     };
 
     #[test]
@@ -137,8 +141,10 @@ mod tests {
           "fields": [
             {
               "name": "field_name",
-              "type": "bytes",
-              "logicalType": "big-decimal"
+              "type": {
+                "type": "bytes",
+                "logicalType": "big-decimal"
+              }
             }
           ]
         }
@@ -156,9 +162,9 @@ mod tests {
             .schema(&schema)
             .codec(codec)
             .writer(Vec::new())
-            .build();
+            .build()?;
 
-        writer.append(record.clone())?;
+        writer.append_value(record.clone())?;
         writer.flush()?;
 
         // read record
@@ -178,6 +184,85 @@ mod tests {
             other => Err(format!("Expected Value::BigDecimal, got: {other:?}")),
         }?;
         assert_eq!(&val, x1res);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_338_deserialize_serde_way() -> TestResult {
+        #[derive(Clone, PartialEq, Eq, Debug, Default, serde::Deserialize, serde::Serialize)]
+        struct Test {
+            big_decimal: BigDecimal,
+        }
+
+        let schema_str = r#"
+        {
+          "type": "record",
+          "name": "Test",
+          "fields": [
+            {
+              "name": "big_decimal",
+              "type": "string"
+            }
+          ]
+        }
+        "#;
+        let schema = Schema::parse_str(schema_str)?;
+
+        let test = Test::default();
+
+        let serialized = GenericDatumWriter::builder(&schema)
+            .build()?
+            .write_ser_to_vec(&test)?;
+        let value: Test = GenericDatumReader::builder(&schema)
+            .build()?
+            .read_deser(&mut &serialized[..])?;
+
+        assert_eq!(value, test);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_338_deserialize_serde_way_with_bigdecimal() -> TestResult {
+        #[derive(Clone, PartialEq, Eq, Debug, Default, serde::Deserialize, serde::Serialize)]
+        #[serde(rename = "test")]
+        struct Test {
+            #[serde(with = "crate::serde::bigdecimal")]
+            big_decimal: BigDecimal,
+        }
+
+        let schema_str = r#"
+        {
+          "type": "record",
+          "name": "test",
+          "fields": [
+            {
+              "name": "big_decimal",
+              "type": {
+                "type": "bytes",
+                "logicalType": "big-decimal"
+              }
+            }
+          ]
+        }
+        "#;
+        let schema = Schema::parse_str(schema_str)?;
+
+        let test = Test::default();
+
+        // write a record
+        let mut writer = Writer::new(&schema, Vec::new())?;
+        writer.append_ser(test.clone())?;
+
+        let wrote_data = writer.into_inner()?;
+
+        // read record
+        let mut reader = Reader::new(&wrote_data[..])?.into_deser_iter();
+
+        let value = reader.next().unwrap()?;
+
+        assert_eq!(test, value);
 
         Ok(())
     }

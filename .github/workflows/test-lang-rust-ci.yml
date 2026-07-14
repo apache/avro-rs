@@ -15,13 +15,14 @@
 # specific language governing permissions and limitations
 # under the License.
 
+---
 name: Rust Continuous Integration
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 permissions:
   contents: read
@@ -34,15 +35,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  license-check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
+        with:
+          tool: hawkeye@6.3
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Check License Header
+        run: hawkeye check
   ci:
     runs-on: ${{ matrix.runner.name }}
     strategy:
       matrix:
         rust:
-          - 'stable'
-          - 'beta'
-          - 'nightly'
-          - '1.85.0'  # MSRV
+          - "stable"
+          - "nightly"
+          - "1.88.0" # MSRV
         runner:
           - name: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
@@ -50,22 +62,32 @@ jobs:
             target: wasm32-unknown-unknown
           - name: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-          - name: ubuntu-24.04-arm
-            target: wasm32-unknown-unknown
 
     steps:
+      - uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
+        if: matrix.rust == 'nightly'
+        with:
+          tool: cargo-expand
+
+      - uses: taiki-e/install-action@4684b8405694ae9dd42c9f39ba901a70ae83f4a3 # v2.82.9
+        if: matrix.rust == 'stable' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
+        with:
+          tool: cargo-rdme@1.4.2
+
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Cache Cargo
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # these represent dependencies downloaded by cargo
           # and thus do not depend on the OS, arch nor rust version.
           path: ~/.cargo
           key: ${{ runner.os }}-${{ matrix.runner.name }}-${{ matrix.runner.target }}-${{ matrix.rust }}-cache1-${{ hashFiles('**/Cargo.lock') }}
       - name: Cache Rust dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # these represent compiled steps of both dependencies and avro
           # and thus are specific for a particular OS, arch and rust version.
@@ -73,27 +95,24 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.runner.name }}-${{ matrix.runner.target }}-${{ matrix.rust }}-cache1-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Rust Toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: ${{ matrix.rust }}
           components: rustfmt
           targets: ${{ matrix.runner.target }}
 
-      - name: Cache cargo-rdme
-        if: matrix.rust == 'stable' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo-${{ matrix.rust }}/cargo-rdme
-          key: cargo-rdme-
-
       # Check if the doc cumment in avro/src/lib.rs and avro/README.md are in sync.
       - name: Run cargo-rdme
-        # The result is environment independent so one test pattern is enough.
+        # The result is environment independent, so one test pattern is enough.
         if: matrix.rust == 'stable' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
-        run: |
-          cargo install --root ~/.cargo-${{ matrix.rust }}/cargo-rdme --locked cargo-rdme
-          export PATH=$PATH:~/.cargo-${{ matrix.rust }}/cargo-rdme/bin
-          cargo rdme --check
+        run: cargo rdme --check
+
+      - name: Run cargo doc
+        # The result is environment independent, so one test pattern is enough.
+        if: matrix.rust == 'nightly' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
+        env:
+          RUSTDOCFLAGS: --cfg docsrs -Dwarnings
+        run: cargo doc --lib --no-deps --document-private-items --features derive
 
       - name: Rust Format
         if: matrix.runner.target != 'wasm32-unknown-unknown'
@@ -120,28 +139,31 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Checkout other SDKs
-        uses: actions/checkout@v5
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: apache/avro
           path: main-repo
+          persist-credentials: false
 
       - name: Rust Toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: stable
 
       - name: Cache Cargo
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # these represent dependencies downloaded by cargo
           # and thus do not depend on the OS, arch nor rust version.
           path: ~/.cargo
           key: ${{ runner.os }}-target-cache1-${{ hashFiles('**/Cargo.lock') }}
       - name: Cache Rust dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # these represent compiled steps of both dependencies and avro
           # and thus are specific for a particular OS, arch and rust version.
@@ -149,24 +171,24 @@ jobs:
           key: ${{ runner.os }}-target-cache1-stable-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache Local Maven Repository
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: 'Setup Temurin JDK 8, 11, 17 & 21'
-        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+      - name: "Setup Temurin JDK 8, 11, 17 & 21"
+        uses: actions/setup-java@1bcf9fb12cf4aa7d266a90ae39939e61372fe520 # v5.4.0
         with:
-          distribution: 'temurin'
+          distribution: "temurin"
           java-version: |
             8
             11
             17
             21
 
-      - name: 'Setup Maven 3.9.9'
+      - name: "Setup Maven 3.9.9"
         uses: stCarolas/setup-maven@d6af6abeda15e98926a57b5aa970a96bb37f97d1 # v5
         with:
           maven-version: 3.9.9
@@ -189,7 +211,7 @@ jobs:
       - name: Rust reads interop files created by Java and Rust
         run: INTEROP_ROOT_FOLDER="main-repo" ./build.sh interop-data-test
 
-      - uses: shogo82148/actions-setup-perl@v1
+      - uses: shogo82148/actions-setup-perl@a198315ec4e9244f206879ea7b63078003aec8a6 # v1.41.1
         with:
           perl-version: 5.32
 
@@ -215,7 +237,6 @@ jobs:
                                                        Try::Tiny \
                                                        inc::Module::Install
 
-
       - name: Perl reads interop files created by Java and Rust
         working-directory: main-repo/lang/perl
         run: ./build.sh interop-data-test
@@ -225,16 +246,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Rust Toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
           toolchain: stable
           targets: wasm32-unknown-unknown
 
       - name: Cache Cargo
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # these represent dependencies downloaded by cargo
           # and thus do not depend on the OS, arch nor rust version.
@@ -242,7 +265,7 @@ jobs:
           key: ${{ runner.os }}-target-cache1-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache Rust dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # these represent compiled steps of both dependencies and avro
           # and thus are specific for a particular OS, arch and rust version.

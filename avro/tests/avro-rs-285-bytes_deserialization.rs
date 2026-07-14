@@ -1,14 +1,34 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+use apache_avro::Reader;
 use apache_avro_test_helper::TestResult;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename = "SimpleRecord")]
 struct ExampleByteArray {
-    #[serde(with = "apache_avro::serde_avro_bytes_opt")]
+    #[serde(with = "apache_avro::serde::bytes_opt")]
     data_bytes: Option<Vec<u8>>,
     description: Option<String>,
 }
 
 #[derive(Deserialize, Serialize)]
+#[serde(rename = "SimpleRecord")]
 struct ExampleByteArrayFiltered {
     description: Option<String>,
 }
@@ -45,7 +65,7 @@ fn avro_rs_285_bytes_deserialization_round_trip() -> TestResult {
     ];
 
     // serialize records to Avro binary format with schema
-    let mut writer = apache_avro::Writer::new(&schema, Vec::new());
+    let mut writer = apache_avro::Writer::new(&schema, Vec::new())?;
     for record in &records {
         writer.append_ser(record)?;
     }
@@ -53,10 +73,9 @@ fn avro_rs_285_bytes_deserialization_round_trip() -> TestResult {
     let avro_data = writer.into_inner()?;
 
     // deserialize Avro binary data back into ExampleByteArray structs
-    let reader = apache_avro::Reader::new(&avro_data[..])?;
-    let deserialized_records: Vec<ExampleByteArray> = reader
-        .map(|value| apache_avro::from_value::<ExampleByteArray>(&value.unwrap()).unwrap())
-        .collect();
+    let deserialized_records = Reader::new(&avro_data[..])?
+        .into_deser_iter()
+        .collect::<Result<Vec<ExampleByteArray>, _>>()?;
 
     assert_eq!(records, deserialized_records);
     Ok(())
@@ -93,7 +112,7 @@ fn avro_rs_285_bytes_deserialization_filtered_round_trip() -> TestResult {
     ];
 
     // serialize records to Avro binary format with schema
-    let mut writer = apache_avro::Writer::new(&schema, Vec::new());
+    let mut writer = apache_avro::Writer::new(&schema, Vec::new())?;
     for record in &records {
         writer.append_ser(record)?;
     }
@@ -101,10 +120,9 @@ fn avro_rs_285_bytes_deserialization_filtered_round_trip() -> TestResult {
     let avro_data = writer.into_inner()?;
 
     // deserialize Avro binary data back into ExampleByteArrayFiltered structs
-    let reader = apache_avro::Reader::new(&avro_data[..])?;
-    let deserialized_records: Vec<ExampleByteArrayFiltered> = reader
-        .map(|value| apache_avro::from_value::<ExampleByteArrayFiltered>(&value.unwrap()).unwrap())
-        .collect();
+    let deserialized_records = Reader::new(&avro_data[..])?
+        .into_deser_iter()
+        .collect::<Result<Vec<ExampleByteArrayFiltered>, _>>()?;
 
     assert_eq!(records.len(), deserialized_records.len());
 

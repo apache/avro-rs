@@ -37,19 +37,17 @@ fn avro_3630_append_to_an_existing_file() -> TestResult {
 
     let marker = read_marker(&bytes[..]);
 
-    let mut writer = Writer::append_to(&schema, bytes, marker);
+    let mut writer = Writer::append_to(&schema, bytes, marker)?;
 
     writer
-        .append(create_datum(&schema, 2))
+        .append_value(create_datum(&schema, 2))
         .expect("An error occurred while appending more data");
 
     let new_bytes = writer.into_inner().expect("Cannot get the new bytes");
 
     let reader = Reader::new(&*new_bytes).expect("Cannot read the new bytes");
-    let mut i = 1;
-    for value in reader {
+    for (i, value) in (1..).zip(reader) {
         check(&value, i);
-        i += 1
     }
 
     Ok(())
@@ -59,8 +57,11 @@ fn avro_3630_append_to_an_existing_file() -> TestResult {
 fn avro_4031_append_to_file_using_multiple_writers() -> TestResult {
     let schema = Schema::parse_str(SCHEMA).expect("Cannot parse the schema");
 
-    let mut first_writer = Writer::builder().schema(&schema).writer(Vec::new()).build();
-    first_writer.append(create_datum(&schema, -42))?;
+    let mut first_writer = Writer::builder()
+        .schema(&schema)
+        .writer(Vec::new())
+        .build()?;
+    first_writer.append_value(create_datum(&schema, -42))?;
     let mut resulting_bytes = first_writer.into_inner()?;
     let first_marker = read_marker(&resulting_bytes);
 
@@ -69,8 +70,8 @@ fn avro_4031_append_to_file_using_multiple_writers() -> TestResult {
         .has_header(true)
         .marker(first_marker)
         .writer(Vec::new())
-        .build();
-    second_writer.append(create_datum(&schema, 42))?;
+        .build()?;
+    second_writer.append_value(create_datum(&schema, 42))?;
     resulting_bytes.append(&mut second_writer.into_inner()?);
 
     let values: Vec<_> = Reader::new(&resulting_bytes[..])?.collect();
@@ -81,9 +82,9 @@ fn avro_4031_append_to_file_using_multiple_writers() -> TestResult {
 
 /// Simulates reading from a pre-existing .avro file and returns its bytes
 fn get_avro_bytes(schema: &Schema) -> Vec<u8> {
-    let mut writer = Writer::new(schema, Vec::new());
+    let mut writer = Writer::new(schema, Vec::new()).unwrap();
     writer
-        .append(create_datum(schema, 1))
+        .append_value(create_datum(schema, 1))
         .expect("An error while appending data");
     writer.into_inner().expect("Cannot get the Avro bytes")
 }
@@ -101,7 +102,7 @@ fn check(value: &AvroResult<Value>, expected: i32) {
         Ok(value) => match value {
             Value::Record(fields) => match &fields[0] {
                 (_, Value::Int(actual)) => assert_eq!(&expected, actual),
-                _ => panic!("The field value type must be an Int: {:?}!", &fields[0]),
+                _ => panic!("The field value type must be an Int: {:?}!", fields[0]),
             },
             _ => panic!("The value type must be a Record: {value:?}!"),
         },

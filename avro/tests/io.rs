@@ -15,8 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! Port of https://github.com/apache/avro/blob/release-1.9.1/lang/py/test/test_io.py
-use apache_avro::{Error, Schema, error::Details, from_avro_datum, to_avro_datum, types::Value};
+//! Port of <https://github.com/apache/avro/blob/release-1.9.1/lang/py/test/test_io.py>
+use apache_avro::writer::datum::GenericDatumWriter;
+use apache_avro::{Error, Schema, error::Details, reader::datum::GenericDatumReader, types::Value};
 use apache_avro_test_helper::TestResult;
 use pretty_assertions::assert_eq;
 use std::{io::Cursor, sync::OnceLock};
@@ -231,8 +232,12 @@ fn test_validate() -> TestResult {
 fn test_round_trip() -> TestResult {
     for (raw_schema, value) in schemas_to_validate().iter() {
         let schema = Schema::parse_str(raw_schema)?;
-        let encoded = to_avro_datum(&schema, value.clone()).unwrap();
-        let decoded = from_avro_datum(&schema, &mut Cursor::new(encoded), None).unwrap();
+        let encoded = GenericDatumWriter::builder(&schema)
+            .build()?
+            .write_value_to_vec(value.clone())?;
+        let decoded = GenericDatumReader::builder(&schema)
+            .build()?
+            .read_value(&mut Cursor::new(encoded))?;
         assert_eq!(value, &decoded);
     }
 
@@ -242,7 +247,9 @@ fn test_round_trip() -> TestResult {
 #[test]
 fn test_binary_int_encoding() -> TestResult {
     for (number, hex_encoding) in binary_encodings().iter() {
-        let encoded = to_avro_datum(&Schema::Int, Value::Int(*number as i32))?;
+        let encoded = GenericDatumWriter::builder(&Schema::Int)
+            .build()?
+            .write_value_to_vec(Value::Int(*number as i32))?;
         assert_eq!(&encoded, hex_encoding);
     }
 
@@ -252,7 +259,9 @@ fn test_binary_int_encoding() -> TestResult {
 #[test]
 fn test_binary_long_encoding() -> TestResult {
     for (number, hex_encoding) in binary_encodings().iter() {
-        let encoded = to_avro_datum(&Schema::Long, Value::Long(*number))?;
+        let encoded = GenericDatumWriter::builder(&Schema::Long)
+            .build()?
+            .write_value_to_vec(Value::Long(*number))?;
         assert_eq!(&encoded, hex_encoding);
     }
 
@@ -264,7 +273,7 @@ fn test_schema_promotion() -> TestResult {
     // Each schema is present in order of promotion (int -> long, long -> float, float -> double)
     // Each value represents the expected decoded value when promoting a value previously encoded with a promotable schema
     let promotable_schemas = [r#""int""#, r#""long""#, r#""float""#, r#""double""#];
-    let promotable_values = vec![
+    let promotable_values = [
         Value::Int(219),
         Value::Long(219),
         Value::Float(219.0),
@@ -275,15 +284,13 @@ fn test_schema_promotion() -> TestResult {
         let original_value = &promotable_values[i];
         for (j, reader_raw_schema) in promotable_schemas.iter().enumerate().skip(i + 1) {
             let reader_schema = Schema::parse_str(reader_raw_schema)?;
-            let encoded = to_avro_datum(&writer_schema, original_value.clone())?;
-            let decoded = from_avro_datum(
-                &writer_schema,
-                &mut Cursor::new(encoded),
-                Some(&reader_schema),
-            )
-            .unwrap_or_else(|_| {
-                panic!("failed to decode {original_value:?} with schema: {reader_raw_schema:?}",)
-            });
+            let encoded = GenericDatumWriter::builder(&writer_schema)
+                .build()?
+                .write_value_to_vec(original_value.clone())?;
+            let decoded = GenericDatumReader::builder(&writer_schema)
+                .reader_schema(&reader_schema)
+                .build()?
+                .read_value(&mut Cursor::new(encoded))?;
             assert_eq!(decoded, promotable_values[j]);
         }
     }
@@ -298,12 +305,13 @@ fn test_unknown_symbol() -> TestResult {
     let reader_schema =
         Schema::parse_str(r#"{"type": "enum", "name": "Test", "symbols": ["BAR", "BAZ"]}"#)?;
     let original_value = Value::Enum(0, "FOO".to_string());
-    let encoded = to_avro_datum(&writer_schema, original_value)?;
-    let decoded = from_avro_datum(
-        &writer_schema,
-        &mut Cursor::new(encoded),
-        Some(&reader_schema),
-    );
+    let encoded = GenericDatumWriter::builder(&writer_schema)
+        .build()?
+        .write_value_to_vec(original_value.clone())?;
+    let decoded = GenericDatumReader::builder(&writer_schema)
+        .reader_schema(&reader_schema)
+        .build()?
+        .read_value(&mut Cursor::new(encoded));
     assert!(decoded.is_err());
 
     Ok(())
@@ -322,12 +330,13 @@ fn test_default_value() -> TestResult {
             }}"#
         ))?;
         let datum_to_read = Value::Record(vec![("H".to_string(), default_datum.clone())]);
-        let encoded = to_avro_datum(long_record_schema(), long_record_datum().clone())?;
-        let datum_read = from_avro_datum(
-            long_record_schema(),
-            &mut Cursor::new(encoded),
-            Some(&reader_schema),
-        )?;
+        let encoded = GenericDatumWriter::builder(long_record_schema())
+            .build()?
+            .write_value_to_vec(long_record_datum().clone())?;
+        let datum_read = GenericDatumReader::builder(long_record_schema())
+            .reader_schema(&reader_schema)
+            .build()?
+            .read_value(&mut Cursor::new(encoded))?;
 
         match default_datum {
             // For float/double, NaN != NaN, so we check specially here.
@@ -379,12 +388,13 @@ fn test_no_default_value() -> TestResult {
             ]
         }"#,
     )?;
-    let encoded = to_avro_datum(long_record_schema(), long_record_datum().clone())?;
-    let result = from_avro_datum(
-        long_record_schema(),
-        &mut Cursor::new(encoded),
-        Some(&reader_schema),
-    );
+    let encoded = GenericDatumWriter::builder(long_record_schema())
+        .build()?
+        .write_value_to_vec(long_record_datum().clone())?;
+    let result = GenericDatumReader::builder(long_record_schema())
+        .reader_schema(&reader_schema)
+        .build()?
+        .read_value(&mut Cursor::new(encoded));
     assert!(result.is_err());
 
     Ok(())
@@ -408,12 +418,13 @@ fn test_projection() -> TestResult {
         ("E".to_string(), Value::Int(5)),
         ("F".to_string(), Value::Int(6)),
     ]);
-    let encoded = to_avro_datum(long_record_schema(), long_record_datum().clone())?;
-    let datum_read = from_avro_datum(
-        long_record_schema(),
-        &mut Cursor::new(encoded),
-        Some(&reader_schema),
-    )?;
+    let encoded = GenericDatumWriter::builder(long_record_schema())
+        .build()?
+        .write_value_to_vec(long_record_datum().clone())?;
+    let datum_read = GenericDatumReader::builder(long_record_schema())
+        .reader_schema(&reader_schema)
+        .build()?
+        .read_value(&mut Cursor::new(encoded))?;
     assert_eq!(datum_to_read, datum_read);
 
     Ok(())
@@ -437,12 +448,13 @@ fn test_field_order() -> TestResult {
         ("F".to_string(), Value::Int(6)),
         ("E".to_string(), Value::Int(5)),
     ]);
-    let encoded = to_avro_datum(long_record_schema(), long_record_datum().clone())?;
-    let datum_read = from_avro_datum(
-        long_record_schema(),
-        &mut Cursor::new(encoded),
-        Some(&reader_schema),
-    )?;
+    let encoded = GenericDatumWriter::builder(long_record_schema())
+        .build()?
+        .write_value_to_vec(long_record_datum().clone())?;
+    let datum_read = GenericDatumReader::builder(long_record_schema())
+        .reader_schema(&reader_schema)
+        .build()?
+        .read_value(&mut Cursor::new(encoded))?;
     assert_eq!(datum_to_read, datum_read);
 
     Ok(())
@@ -467,7 +479,11 @@ fn test_type_exception() -> Result<(), String> {
         ("E".to_string(), Value::Int(5)),
         ("F".to_string(), Value::String(String::from("Bad"))),
     ]);
-    let encoded = to_avro_datum(&writer_schema, datum_to_write).map_err(Error::into_details);
+    let encoded = GenericDatumWriter::builder(&writer_schema)
+        .build()
+        .unwrap()
+        .write_value_to_vec(datum_to_write)
+        .map_err(Error::into_details);
     match encoded {
         Ok(_) => Err(String::from("Expected ValidationError, got Ok")),
         Err(Details::Validation) => Ok(()),

@@ -36,10 +36,29 @@ github:
   protected_tags:
     - "rel/*"
     - "v*.*.*"
+  pull_requests:
+    # enable updating head branches of pull requests
+    allow_update_branch: true
+    allow_auto_merge: true
+    # auto-delete head branches after being merged
+    del_branch_on_merge: true
 
 #publish:
 #  whoami: asf-site
 
+  rulesets:
+    - name: "Default Branch Protection"
+      type: branch
+      branches:
+        includes:
+          - "~DEFAULT_BRANCH"
+          - "release/*"
+          - "rel/*"
+        excludes: []
+      bypass_teams:
+        - root
+      restrict_deletion: true
+      restrict_force_push: true
 notifications:
   commits: commits@avro.apache.org
   issues: issues@avro.apache.org

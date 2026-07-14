@@ -1,6 +1,25 @@
-use apache_avro::{AvroSchema, Schema, SpecificSingleObjectWriter};
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+use apache_avro::{AvroSchema, Schema, SpecificSingleObjectWriter, schema::UuidSchema};
 use apache_avro_test_helper::TestResult;
+use pretty_assertions::assert_eq;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[test]
 fn avro_rs_53_uuid_with_fixed() -> TestResult {
@@ -35,11 +54,92 @@ fn avro_rs_53_uuid_with_fixed() -> TestResult {
     };
     let mut buffer = Vec::new();
 
-    // serialize the Uuid as Bytes
+    // serialize the Uuid as Fixed
     assert!(!apache_avro::util::set_serde_human_readable(false));
-    let bytes = SpecificSingleObjectWriter::<Comment>::with_capacity(64)?
-        .write_ref(&payload, &mut buffer)?;
-    assert_eq!(bytes, 27);
+    let bytes = SpecificSingleObjectWriter::<Comment>::new()?.write_ref(&payload, &mut buffer)?;
+    assert_eq!(bytes, 26);
+
+    Ok(())
+}
+
+#[test]
+fn avro_rs_440_uuid_string() -> TestResult {
+    #[derive(apache_avro_derive::AvroSchema, Serialize, Deserialize)]
+    #[serde(transparent)]
+    struct CustomUuid {
+        #[avro(with = || Schema::Uuid(UuidSchema::String))]
+        inner: Uuid,
+    }
+    let uuid = CustomUuid {
+        inner: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")?,
+    };
+    let mut buffer = Vec::new();
+
+    assert!(!apache_avro::util::set_serde_human_readable(false));
+    let writer = SpecificSingleObjectWriter::new()?;
+    assert_eq!(
+        writer.write(uuid, &mut buffer).unwrap_err().to_string(),
+        "Failed to serialize value of type `bytes` using Schema::Uuid(String): Expected Schema::Bytes | Schema::Fixed | Schema::BigDecimal | Schema::Decimal | Schema::Uuid(Bytes | Fixed) | Schema::Duration"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn avro_rs_440_uuid_bytes() -> TestResult {
+    #[derive(apache_avro_derive::AvroSchema, Serialize, Deserialize)]
+    #[serde(transparent)]
+    struct CustomUuid {
+        #[avro(with = || Schema::Uuid(UuidSchema::Bytes))]
+        inner: Uuid,
+    }
+    let uuid = CustomUuid {
+        inner: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")?,
+    };
+    let mut buffer = Vec::new();
+
+    assert!(!apache_avro::util::set_serde_human_readable(false));
+    let writer = SpecificSingleObjectWriter::new()?;
+    writer.write(uuid, &mut buffer)?;
+
+    assert_eq!(
+        buffer.as_slice(),
+        &[
+            195, 1, 46, 208, 56, 148, 57, 0, 104, 249, 32, 85, 14, 132, 0, 226, 155, 65, 212, 167,
+            22, 68, 102, 85, 68, 0, 0
+        ][..]
+    );
+
+    Ok(())
+}
+
+#[test]
+fn avro_rs_440_uuid_fixed() -> TestResult {
+    #[derive(apache_avro_derive::AvroSchema, Serialize, Deserialize)]
+    #[serde(transparent)]
+    struct CustomUuid {
+        inner: Uuid,
+    }
+    assert!(matches!(
+        CustomUuid::get_schema(),
+        Schema::Uuid(UuidSchema::Fixed(_))
+    ));
+    let uuid = CustomUuid {
+        inner: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")?,
+    };
+    let mut buffer = Vec::new();
+
+    assert!(!apache_avro::util::set_serde_human_readable(false));
+    let writer = SpecificSingleObjectWriter::new()?;
+    writer.write(uuid, &mut buffer)?;
+
+    assert_eq!(
+        buffer.as_slice(),
+        &[
+            195, 1, 68, 197, 49, 158, 70, 248, 114, 20, 85, 14, 132, 0, 226, 155, 65, 212, 167, 22,
+            68, 102, 85, 68, 0, 0
+        ][..]
+    );
 
     Ok(())
 }

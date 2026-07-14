@@ -1,0 +1,5 @@
+error: AvroSchema: derive does not support raw pointers
+  --> tests/ui/avro_rs_401_ptr.rs:22:8
+   |
+22 |     a: *const String,
+   |        ^^^^^^^^^^^^^

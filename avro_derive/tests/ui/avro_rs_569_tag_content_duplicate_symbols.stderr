@@ -1,0 +1,10 @@
+error: AvroSchema: Duplicate variant names detected: ["One", "One"]
+  --> tests/ui/avro_rs_569_tag_content_duplicate_symbols.rs:21:1
+   |
+21 | / #[serde(tag = "tag", content = "content")]
+22 | | enum Foo {
+23 | |     One,
+24 | |     #[serde(rename = "One")]
+25 | |     Two,
+26 | | }
+   | |_^

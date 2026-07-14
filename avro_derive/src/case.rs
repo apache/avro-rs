@@ -18,33 +18,49 @@
 //! Code to convert the Rust-styled field/variant (e.g. `my_field`, `MyType`) to the
 //! case of the source (e.g. `my-field`, `MY_FIELD`).
 //! Code copied from serde <https://github.com/serde-rs/serde/blob/master/serde_derive/src/internals/case.rs>
-use self::RenameRule::*;
+use darling::FromMeta;
+use syn::Lit;
+
+use self::RenameRule::{
+    CamelCase, KebabCase, LowerCase, None, PascalCase, ScreamingKebabCase, ScreamingSnakeCase,
+    SnakeCase, UpperCase,
+};
 use std::fmt::{self, Debug, Display};
 
 /// The different possible ways to change case of fields in a struct, or variants in an enum.
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
 pub enum RenameRule {
     /// Don't apply a default rename rule.
+    #[default]
     None,
-    /// Rename direct children to "lowercase" style.
+    /// Rename direct children to `lowercase` style.
     LowerCase,
-    /// Rename direct children to "UPPERCASE" style.
+    /// Rename direct children to `UPPERCASE` style.
     UpperCase,
-    /// Rename direct children to "PascalCase" style, as typically used for
+    /// Rename direct children to `PascalCase` style, as typically used for
     /// enum variants.
     PascalCase,
-    /// Rename direct children to "camelCase" style.
+    /// Rename direct children to `camelCase` style.
     CamelCase,
-    /// Rename direct children to "snake_case" style, as commonly used for
+    /// Rename direct children to `snake_case` style, as commonly used for
     /// fields.
     SnakeCase,
-    /// Rename direct children to "SCREAMING_SNAKE_CASE" style, as commonly
+    /// Rename direct children to `SCREAMING_SNAKE_CASE` style, as commonly
     /// used for constants.
     ScreamingSnakeCase,
-    /// Rename direct children to "kebab-case" style.
+    /// Rename direct children to `kebab-case` style.
     KebabCase,
-    /// Rename direct children to "SCREAMING-KEBAB-CASE" style.
+    /// Rename direct children to `SCREAMING-KEBAB-CASE` style.
     ScreamingKebabCase,
+}
+
+impl FromMeta for RenameRule {
+    fn from_value(value: &Lit) -> darling::Result<Self> {
+        let Lit::Str(litstr) = value else {
+            return Err(darling::Error::unexpected_lit_type(value));
+        };
+        Self::from_str(&litstr.value()).map_err(darling::Error::custom)
+    }
 }
 
 static RENAME_RULES: &[(&str, RenameRule)] = &[
@@ -59,15 +75,14 @@ static RENAME_RULES: &[(&str, RenameRule)] = &[
 ];
 
 impl RenameRule {
-    pub fn from_str(rename_all_str: &str) -> Result<Self, ParseError<'_>> {
-        for (name, rule) in RENAME_RULES {
-            if rename_all_str == *name {
-                return Ok(*rule);
-            }
-        }
-        Err(ParseError {
-            unknown: rename_all_str,
-        })
+    pub fn from_str(rename_all_str: &str) -> Result<Self, ParseError> {
+        RENAME_RULES
+            .iter()
+            .find(|(name, _)| *name == rename_all_str)
+            .map(|(_, rule)| *rule)
+            .ok_or_else(|| ParseError {
+                unknown: rename_all_str.to_string(),
+            })
     }
 
     /// Apply a renaming rule to an enum variant, returning the version expected in the source.
@@ -99,7 +114,7 @@ impl RenameRule {
     pub fn apply_to_field(self, field: &str) -> String {
         match self {
             None | LowerCase | SnakeCase => field.to_owned(),
-            UpperCase => field.to_ascii_uppercase(),
+            UpperCase | ScreamingSnakeCase => field.to_ascii_uppercase(),
             PascalCase => {
                 let mut pascal = String::new();
                 let mut capitalize = true;
@@ -119,21 +134,28 @@ impl RenameRule {
                 let pascal = PascalCase.apply_to_field(field);
                 pascal[..1].to_ascii_lowercase() + &pascal[1..]
             }
-            ScreamingSnakeCase => field.to_ascii_uppercase(),
             KebabCase => field.replace('_', "-"),
             ScreamingKebabCase => ScreamingSnakeCase.apply_to_field(field).replace('_', "-"),
         }
     }
+
+    /// Returns the `RenameRule` if it is not `None`, `rule_b` otherwise.
+    pub fn or(self, rule_b: Self) -> Self {
+        match self {
+            None => rule_b,
+            _ => self,
+        }
+    }
 }
 
-pub struct ParseError<'a> {
-    unknown: &'a str,
+pub struct ParseError {
+    unknown: String,
 }
 
-impl Display for ParseError<'_> {
+impl Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str("unknown rename rule `rename_all = ")?;
-        Debug::fmt(self.unknown, f)?;
+        Debug::fmt(&self.unknown, f)?;
         f.write_str("`, expected one of ")?;
         for (i, (name, _rule)) in RENAME_RULES.iter().enumerate() {
             if i > 0 {
@@ -145,65 +167,80 @@ impl Display for ParseError<'_> {
     }
 }
 
-#[test]
-fn rename_variants() {
-    for &(original, lower, upper, camel, snake, screaming, kebab, screaming_kebab) in &[
-        (
-            "Outcome", "outcome", "OUTCOME", "outcome", "outcome", "OUTCOME", "outcome", "OUTCOME",
-        ),
-        (
-            "VeryTasty",
-            "verytasty",
-            "VERYTASTY",
-            "veryTasty",
-            "very_tasty",
-            "VERY_TASTY",
-            "very-tasty",
-            "VERY-TASTY",
-        ),
-        ("A", "a", "A", "a", "a", "A", "a", "A"),
-        ("Z42", "z42", "Z42", "z42", "z42", "Z42", "z42", "Z42"),
-    ] {
-        assert_eq!(None.apply_to_variant(original), original);
-        assert_eq!(LowerCase.apply_to_variant(original), lower);
-        assert_eq!(UpperCase.apply_to_variant(original), upper);
-        assert_eq!(PascalCase.apply_to_variant(original), original);
-        assert_eq!(CamelCase.apply_to_variant(original), camel);
-        assert_eq!(SnakeCase.apply_to_variant(original), snake);
-        assert_eq!(ScreamingSnakeCase.apply_to_variant(original), screaming);
-        assert_eq!(KebabCase.apply_to_variant(original), kebab);
-        assert_eq!(
-            ScreamingKebabCase.apply_to_variant(original),
-            screaming_kebab
-        );
-    }
-}
+#[cfg(test)]
+mod tests {
+    use crate::case::RenameRule::{
+        CamelCase, KebabCase, LowerCase, PascalCase, ScreamingKebabCase, ScreamingSnakeCase,
+        SnakeCase, UpperCase,
+    };
 
-#[test]
-fn rename_fields() {
-    for &(original, upper, pascal, camel, screaming, kebab, screaming_kebab) in &[
-        (
-            "outcome", "OUTCOME", "Outcome", "outcome", "OUTCOME", "outcome", "OUTCOME",
-        ),
-        (
-            "very_tasty",
-            "VERY_TASTY",
-            "VeryTasty",
-            "veryTasty",
-            "VERY_TASTY",
-            "very-tasty",
-            "VERY-TASTY",
-        ),
-        ("a", "A", "A", "a", "A", "a", "A"),
-        ("z42", "Z42", "Z42", "z42", "Z42", "z42", "Z42"),
-    ] {
-        assert_eq!(None.apply_to_field(original), original);
-        assert_eq!(UpperCase.apply_to_field(original), upper);
-        assert_eq!(PascalCase.apply_to_field(original), pascal);
-        assert_eq!(CamelCase.apply_to_field(original), camel);
-        assert_eq!(SnakeCase.apply_to_field(original), original);
-        assert_eq!(ScreamingSnakeCase.apply_to_field(original), screaming);
-        assert_eq!(KebabCase.apply_to_field(original), kebab);
-        assert_eq!(ScreamingKebabCase.apply_to_field(original), screaming_kebab);
+    #[test]
+    fn rename_variants() {
+        for &(original, lower, upper, camel, snake, screaming, kebab, screaming_kebab) in &[
+            (
+                "Outcome", "outcome", "OUTCOME", "outcome", "outcome", "OUTCOME", "outcome",
+                "OUTCOME",
+            ),
+            (
+                "VeryTasty",
+                "verytasty",
+                "VERYTASTY",
+                "veryTasty",
+                "very_tasty",
+                "VERY_TASTY",
+                "very-tasty",
+                "VERY-TASTY",
+            ),
+            ("A", "a", "A", "a", "a", "A", "a", "A"),
+            ("Z42", "z42", "Z42", "z42", "z42", "Z42", "z42", "Z42"),
+        ] {
+            assert_eq!(
+                crate::case::RenameRule::None.apply_to_variant(original),
+                original
+            );
+            assert_eq!(LowerCase.apply_to_variant(original), lower);
+            assert_eq!(UpperCase.apply_to_variant(original), upper);
+            assert_eq!(PascalCase.apply_to_variant(original), original);
+            assert_eq!(CamelCase.apply_to_variant(original), camel);
+            assert_eq!(SnakeCase.apply_to_variant(original), snake);
+            assert_eq!(ScreamingSnakeCase.apply_to_variant(original), screaming);
+            assert_eq!(KebabCase.apply_to_variant(original), kebab);
+            assert_eq!(
+                ScreamingKebabCase.apply_to_variant(original),
+                screaming_kebab
+            );
+        }
+    }
+
+    #[test]
+    fn rename_fields() {
+        for &(original, upper, pascal, camel, screaming, kebab, screaming_kebab) in &[
+            (
+                "outcome", "OUTCOME", "Outcome", "outcome", "OUTCOME", "outcome", "OUTCOME",
+            ),
+            (
+                "very_tasty",
+                "VERY_TASTY",
+                "VeryTasty",
+                "veryTasty",
+                "VERY_TASTY",
+                "very-tasty",
+                "VERY-TASTY",
+            ),
+            ("a", "A", "A", "a", "A", "a", "A"),
+            ("z42", "Z42", "Z42", "z42", "Z42", "z42", "Z42"),
+        ] {
+            assert_eq!(
+                crate::case::RenameRule::None.apply_to_field(original),
+                original
+            );
+            assert_eq!(UpperCase.apply_to_field(original), upper);
+            assert_eq!(PascalCase.apply_to_field(original), pascal);
+            assert_eq!(CamelCase.apply_to_field(original), camel);
+            assert_eq!(SnakeCase.apply_to_field(original), original);
+            assert_eq!(ScreamingSnakeCase.apply_to_field(original), screaming);
+            assert_eq!(KebabCase.apply_to_field(original), kebab);
+            assert_eq!(ScreamingKebabCase.apply_to_field(original), screaming_kebab);
+        }
     }
 }

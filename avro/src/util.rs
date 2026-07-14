@@ -24,40 +24,39 @@ use std::{
     sync::OnceLock,
 };
 
-/// Maximum number of bytes that can be allocated when decoding
-/// Avro-encoded values. This is a protection against ill-formed
-/// data, whose length field might be interpreted as enormous.
-/// See max_allocation_bytes to change this limit.
+/// Maximum number of bytes that can be allocated when decoding Avro-encoded values.
+///
+/// This is a protection against ill-formed data, whose length field might be interpreted as enormous.
+///
+/// See [`max_allocation_bytes`] to change this limit.
 pub const DEFAULT_MAX_ALLOCATION_BYTES: usize = 512 * 1024 * 1024;
 static MAX_ALLOCATION_BYTES: OnceLock<usize> = OnceLock::new();
 
-/// Whether to set serialization & deserialization traits
-/// as `human_readable` or not.
-/// See [set_serde_human_readable] to change this value.
+/// Whether to set serialization & deserialization traits as `human_readable` or not.
+///
+/// See [`set_serde_human_readable`] to change this value.
+pub const DEFAULT_SERDE_HUMAN_READABLE: bool = false;
+/// Whether the serializer and deserializer should indicate to types that the format is human-readable.
 // crate-visible for testing
 pub(crate) static SERDE_HUMAN_READABLE: OnceLock<bool> = OnceLock::new();
-/// Whether the serializer and deserializer should indicate to types that the format is human-readable.
-pub const DEFAULT_SERDE_HUMAN_READABLE: bool = false;
 
 pub(crate) trait MapHelper {
-    fn string(&self, key: &str) -> Option<String>;
+    fn string(&self, key: &str) -> Option<&str>;
 
-    fn name(&self) -> Option<String> {
+    fn name(&self) -> Option<&str> {
         self.string("name")
     }
 
     fn doc(&self) -> Documentation {
-        self.string("doc")
+        self.string("doc").map(Into::into)
     }
 
     fn aliases(&self) -> Option<Vec<String>>;
 }
 
 impl MapHelper for Map<String, Value> {
-    fn string(&self, key: &str) -> Option<String> {
-        self.get(key)
-            .and_then(|v| v.as_str())
-            .map(|v| v.to_string())
+    fn string(&self, key: &str) -> Option<&str> {
+        self.get(key).and_then(|v| v.as_str())
     }
 
     fn aliases(&self) -> Option<Vec<String>> {
@@ -78,19 +77,24 @@ pub(crate) fn read_long<R: Read>(reader: &mut R) -> AvroResult<i64> {
     zag_i64(reader)
 }
 
+/// Write the number as a zigzagged varint to the writer.
 pub(crate) fn zig_i32<W: Write>(n: i32, buffer: W) -> AvroResult<usize> {
     zig_i64(n as i64, buffer)
 }
 
+/// Write the number as a zigzagged varint to the writer.
 pub(crate) fn zig_i64<W: Write>(n: i64, writer: W) -> AvroResult<usize> {
-    encode_variable(((n << 1) ^ (n >> 63)) as u64, writer)
+    let zigzagged = ((n << 1) ^ (n >> 63)) as u64;
+    encode_variable(zigzagged, writer)
 }
 
+/// Decode a zigzagged varint from the reader.
 pub(crate) fn zag_i32<R: Read>(reader: &mut R) -> AvroResult<i32> {
     let i = zag_i64(reader)?;
     i32::try_from(i).map_err(|e| Details::ZagI32(e, i).into())
 }
 
+/// Decode a zigzagged varint from the reader.
 pub(crate) fn zag_i64<R: Read>(reader: &mut R) -> AvroResult<i64> {
     let z = decode_variable(reader)?;
     Ok(if z & 0x1 == 0 {
@@ -100,25 +104,35 @@ pub(crate) fn zag_i64<R: Read>(reader: &mut R) -> AvroResult<i64> {
     })
 }
 
-fn encode_variable<W: Write>(mut z: u64, mut writer: W) -> AvroResult<usize> {
+/// Write the number as a varint to the writer.
+///
+/// Note: this function does not do zigzag encoding, for that see [`zig_i32`] and [`zig_i64`].
+fn encode_variable<W: Write>(mut zigzagged: u64, mut writer: W) -> AvroResult<usize> {
+    // Ensure the number is little endian for the varint encoding (no-op on LE systems)
+    zigzagged = zigzagged.to_le();
+    // Encode the number as a varint
     let mut buffer = [0u8; 10];
     let mut i: usize = 0;
     loop {
-        if z <= 0x7F {
-            buffer[i] = (z & 0x7F) as u8;
+        if zigzagged <= 0x7F {
+            buffer[i] = (zigzagged & 0x7F) as u8;
             i += 1;
             break;
         } else {
-            buffer[i] = (0x80 | (z & 0x7F)) as u8;
+            buffer[i] = (0x80 | (zigzagged & 0x7F)) as u8;
             i += 1;
-            z >>= 7;
+            zigzagged >>= 7;
         }
     }
     writer
-        .write(&buffer[..i])
-        .map_err(|e| Details::WriteBytes(e).into())
+        .write_all(&buffer[..i])
+        .map_err(Details::WriteBytes)?;
+    Ok(i)
 }
 
+/// Read a varint from the reader.
+///
+/// Note: this function does not do zigzag decoding, for that see [`zag_i32`] and [`zag_i64`].
 fn decode_variable<R: Read>(reader: &mut R) -> AvroResult<u64> {
     let mut i = 0u64;
     let mut buf = [0u8; 1];
@@ -140,7 +154,7 @@ fn decode_variable<R: Read>(reader: &mut R) -> AvroResult<u64> {
         }
     }
 
-    Ok(i)
+    Ok(u64::from_le(i))
 }
 
 /// Set the maximum number of bytes that can be allocated when decoding data.
@@ -282,8 +296,13 @@ mod tests {
 
     #[test]
     fn test_overflow() {
-        let causes_left_shift_overflow: &[u8] = &[0xe1, 0xe1, 0xe1, 0xe1, 0xe1];
-        assert!(decode_variable(&mut &*causes_left_shift_overflow).is_err());
+        let causes_left_shift_overflow: &[u8] = &[0xe1; 10];
+        assert!(matches!(
+            decode_variable(&mut &*causes_left_shift_overflow)
+                .unwrap_err()
+                .details(),
+            Details::IntegerOverflow
+        ));
     }
 
     #[test]

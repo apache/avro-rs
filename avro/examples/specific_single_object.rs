@@ -17,6 +17,7 @@
 
 use apache_avro::{AvroSchema, SpecificSingleObjectReader, SpecificSingleObjectWriter};
 use serde::{Deserialize, Serialize};
+use std::iter::repeat_n;
 
 #[derive(Debug, Clone, Serialize, Deserialize, AvroSchema, PartialEq)]
 struct Test {
@@ -24,32 +25,37 @@ struct Test {
     b: String,
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut buffer: Vec<u8> = Vec::new();
     let test = Test {
         a: 27,
         b: "foo".to_string(),
     };
 
-    let mut writer = SpecificSingleObjectWriter::<Test>::with_capacity(1024)?;
-    match writer.write(test.clone(), &mut buffer) {
-        Ok(bytes_written) => {
-            assert_eq!(bytes_written, 15);
-            assert_eq!(
-                buffer,
-                vec![
-                    195, 1, 166, 59, 243, 49, 82, 230, 8, 161, 54, 6, 102, 111, 111
-                ]
-            );
-        }
-        Err(err) => {
-            panic!("Error during serialization: {err:?}");
-        }
-    }
-
+    let writer = SpecificSingleObjectWriter::<Test>::new()?;
     let reader = SpecificSingleObjectReader::<Test>::new()?;
-    let read = reader.read(&mut buffer.as_slice())?;
-    assert_eq!(test, read);
+
+    for test in repeat_n(test, 2) {
+        buffer.clear();
+
+        match writer.write(test.clone(), &mut buffer) {
+            Ok(bytes_written) => {
+                assert_eq!(bytes_written, 15);
+                assert_eq!(
+                    buffer,
+                    vec![
+                        195, 1, 166, 59, 243, 49, 82, 230, 8, 161, 54, 6, 102, 111, 111
+                    ]
+                );
+            }
+            Err(err) => {
+                panic!("Error during serialization: {err:?}");
+            }
+        }
+
+        let read = reader.read(&mut buffer.as_slice())?;
+        assert_eq!(test, read);
+    }
 
     Ok(())
 }

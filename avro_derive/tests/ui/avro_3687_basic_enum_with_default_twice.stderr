@@ -1,0 +1,13 @@
+error: multiple declared defaults
+  --> tests/ui/avro_3687_basic_enum_with_default_twice.rs:20:22
+   |
+20 | #[derive(AvroSchema, Default)]
+   |                      ^^^^^^^
+...
+23 |     A,
+   |     - first default
+...
+26 |     C,
+   |     - additional default
+   |
+   = note: only one variant can be default

@@ -32,17 +32,27 @@ readme = "README.md"
 proc-macro = true
 
 [dependencies]
-darling = { default-features = false, version = "0.21.3" }
-proc-macro2 = { default-features = false, version = "1.0.103" }
-quote = { default-features = false, version = "1.0.41" }
+darling = { default-features = false, version = "0.23.0" }
+proc-macro2 = { default-features = false, version = "1.0.106" }
+quote = { default-features = false, version = "1.0.45" }
 serde_json = { workspace = true }
-syn = { default-features = false, version = "2.0.108", features = ["full", "fold"] }
+syn = { default-features = false, version = "2.0.117", features = ["full", "fold"] }
+uuid = { workspace = true }
 
 [dev-dependencies]
 apache-avro = { default-features = false, path = "../avro", features = ["derive"] }
-proptest = { default-features = false, version = "1.9.0", features = ["std"] }
-serde = { workspace = true }
+macrotest = { version = "1.2.1", default-features = false }
 pretty_assertions = { workspace = true }
+proptest = { default-features = false, version = "1.11.0", features = ["std"] }
+rustversion = "1.0.22"
+serde = { workspace = true }
+trybuild = "1.0.116"
+
+[build-dependencies]
+rustversion = "1.0.22"
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

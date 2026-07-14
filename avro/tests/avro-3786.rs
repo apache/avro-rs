@@ -15,7 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use apache_avro::{Schema, from_avro_datum, to_avro_datum, to_value, types};
+use apache_avro::writer::datum::GenericDatumWriter;
+use apache_avro::{Schema, reader::datum::GenericDatumReader, to_value, types};
 use apache_avro_test_helper::TestResult;
 
 #[test]
@@ -132,10 +133,15 @@ fn avro_3786_deserialize_union_with_different_enum_order() -> TestResult {
         avro_value.validate(&writer_schema),
         "value is valid for schema",
     );
-    let datum = to_avro_datum(&writer_schema, avro_value)?;
+    let datum = GenericDatumWriter::builder(&writer_schema)
+        .build()?
+        .write_value_to_vec(avro_value)?;
     let mut x = &datum[..];
     let reader_schema = Schema::parse_str(reader_schema)?;
-    let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
+    let deser_value = GenericDatumReader::builder(&writer_schema)
+        .reader_schema(&reader_schema)
+        .build()?
+        .read_value(&mut x)?;
     match deser_value {
         types::Value::Record(fields) => {
             assert_eq!(fields.len(), 2);
@@ -256,10 +262,15 @@ fn avro_3786_deserialize_union_with_different_enum_order_defined_in_record() -> 
         avro_value.validate(&writer_schema),
         "value is valid for schema",
     );
-    let datum = to_avro_datum(&writer_schema, avro_value)?;
+    let datum = GenericDatumWriter::builder(&writer_schema)
+        .build()?
+        .write_value_to_vec(avro_value)?;
     let mut x = &datum[..];
     let reader_schema = Schema::parse_str(reader_schema)?;
-    let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
+    let deser_value = GenericDatumReader::builder(&writer_schema)
+        .reader_schema(&reader_schema)
+        .build()?
+        .read_value(&mut x)?;
     match deser_value {
         types::Value::Record(fields) => {
             assert_eq!(fields.len(), 1);
@@ -369,10 +380,15 @@ fn test_avro_3786_deserialize_union_with_different_enum_order_defined_in_record_
         avro_value.validate(&writer_schema),
         "value is valid for schema",
     );
-    let datum = to_avro_datum(&writer_schema, avro_value)?;
+    let datum = GenericDatumWriter::builder(&writer_schema)
+        .build()?
+        .write_value_to_vec(avro_value)?;
     let mut x = &datum[..];
     let reader_schema = Schema::parse_str(reader_schema)?;
-    let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
+    let deser_value = GenericDatumReader::builder(&writer_schema)
+        .reader_schema(&reader_schema)
+        .build()?
+        .read_value(&mut x)?;
     match deser_value {
         types::Value::Record(fields) => {
             assert_eq!(fields.len(), 1);
@@ -482,10 +498,15 @@ fn test_avro_3786_deserialize_union_with_different_enum_order_defined_in_record_
         avro_value.validate(&writer_schema),
         "value is valid for schema",
     );
-    let datum = to_avro_datum(&writer_schema, avro_value)?;
+    let datum = GenericDatumWriter::builder(&writer_schema)
+        .build()?
+        .write_value_to_vec(avro_value)?;
     let mut x = &datum[..];
     let reader_schema = Schema::parse_str(reader_schema)?;
-    let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
+    let deser_value = GenericDatumReader::builder(&writer_schema)
+        .reader_schema(&reader_schema)
+        .build()?
+        .read_value(&mut x)?;
     match deser_value {
         types::Value::Record(fields) => {
             assert_eq!(fields.len(), 1);
@@ -595,10 +616,15 @@ fn deserialize_union_with_different_enum_order_defined_in_record() -> TestResult
         avro_value.validate(&writer_schema),
         "value is valid for schema",
     );
-    let datum = to_avro_datum(&writer_schema, avro_value)?;
+    let datum = GenericDatumWriter::builder(&writer_schema)
+        .build()?
+        .write_value_to_vec(avro_value)?;
     let mut x = &datum[..];
     let reader_schema = Schema::parse_str(reader_schema)?;
-    let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
+    let deser_value = GenericDatumReader::builder(&writer_schema)
+        .reader_schema(&reader_schema)
+        .build()?
+        .read_value(&mut x)?;
     match deser_value {
         types::Value::Record(fields) => {
             assert_eq!(fields.len(), 1);
@@ -869,10 +895,15 @@ fn deserialize_union_with_record_with_enum_defined_inline_reader_has_different_i
         avro_value.validate(&writer_schema),
         "value is valid for schema",
     );
-    let datum = to_avro_datum(&writer_schema, avro_value)?;
+    let datum = GenericDatumWriter::builder(&writer_schema)
+        .build()?
+        .write_value_to_vec(avro_value)?;
     let mut x = &datum[..];
     let reader_schema = Schema::parse_str(reader_schema)?;
-    let deser_value = from_avro_datum(&writer_schema, &mut x, Some(&reader_schema))?;
+    let deser_value = GenericDatumReader::builder(&writer_schema)
+        .reader_schema(&reader_schema)
+        .build()?
+        .read_value(&mut x)?;
     match deser_value {
         types::Value::Record(fields) => {
             assert_eq!(fields.len(), 3);

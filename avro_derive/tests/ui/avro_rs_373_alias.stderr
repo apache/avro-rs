@@ -1,0 +1,15 @@
+warning: `#[avro(alias = "..")]` is deprecated
+  --> tests/ui/avro_rs_373_alias.rs:22:5
+   |
+22 | /     #[avro(alias = "c")]
+23 | |     a: String,
+   | |_____________^
+   |
+   = help: Use `#[serde(alias = "..")]` instead
+
+error: `#[avro(alias = "..")]` must match `#[serde(alias = "..")]`, it's also deprecated. Please use only `#[serde(alias = "..")]`
+  --> tests/ui/avro_rs_373_alias.rs:22:5
+   |
+22 | /     #[avro(alias = "c")]
+23 | |     a: String,
+   | |_____________^

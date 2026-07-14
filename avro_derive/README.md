@@ -56,7 +56,7 @@ struct Test {
 // derived schema, always valid or code fails to compile with a descriptive message
 let schema = Test::get_schema();
 
-let mut writer = Writer::new(&schema, Vec::new());
+let mut writer = Writer::new(&schema, Vec::new()).unwrap();
 let test = Test {
     a: 27,
     b: "foo".to_owned(),

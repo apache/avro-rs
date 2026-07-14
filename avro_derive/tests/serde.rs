@@ -1,0 +1,696 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+use apache_avro::{
+    AvroSchema, Error, Schema, reader::datum::GenericDatumReader, writer::datum::GenericDatumWriter,
+};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+
+/// Takes in a type that implements the right combination of traits and runs it through a Serde
+/// round-trip and asserts the result is the same.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Significantly complicates the trait bounds"
+)]
+#[track_caller]
+fn serde_assert<T>(obj: T)
+where
+    T: std::fmt::Debug + Serialize + DeserializeOwned + AvroSchema + PartialEq,
+{
+    assert_eq!(obj, serde(&obj).unwrap());
+}
+
+fn serde<T>(obj: &T) -> Result<T, Error>
+where
+    T: Serialize + DeserializeOwned + AvroSchema,
+{
+    de(&ser(obj)?)
+}
+
+fn ser<T>(obj: &T) -> Result<Vec<u8>, Error>
+where
+    T: Serialize + AvroSchema,
+{
+    let schema = T::get_schema();
+    GenericDatumWriter::builder(&schema)
+        .build()?
+        .write_ser_to_vec(&obj)
+}
+
+fn de<T>(mut encoded: &[u8]) -> Result<T, Error>
+where
+    T: DeserializeOwned + AvroSchema,
+{
+    assert!(!encoded.is_empty());
+    let schema = T::get_schema();
+    GenericDatumReader::builder(&schema)
+        .build()?
+        .read_deser(&mut encoded)
+}
+
+mod container_attributes {
+    use super::*;
+
+    #[test]
+    fn avro_rs_373_rename() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[serde(rename = "Bar")]
+        struct Foo {
+            a: String,
+            b: i32,
+        }
+
+        let schema = r#"
+        {
+            "type":"record",
+            "name":"Bar",
+            "fields": [
+                {
+                    "name":"a",
+                    "type":"string"
+                },
+                {
+                    "name":"b",
+                    "type":"int"
+                }
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo {
+            a: "spam".to_string(),
+            b: 321,
+        });
+    }
+
+    #[test]
+    fn avro_rs_373_nested_rename() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[serde(rename = "Bar")]
+        struct Foo {
+            a: String,
+            b: i32,
+        }
+
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct Outer {
+            bar: Foo,
+        }
+
+        let schema = r#"
+        {
+            "type":"record",
+            "name":"Outer",
+            "fields": [
+                {
+                    "name":"bar",
+                    "type": {
+                        "type":"record",
+                        "name":"Bar",
+                        "fields": [
+                            {
+                                "name":"a",
+                                "type":"string"
+                            },
+                            {
+                                "name":"b",
+                                "type":"int"
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Outer::get_schema());
+
+        serde_assert(Outer {
+            bar: Foo {
+                a: "spam".to_string(),
+                b: 321,
+            },
+        });
+    }
+
+    #[test]
+    fn avro_rs_373_rename_all() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[serde(rename_all = "UPPERCASE")]
+        struct Foo {
+            a: String,
+            b: i32,
+        }
+
+        let schema = r#"
+        {
+            "type":"record",
+            "name":"Foo",
+            "fields": [
+                {
+                    "name":"A",
+                    "type":"string"
+                },
+                {
+                    "name":"B",
+                    "type":"int"
+                }
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo {
+            a: "spam".to_string(),
+            b: 321,
+        });
+    }
+
+    // TODO: This should not panic. Schema generation should use the schema from the type defined in from/into
+    #[test]
+    #[should_panic(expected = "Expected Schema::Record(name: FooFromInto)")]
+    fn avro_rs_373_from_into() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[serde(from = "FooFromInto", into = "FooFromInto")]
+        struct Foo {
+            a: String,
+            b: i32,
+        }
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct FooFromInto {
+            a: String,
+            b: i32,
+        }
+
+        impl From<FooFromInto> for Foo {
+            fn from(value: FooFromInto) -> Self {
+                Self {
+                    a: value.a,
+                    b: value.b,
+                }
+            }
+        }
+
+        impl From<Foo> for FooFromInto {
+            fn from(value: Foo) -> Self {
+                Self {
+                    a: value.a,
+                    b: value.b,
+                }
+            }
+        }
+
+        let schema = r#"
+        {
+            "type":"record",
+            "name":"Foo",
+            "fields": [
+                {
+                    "name":"a",
+                    "type":"string"
+                },
+                {
+                    "name":"b",
+                    "type":"int"
+                }
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo {
+            a: "spam".to_string(),
+            b: 321,
+        });
+    }
+
+    // TODO: This should not panic. Schema generation should use the schema from the type defined in from/into
+    #[test]
+    #[should_panic(expected = r#"Missing field in record: "c""#)]
+    fn avro_rs_373_from_into_different() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[serde(from = "FooFromInto", into = "FooFromInto")]
+        struct Foo {
+            a: String,
+            b: i32,
+        }
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct FooFromInto {
+            a: String,
+            b: i32,
+            c: bool,
+        }
+
+        impl From<FooFromInto> for Foo {
+            fn from(value: FooFromInto) -> Self {
+                Self {
+                    a: value.a,
+                    b: value.b,
+                }
+            }
+        }
+
+        impl From<Foo> for FooFromInto {
+            fn from(value: Foo) -> Self {
+                Self {
+                    a: value.a,
+                    b: value.b,
+                    c: true,
+                }
+            }
+        }
+
+        let schema = r#"
+        {
+            "type":"record",
+            "name":"Foo",
+            "fields": [
+                {
+                    "name":"a",
+                    "type":"string"
+                },
+                {
+                    "name":"b",
+                    "type":"int"
+                }
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo {
+            a: "spam".to_string(),
+            b: 321,
+        });
+    }
+
+    #[test]
+    fn avro_rs_398_transparent() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[serde(transparent)]
+        struct Foo {
+            a: String,
+        }
+
+        let schema = r#"
+        {
+            "type":"string"
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo {
+            a: "spam".to_string(),
+        });
+    }
+
+    #[test]
+    fn avro_rs_398_transparent_ref() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[serde(transparent)]
+        struct Foo<'a> {
+            a: &'a str,
+        }
+
+        let schema = r#"
+        {
+            "type":"string"
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+    }
+
+    #[test]
+    fn avro_rs_398_transparent_array() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        #[serde(transparent)]
+        struct Foo {
+            a: Vec<String>,
+        }
+
+        let schema = r#"
+        {
+            "type":"array",
+            "items":"string"
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo {
+            a: vec!["spam".to_string()],
+        });
+    }
+
+    #[test]
+    fn avro_rs_564_remote() {
+        // The types and supporting code here have been pulled directly from the Serde documentation
+        // (https://serde.rs/remote-derive.html)
+
+        // Pretend that this is somebody else's crate, not a module.
+        mod other_crate {
+            // Neither Serde nor the other crate provides Serialize and Deserialize
+            // impls for this struct. Oh, and the fields are private.
+            #[derive(Debug, PartialEq, Eq)]
+            pub struct Duration {
+                secs: i64,
+                nanos: i32,
+            }
+
+            impl Duration {
+                pub fn new(secs: i64, nanos: i32) -> Self {
+                    Duration { secs, nanos }
+                }
+
+                pub fn seconds(&self) -> i64 {
+                    self.secs
+                }
+
+                pub fn subsec_nanos(&self) -> i32 {
+                    self.nanos
+                }
+            }
+        }
+
+        ////////////////////////////////////////////////////////////////////////////////
+
+        use other_crate::Duration;
+        use serde::{Deserialize, Serialize};
+
+        // Provide getters for every private field of the remote struct. The getter must
+        // return either `T` or `&T` where `T` is the type of the field.
+        #[derive(Serialize, Deserialize, AvroSchema)]
+        #[serde(remote = "Duration")]
+        struct DurationDef {
+            #[serde(getter = "Duration::seconds")]
+            secs: i64,
+            #[serde(getter = "Duration::subsec_nanos")]
+            nanos: i32,
+        }
+
+        // Provide a conversion to construct the remote type.
+        impl From<DurationDef> for Duration {
+            fn from(def: DurationDef) -> Duration {
+                Duration::new(def.secs, def.nanos)
+            }
+        }
+
+        #[derive(Serialize, Deserialize, AvroSchema, Debug, PartialEq, Eq)]
+        struct Process {
+            command_line: String,
+
+            #[serde(with = "DurationDef")]
+            #[avro(with)]
+            wall_time: Duration,
+        }
+
+        serde_assert(Process {
+            command_line: "abracadabra".to_string(),
+            wall_time: Duration::new(15, 42),
+        });
+    }
+}
+
+mod variant_attributes {
+    use super::*;
+
+    #[test]
+    fn avro_rs_373_rename() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        enum Foo {
+            #[serde(rename = "Three")]
+            One,
+            Two,
+        }
+
+        let schema = r#"
+        {
+            "type":"enum",
+            "name":"Foo",
+            "symbols": [
+                "Three", "Two"
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo::One);
+    }
+
+    #[test]
+    fn avro_rs_373_alias() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        enum Foo {
+            #[serde(rename = "Three", alias = "One")]
+            One,
+            Two,
+        }
+
+        let schema = r#"
+        {
+            "type":"enum",
+            "name":"Foo",
+            "symbols": [
+                "Three", "Two"
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo::One);
+    }
+
+    #[test]
+    fn avro_rs_373_skip() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        enum Foo {
+            #[allow(dead_code)]
+            #[serde(skip)]
+            One,
+            Two,
+        }
+
+        let schema = r#"
+        {
+            "type":"enum",
+            "name":"Foo",
+            "symbols": [
+                "Two"
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo::Two);
+    }
+}
+
+mod field_attributes {
+    use super::*;
+
+    #[test]
+    fn avro_rs_373_rename() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct Foo {
+            #[serde(rename = "c")]
+            a: String,
+            b: i32,
+        }
+
+        let schema = r#"
+        {
+            "type":"record",
+            "name":"Foo",
+            "fields": [
+                {
+                    "name":"c",
+                    "type":"string"
+                },
+                {
+                    "name":"b",
+                    "type":"int"
+                }
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo {
+            a: "spam".to_string(),
+            b: 321,
+        });
+    }
+
+    #[test]
+    fn avro_rs_373_flatten() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct Nested {
+            a: bool,
+        }
+
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct Foo {
+            #[serde(flatten)]
+            nested: Nested,
+            b: i32,
+        }
+
+        let schema = r#"
+        {
+            "type":"record",
+            "name":"Foo",
+            "fields": [
+                {
+                    "name":"a",
+                    "type":"boolean"
+                },
+                {
+                    "name":"b",
+                    "type":"int"
+                }
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo {
+            nested: Nested { a: true },
+            b: 321,
+        });
+    }
+
+    #[test]
+    fn avro_rs_373_skip() {
+        #[derive(Debug, Serialize, Deserialize, AvroSchema, Clone, PartialEq)]
+        struct Foo {
+            #[serde(skip)]
+            a: String,
+            b: i32,
+        }
+
+        let schema = r#"
+        {
+            "type":"record",
+            "name":"Foo",
+            "fields": [
+                {
+                    "name":"b",
+                    "type":"int"
+                }
+            ]
+        }
+        "#;
+
+        let schema = Schema::parse_str(schema).unwrap();
+        assert_eq!(schema, Foo::get_schema());
+
+        serde_assert(Foo {
+            a: "".to_string(),
+            b: 321,
+        });
+    }
+
+    #[test]
+    fn avro_rs_397_avroschema_with_bytes() {
+        #[expect(dead_code, reason = "We only care about the schema")]
+        #[derive(AvroSchema)]
+        struct TestStructWithBytes<'a> {
+            #[avro(with)]
+            #[serde(with = "apache_avro::serde::bytes")]
+            vec_field: Vec<u8>,
+            #[avro(with)]
+            #[serde(with = "apache_avro::serde::bytes_opt")]
+            vec_field_opt: Option<Vec<u8>>,
+
+            #[avro(with = apache_avro::serde::fixed::get_schema_in_ctxt::<6>)]
+            #[serde(with = "apache_avro::serde::fixed")]
+            fixed_field: [u8; 6],
+            #[avro(with = apache_avro::serde::fixed_opt::get_schema_in_ctxt::<7>)]
+            #[serde(with = "apache_avro::serde::fixed_opt")]
+            fixed_field_opt: Option<[u8; 7]>,
+
+            #[avro(with)]
+            #[serde(with = "apache_avro::serde::slice")]
+            slice_field: &'a [u8],
+            #[avro(with)]
+            #[serde(with = "apache_avro::serde::slice_opt")]
+            slice_field_opt: Option<&'a [u8]>,
+        }
+
+        let schema = Schema::parse_str(
+            r#"
+            {
+              "type": "record",
+              "name": "TestStructWithBytes",
+              "fields": [ {
+                "name": "vec_field",
+                "type": "bytes"
+              }, {
+                "name": "vec_field_opt",
+                "type": ["null", "bytes"]
+              }, {
+                "name": "fixed_field",
+                "type": {
+                  "name": "serde_avro_fixed_6",
+                  "type": "fixed",
+                  "size": 6
+                }
+              }, {
+                "name": "fixed_field_opt",
+                "type": ["null", {
+                  "name": "serde_avro_fixed_7",
+                  "type": "fixed",
+                  "size": 7
+                } ]
+              }, {
+                "name": "slice_field",
+                "type": "bytes"
+              }, {
+                "name": "slice_field_opt",
+                "type": ["null", "bytes"]
+              } ]
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(schema, TestStructWithBytes::get_schema());
+    }
+}

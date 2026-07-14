@@ -15,16 +15,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::schema::{InnerDecimalSchema, NamespaceRef, UuidSchema};
 use crate::{
     AvroResult, Error,
     bigdecimal::deserialize_big_decimal,
     decimal::Decimal,
     duration::Duration,
     error::Details,
-    schema::{
-        DecimalSchema, EnumSchema, FixedSchema, Name, Namespace, RecordSchema, ResolvedSchema,
-        Schema,
-    },
+    schema::{DecimalSchema, EnumSchema, FixedSchema, Name, RecordSchema, ResolvedSchema, Schema},
     types::Value,
     util::{safe_len, zag_i32, zag_i64},
 };
@@ -73,16 +71,16 @@ fn decode_seq_len<R: Read>(reader: &mut R) -> AvroResult<usize> {
 /// Decode a `Value` from avro format given its `Schema`.
 pub fn decode<R: Read>(schema: &Schema, reader: &mut R) -> AvroResult<Value> {
     let rs = ResolvedSchema::try_from(schema)?;
-    decode_internal(schema, rs.get_names(), &None, reader)
+    decode_internal(schema, rs.get_names(), None, reader)
 }
 
 pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
     schema: &Schema,
     names: &HashMap<Name, S>,
-    enclosing_namespace: &Namespace,
+    enclosing_namespace: NamespaceRef,
     reader: &mut R,
 ) -> AvroResult<Value> {
-    match *schema {
+    match schema {
         Schema::Null => Ok(Value::Null),
         Schema::Boolean => {
             let mut buf = [0u8; 1];
@@ -101,18 +99,24 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                 }
             }
         }
-        Schema::Decimal(DecimalSchema { ref inner, .. }) => match &**inner {
-            Schema::Fixed { .. } => {
-                match decode_internal(inner, names, enclosing_namespace, reader)? {
+        Schema::Decimal(DecimalSchema { inner, .. }) => match inner {
+            InnerDecimalSchema::Fixed(fixed) => {
+                match decode_internal(
+                    &Schema::Fixed(fixed.copy_only_size()),
+                    names,
+                    enclosing_namespace,
+                    reader,
+                )? {
                     Value::Fixed(_, bytes) => Ok(Value::Decimal(Decimal::from(bytes))),
                     value => Err(Details::FixedValue(value).into()),
                 }
             }
-            Schema::Bytes => match decode_internal(inner, names, enclosing_namespace, reader)? {
-                Value::Bytes(bytes) => Ok(Value::Decimal(Decimal::from(bytes))),
-                value => Err(Details::BytesValue(value).into()),
-            },
-            schema => Err(Details::ResolveDecimalSchema(schema.into()).into()),
+            InnerDecimalSchema::Bytes => {
+                match decode_internal(&Schema::Bytes, names, enclosing_namespace, reader)? {
+                    Value::Bytes(bytes) => Ok(Value::Decimal(Decimal::from(bytes))),
+                    value => Err(Details::BytesValue(value).into()),
+                }
+            }
         },
         Schema::BigDecimal => {
             match decode_internal(&Schema::Bytes, names, enclosing_namespace, reader)? {
@@ -120,20 +124,45 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                 value => Err(Details::BytesValue(value).into()),
             }
         }
-        Schema::Uuid => {
+        Schema::Uuid(UuidSchema::String) => {
+            let Value::String(string) =
+                decode_internal(&Schema::String, names, enclosing_namespace, reader)?
+            else {
+                // decoding a String can also return a Null, indicating EOF
+                return Err(Error::new(Details::ReadBytes(std::io::Error::from(
+                    ErrorKind::UnexpectedEof,
+                ))));
+            };
+            let uuid = Uuid::parse_str(&string).map_err(Details::ConvertStrToUuid)?;
+            Ok(Value::Uuid(uuid))
+        }
+        Schema::Uuid(UuidSchema::Bytes) => {
             let Value::Bytes(bytes) =
                 decode_internal(&Schema::Bytes, names, enclosing_namespace, reader)?
             else {
-                // Calling decode_internal with Schema::Bytes can only return a Value::Bytes or an error
-                unreachable!();
+                unreachable!(
+                    "decode_internal(Schema::Bytes) can only return a Value::Bytes or an error"
+                )
             };
-
-            let uuid = if bytes.len() == 16 {
-                Uuid::from_slice(&bytes).map_err(Details::ConvertSliceToUuid)?
-            } else {
-                let string = std::str::from_utf8(&bytes).map_err(Details::ConvertToUtf8Error)?;
-                Uuid::parse_str(string).map_err(Details::ConvertStrToUuid)?
+            let uuid = Uuid::from_slice(&bytes).map_err(Details::ConvertSliceToUuid)?;
+            Ok(Value::Uuid(uuid))
+        }
+        Schema::Uuid(UuidSchema::Fixed(fixed)) => {
+            let Value::Fixed(n, bytes) = decode_internal(
+                &Schema::Fixed(fixed.copy_only_size()),
+                names,
+                enclosing_namespace,
+                reader,
+            )?
+            else {
+                unreachable!(
+                    "decode_internal(Schema::Fixed) can only return a Value::Fixed or an error"
+                )
             };
+            if n != 16 {
+                return Err(Details::ConvertFixedToUuid(n).into());
+            }
+            let uuid = Uuid::from_slice(&bytes).map_err(Details::ConvertSliceToUuid)?;
             Ok(Value::Uuid(uuid))
         }
         Schema::Int => decode_int(reader),
@@ -147,10 +176,18 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
         Schema::LocalTimestampMillis => zag_i64(reader).map(Value::LocalTimestampMillis),
         Schema::LocalTimestampMicros => zag_i64(reader).map(Value::LocalTimestampMicros),
         Schema::LocalTimestampNanos => zag_i64(reader).map(Value::LocalTimestampNanos),
-        Schema::Duration => {
-            let mut buf = [0u8; 12];
-            reader.read_exact(&mut buf).map_err(Details::ReadDuration)?;
-            Ok(Value::Duration(Duration::from(buf)))
+        Schema::Duration(fixed_schema) => {
+            if fixed_schema.size == 12 {
+                let mut buf = [0u8; 12];
+                reader.read_exact(&mut buf).map_err(Details::ReadDuration)?;
+                Ok(Value::Duration(Duration::from(buf)))
+            } else {
+                Err(Details::CompareFixedSizes {
+                    size: 12,
+                    n: fixed_schema.size,
+                }
+                .into())
+            }
         }
         Schema::Float => {
             let mut buf = [0u8; std::mem::size_of::<f32>()];
@@ -189,13 +226,13 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
             }
         }
         Schema::Fixed(FixedSchema { size, .. }) => {
-            let mut buf = vec![0u8; size];
+            let mut buf = vec![0u8; *size];
             reader
                 .read_exact(&mut buf)
-                .map_err(|e| Details::ReadFixed(e, size))?;
-            Ok(Value::Fixed(size, buf))
+                .map_err(|e| Details::ReadFixed(e, *size))?;
+            Ok(Value::Fixed(*size, buf))
         }
-        Schema::Array(ref inner) => {
+        Schema::Array(inner) => {
             let mut items = Vec::new();
 
             loop {
@@ -217,7 +254,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
 
             Ok(Value::Array(items))
         }
-        Schema::Map(ref inner) => {
+        Schema::Map(inner) => {
             let mut items = HashMap::new();
 
             loop {
@@ -241,7 +278,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
 
             Ok(Value::Map(items))
         }
-        Schema::Union(ref inner) => match zag_i64(reader).map_err(Error::into_details) {
+        Schema::Union(inner) => match zag_i64(reader).map_err(Error::into_details) {
             Ok(index) => {
                 let variants = inner.variants();
                 let variant = variants
@@ -262,11 +299,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
             }
             Err(io_err) => Err(Error::new(io_err)),
         },
-        Schema::Record(RecordSchema {
-            ref name,
-            ref fields,
-            ..
-        }) => {
+        Schema::Record(RecordSchema { name, fields, .. }) => {
             let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
             // Benchmarks indicate ~10% improvement using this method.
             let mut items = Vec::with_capacity(fields.len());
@@ -277,14 +310,14 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                     decode_internal(
                         &field.schema,
                         names,
-                        &fully_qualified_name.namespace,
+                        fully_qualified_name.namespace(),
                         reader,
                     )?,
                 ));
             }
             Ok(Value::Record(items))
         }
-        Schema::Enum(EnumSchema { ref symbols, .. }) => {
+        Schema::Enum(EnumSchema { symbols, .. }) => {
             Ok(if let Value::Int(raw_index) = decode_int(reader)? {
                 let index = usize::try_from(raw_index)
                     .map_err(|e| Details::ConvertI32ToUsize(e, raw_index))?;
@@ -302,17 +335,17 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                 return Err(Details::GetEnumUnknownIndexValue.into());
             })
         }
-        Schema::Ref { ref name } => {
+        Schema::Ref { name } => {
             let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
             if let Some(resolved) = names.get(&fully_qualified_name) {
                 decode_internal(
                     resolved.borrow(),
                     names,
-                    &fully_qualified_name.namespace,
+                    fully_qualified_name.namespace(),
                     reader,
                 )
             } else {
-                Err(Details::SchemaResolutionError(fully_qualified_name).into())
+                Err(Details::SchemaResolutionError(fully_qualified_name.into_owned()).into())
             }
         }
     }
@@ -321,6 +354,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
 #[cfg(test)]
 #[allow(clippy::expect_fun_call)]
 mod tests {
+    use crate::schema::{InnerDecimalSchema, UuidSchema};
     use crate::{
         Decimal,
         decode::decode,
@@ -339,7 +373,7 @@ mod tests {
     #[test]
     fn test_decode_array_without_size() -> TestResult {
         let mut input: &[u8] = &[6, 2, 4, 6, 0];
-        let result = decode(&Schema::array(Schema::Int), &mut input);
+        let result = decode(&Schema::array(Schema::Int).build(), &mut input);
         assert_eq!(Array(vec!(Int(1), Int(2), Int(3))), result?);
 
         Ok(())
@@ -348,7 +382,7 @@ mod tests {
     #[test]
     fn test_decode_array_with_size() -> TestResult {
         let mut input: &[u8] = &[5, 6, 2, 4, 6, 0];
-        let result = decode(&Schema::array(Schema::Int), &mut input);
+        let result = decode(&Schema::array(Schema::Int).build(), &mut input);
         assert_eq!(Array(vec!(Int(1), Int(2), Int(3))), result?);
 
         Ok(())
@@ -357,7 +391,7 @@ mod tests {
     #[test]
     fn test_decode_map_without_size() -> TestResult {
         let mut input: &[u8] = &[0x02, 0x08, 0x74, 0x65, 0x73, 0x74, 0x02, 0x00];
-        let result = decode(&Schema::map(Schema::Int), &mut input);
+        let result = decode(&Schema::map(Schema::Int).build(), &mut input);
         let mut expected = HashMap::new();
         expected.insert(String::from("test"), Int(1));
         assert_eq!(Map(expected), result?);
@@ -368,7 +402,7 @@ mod tests {
     #[test]
     fn test_decode_map_with_size() -> TestResult {
         let mut input: &[u8] = &[0x01, 0x0C, 0x08, 0x74, 0x65, 0x73, 0x74, 0x02, 0x00];
-        let result = decode(&Schema::map(Schema::Int), &mut input);
+        let result = decode(&Schema::map(Schema::Int).build(), &mut input);
         let mut expected = HashMap::new();
         expected.insert(String::from("test"), Int(1));
         assert_eq!(Map(expected), result?);
@@ -380,14 +414,13 @@ mod tests {
     fn test_negative_decimal_value() -> TestResult {
         use crate::{encode::encode, schema::Name};
         use num_bigint::ToBigInt;
-        let inner = Box::new(Schema::Fixed(
-            FixedSchema::builder()
-                .name(Name::new("decimal")?)
-                .size(2)
-                .build(),
-        ));
         let schema = Schema::Decimal(DecimalSchema {
-            inner,
+            inner: InnerDecimalSchema::Fixed(
+                FixedSchema::builder()
+                    .name(Name::new("decimal")?)
+                    .size(2)
+                    .build(),
+            ),
             precision: 4,
             scale: 2,
         });
@@ -408,16 +441,14 @@ mod tests {
     fn test_decode_decimal_with_bigger_than_necessary_size() -> TestResult {
         use crate::{encode::encode, schema::Name};
         use num_bigint::ToBigInt;
-        let inner = Box::new(Schema::Fixed(FixedSchema {
-            size: 13,
-            name: Name::new("decimal")?,
-            aliases: None,
-            doc: None,
-            default: None,
-            attributes: Default::default(),
-        }));
         let schema = Schema::Decimal(DecimalSchema {
-            inner,
+            inner: InnerDecimalSchema::Fixed(FixedSchema {
+                size: 13,
+                name: Name::new("decimal")?,
+                aliases: None,
+                doc: None,
+                attributes: Default::default(),
+            }),
             precision: 4,
             scale: 2,
         });
@@ -475,8 +506,7 @@ mod tests {
         assert_eq!(
             outer_value1,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to decode using recursive definitions with schema:\n {:?}\n",
-                &schema
+                "Failed to decode using recursive definitions with schema:\n {schema:?}\n"
             ))
         );
 
@@ -490,8 +520,7 @@ mod tests {
         assert_eq!(
             outer_value2,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to decode using recursive definitions with schema:\n {:?}\n",
-                &schema
+                "Failed to decode using recursive definitions with schema:\n {schema:?}\n"
             ))
         );
 
@@ -540,8 +569,7 @@ mod tests {
         assert_eq!(
             outer_value,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to decode using recursive definitions with schema:\n {:?}\n",
-                &schema
+                "Failed to decode using recursive definitions with schema:\n {schema:?}\n"
             ))
         );
 
@@ -593,8 +621,7 @@ mod tests {
         assert_eq!(
             outer_value,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to decode using recursive definitions with schema:\n {:?}\n",
-                &schema
+                "Failed to decode using recursive definitions with schema:\n {schema:?}\n"
             ))
         );
 
@@ -685,8 +712,7 @@ mod tests {
         assert_eq!(
             outer_record_variation_1,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
-                &schema
+                "Failed to Decode with recursively defined namespace with schema:\n {schema:?}\n"
             ))
         );
 
@@ -697,8 +723,7 @@ mod tests {
         assert_eq!(
             outer_record_variation_2,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
-                &schema
+                "Failed to Decode with recursively defined namespace with schema:\n {schema:?}\n"
             ))
         );
 
@@ -709,8 +734,7 @@ mod tests {
         assert_eq!(
             outer_record_variation_3,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
-                &schema
+                "Failed to Decode with recursively defined namespace with schema:\n {schema:?}\n"
             ))
         );
 
@@ -802,8 +826,7 @@ mod tests {
         assert_eq!(
             outer_record_variation_1,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
-                &schema
+                "Failed to Decode with recursively defined namespace with schema:\n {schema:?}\n"
             ))
         );
 
@@ -814,8 +837,7 @@ mod tests {
         assert_eq!(
             outer_record_variation_2,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
-                &schema
+                "Failed to Decode with recursively defined namespace with schema:\n {schema:?}\n"
             ))
         );
 
@@ -826,8 +848,7 @@ mod tests {
         assert_eq!(
             outer_record_variation_3,
             decode(&schema, &mut bytes).expect(&format!(
-                "Failed to Decode with recursively defined namespace with schema:\n {:?}\n",
-                &schema
+                "Failed to Decode with recursively defined namespace with schema:\n {schema:?}\n"
             ))
         );
 
@@ -844,7 +865,7 @@ mod tests {
         let mut buffer = Vec::new();
         encode(&value, &schema, &mut buffer).expect(&success(&value, &schema));
 
-        let result = decode(&Schema::Uuid, &mut &buffer[..])?;
+        let result = decode(&Schema::Uuid(UuidSchema::String), &mut &buffer[..])?;
         assert_eq!(result, value);
 
         Ok(())
@@ -854,20 +875,37 @@ mod tests {
     fn avro_3926_encode_decode_uuid_to_fixed() -> TestResult {
         use crate::encode::encode;
 
-        let schema = Schema::Fixed(FixedSchema {
+        let fixed = FixedSchema {
             size: 16,
-            name: "uuid".into(),
+            name: "uuid".try_into()?,
             aliases: None,
             doc: None,
-            default: None,
             attributes: Default::default(),
-        });
+        };
+
+        let schema = Schema::Fixed(fixed.clone());
         let value = Value::Uuid(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")?);
 
         let mut buffer = Vec::new();
         encode(&value, &schema, &mut buffer).expect(&success(&value, &schema));
 
-        let result = decode(&Schema::Uuid, &mut &buffer[..])?;
+        let result = decode(&Schema::Uuid(UuidSchema::Fixed(fixed)), &mut &buffer[..])?;
+        assert_eq!(result, value);
+
+        Ok(())
+    }
+
+    #[test]
+    fn encode_decode_uuid_to_bytes() -> TestResult {
+        use crate::encode::encode;
+
+        let schema = Schema::Bytes;
+        let value = Value::Uuid(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")?);
+
+        let mut buffer = Vec::new();
+        encode(&value, &schema, &mut buffer).expect(&success(&value, &schema));
+
+        let result = decode(&Schema::Uuid(UuidSchema::Bytes), &mut &buffer[..])?;
         assert_eq!(result, value);
 
         Ok(())

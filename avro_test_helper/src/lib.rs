@@ -15,9 +15,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
+pub mod data;
+pub mod logger;
+
+use core::any::type_name;
+use core::cell::RefCell;
+use core::fmt::{Debug, Display};
 #[cfg(not(target_arch = "wasm32"))]
-use ctor::{ctor, dtor};
-use std::cell::RefCell;
+use linktime::{ctor, dtor};
 
 thread_local! {
     // The unit tests run in parallel
@@ -26,11 +31,8 @@ thread_local! {
     pub(crate) static LOG_MESSAGES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
-pub mod data;
-pub mod logger;
-
 #[cfg(not(target_arch = "wasm32"))]
-#[ctor]
+#[ctor(unsafe)]
 fn before_all() {
     // better stacktraces in tests
     better_panic::Settings::new()
@@ -44,28 +46,31 @@ fn before_all() {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-#[dtor]
+#[dtor(unsafe)]
 fn after_all() {
     logger::clear_log_messages();
 }
 
 /// A custom error type for tests.
 #[derive(Debug)]
-pub struct TestError {}
+pub struct TestError;
 
-/// A converter of any error into [TestError].
+/// A converter of any error into [`TestError`].
+///
 /// It is used to print better error messages in the tests.
-/// Borrowed from <https://bluxte.net/musings/2023/01/08/improving_failure_messages_rust_tests/>
-impl<Err: std::fmt::Display> From<Err> for TestError {
+/// Borrowed from <https://bluxte.net/musings/2023/01/08/improving_failure_messages_rust_tests/>.
+// The Display bound is needed so that the `From` implementation doesn't
+// apply to `TestError` itself.
+impl<Err: Display + Debug> From<Err> for TestError {
     #[track_caller]
     fn from(err: Err) -> Self {
-        panic!("{}: {}", std::any::type_name::<Err>(), err);
+        panic!("{}: {:?}", type_name::<Err>(), err);
     }
 }
 
-pub type TestResult = anyhow::Result<(), TestError>;
+pub type TestResult = Result<(), TestError>;
 
 /// Does nothing. Just loads the crate.
 /// Should be used in the integration tests, because they do not use [dev-dependencies]
 /// and do not auto-load this crate.
-pub fn init() {}
+pub const fn init() {}

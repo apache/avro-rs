@@ -17,7 +17,7 @@
 
 //! Logic for all supported compression codecs in Avro.
 use crate::{AvroResult, Error, error::Details, types::Value};
-use strum_macros::{EnumIter, EnumString, IntoStaticStr};
+use strum::{EnumIter, EnumString, IntoStaticStr};
 
 /// Settings for the `Deflate` codec.
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
@@ -30,7 +30,9 @@ impl DeflateSettings {
         DeflateSettings { compression_level }
     }
 
-    fn compression_level(&self) -> u8 {
+    /// Get the compression level as a `u8`, note that this means the [`miniz_oxide::deflate::CompressionLevel::DefaultCompression`] variant
+    /// will appear as `255`, this is normalized by the [`miniz_oxide`] crate later.
+    pub fn compression_level(&self) -> u8 {
         self.compression_level as u8
     }
 }
@@ -106,10 +108,10 @@ impl Codec {
             #[cfg(feature = "zstandard")]
             Codec::Zstandard(settings) => {
                 use std::io::Write;
-                let mut encoder =
-                    zstd::Encoder::new(Vec::new(), settings.compression_level as i32).unwrap();
+                let mut encoder = zstd::Encoder::new(Vec::new(), settings.compression_level as i32)
+                    .map_err(Details::ZstdCompress)?;
                 encoder.write_all(stream).map_err(Details::ZstdCompress)?;
-                *stream = encoder.finish().unwrap();
+                *stream = encoder.finish().map_err(Details::ZstdCompress)?;
             }
             #[cfg(feature = "bzip")]
             Codec::Bzip2(settings) => {
@@ -118,7 +120,9 @@ impl Codec {
 
                 let mut encoder = BzEncoder::new(&stream[..], settings.compression());
                 let mut buffer = Vec::new();
-                encoder.read_to_end(&mut buffer).unwrap();
+                encoder
+                    .read_to_end(&mut buffer)
+                    .unwrap_or_else(|_| unreachable!("No I/O errors possible with Vec<u8>"));
                 *stream = buffer;
             }
             #[cfg(feature = "xz")]
@@ -128,7 +132,9 @@ impl Codec {
 
                 let mut encoder = XzEncoder::new(&stream[..], settings.compression_level as u32);
                 let mut buffer = Vec::new();
-                encoder.read_to_end(&mut buffer).unwrap();
+                encoder
+                    .read_to_end(&mut buffer)
+                    .unwrap_or_else(|_| unreachable!("No I/O errors possible with Vec<u8>"));
                 *stream = buffer;
             }
         };
@@ -142,7 +148,7 @@ impl Codec {
             Codec::Null => return Ok(()),
             Codec::Deflate(_settings) => miniz_oxide::inflate::decompress_to_vec(stream).map_err(|e| {
                 let err = {
-                    use miniz_oxide::inflate::TINFLStatus::*;
+                    use miniz_oxide::inflate::TINFLStatus::{FailedCannotMakeProgress, BadParam, Adler32Mismatch, Failed, Done, NeedsMoreInput, HasMoreOutput};
                     use std::io::{Error,ErrorKind};
                     match e.status {
                         FailedCannotMakeProgress => Error::from(ErrorKind::UnexpectedEof),
@@ -152,6 +158,7 @@ impl Codec {
                         Done => Error::other("Unexpected error: miniz_oxide reported an error with a success status. Please report this to avro-rs developers."),
                         NeedsMoreInput => Error::from(ErrorKind::UnexpectedEof),
                         HasMoreOutput => Error::other("Unexpected error: miniz_oxide has more data than the output buffer can hold. Please report this to avro-rs developers."), // not possible for _to_vec()
+                        other => Error::other(format!("Unexpected error: {other:?}"))
                     }
                 };
                 Error::new(Details::DeflateDecompress(err))
@@ -186,7 +193,7 @@ impl Codec {
                 let mut decoded = Vec::new();
                 let buffer_size = zstd_safe::DCtx::in_size();
                 let buffer = BufReader::with_capacity(buffer_size, &stream[..]);
-                let mut decoder = zstd::Decoder::new(buffer).unwrap();
+                let mut decoder = zstd::Decoder::new(buffer).map_err(Details::ZstdDecompress)?;
                 std::io::copy(&mut decoder, &mut decoded).map_err(Details::ZstdDecompress)?;
                 decoded
             }
@@ -197,7 +204,7 @@ impl Codec {
 
                 let mut decoder = BzDecoder::new(&stream[..]);
                 let mut decoded = Vec::new();
-                decoder.read_to_end(&mut decoded).unwrap();
+                decoder.read_to_end(&mut decoded).unwrap_or_else(|_| unreachable!("No I/O errors possible with Vec<u8>"));
                 decoded
             }
             #[cfg(feature = "xz")]
@@ -207,7 +214,7 @@ impl Codec {
 
                 let mut decoder = XzDecoder::new(&stream[..]);
                 let mut decoded: Vec<u8> = Vec::new();
-                decoder.read_to_end(&mut decoded).unwrap();
+                decoder.read_to_end(&mut decoded).unwrap_or_else(|_| unreachable!("No I/O errors possible with Vec<u8>"));
                 decoded
             }
         };

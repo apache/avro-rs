@@ -59,7 +59,7 @@ fn benchmark(
         let records = records.clone();
 
         let start = Instant::now();
-        let mut writer = Writer::new(schema, BufWriter::new(Vec::new()));
+        let mut writer = Writer::new(schema, BufWriter::new(Vec::new()))?;
         writer.extend(records)?;
 
         let duration = Instant::now().duration_since(start);
@@ -78,7 +78,9 @@ fn benchmark(
 
     for _ in 0..runs {
         let start = Instant::now();
-        let reader = Reader::with_schema(schema, BufReader::new(&bytes[..]))?;
+        let reader = Reader::builder(BufReader::new(&bytes[..]))
+            .reader_schema(schema)
+            .build()?;
 
         let mut read_records = Vec::with_capacity(count);
         for record in reader {

@@ -17,7 +17,6 @@
 
 use apache_avro::{
     AvroResult,
-    schema::Namespace,
     validator::{
         EnumSymbolNameValidator, RecordFieldNameValidator, SchemaNameValidator,
         SchemaNamespaceValidator, set_enum_symbol_name_validator, set_record_field_name_validator,
@@ -32,8 +31,8 @@ struct CustomValidator;
 // because the parsing will trigger the validation and will
 // setup the default validator (SpecificationValidator)!
 impl SchemaNameValidator for CustomValidator {
-    fn validate(&self, schema_name: &str) -> AvroResult<(String, Namespace)> {
-        Ok((schema_name.to_string(), None))
+    fn validate(&self, _schema_name: &str) -> AvroResult<usize> {
+        Ok(0)
     }
 }
 
@@ -72,9 +71,12 @@ fn avro_3900_custom_validator_with_spec_invalid_names() -> TestResult {
                 "type": "int"
             },
             {
-                "type": "enum",
-                "name": "Test",
-                "symbols": ["A-B", "B-A"]
+                "name": "field-name",
+                "type": {
+                    "type": "enum",
+                    "name": "Test",
+                    "symbols": ["A-B", "B-A"]
+                }
             }
         ]
     }"#;
