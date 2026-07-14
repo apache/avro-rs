@@ -15,25 +15,44 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! Optional allocation tracking support.
+//! Optional custom allocator support.
 //!
 //! This module is only available when the `custom_allocator` feature is enabled.
+//! It is **opt-in**: nothing here changes how `apache-avro` allocates unless a
+//! downstream program explicitly installs one of these types as its
+//! `#[global_allocator]`.
 //!
-//! It provides [`CountingAllocator`], a [`GlobalAlloc`] adapter that wraps any
-//! other allocator (the [`System`] allocator by default) and keeps live, peak
-//! and cumulative allocation statistics. Installing it as the process
-//! `#[global_allocator]` lets you observe exactly how much memory `apache-avro`
-//! (and the rest of your program) allocates while reading or writing data.
+//! It provides two custom [`GlobalAlloc`] implementations:
 //!
-//! This complements the per-length decoding guard configured through
-//! [`crate::util::max_allocation_bytes`]. That guard rejects any *single*
-//! oversized length prefix up front, whereas [`CountingAllocator`] measures the
-//! *actual* live memory of the whole process, so it can also surface pressure
-//! that builds up across many individually-small allocations.
+//! 1. [`CustomAllocator`] — a minimal allocator that delegates every operation
+//!    to the [`System`] allocator. It is a ready-made base you can install
+//!    directly, or extend, to add your own allocation behavior without
+//!    reimplementing the platform allocation logic.
+//! 2. [`CountingAllocator`] — a [`GlobalAlloc`] adapter that wraps any other
+//!    allocator (the [`System`] allocator by default) and keeps live, peak and
+//!    cumulative allocation statistics. Installing it as the process
+//!    `#[global_allocator]` lets you observe exactly how much memory
+//!    `apache-avro` (and the rest of your program) allocates while reading or
+//!    writing data.
 //!
-//! # Example
+//! [`CountingAllocator`] complements the per-length decoding guard configured
+//! through [`crate::util::max_allocation_bytes`]. That guard rejects any
+//! *single* oversized length prefix up front, whereas [`CountingAllocator`]
+//! measures the *actual* live memory of the whole process, so it can also
+//! surface pressure that builds up across many individually-small allocations.
 //!
-//! Install [`CountingAllocator`] as the global allocator and read the counters:
+//! # Examples
+//!
+//! Install the plain [`CustomAllocator`] as the global allocator:
+//!
+//! ```no_run
+//! use apache_avro::alloc::CustomAllocator;
+//!
+//! #[global_allocator]
+//! static GLOBAL: CustomAllocator = CustomAllocator;
+//! ```
+//!
+//! Install [`CountingAllocator`] instead and read the counters:
 //!
 //! ```no_run
 //! use apache_avro::alloc::CountingAllocator;
@@ -52,6 +71,40 @@ use std::{
     alloc::{GlobalAlloc, Layout, System},
     sync::atomic::{AtomicUsize, Ordering},
 };
+
+/// A minimal custom [`GlobalAlloc`] that delegates every operation to the
+/// [`System`] allocator.
+///
+/// This type can be installed directly as a `#[global_allocator]`, or used as a
+/// base to build a more elaborate custom allocator (for example one that adds
+/// logging or pooling) without having to reimplement the platform allocation
+/// logic. It is behaviorally identical to using the default system allocator.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct CustomAllocator;
+
+// SAFETY: Every method simply forwards to `System`, which is a correct
+// `GlobalAlloc` implementation, preserving all of its invariants.
+unsafe impl GlobalAlloc for CustomAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        // SAFETY: Upheld by the caller of the `GlobalAlloc` method.
+        unsafe { System.alloc(layout) }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        // SAFETY: Upheld by the caller of the `GlobalAlloc` method.
+        unsafe { System.dealloc(ptr, layout) }
+    }
+
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        // SAFETY: Upheld by the caller of the `GlobalAlloc` method.
+        unsafe { System.alloc_zeroed(layout) }
+    }
+
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        // SAFETY: Upheld by the caller of the `GlobalAlloc` method.
+        unsafe { System.realloc(ptr, layout, new_size) }
+    }
+}
 
 /// A [`GlobalAlloc`] adapter that forwards every request to an inner allocator
 /// while tracking live, peak and cumulative allocation statistics.
@@ -220,6 +273,21 @@ unsafe impl<A: GlobalAlloc> GlobalAlloc for CountingAllocator<A> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_custom_allocator_delegates_to_system() {
+        let allocator = CustomAllocator;
+        let layout = Layout::from_size_align(48, 8).unwrap();
+
+        // SAFETY: The block is allocated and freed through the same allocator
+        // with the same layout.
+        unsafe {
+            let ptr = allocator.alloc(layout);
+            assert!(!ptr.is_null());
+            ptr.write_bytes(0xAB, layout.size());
+            allocator.dealloc(ptr, layout);
+        }
+    }
 
     #[test]
     fn test_alloc_and_dealloc_update_counters() {

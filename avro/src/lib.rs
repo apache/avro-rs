@@ -38,7 +38,8 @@
 //! - `zstandard`: enable support for the Zstandard codec
 //! - `bzip`: enable support for the Bzip2 codec
 //! - `xz`: enable support for the Xz codec
-//! - `custom_allocator`: expose the [`alloc`] module with an allocation-tracking
+//! - `custom_allocator`: expose the [`alloc`] module with an opt-in
+//!   [`alloc::CustomAllocator`] and an allocation-tracking
 //!   [`alloc::CountingAllocator`]
 //!
 //! # MSRV
