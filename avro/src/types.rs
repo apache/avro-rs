@@ -790,8 +790,8 @@ impl Value {
             }) => self.resolve_enum(symbols, default, field_default),
             Schema::Array(inner) => self.resolve_array(&inner.items, names, enclosing_namespace),
             Schema::Map(inner) => self.resolve_map(&inner.types, names, enclosing_namespace),
-            Schema::Record(RecordSchema { fields, .. }) => {
-                self.resolve_record(fields, names, enclosing_namespace)
+            Schema::Record(RecordSchema { fields, name, .. }) => {
+                self.resolve_record(fields, names, name.namespace().or(enclosing_namespace))
             }
             Schema::Decimal(DecimalSchema {
                 scale,
