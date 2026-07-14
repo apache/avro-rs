@@ -102,7 +102,7 @@ use crate::{
 ///
 ///    Use the schema of the inner field directly. Is only allowed on structs with only one unskipped field.
 ///
-///  - `#[avro(test = false)]`
+///  - `#[avro(tests = false)]`
 ///
 ///    To disable generating tests for derived schemas. This is useful if you use a different [validator](crate::validator)
 ///    or the `unnameable_test_items` lint is triggered because the type you are deriving is inside a function.
