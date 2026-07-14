@@ -24,7 +24,7 @@ use crate::{
     error::Details,
     schema::{DecimalSchema, EnumSchema, FixedSchema, Name, RecordSchema, ResolvedSchema, Schema},
     types::Value,
-    util::{safe_len, zag_i32, zag_i64},
+    util::{safe_collection_len, safe_len, zag_i32, zag_i64},
 };
 use std::{
     borrow::Borrow,
@@ -241,7 +241,15 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                     break;
                 }
 
-                items.reserve(len);
+                // Check that the Vec won't grow past the max allocation size
+                let total = items
+                    .len()
+                    .checked_add(len)
+                    .ok_or(Details::IntegerOverflow)?;
+                safe_collection_len::<Value>(total)?;
+                // Use reserve_exact as reserve can allocate more than needed defeating the purpose
+                // of the previous check
+                items.reserve_exact(len);
                 for _ in 0..len {
                     items.push(decode_internal(
                         &inner.items,
@@ -262,6 +270,15 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                 if len == 0 {
                     break;
                 }
+
+                // Check that the HashMap won't grow past the max allocation size. This is less
+                // precise than the Vec check above as HashMap allocates in buckets and doesn't have
+                // a reserve_exact
+                let total = items
+                    .len()
+                    .checked_add(len)
+                    .ok_or(Details::IntegerOverflow)?;
+                safe_collection_len::<(String, Value)>(total)?;
 
                 items.reserve(len);
                 for _ in 0..len {
@@ -384,6 +401,88 @@ mod tests {
         let mut input: &[u8] = &[5, 6, 2, 4, 6, 0];
         let result = decode(&Schema::array(Schema::Int).build(), &mut input);
         assert_eq!(Array(vec!(Int(1), Int(2), Int(3))), result?);
+
+        Ok(())
+    }
+
+    // Create an array/map block with an object count of `n` and no items
+    fn create_block(n: i64) -> Vec<u8> {
+        // Reuse the crate's encoder so the tests cannot diverge from it.
+        let mut out = Vec::new();
+        crate::util::zig_i64(n, &mut out).unwrap();
+        out.push(0x00);
+        out
+    }
+
+    #[test]
+    fn test_decode_array_of_null_huge_count_is_rejected() -> TestResult {
+        // 200,000,000 nulls => ~11 GiB reserve, far above the default budget.
+        let payload = create_block(200_000_000);
+        let result = decode(
+            &Schema::array(Schema::Null).build(),
+            &mut payload.as_slice(),
+        );
+        assert!(
+            result.is_err(),
+            "a huge array<null> block count must be rejected, got {result:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_array_of_long_huge_count_is_rejected() -> TestResult {
+        // Non-zero-byte elements are also affected: the reserve happens before
+        // any element is read.
+        let payload = create_block(200_000_000);
+        let result = decode(
+            &Schema::array(Schema::Long).build(),
+            &mut payload.as_slice(),
+        );
+        assert!(
+            result.is_err(),
+            "a huge array<long> block count must be rejected, got {result:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_map_huge_count_is_rejected() -> TestResult {
+        let payload = create_block(200_000_000);
+        let result = decode(&Schema::map(Schema::Long).build(), &mut payload.as_slice());
+        assert!(
+            result.is_err(),
+            "a huge map block count must be rejected, got {result:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_small_array_of_null_still_decodes() -> TestResult {
+        // A modest array of nulls within the budget must still decode.
+        let payload = create_block(3);
+        let result = decode(
+            &Schema::array(Schema::Null).build(),
+            &mut payload.as_slice(),
+        )?;
+        assert_eq!(Array(vec!(Value::Null, Value::Null, Value::Null)), result);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_array_int64_min_block_count_is_rejected() -> TestResult {
+        // i64::MIN as a negative block count cannot be negated (checked_neg
+        // returns None); decoding must fail rather than wrap. i64::MIN zig-zag
+        // encodes as the 10-byte varint below, followed by a block byte-size.
+        let payload = create_block(i64::MIN);
+        let result = decode(&Schema::array(Schema::Int).build(), &mut payload.as_slice());
+        assert!(
+            result.is_err(),
+            "an i64::MIN array block count must be rejected, got {result:?}"
+        );
 
         Ok(())
     }
