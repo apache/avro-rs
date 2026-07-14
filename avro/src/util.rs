@@ -73,8 +73,10 @@ impl MapHelper for Map<String, Value> {
     }
 }
 
-pub(crate) fn read_long<R: Read>(reader: &mut R) -> AvroResult<i64> {
-    zag_i64(reader)
+/// Decode a long from the reader and convert it to a usize.
+pub(crate) fn read_usize<R: Read>(reader: &mut R) -> AvroResult<usize> {
+    let long = zag_i64(reader)?;
+    usize::try_from(long).map_err(|e| Details::ConvertI64ToUsize(e, long).into())
 }
 
 /// Write the number as a zigzagged varint to the writer.

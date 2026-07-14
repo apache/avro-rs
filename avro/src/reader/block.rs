@@ -142,11 +142,11 @@ impl<'r, R: Read> Block<'r, R> {
     /// the block. The objects are stored in an internal buffer to the `Reader`.
     fn read_block_next(&mut self) -> AvroResult<()> {
         assert!(self.is_empty(), "Expected self to be empty!");
-        match util::read_long(&mut self.reader).map_err(Error::into_details) {
+        match util::read_usize(&mut self.reader).map_err(Error::into_details) {
             Ok(block_len) => {
-                self.message_count = block_len as usize;
-                let block_bytes = util::read_long(&mut self.reader)?;
-                self.fill_buf(block_bytes as usize)?;
+                self.message_count = block_len;
+                let block_bytes = util::read_usize(&mut self.reader)?;
+                self.fill_buf(block_bytes)?;
                 let mut marker = [0u8; 16];
                 self.reader
                     .read_exact(&mut marker)
@@ -352,4 +352,53 @@ fn read_codec(metadata: &HashMap<String, Value>) -> AvroResult<Codec> {
         });
 
     result.unwrap_or(Ok(Codec::Null))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Block;
+    use crate::error::Details;
+    use crate::{Codec, Schema};
+
+    #[test]
+    fn avro_rs_586_negative_block_size() {
+        let mut block = Block::<'_, &[u8]> {
+            // Block header with an object count of 1 and a block size of -1
+            reader: &[0x02, 0x01],
+            buf: vec![],
+            buf_idx: 0,
+            message_count: 0,
+            marker: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+            codec: Codec::Null,
+            writer_schema: Schema::Null,
+            schemata: vec![],
+            user_metadata: Default::default(),
+            names_refs: Default::default(),
+            human_readable: false,
+        };
+
+        let err = block.read_block_next().unwrap_err().into_details();
+        assert!(matches!(err, Details::ConvertI64ToUsize(_, _)));
+    }
+
+    #[test]
+    fn avro_rs_586_negative_block_len() {
+        let mut block = Block::<'_, &[u8]> {
+            // Block header with an object count of -1 and a block size of 0
+            reader: &[0x01, 0x00],
+            buf: vec![],
+            buf_idx: 0,
+            message_count: 0,
+            marker: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+            codec: Codec::Null,
+            writer_schema: Schema::Null,
+            schemata: vec![],
+            user_metadata: Default::default(),
+            names_refs: Default::default(),
+            human_readable: false,
+        };
+
+        let err = block.read_block_next().unwrap_err().into_details();
+        assert!(matches!(err, Details::ConvertI64ToUsize(_, _)));
+    }
 }
