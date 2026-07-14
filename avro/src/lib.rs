@@ -38,6 +38,8 @@
 //! - `zstandard`: enable support for the Zstandard codec
 //! - `bzip`: enable support for the Bzip2 codec
 //! - `xz`: enable support for the Xz codec
+//! - `custom_allocator`: expose the [`alloc`] module with an allocation-tracking
+//!   [`alloc::CountingAllocator`]
 //!
 //! # MSRV
 //!
@@ -52,6 +54,9 @@
 // Enable using `fake_variadic` on docs.rs
 #![cfg_attr(docsrs, feature(rustdoc_internals))]
 #![cfg_attr(docsrs, allow(internal_features))]
+
+#[cfg(feature = "custom_allocator")]
+pub mod alloc;
 
 mod bigdecimal;
 mod bytes;

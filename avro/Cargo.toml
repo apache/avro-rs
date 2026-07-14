@@ -30,6 +30,7 @@ documentation.workspace = true
 
 [features]
 bzip = ["dep:bzip2"]
+custom_allocator = []
 derive = ["dep:apache-avro-derive"]
 snappy = ["dep:crc32fast", "dep:snap"]
 xz = ["dep:liblzma"]
