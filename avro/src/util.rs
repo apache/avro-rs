@@ -74,7 +74,7 @@ impl MapHelper for Map<String, Value> {
 }
 
 /// Decode a long from the reader and convert it to a usize.
-pub(crate) fn read_ulong<R: Read>(reader: &mut R) -> AvroResult<usize> {
+pub(crate) fn read_usize<R: Read>(reader: &mut R) -> AvroResult<usize> {
     let long = zag_i64(reader)?;
     usize::try_from(long).map_err(|e| Details::ConvertI64ToUsize(e, long).into())
 }
