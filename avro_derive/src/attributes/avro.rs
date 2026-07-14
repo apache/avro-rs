@@ -85,7 +85,7 @@ pub struct ContainerAttributes {
     /// Force the generator to use a certain schema representation
     #[darling(default)]
     pub repr: Option<Repr>,
-    /// Force the generator to use a certain schema representation
+    /// Disable the generation of tests
     #[darling(default = || true)]
     pub tests: bool,
 }
