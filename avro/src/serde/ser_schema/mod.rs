@@ -87,7 +87,7 @@ pub struct SchemaAwareSerializer<'s, 'w, W: Write, S: Borrow<Schema>> {
     /// This schema is guaranteed to not be a [`Schema::Ref`].
     schema: &'s Schema,
     config: Config<'s, S>,
-    null_variant_index: Option<usize>,
+    flattened_option_null_index: Option<usize>,
 }
 
 impl<'s, 'w, W: Write, S: Borrow<Schema>> SchemaAwareSerializer<'s, 'w, W, S> {
@@ -105,7 +105,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> SchemaAwareSerializer<'s, 'w, W, S> {
             writer,
             schema,
             config,
-            null_variant_index: None,
+            flattened_option_null_index: None,
         })
     }
 
@@ -129,13 +129,16 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> SchemaAwareSerializer<'s, 'w, W, S> {
         Ok(self)
     }
 
-    fn with_null_variant_index(mut self, null_variant_index: usize) -> Self {
-        self.null_variant_index = Some(null_variant_index);
+    /// Create a new serializer that is aware that the index of the null variant has been consumed by the Option.
+    fn with_flattened_option_null_index(mut self, index: usize) -> Self {
+        self.flattened_option_null_index = Some(index);
         self
     }
 
-    fn get_branch_index(&self, variant_index: usize) -> usize {
-        match self.null_variant_index {
+    fn correct_index_from_serde(&self, variant_index: usize) -> usize {
+        match self.flattened_option_null_index {
+            // The index from Serde needs to be corrected for the flattened Option<T> null schema,
+            // as Serde is not aware of the flattening.
             Some(null_index) if variant_index >= null_index => variant_index + 1,
             _ => variant_index,
         }
@@ -410,7 +413,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
                     value.serialize(self.with_different_schema(&union.variants()[some_index])?)?;
                 Ok(bytes_written)
             } else {
-                value.serialize(self.with_null_variant_index(null_index))
+                value.serialize(self.with_flattened_option_null_index(null_index))
             }
         } else {
             Err(self.error("some", "Expected Schema::Union([Schema::Null, _])"))
@@ -444,7 +447,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
 
     fn serialize_unit_variant(
         self,
-        _name: &'static str,
+        name: &'static str,
         variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
@@ -462,15 +465,18 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
                 }
             }
             Schema::Union(union) => {
-                let branch_index = self.get_branch_index(variant_index as usize);
-                match self.get_resolved_union_variant(union, branch_index)? {
+                let corrected_index = self.correct_index_from_serde(variant_index as usize);
+                match self.get_resolved_union_variant(union, corrected_index)? {
                     // Bare union
-                    Schema::Null => zig_i32(branch_index as i32, &mut *self.writer),
+                    Schema::Null => zig_i32(corrected_index as i32, &mut *self.writer),
                     Schema::Record(record) if record.fields.is_empty() && record.name.name() == variant => {
                         // Union of records
-                        zig_i32(branch_index as i32, &mut *self.writer)
+                        zig_i32(corrected_index as i32, &mut *self.writer)
                     }
-                    _ => Err(self.error("unit variant", format!("Expected Schema::Null | Schema::Record(name: {variant}, fields: []) at index {branch_index} in the union"))),
+                    _ if let Some((_, Schema::Enum(_))) = union.find_named_schema(name, self.config.names)? => {
+                        Err(self.error("unit variant", format!("Expected Schema::Null | Schema::Record(name: {variant}, fields: []) at index {corrected_index} in the union. If the type has a plain enum inside a untagged enum, this is not supported by Serde.")))
+                    }
+                    _ => Err(self.error("unit variant", format!("Expected Schema::Null | Schema::Record(name: {variant}, fields: []) at index {corrected_index} in the union"))),
                 }
             }
             _ => Err(self.error("unit variant", format!("Expected Schema::Enum(symbols[{variant_index}] == {variant}) | Schema::Union(variants[{variant_index}] == Schema::Null | Schema::Record(name: {variant}, fields: []))"))),
@@ -509,29 +515,31 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
     where
         T: ?Sized + Serialize,
     {
-        let branch_index = self.get_branch_index(variant_index as usize);
+        let corrected_index = self.correct_index_from_serde(variant_index as usize);
         match self.schema {
-            Schema::Union(union) => match self.get_resolved_union_variant(union, branch_index)? {
-                Schema::Record(record)
-                    if record.fields.len() == 1
-                        && record.name.name() == variant
-                        && record
-                            .attributes
-                            .get("org.apache.avro.rust.union_of_records")
-                            == Some(&Bool(true)) =>
-                {
-                    // Union of records
-                    let mut bytes_written = zig_i32(branch_index as i32, &mut *self.writer)?;
-                    let schema = &record.fields[0].schema;
-                    bytes_written += value.serialize(self.with_different_schema(schema)?)?;
-                    Ok(bytes_written)
+            Schema::Union(union) => {
+                match self.get_resolved_union_variant(union, corrected_index)? {
+                    Schema::Record(record)
+                        if record.fields.len() == 1
+                            && record.name.name() == variant
+                            && record
+                                .attributes
+                                .get("org.apache.avro.rust.union_of_records")
+                                == Some(&Bool(true)) =>
+                    {
+                        // Union of records
+                        let mut bytes_written = zig_i32(corrected_index as i32, &mut *self.writer)?;
+                        let schema = &record.fields[0].schema;
+                        bytes_written += value.serialize(self.with_different_schema(schema)?)?;
+                        Ok(bytes_written)
+                    }
+                    schema => {
+                        let mut bytes_written = zig_i32(corrected_index as i32, &mut *self.writer)?;
+                        bytes_written += value.serialize(self.with_different_schema(schema)?)?;
+                        Ok(bytes_written)
+                    }
                 }
-                schema => {
-                    let mut bytes_written = zig_i32(branch_index as i32, &mut *self.writer)?;
-                    bytes_written += value.serialize(self.with_different_schema(schema)?)?;
-                    Ok(bytes_written)
-                }
-            },
+            }
             _ => Err(self.error("newtype variant", "Expected Schema::Union")),
         }
     }
@@ -603,13 +611,14 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        let branch_index = self.get_branch_index(variant_index as usize);
+        let corrected_index = self.correct_index_from_serde(variant_index as usize);
         if let Schema::Union(union) = self.schema
-            && let Schema::Record(record) = self.get_resolved_union_variant(union, branch_index)?
+            && let Schema::Record(record) =
+                self.get_resolved_union_variant(union, corrected_index)?
             && record.fields.len() == len
             && record.name.name() == variant
         {
-            let bytes_written = zig_i32(branch_index as i32, &mut *self.writer)?;
+            let bytes_written = zig_i32(corrected_index as i32, &mut *self.writer)?;
             Ok(ManyTupleSerializer::new(
                 self.writer,
                 record,
@@ -617,7 +626,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
                 Some(bytes_written),
             ))
         } else {
-            Err(self.error("tuple variant", format!("Expected Schema::Union(variants[{branch_index}] == Schema::Record(name: {variant}, fields.len() == {len}))")))
+            Err(self.error("tuple variant", format!("Expected Schema::Union(variants[{corrected_index}] == Schema::Record(name: {variant}, fields.len() == {len}))")))
         }
     }
 
@@ -678,13 +687,14 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        let branch_index = self.get_branch_index(variant_index as usize);
+        let corrected_index = self.correct_index_from_serde(variant_index as usize);
         if let Schema::Union(union) = self.schema
-            && let Schema::Record(record) = self.get_resolved_union_variant(union, branch_index)?
+            && let Schema::Record(record) =
+                self.get_resolved_union_variant(union, corrected_index)?
             && record.fields.len() == len
             && record.name.name() == variant
         {
-            let bytes_written = zig_i32(branch_index as i32, &mut *self.writer)?;
+            let bytes_written = zig_i32(corrected_index as i32, &mut *self.writer)?;
             Ok(RecordSerializer::new(
                 self.writer,
                 record,
@@ -692,7 +702,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
                 Some(bytes_written),
             ))
         } else {
-            Err(self.error("struct variant", format!("Expected Schema::Union(variants[{branch_index}] == Schema::Record(name: {variant}, fields.len() == {len}))")))
+            Err(self.error("struct variant", format!("Expected Schema::Union(variants[{corrected_index}] == Schema::Record(name: {variant}, fields.len() == {len}))")))
         }
     }
 

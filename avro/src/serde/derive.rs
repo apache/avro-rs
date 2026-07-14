@@ -583,15 +583,25 @@ impl<T> AvroSchemaComponent for Option<T>
 where
     T: AvroSchemaComponent,
 {
+    /// The schema is a [`Schema::Union`] with the first variant set to [`Schema::Null`].
+    ///
+    /// If the schema of `T` is a union, the variants of this union will be appended. If the `T` union
+    /// already contains a `Schema::Null` the construction will panic.
+    /// If the schema of `T` is not a union, it will be appended to the union.
+    ///
+    /// # Panics
+    /// If `T::get_schema_in_ctxt` returns a [`Schema::Union`] where one variant is [`Schema::Null`].
     fn get_schema_in_ctxt(
         named_schemas: &mut HashSet<Name>,
         enclosing_namespace: NamespaceRef,
     ) -> Schema {
         let variants = match T::get_schema_in_ctxt(named_schemas, enclosing_namespace) {
-            Schema::Union(union) => vec![Schema::Null]
-                .into_iter()
-                .chain(union.schemas)
-                .collect(),
+            Schema::Union(mut union) => {
+                // It would be more efficient to append the null schema, but the (de)serializers have
+                // a fast path if the first variant is the null schema
+                union.schemas.insert(0, Schema::Null);
+                union.schemas
+            }
             schema => vec![Schema::Null, schema],
         };
         Schema::Union(
@@ -954,7 +964,7 @@ mod tests {
     use crate::{
         AvroSchema, AvroSchemaComponent, Schema,
         reader::datum::GenericDatumReader,
-        schema::{FixedSchema, Name, NamespaceRef, UnionSchema},
+        schema::{FixedSchema, Name, NamespaceRef},
         writer::datum::GenericDatumWriter,
     };
     use std::collections::HashSet;
@@ -1220,15 +1230,8 @@ mod tests {
         }
 
         impl AvroSchemaComponent for MyUnion {
-            fn get_schema_in_ctxt(
-                named_schemas: &mut HashSet<Name>,
-                enclosing_namespace: NamespaceRef,
-            ) -> Schema {
-                let int_schema = i32::get_schema_in_ctxt(named_schemas, enclosing_namespace);
-                let string_schema = String::get_schema_in_ctxt(named_schemas, enclosing_namespace);
-                Schema::Union(
-                    UnionSchema::new(vec![int_schema, string_schema]).expect("Union must be valid"),
-                )
+            fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Schema {
+                Schema::union(vec![Schema::Int, Schema::String]).expect("Union must be valid")
             }
         }
 

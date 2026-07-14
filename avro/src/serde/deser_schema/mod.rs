@@ -78,7 +78,7 @@ pub struct SchemaAwareDeserializer<'s, 'r, R: Read, S: Borrow<Schema>> {
     /// This schema is guaranteed to not be a [`Schema::Ref`].
     schema: &'s Schema,
     config: Config<'s, S>,
-    branch_index: Option<usize>,
+    flattened_option_null_index: Option<usize>,
 }
 
 impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
@@ -96,14 +96,14 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
                 reader,
                 schema,
                 config,
-                branch_index: None,
+                flattened_option_null_index: None,
             })
         } else {
             Ok(Self {
                 reader,
                 schema,
                 config,
-                branch_index: None,
+                flattened_option_null_index: None,
             })
         }
     }
@@ -131,8 +131,9 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
         Ok(self)
     }
 
-    fn with_branch_index(mut self, branch_index: usize) -> Self {
-        self.branch_index = Some(branch_index);
+    /// Create a new deserializer which is aware that the Option has already read the union index.
+    fn with_flattened_option_null_index(mut self, index: usize) -> Self {
+        self.flattened_option_null_index = Some(index);
         self
     }
 
@@ -140,12 +141,11 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
     ///
     /// This will resolve the read schema if it is a reference.
     fn with_union(self, schema: &'s UnionSchema) -> Result<Self, Error> {
-        let index = match self.branch_index {
-            Some(index) => index,
-            None => {
-                let index = zag_i32(self.reader)?;
-                usize::try_from(index).map_err(|e| Details::ConvertI32ToUsize(e, index))?
-            }
+        let index = if let Some(index) = self.flattened_option_null_index {
+            index
+        } else {
+            let index = zag_i32(self.reader)?;
+            usize::try_from(index).map_err(|e| Details::ConvertI32ToUsize(e, index))?
         };
         let variant = schema.get_variant(index)?;
         self.with_different_schema(variant)
@@ -562,7 +562,7 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
                 if union.variants().len() == 2 {
                     visitor.visit_some(self.with_different_schema(schema)?)
                 } else {
-                    visitor.visit_some(self.with_branch_index(index))
+                    visitor.visit_some(self.with_flattened_option_null_index(index))
                 }
             }
         } else {
@@ -742,7 +742,7 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> Deserializer<'de>
                 self.reader,
                 union,
                 self.config,
-                self.branch_index,
+                self.flattened_option_null_index,
             )),
             _ => Err(self.error("enum", "Expected Schema::Enum | Schema::Union")),
         }

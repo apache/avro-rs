@@ -102,7 +102,8 @@ pub struct UnionEnumDeserializer<'s, 'r, R: Read, S: Borrow<Schema>> {
     reader: &'r mut R,
     variants: &'s [Schema],
     config: Config<'s, S>,
-    branch_index: Option<usize>,
+    /// The index of the null that belongs to the Option<T> schema and has already been read.
+    flattened_option_null_index: Option<usize>,
 }
 
 impl<'s, 'r, R: Read, S: Borrow<Schema>> UnionEnumDeserializer<'s, 'r, R, S> {
@@ -110,20 +111,22 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> UnionEnumDeserializer<'s, 'r, R, S> {
         reader: &'r mut R,
         schema: &'s UnionSchema,
         config: Config<'s, S>,
-        branch_index: Option<usize>,
+        flattened_option_null_index: Option<usize>,
     ) -> Self {
         Self {
             reader,
             variants: schema.variants(),
             config,
-            branch_index,
+            flattened_option_null_index,
         }
     }
 
-    fn get_variant_index(&self, branch_index: usize) -> usize {
-        match self.branch_index {
-            Some(null_index) if branch_index >= null_index => branch_index - 1,
-            _ => branch_index,
+    fn correct_index_for_serde(&self, serde_index: usize) -> usize {
+        match self.flattened_option_null_index {
+            // The index from Serde needs to be corrected for the flattened Option<T> null schema,
+            // as Serde is not aware of the flattening.
+            Some(null_index) if serde_index >= null_index => serde_index - 1,
+            _ => serde_index,
         }
     }
 }
@@ -138,24 +141,24 @@ impl<'de, 's, 'r, R: Read, S: Borrow<Schema>> EnumAccess<'de>
     where
         V: DeserializeSeed<'de>,
     {
-        let index = match self.branch_index {
-            Some(index) => index,
-            None => {
-                let index = zag_i32(self.reader)?;
-                usize::try_from(index).map_err(|e| Details::ConvertI32ToUsize(e, index))?
-            }
+        let index = if let Some(index) = self.flattened_option_null_index {
+            index
+        } else {
+            let index = zag_i32(self.reader)?;
+            usize::try_from(index).map_err(|e| Details::ConvertI32ToUsize(e, index))?
         };
         let schema = self.variants.get(index).ok_or(Details::GetUnionVariant {
             index: index as i64,
             num_variants: self.variants.len(),
         })?;
-        let variant_index = self.get_variant_index(index);
+        let variant_index = self.correct_index_for_serde(index);
         Ok((
             seed.deserialize(IdentifierDeserializer::index(variant_index as u32))?,
             UnionVariantAccess::new(schema, self.reader, self.config)?,
         ))
     }
 }
+
 pub struct UnionVariantAccess<'s, 'r, R: Read, S: Borrow<Schema>> {
     schema: &'s Schema,
     reader: &'r mut R,
