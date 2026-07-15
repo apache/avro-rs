@@ -428,7 +428,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
 
     fn serialize_unit_variant(
         self,
-        _name: &'static str,
+        name: &'static str,
         variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
@@ -445,15 +445,17 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
                     Err(self.error("unit variant", format!(r#"Expected symbol "{variant}" at index {variant_index} in enum"#)))
                 }
             }
-            Schema::Union(union) => match self.get_resolved_union_variant(union, variant_index)? {
+            Schema::Union(union) if (variant_index as usize) < union.variants().len() => match self.get_resolved_union_variant(union, variant_index)? {
                 // Bare union
                 Schema::Null => zig_i32(variant_index as i32, &mut *self.writer),
                 Schema::Record(record) if record.fields.is_empty() && record.name.name() == variant => {
                     // Union of records
                     zig_i32(variant_index as i32, &mut *self.writer)
                 }
-                _ => Err(self.error("unit variant", format!("Expected Schema::Null | Schema::Record(name: {variant}, fields: []) at index {variant_index} in the union"))),
+                _ => UnionSerializer::new(self.writer, union, self.config).serialize_unit_variant(name, variant_index, variant)
             }
+            // This branch happens if the enum has more variants than the union, which is valid if the target schema is a enum schema in the union
+            Schema::Union(union) => UnionSerializer::new(self.writer, union, self.config).serialize_unit_variant(name, variant_index, variant),
             _ => Err(self.error("unit variant", format!("Expected Schema::Enum(symbols[{variant_index}] == {variant}) | Schema::Union(variants[{variant_index}] == Schema::Null | Schema::Record(name: {variant}, fields: []))"))),
         }
     }
@@ -2213,6 +2215,35 @@ mod tests {
             &names,
             &[2, 4, 5, 6, 7, 8, 9, 10, 11],
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_529_enum_with_union_schema() -> TestResult {
+        #[derive(Debug, Serialize)]
+        enum TestEnum {
+            A,
+            B,
+            C,
+        }
+
+        let schema = Schema::parse_str(
+            r#"
+            [
+                "int",
+                {
+                    "type": "enum",
+                    "name": "TestEnum",
+                    "symbols": ["A", "B", "C"]
+                }
+            ]
+            "#,
+        )?;
+        let names = HashMap::new();
+        assert_serialize(TestEnum::A, &schema, &names, &[2, 0]);
+        assert_serialize(TestEnum::B, &schema, &names, &[2, 2]);
+        assert_serialize(TestEnum::C, &schema, &names, &[2, 4]);
 
         Ok(())
     }
