@@ -35,3 +35,7 @@ updates:
       prefix: "chore(ci): "
     cooldown:
       default-days: 7
+    groups:
+      github-codeql:
+        patterns:
+          - "github/codeql-action/*"
