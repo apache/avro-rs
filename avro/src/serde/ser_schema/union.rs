@@ -374,7 +374,11 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
             Ok(bytes_written)
         } else {
             for (index, schema) in self.union.variants().iter().enumerate() {
-                if let Schema::Enum(enum_schema) = schema
+                let resolved_schema = match schema {
+                    Schema::Ref { name } => self.config.get_schema(name).unwrap_or(schema),
+                    _ => schema,
+                };
+                if let Schema::Enum(enum_schema) = resolved_schema
                     && let Some(symbol) = enum_schema.symbols.iter().position(|s| s == variant)
                 {
                     let mut bytes_written = zig_i32(index as i32, &mut *self.writer)?;

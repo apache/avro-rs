@@ -2220,7 +2220,7 @@ mod tests {
     }
 
     #[test]
-    fn avro_rs_529_enum_with_union_schema() -> TestResult {
+    fn avro_rs_529_enum_larger_than_union_schema() -> TestResult {
         #[derive(Debug, Serialize)]
         enum TestEnum {
             A,
@@ -2246,5 +2246,170 @@ mod tests {
         assert_serialize(TestEnum::C, &schema, &names, &[2, 4]);
 
         Ok(())
+    }
+
+    #[test]
+    fn avro_rs_529_enum_equal_to_union_schema() -> TestResult {
+        #[derive(Debug, Serialize)]
+        enum TestEnum {
+            A,
+            B,
+        }
+
+        let schema = Schema::parse_str(
+            r#"
+            [
+                "int",
+                {
+                    "type": "enum",
+                    "name": "TestEnum",
+                    "symbols": ["A", "B"]
+                }
+            ]
+            "#,
+        )?;
+        let names = HashMap::new();
+        assert_serialize(TestEnum::A, &schema, &names, &[2, 0]);
+        assert_serialize(TestEnum::B, &schema, &names, &[2, 2]);
+
+        Ok(())
+    }
+
+    #[test]
+    #[should_panic(expected = "assertion failed: `(left == right)`")]
+    fn avro_rs_529_enum_with_union_schema_with_null() {
+        #[derive(Debug, Serialize)]
+        enum TestEnum {
+            A,
+            B,
+        }
+
+        let schema = Schema::parse_str(
+            r#"
+            [
+                "null",
+                {
+                    "type": "enum",
+                    "name": "TestEnum",
+                    "symbols": ["A", "B"]
+                }
+            ]
+            "#,
+        )
+        .unwrap();
+        let names = HashMap::new();
+        // This works because the value index does not contain a null
+        assert_serialize(TestEnum::B, &schema, &names, &[2, 2]);
+        // This doesn't work because the value index contains a null, so the serializer uses that and
+        // writes [0, 0]
+        assert_serialize(TestEnum::A, &schema, &names, &[2, 0]);
+    }
+
+    #[test]
+    #[should_panic(expected = "assertion failed: `(left == right)`")]
+    fn avro_rs_529_enum_with_union_schema_with_empty_record_matching_variant() {
+        #[derive(Debug, Serialize)]
+        enum TestEnum {
+            A,
+            B,
+        }
+
+        let schema = Schema::parse_str(
+            r#"
+            [
+                {
+                    "type": "record",
+                    "name": "A",
+                    "fields": []
+                },
+                {
+                    "type": "enum",
+                    "name": "TestEnum",
+                    "symbols": ["A", "B"]
+                }
+            ]
+            "#,
+        )
+        .unwrap();
+        let names = HashMap::new();
+        // This works because the value index does not contain a null
+        assert_serialize(TestEnum::B, &schema, &names, &[2, 2]);
+        // This doesn't work because the value index contains a null, so the serializer uses that and
+        // writes [0, 0]
+        assert_serialize(TestEnum::A, &schema, &names, &[2, 0]);
+    }
+
+    #[test]
+    fn avro_rs_529_enum_with_union_schema_with_two_enums() {
+        #[derive(Debug, Serialize)]
+        enum TestEnum {
+            A,
+            B,
+        }
+
+        #[derive(Debug, Serialize)]
+        enum WrongName {
+            A,
+            B,
+        }
+
+        let schema = Schema::parse_str(
+            r#"
+            [
+                {
+                    "type": "enum",
+                    "name": "TestEnum",
+                    "symbols": ["A", "B"]
+                },
+                {
+                    "type": "enum",
+                    "name": "OtherEnum",
+                    "symbols": ["A", "B"]
+                }
+            ]
+            "#,
+        )
+        .unwrap();
+        let names = HashMap::new();
+        assert_serialize(TestEnum::A, &schema, &names, &[0, 0]);
+        assert_serialize(TestEnum::B, &schema, &names, &[0, 2]);
+
+        // These will select the first enum, as the enum name doesn't match the names in the union
+        // so the serializer picks the first that the correct variant name
+        assert_serialize(WrongName::A, &schema, &names, &[0, 0]);
+        assert_serialize(WrongName::B, &schema, &names, &[0, 2]);
+    }
+
+    #[test]
+    fn avro_rs_529_enum_with_union_schema_with_reference() {
+        #[derive(Debug, Serialize)]
+        enum WrongName {
+            A,
+            B,
+        }
+
+        let (schema, mut schemata) = Schema::parse_str_with_list(
+            r#"
+            [
+                {
+                    "type": "OtherEnum"
+                }
+            ]
+            "#,
+            [r#"
+            {
+                "type": "enum",
+                "name": "OtherEnum",
+                "symbols": ["A", "B"]
+            }
+        "#],
+        )
+        .unwrap();
+        let mut names = HashMap::new();
+        let reference = schemata.pop().unwrap();
+        names.insert(reference.name().cloned().unwrap(), &reference);
+
+        assert_serialize(WrongName::A, &schema, &names, &[0, 0]);
+        assert_serialize(WrongName::B, &schema, &names, &[0, 2]);
     }
 }
