@@ -95,11 +95,12 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.runner.name }}-${{ matrix.runner.target }}-${{ matrix.rust }}-cache1-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Rust Toolchain
-        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
-        with:
-          toolchain: ${{ matrix.rust }}
-          components: rustfmt
-          targets: ${{ matrix.runner.target }}
+        run: |
+          rustup update ${{ matrix.rust }}
+          rustup toolchain install ${{ matrix.rust }}
+          rustup default ${{ matrix.rust }}
+          rustup component add rustfmt
+          rustup target add ${{ matrix.runner.target }}
 
       # Check if the doc cumment in avro/src/lib.rs and avro/README.md are in sync.
       - name: Run cargo-rdme
@@ -151,9 +152,10 @@ jobs:
           persist-credentials: false
 
       - name: Rust Toolchain
-        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
-        with:
-          toolchain: stable
+        run: |
+          rustup update stable
+          rustup toolchain install stable
+          rustup default stable
 
       - name: Cache Cargo
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -251,10 +253,11 @@ jobs:
           persist-credentials: false
 
       - name: Rust Toolchain
-        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
-        with:
-          toolchain: stable
-          targets: wasm32-unknown-unknown
+        run: |
+          rustup update stable
+          rustup toolchain install stable
+          rustup default stable
+          rustup target add wasm32-unknown-unknown
 
       - name: Cache Cargo
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
