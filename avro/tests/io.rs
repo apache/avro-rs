@@ -127,7 +127,7 @@ fn default_value_examples() -> &'static Vec<(&'static str, &'static str, Value)>
             (
                 r#"{"type": "fixed", "name": "F", "size": 2}"#,
                 r#""a""#,
-                Value::Fixed(1, vec![97]),
+                Value::Fixed(2, vec![97, 0]),
             ), // ASCII 'a' => one byte
             (
                 r#"{"type": "fixed", "name": "F", "size": 2}"#,
