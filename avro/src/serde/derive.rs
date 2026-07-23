@@ -583,15 +583,27 @@ impl<T> AvroSchemaComponent for Option<T>
 where
     T: AvroSchemaComponent,
 {
+    /// The schema is a [`Schema::Union`] with the first variant set to [`Schema::Null`].
+    ///
+    /// If the schema of `T` is a union, the variants of this union will be appended. If the `T` union
+    /// already contains a `Schema::Null` the construction will panic.
+    /// If the schema of `T` is not a union, it will be appended to the union.
+    ///
+    /// # Panics
+    /// If `T::get_schema_in_ctxt` returns a [`Schema::Union`] where one variant is [`Schema::Null`].
     fn get_schema_in_ctxt(
         named_schemas: &mut HashSet<Name>,
         enclosing_namespace: NamespaceRef,
     ) -> Schema {
-        let variants = vec![
-            Schema::Null,
-            T::get_schema_in_ctxt(named_schemas, enclosing_namespace),
-        ];
-
+        let variants = match T::get_schema_in_ctxt(named_schemas, enclosing_namespace) {
+            Schema::Union(mut union) => {
+                // It would be more efficient to append the null schema, but the (de)serializers have
+                // a fast path if the first variant is the null schema
+                union.schemas.insert(0, Schema::Null);
+                union.schemas
+            }
+            schema => vec![Schema::Null, schema],
+        };
         Schema::Union(
             UnionSchema::new(variants).expect("Option<T> must produce a valid (non-nested) union"),
         )
@@ -950,11 +962,12 @@ mod tests {
     use apache_avro_test_helper::TestResult;
 
     use crate::{
-        AvroSchema, Schema,
+        AvroSchema, AvroSchemaComponent, Schema,
         reader::datum::GenericDatumReader,
-        schema::{FixedSchema, Name},
+        schema::{FixedSchema, Name, NamespaceRef},
         writer::datum::GenericDatumWriter,
     };
+    use std::collections::HashSet;
 
     #[test]
     fn avro_rs_401_str() -> TestResult {
@@ -1070,9 +1083,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(
-        expected = "Option<T> must produce a valid (non-nested) union: Error { details: Unions may not directly contain a union }"
-    )]
+    #[should_panic(expected = "Unions cannot contain duplicate types, found at least two Null")]
     fn avro_rs_489_option_option() {
         <Option<Option<i32>>>::get_schema();
     }
@@ -1205,6 +1216,27 @@ mod tests {
             schema,
             <(Option<uuid::Uuid>, uuid::Uuid, String)>::get_schema()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_nullable_complex_union() -> TestResult {
+        let schema = Schema::parse_str(r#"["null", "int", "string"]"#)?;
+
+        #[allow(dead_code)]
+        enum MyUnion {
+            Int(i32),
+            String(String),
+        }
+
+        impl AvroSchemaComponent for MyUnion {
+            fn get_schema_in_ctxt(_: &mut HashSet<Name>, _: NamespaceRef) -> Schema {
+                Schema::union(vec![Schema::Int, Schema::String]).expect("Union must be valid")
+            }
+        }
+
+        assert_eq!(schema, Option::<MyUnion>::get_schema());
+
         Ok(())
     }
 }
