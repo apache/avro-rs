@@ -40,6 +40,8 @@
 //! - **string** => [`Schema::String`]
 //! - **byte array** => [`Schema::Bytes`] or [`Schema::Fixed`]
 //! - **option** => [`Schema::Union([Schema::Null, _])`](crate::schema::Schema::Union)
+//!     - If the schema of `T` is also a union schema and does not have a null variant, the schemas
+//!       are allowed to be merged. This results in a "flattened" `Option<T>`.
 //! - **unit** => [`Schema::Null`]
 //! - **unit struct** => [`Schema::Record`] with the unqualified name equal to the name of the struct and zero fields
 //! - **unit variant** => See [Enums](#enums)
