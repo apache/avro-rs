@@ -428,7 +428,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
 
     fn serialize_unit_variant(
         self,
-        _name: &'static str,
+        name: &'static str,
         variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
@@ -445,15 +445,17 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
                     Err(self.error("unit variant", format!(r#"Expected symbol "{variant}" at index {variant_index} in enum"#)))
                 }
             }
-            Schema::Union(union) => match self.get_resolved_union_variant(union, variant_index)? {
+            Schema::Union(union) if (variant_index as usize) < union.variants().len() => match self.get_resolved_union_variant(union, variant_index)? {
                 // Bare union
                 Schema::Null => zig_i32(variant_index as i32, &mut *self.writer),
                 Schema::Record(record) if record.fields.is_empty() && record.name.name() == variant => {
                     // Union of records
                     zig_i32(variant_index as i32, &mut *self.writer)
                 }
-                _ => Err(self.error("unit variant", format!("Expected Schema::Null | Schema::Record(name: {variant}, fields: []) at index {variant_index} in the union"))),
+                _ => UnionSerializer::new(self.writer, union, self.config).serialize_unit_variant(name, variant_index, variant)
             }
+            // This branch happens if the enum has more variants than the union, which is valid if the target schema is a enum schema in the union
+            Schema::Union(union) => UnionSerializer::new(self.writer, union, self.config).serialize_unit_variant(name, variant_index, variant),
             _ => Err(self.error("unit variant", format!("Expected Schema::Enum(symbols[{variant_index}] == {variant}) | Schema::Union(variants[{variant_index}] == Schema::Null | Schema::Record(name: {variant}, fields: []))"))),
         }
     }
@@ -2215,5 +2217,199 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn avro_rs_529_enum_larger_than_union_schema() -> TestResult {
+        #[derive(Debug, Serialize)]
+        enum TestEnum {
+            A,
+            B,
+            C,
+        }
+
+        let schema = Schema::parse_str(
+            r#"
+            [
+                "int",
+                {
+                    "type": "enum",
+                    "name": "TestEnum",
+                    "symbols": ["A", "B", "C"]
+                }
+            ]
+            "#,
+        )?;
+        let names = HashMap::new();
+        assert_serialize(TestEnum::A, &schema, &names, &[2, 0]);
+        assert_serialize(TestEnum::B, &schema, &names, &[2, 2]);
+        assert_serialize(TestEnum::C, &schema, &names, &[2, 4]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_529_enum_equal_to_union_schema() -> TestResult {
+        #[derive(Debug, Serialize)]
+        enum TestEnum {
+            A,
+            B,
+        }
+
+        let schema = Schema::parse_str(
+            r#"
+            [
+                "int",
+                {
+                    "type": "enum",
+                    "name": "TestEnum",
+                    "symbols": ["A", "B"]
+                }
+            ]
+            "#,
+        )?;
+        let names = HashMap::new();
+        assert_serialize(TestEnum::A, &schema, &names, &[2, 0]);
+        assert_serialize(TestEnum::B, &schema, &names, &[2, 2]);
+
+        Ok(())
+    }
+
+    #[test]
+    #[should_panic(expected = "assertion failed: `(left == right)`")]
+    fn avro_rs_529_enum_with_union_schema_with_null() {
+        #[derive(Debug, Serialize)]
+        enum TestEnum {
+            A,
+            B,
+        }
+
+        let schema = Schema::parse_str(
+            r#"
+            [
+                "null",
+                {
+                    "type": "enum",
+                    "name": "TestEnum",
+                    "symbols": ["A", "B"]
+                }
+            ]
+            "#,
+        )
+        .unwrap();
+        let names = HashMap::new();
+        // This works because the value index does not contain a null
+        assert_serialize(TestEnum::B, &schema, &names, &[2, 2]);
+        // This doesn't work because the value index contains a null, so the serializer uses that and
+        // writes [0, 0]
+        assert_serialize(TestEnum::A, &schema, &names, &[2, 0]);
+    }
+
+    #[test]
+    #[should_panic(expected = "assertion failed: `(left == right)`")]
+    fn avro_rs_529_enum_with_union_schema_with_empty_record_matching_variant() {
+        #[derive(Debug, Serialize)]
+        enum TestEnum {
+            A,
+            B,
+        }
+
+        let schema = Schema::parse_str(
+            r#"
+            [
+                {
+                    "type": "record",
+                    "name": "A",
+                    "fields": []
+                },
+                {
+                    "type": "enum",
+                    "name": "TestEnum",
+                    "symbols": ["A", "B"]
+                }
+            ]
+            "#,
+        )
+        .unwrap();
+        let names = HashMap::new();
+        // This works because the value index does not contain a null
+        assert_serialize(TestEnum::B, &schema, &names, &[2, 2]);
+        // This doesn't work because the value index contains a null, so the serializer uses that and
+        // writes [0, 0]
+        assert_serialize(TestEnum::A, &schema, &names, &[2, 0]);
+    }
+
+    #[test]
+    fn avro_rs_529_enum_with_union_schema_with_two_enums() {
+        #[derive(Debug, Serialize)]
+        enum TestEnum {
+            A,
+            B,
+        }
+
+        #[derive(Debug, Serialize)]
+        enum WrongName {
+            A,
+            B,
+        }
+
+        let schema = Schema::parse_str(
+            r#"
+            [
+                {
+                    "type": "enum",
+                    "name": "TestEnum",
+                    "symbols": ["A", "B"]
+                },
+                {
+                    "type": "enum",
+                    "name": "OtherEnum",
+                    "symbols": ["A", "B"]
+                }
+            ]
+            "#,
+        )
+        .unwrap();
+        let names = HashMap::new();
+        assert_serialize(TestEnum::A, &schema, &names, &[0, 0]);
+        assert_serialize(TestEnum::B, &schema, &names, &[0, 2]);
+
+        // These will select the first enum, as the enum name doesn't match the names in the union
+        // so the serializer picks the first that the correct variant name
+        assert_serialize(WrongName::A, &schema, &names, &[0, 0]);
+        assert_serialize(WrongName::B, &schema, &names, &[0, 2]);
+    }
+
+    #[test]
+    fn avro_rs_529_enum_with_union_schema_with_reference() {
+        #[derive(Debug, Serialize)]
+        enum WrongName {
+            A,
+            B,
+        }
+
+        let (schema, mut schemata) = Schema::parse_str_with_list(
+            r#"
+            [
+                {
+                    "type": "OtherEnum"
+                }
+            ]
+            "#,
+            [r#"
+            {
+                "type": "enum",
+                "name": "OtherEnum",
+                "symbols": ["A", "B"]
+            }
+        "#],
+        )
+        .unwrap();
+        let mut names = HashMap::new();
+        let reference = schemata.pop().unwrap();
+        names.insert(reference.name().cloned().unwrap(), &reference);
+
+        assert_serialize(WrongName::A, &schema, &names, &[0, 0]);
+        assert_serialize(WrongName::B, &schema, &names, &[0, 2]);
     }
 }

@@ -356,11 +356,41 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
 
     fn serialize_unit_variant(
         self,
-        _: &'static str,
-        _: u32,
-        _: &'static str,
+        name: &'static str,
+        variant_index: u32,
+        variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        Err(self.error("unit variant", "Nested unions are not supported"))
+        if let Some((index, Schema::Enum(enum_schema))) =
+            self.union.find_named_schema(name, self.config.names)?
+            && enum_schema
+                .symbols
+                .get(variant_index as usize)
+                .map(String::as_str)
+                == Some(variant)
+        {
+            // Fast path for if the name and variant match (no #[serde(skip)] or other trickery)
+            let mut bytes_written = zig_i32(index as i32, &mut *self.writer)?;
+            bytes_written += zig_i32(variant_index as i32, &mut *self.writer)?;
+            Ok(bytes_written)
+        } else {
+            for (index, schema) in self.union.variants().iter().enumerate() {
+                let resolved_schema = match schema {
+                    Schema::Ref { name } => self.config.get_schema(name).unwrap_or(schema),
+                    _ => schema,
+                };
+                if let Schema::Enum(enum_schema) = resolved_schema
+                    && let Some(symbol) = enum_schema.symbols.iter().position(|s| s == variant)
+                {
+                    let mut bytes_written = zig_i32(index as i32, &mut *self.writer)?;
+                    bytes_written += zig_i32(symbol as i32, &mut *self.writer)?;
+                    return Ok(bytes_written);
+                }
+            }
+            Err(self.error(
+                "unit variant",
+                format!("Expected Schema::Enum(symbols: [.., {variant}, ..]) in variants"),
+            ))
+        }
     }
 
     fn serialize_newtype_struct<T>(
