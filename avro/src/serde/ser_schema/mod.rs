@@ -2348,7 +2348,7 @@ mod tests {
         }
 
         #[derive(Debug, Serialize)]
-        enum WrongName {
+        enum OtherEnum {
             A,
             B,
         }
@@ -2374,16 +2374,14 @@ mod tests {
         assert_serialize(TestEnum::A, &schema, &names, &[0, 0]);
         assert_serialize(TestEnum::B, &schema, &names, &[0, 2]);
 
-        // These will select the first enum, as the enum name doesn't match the names in the union
-        // so the serializer picks the first that the correct variant name
-        assert_serialize(WrongName::A, &schema, &names, &[0, 0]);
-        assert_serialize(WrongName::B, &schema, &names, &[0, 2]);
+        assert_serialize(OtherEnum::A, &schema, &names, &[2, 0]);
+        assert_serialize(OtherEnum::B, &schema, &names, &[2, 2]);
     }
 
     #[test]
     fn avro_rs_529_enum_with_union_schema_with_reference() {
         #[derive(Debug, Serialize)]
-        enum WrongName {
+        enum TestEnum {
             A,
             B,
         }
@@ -2392,14 +2390,14 @@ mod tests {
             r#"
             [
                 {
-                    "type": "OtherEnum"
+                    "type": "TestEnum"
                 }
             ]
             "#,
             [r#"
             {
                 "type": "enum",
-                "name": "OtherEnum",
+                "name": "TestEnum",
                 "symbols": ["A", "B"]
             }
         "#],
@@ -2409,7 +2407,78 @@ mod tests {
         let reference = schemata.pop().unwrap();
         names.insert(reference.name().cloned().unwrap(), &reference);
 
-        assert_serialize(WrongName::A, &schema, &names, &[0, 0]);
-        assert_serialize(WrongName::B, &schema, &names, &[0, 2]);
+        assert_serialize(TestEnum::A, &schema, &names, &[0, 0]);
+        assert_serialize(TestEnum::B, &schema, &names, &[0, 2]);
+    }
+
+    #[test]
+    fn avro_rs_529_wrong_name() -> TestResult {
+        #[derive(Debug, Serialize)]
+        enum WrongName {
+            A,
+            B,
+        }
+
+        let schema = Schema::parse_str(
+            r#"
+            [
+                "int",
+                {
+                    "type": "enum",
+                    "name": "TestEnum",
+                    "symbols": ["A", "B"]
+                }
+            ]
+            "#,
+        )?;
+        let names = HashMap::new();
+        assert_serialize_err(
+            WrongName::A,
+            &schema,
+            &names,
+            r#"Failed to serialize value of type `unit variant` using Schema::Union(UnionSchema { schemas: [Int, Enum(EnumSchema { name: Name { name: "TestEnum", .. }, symbols: ["A", "B"], .. })] }): Expected Schema::Enum(name: "WrongName", symbols: [.., "A", ..]) in variants"#,
+        );
+        assert_serialize_err(
+            WrongName::B,
+            &schema,
+            &names,
+            r#"Failed to serialize value of type `unit variant` using Schema::Union(UnionSchema { schemas: [Int, Enum(EnumSchema { name: Name { name: "TestEnum", .. }, symbols: ["A", "B"], .. })] }): Expected Schema::Enum(name: "WrongName", symbols: [.., "B", ..]) in variants"#,
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_529_unknown_variant() -> TestResult {
+        #[derive(Debug, Serialize)]
+        enum TestEnum {
+            A,
+            B,
+            C,
+        }
+
+        let schema = Schema::parse_str(
+            r#"
+            [
+                "int",
+                {
+                    "type": "enum",
+                    "name": "TestEnum",
+                    "symbols": ["A", "B"]
+                }
+            ]
+            "#,
+        )?;
+        let names = HashMap::new();
+        assert_serialize(TestEnum::A, &schema, &names, &[2, 0]);
+        assert_serialize(TestEnum::B, &schema, &names, &[2, 2]);
+        assert_serialize_err(
+            TestEnum::C,
+            &schema,
+            &names,
+            r#"Failed to serialize value of type `unit variant` using Schema::Union(UnionSchema { schemas: [Int, Enum(EnumSchema { name: Name { name: "TestEnum", .. }, symbols: ["A", "B"], .. })] }): No variant named "C" in enum schema"#,
+        );
+
+        Ok(())
     }
 }
