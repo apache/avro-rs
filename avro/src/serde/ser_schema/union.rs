@@ -356,11 +356,39 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
 
     fn serialize_unit_variant(
         self,
-        _: &'static str,
-        _: u32,
-        _: &'static str,
+        name: &'static str,
+        variant_index: u32,
+        variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        Err(self.error("unit variant", "Nested unions are not supported"))
+        if let Some((index, Schema::Enum(enum_schema))) =
+            self.union.find_named_schema(name, self.config.names)?
+        {
+            let variant_index = if enum_schema
+                .symbols
+                .get(variant_index as usize)
+                .map(String::as_str)
+                == Some(variant)
+            {
+                variant_index as i32
+            } else if let Some(symbol) = enum_schema.symbols.iter().position(|s| s == variant) {
+                symbol as i32
+            } else {
+                return Err(self.error(
+                    "unit variant",
+                    format!(r#"No variant named "{variant}" in enum schema"#),
+                ));
+            };
+            let mut bytes_written = zig_i32(index as i32, &mut *self.writer)?;
+            bytes_written += zig_i32(variant_index, &mut *self.writer)?;
+            Ok(bytes_written)
+        } else {
+            Err(self.error(
+                "unit variant",
+                format!(
+                    r#"Expected Schema::Enum(name: "{name}", symbols: [.., "{variant}", ..]) in variants"#
+                ),
+            ))
+        }
     }
 
     fn serialize_newtype_struct<T>(
