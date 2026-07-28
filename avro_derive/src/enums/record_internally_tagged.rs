@@ -110,11 +110,10 @@ pub fn to_implementation(
                     Fields::Unnamed(mut fields) => {
                         // Serde only allows #[serde(tag = "...")] on tuple variants with exactly one field (newtype variant)
                         if fields.unnamed.len() == 1 {
-                            let pair = fields
+                            let field = fields
                                 .unnamed
                                 .pop()
                                 .unwrap_or_else(|| unreachable!("Length is 1"));
-                            let field = pair.into_value();
                             let field_attrs = match FieldOptions::new(&field.attrs, field.span())
                                 .and_then(|o| newtype_extra_attribute_checks(o, field.span()))
                             {

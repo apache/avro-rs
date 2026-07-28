@@ -190,8 +190,7 @@ fn variant_to_schema_expr(
                         schema_type: SchemaType::Transparent,
                     })
                     .map_err(|m| vec![syn::Error::new(variant_span, m)])?;
-                    let pair = fields.unnamed.pop().expect("There is one field");
-                    let field = pair.into_value();
+                    let field = fields.unnamed.pop().expect("There is one field");
                     let field_attributes = FieldOptions::new(&field.attrs, field.span())
                         .and_then(|o| newtype_extra_attribute_checks(o, field.span()))?;
                     field_to_schema_expr(&field, &field_attributes.with)
