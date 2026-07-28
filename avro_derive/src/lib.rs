@@ -24,6 +24,7 @@
 //! use apache_avro::AvroSchema;
 //!
 //! #[derive(AvroSchema)]
+//! struct MyStruct;
 //! ```
 //! Please see the documentation of the [`AvroSchema`] trait for instructions on how to use it.
 //!
