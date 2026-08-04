@@ -21,9 +21,14 @@ mod block;
 pub mod datum;
 pub mod single_object;
 
-use std::{collections::HashMap, io::Read, marker::PhantomData};
+use std::{
+    collections::HashMap,
+    io::{Read, Seek},
+    marker::PhantomData,
+};
 
 use block::Block;
+pub use block::BlockPosition;
 use bon::bon;
 use serde::de::DeserializeOwned;
 
@@ -76,11 +81,15 @@ impl<'a, R: Read> Reader<'a, R> {
         reader_schema: Option<&'a Schema>,
         schemata: Option<Vec<&'a Schema>>,
         #[builder(default = is_human_readable())] human_readable: bool,
+        /// Track byte offsets so [`Reader::current_block`] and
+        /// [`Reader::data_start`] return useful values. Off by default.
+        #[builder(default = false)]
+        seekable: bool,
     ) -> AvroResult<Reader<'a, R>> {
         let schemata =
             schemata.unwrap_or_else(|| reader_schema.map(|rs| vec![rs]).unwrap_or_default());
 
-        let block = Block::new(reader, schemata, human_readable)?;
+        let block = Block::new(reader, schemata, human_readable, seekable)?;
         let mut reader = Reader {
             block,
             reader_schema,
@@ -156,6 +165,42 @@ impl<R: Read> Iterator for Reader<'_, R> {
                 Some(Err(e))
             }
         }
+    }
+}
+
+impl<R: Read> Reader<'_, R> {
+    /// The currently loaded block's position and record count.
+    ///
+    /// Returns `None` when position tracking was not enabled (see the
+    /// `seekable` builder option) or before the first block has been
+    /// loaded via iteration or [`seek_to_block`](Self::seek_to_block).
+    pub fn current_block(&self) -> Option<BlockPosition> {
+        self.block.current_block_info
+    }
+
+    /// Byte offset where data blocks begin (right after the file header).
+    ///
+    /// Equivalent to the offset of block 0. `None` when position tracking (`seekable`) was
+    /// not enabled at construction.
+    pub fn data_start(&self) -> Option<u64> {
+        self.block.data_start
+    }
+}
+
+impl<R: Read + Seek> Reader<'_, R> {
+    /// Seek to the data block at the given byte offset and load it.
+    ///
+    /// The offset must point to the start of a valid data block (before its
+    /// object-count varint). The block is read, decompressed, and its sync
+    /// marker is validated against the file header. After this call, [`Iterator::next`]
+    /// yields the first record in that block.
+    ///
+    /// Typically the caller saves offsets from [`current_block`](Self::current_block)
+    /// during forward iteration and later passes them here to jump back.
+    pub fn seek_to_block(&mut self, offset: u64) -> AvroResult<()> {
+        let seek_status = self.block.seek_to_block(offset);
+        self.errored = seek_status.is_err();
+        seek_status
     }
 }
 
@@ -365,5 +410,141 @@ mod tests {
         } else {
             panic!("Expected an error in the reading of the codec!");
         }
+    }
+
+    /// Write an Avro file with multiple blocks and verify we can seek between them.
+    #[test]
+    fn test_seek_to_block() -> TestResult {
+        use crate::writer::Writer;
+
+        let schema = Schema::parse_str(SCHEMA)?;
+        let mut writer = Writer::new(&schema, Vec::new())?;
+
+        // Block 0: records with a=10, a=20
+        let mut r = Record::new(&schema).unwrap();
+        r.put("a", 10i64);
+        r.put("b", "b0_r0");
+        writer.append_value(r)?;
+        let mut r = Record::new(&schema).unwrap();
+        r.put("a", 20i64);
+        r.put("b", "b0_r1");
+        writer.append_value(r)?;
+        writer.flush()?;
+
+        // Block 1: records with a=30, a=40
+        let mut r = Record::new(&schema).unwrap();
+        r.put("a", 30i64);
+        r.put("b", "b1_r0");
+        writer.append_value(r)?;
+        let mut r = Record::new(&schema).unwrap();
+        r.put("a", 40i64);
+        r.put("b", "b1_r1");
+        writer.append_value(r)?;
+        writer.flush()?;
+
+        // Block 2: records with a=50
+        let mut r = Record::new(&schema).unwrap();
+        r.put("a", 50i64);
+        r.put("b", "b2_r0");
+        writer.append_value(r)?;
+        writer.flush()?;
+
+        let data = writer.into_inner()?;
+
+        // Read forward and collect block positions
+        let mut reader = Reader::builder(Cursor::new(&data)).seekable(true).build()?;
+        let mut block_offsets: Vec<BlockPosition> = Vec::new();
+        let mut all_values: Vec<Value> = Vec::new();
+
+        assert!(reader.current_block().is_none());
+
+        while let Some(value) = reader.next() {
+            all_values.push(value?);
+            let pos = reader.current_block().expect("block info after read");
+            if block_offsets
+                .last()
+                .is_none_or(|last| last.offset() != pos.offset())
+            {
+                block_offsets.push(pos);
+            }
+        }
+
+        assert_eq!(all_values.len(), 5);
+        assert_eq!(block_offsets.len(), 3);
+        assert_eq!(block_offsets[0].message_count(), 2);
+        assert_eq!(block_offsets[1].message_count(), 2);
+        assert_eq!(block_offsets[2].message_count(), 1);
+        assert_eq!(reader.data_start(), Some(block_offsets[0].offset()));
+
+        // Seek back to block 1 and read its records
+        reader.seek_to_block(block_offsets[1].offset())?;
+        let v1 = reader.next().unwrap()?;
+        assert_eq!(v1, all_values[2]);
+        let v2 = reader.next().unwrap()?;
+        assert_eq!(v2, all_values[3]);
+
+        // Seek back to block 0
+        reader.seek_to_block(block_offsets[0].offset())?;
+        let v0 = reader.next().unwrap()?;
+        assert_eq!(v0, all_values[0]);
+
+        // Seek to block 2
+        reader.seek_to_block(block_offsets[2].offset())?;
+        let v4 = reader.next().unwrap()?;
+        assert_eq!(v4, all_values[4]);
+
+        assert!(reader.next().is_none());
+
+        Ok(())
+    }
+
+    /// Seeking to an invalid offset should fail with a sync marker error.
+    #[test]
+    fn test_seek_to_invalid_offset() -> TestResult {
+        use crate::writer::Writer;
+
+        let schema = Schema::parse_str(SCHEMA)?;
+        let mut writer = Writer::new(&schema, Vec::new())?;
+        let mut r = Record::new(&schema).unwrap();
+        r.put("a", 1i64);
+        r.put("b", "x");
+        writer.append_value(r)?;
+        writer.flush()?;
+        let data = writer.into_inner()?;
+
+        let mut reader = Reader::builder(Cursor::new(&data)).seekable(true).build()?;
+        assert!(reader.seek_to_block(7).is_err());
+
+        Ok(())
+    }
+
+    /// Seeking to outside the data
+    #[test]
+    fn test_seek_after_eof() -> TestResult {
+        use crate::writer::Writer;
+
+        let schema = Schema::parse_str(SCHEMA)?;
+        let mut writer = Writer::new(&schema, Vec::new())?;
+        let mut r = Record::new(&schema).unwrap();
+        r.put("a", 1i64);
+        r.put("b", "x");
+        writer.append_value(r)?;
+        writer.flush()?;
+        let data = writer.into_inner()?;
+
+        let mut reader = Reader::builder(Cursor::new(&data)).seekable(true).build()?;
+
+        let eof = data.len() as u64;
+        let _ = reader.seek_to_block(eof);
+        assert_eq!(reader.current_block(), None);
+        let next = reader.next();
+        assert!(next.is_none());
+
+        let _ = reader.seek_to_block(eof + 1);
+        assert_eq!(reader.current_block(), None);
+        let next = reader.next();
+        assert!(next.is_none());
+
+        Ok(())
     }
 }
