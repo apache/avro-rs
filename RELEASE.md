@@ -5,11 +5,12 @@
 # in avro-rs Git clone
 git switch main && git pull --rebase
 export AVRO_RS_VERSION=0.22.0
+export AVRO_RC_VERSION=RC0
 # update the version in Cargo.toml files to $AVRO_RS_VERSION
 git commit -am "Update version to $AVRO_RS_VERSION"
-git tag -s rel/release-$AVRO_RS_VERSION-rc0 -m "Avro-rs $AVRO_RS_VERSION RC0 release."
-git archive HEAD -o apache-avro-rs-$AVRO_RS_VERSION-RC0.tgz
-git push origin rel/release-$AVRO_RS_VERSION-rc0
+git tag -s rel/release-$AVRO_RS_VERSION-$AVRO_RC_VERSION -m "Avro-rs $AVRO_RS_VERSION $AVRO_RC_VERSION release."
+git archive HEAD --prefix=apache-avro-rs-$AVRO_RS_VERSION-$AVRO_RC_VERSION/ -o apache-avro-rs-$AVRO_RS_VERSION-$AVRO_RC_VERSION.tgz
+git push origin rel/release-$AVRO_RS_VERSION-$AVRO_RC_VERSION
 ```
 
 Note: make sure your GPG key is in https://dist.apache.org/repos/dist/release/avro/KEYS
@@ -18,13 +19,13 @@ Note: make sure your GPG key is in https://dist.apache.org/repos/dist/release/av
 ```
 # checkout the 'dev' dist SVN repo
 svn co https://dist.apache.org/repos/dist/dev/avro/ dev-avro
-cd dev-avro/avro-rs
-mkdir $AVRO_RS_VERSION && cd $AVRO_RS_VERSION
-cp .../apache-avro-rs-$AVRO_RS_VERSION-RC0.tgz .
-sha256sum apache-avro-rs-$AVRO_RS_VERSION-RC0.tgz > apache-avro-rs-$AVRO_RS_VERSION-RC0.tgz.sha256
-gpg --armor --output apache-avro-rs-$AVRO_RS_VERSION-RC0.tgz.asc --detach-sig apache-avro-rs-$AVRO_RS_VERSION-RC0.tgz
+cd dev-avro/avro-rs || exit
+mkdir "$AVRO_RS_VERSION" && cd "$AVRO_RS_VERSION" || exit
+cp .../apache-avro-rs-"$AVRO_RS_VERSION"-"$AVRO_RC_VERSION".tgz .
+sha256sum apache-avro-rs-"$AVRO_RS_VERSION"-"$AVRO_RC_VERSION".tgz > apache-avro-rs-"$AVRO_RS_VERSION"-"$AVRO_RC_VERSION".tgz.sha256
+gpg --armor --output apache-avro-rs-"$AVRO_RS_VERSION"-"$AVRO_RC_VERSION".tgz.asc --detach-sig apache-avro-rs-"$AVRO_RS_VERSION"-"$AVRO_RC_VERSION".tgz
 cd ..
-svn add $AVRO_RS_VERSION
+svn add "$AVRO_RS_VERSION"
 svn ci -m "Add sources of avro-rs $AVRO_RS_VERSION for voting"
 ```
 
