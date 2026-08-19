@@ -1110,7 +1110,15 @@ impl Value {
                     Err(Details::CompareFixedSizes { size, n }.into())
                 }
             }
-            Value::String(s) => Ok(Value::Fixed(s.len(), s.into_bytes())),
+            Value::String(s) => {
+                if s.len() > size {
+                    Err(Details::CompareFixedSizes { size, n: s.len() }.into())
+                } else {
+                    let mut bytes = s.into_bytes();
+                    bytes.resize(size, 0);
+                    Ok(Value::Fixed(size, bytes))
+                }
+            }
             Value::Bytes(s) => {
                 if s.len() == size {
                     Ok(Value::Fixed(size, s))
@@ -3642,5 +3650,113 @@ Field with name '"b"' is not a member of the map items"#,
                 .to_string(),
             "JSON number 18446744073709551615 could not be converted into an Avro value as it's too large"
         );
+    }
+
+    #[test]
+    fn avro_rs_542_test_bigger_string_to_smaller_fixed_resolution() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"
+        {
+            "name": "test",
+            "type": "record",
+            "fields": [{
+                "name": "test_field",
+                "type": {
+                    "name": "myFixed",
+                    "type": "fixed",
+                    "size": 2
+                }
+            }]
+        }"#,
+        )?;
+
+        let long_string = "This string is too long and won't fit!!".to_string();
+        let value = Value::Record(vec![(
+            "test_field".to_string(),
+            Value::String(long_string.clone()),
+        )]);
+
+        assert_eq!(
+            value.resolve(&schema)
+            .expect_err("Expected resolution to fail since string is too large for the given fixed schema size")
+            .into_details()
+            .to_string(),
+            Details::CompareFixedSizes { size: 2, n: long_string.len() }.to_string()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_542_test_smaller_string_to_bigger_fixed_resolution() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"
+        {
+            "name": "test",
+            "type": "record",
+            "fields": [{
+                "name": "test_field",
+                "type": {
+                    "name": "myFixed",
+                    "type": "fixed",
+                    "size": 6
+                }
+            }]
+        }"#,
+        )?;
+
+        let mut value = Value::Record(vec![(
+            "test_field".to_string(),
+            Value::String("abc".to_string()),
+        )]);
+
+        value = value.resolve(&schema)?;
+
+        assert_eq!(
+            value,
+            Value::Record(vec![(
+                "test_field".to_string(),
+                Value::Fixed(6, vec![97, 98, 99, 0, 0, 0])
+            )])
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_542_test_smaller_string_to_bigger_fixed_resolution_idempotence() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"
+        {
+            "name": "test",
+            "type": "record",
+            "fields": [{
+                "name": "test_field",
+                "type": {
+                    "name": "myFixed",
+                    "type": "fixed",
+                    "size": 6
+                }
+            }]
+        }"#,
+        )?;
+
+        let mut value = Value::Record(vec![(
+            "test_field".to_string(),
+            Value::String("abc".to_string()),
+        )]);
+
+        value = value.resolve(&schema)?;
+        value = value.resolve(&schema)?;
+
+        assert_eq!(
+            value,
+            Value::Record(vec![(
+                "test_field".to_string(),
+                Value::Fixed(6, vec![97, 98, 99, 0, 0, 0])
+            )])
+        );
+
+        Ok(())
     }
 }
