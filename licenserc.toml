@@ -15,13 +15,22 @@
 # specific language governing permissions and limitations
 # under the License.
 
-headerPath = "Apache-2.0-ASF.txt"
+[header]
+builtin = "Apache-2.0-ASF"
+
+[files]
 excludes = [
   "*.stderr",
   "*.expanded.rs",
   "*.avro",
+  "**/*.lock",
+  "**/*.md",
+  "**/.gitignore",
+  "**/LICENSE",
+  # rustfmt removes the separator that HawkEye writes after this header-only placeholder.
+  "wasm-demo/src/lib.rs",
   "NOTICE",
   "README.tpl",
   ".requirements-precommit.txt",
-  "*.proptest-regressions"
+  "*.proptest-regressions",
 ]
