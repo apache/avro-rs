@@ -22,7 +22,7 @@ use crate::schema::{
     SchemaKind, UnionSchema, UuidSchema,
 };
 use crate::types;
-use crate::util::MapHelper;
+use crate::util::{MapHelper, safe_len};
 use crate::validator::validate_enum_symbol_name;
 use crate::{AvroResult, Error};
 use log::{debug, error, warn};
@@ -772,6 +772,11 @@ impl Parser {
                 .ok_or_else(|| Details::GetFixedSizeFieldPositive(size.clone())),
             None => Err(Details::GetFixedSizeField),
         }?;
+        // A fixed schema's size directs decoders to allocate that many bytes,
+        // and the schema itself may be attacker-supplied (e.g. an OCF header).
+        // Always bound it before allocating.
+        let size = usize::try_from(size).map_err(|e| Details::ConvertU64ToUsize(e, size))?;
+        let size = safe_len(size)?;
 
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
         let aliases =
@@ -781,7 +786,7 @@ impl Parser {
             name: fully_qualified_name.clone(),
             aliases: aliases.clone(),
             doc,
-            size: size as usize,
+            size,
             attributes: self.get_custom_attributes(complex, &["size"]),
         });
 

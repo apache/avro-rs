@@ -612,6 +612,29 @@ mod tests {
     }
 
     #[test]
+    fn avro_rs_640_test_decode_fixed_size_above_budget_is_rejected() -> TestResult {
+        use crate::schema::Name;
+
+        // The schema (and with it the fixed size) can be attacker-supplied
+        // via an OCF header; the decoder must refuse to allocate more than
+        // the budget, before reading a single payload byte.
+        let schema = Schema::Fixed(
+            FixedSchema::builder()
+                .name(Name::new("huge")?)
+                .size(usize::MAX / 2)
+                .build(),
+        );
+        let mut input: &[u8] = &[0u8; 4];
+        let result = decode(&schema, &mut input);
+        assert!(
+            result.is_err(),
+            "a fixed size larger than the allocation budget must be rejected, got {result:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn test_decode_map_without_size() -> TestResult {
         let mut input: &[u8] = &[0x02, 0x08, 0x74, 0x65, 0x73, 0x74, 0x02, 0x00];
         let result = decode(&Schema::map(Schema::Int).build(), &mut input);
