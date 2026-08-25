@@ -74,6 +74,7 @@ impl GenericSingleObjectReader {
         let config = Config {
             names: self.write_schema.get_names(),
             human_readable: self.human_readable,
+            recursion_depth: 0,
         };
         T::deserialize(SchemaAwareDeserializer::new(
             reader,

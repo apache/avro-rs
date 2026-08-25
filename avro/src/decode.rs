@@ -25,8 +25,8 @@ use crate::{
     schema::{DecimalSchema, EnumSchema, FixedSchema, Name, RecordSchema, ResolvedSchema, Schema},
     types::Value,
     util::{
-        DEFAULT_MAX_ALLOCATION_BYTES, max_allocation_bytes, safe_collection_len, safe_len, zag_i32,
-        zag_i64,
+        DEFAULT_MAX_ALLOCATION_BYTES, decode_recursion_limit, max_allocation_bytes,
+        safe_collection_len, safe_len, zag_i32, zag_i64,
     },
 };
 use std::{
@@ -78,9 +78,12 @@ fn decode_seq_len<R: Read>(reader: &mut R) -> AvroResult<usize> {
 /// every allocation performed while decoding one datum is debited from a
 /// shared budget of [`max_allocation_bytes`] bytes, instead of each
 /// collection only being checked in isolation.
+#[derive(Debug)]
 pub(crate) struct DecodeContext {
     /// Bytes still available for allocations while decoding the current datum.
     remaining_budget: usize,
+    /// Current recursion depth of `decode_internal`.
+    depth: usize,
 }
 
 impl DecodeContext {
@@ -90,6 +93,7 @@ impl DecodeContext {
     pub(crate) fn new() -> Self {
         Self {
             remaining_budget: max_allocation_bytes(DEFAULT_MAX_ALLOCATION_BYTES),
+            depth: 0,
         }
     }
 
@@ -121,6 +125,23 @@ impl DecodeContext {
             .ok_or(Details::IntegerOverflow)?;
         self.debit_bytes(bytes)
     }
+
+    /// Track one level of decoding recursion, erroring once the configured
+    /// maximum depth is exceeded.
+    fn enter(&mut self) -> AvroResult<()> {
+        self.depth += 1;
+        let maximum = decode_recursion_limit();
+        if self.depth > maximum {
+            Err(Details::DecodeRecursionLimit { maximum }.into())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Leave one level of decoding recursion.
+    fn leave(&mut self) {
+        self.depth -= 1;
+    }
 }
 
 /// Decode a `Value` from avro format given its `Schema`.
@@ -136,6 +157,19 @@ pub fn decode<R: Read>(schema: &Schema, reader: &mut R) -> AvroResult<Value> {
 }
 
 pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
+    schema: &Schema,
+    names: &HashMap<Name, S>,
+    enclosing_namespace: NamespaceRef,
+    reader: &mut R,
+    ctx: &mut DecodeContext,
+) -> AvroResult<Value> {
+    ctx.enter()?;
+    let value = decode_internal_body(schema, names, enclosing_namespace, reader, ctx);
+    ctx.leave();
+    value
+}
+
+fn decode_internal_body<R: Read, S: Borrow<Schema>>(
     schema: &Schema,
     names: &HashMap<Name, S>,
     enclosing_namespace: NamespaceRef,
@@ -456,6 +490,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
 mod tests {
     use crate::error::Details;
     use crate::schema::{InnerDecimalSchema, UuidSchema};
+    use crate::util::decode_recursion_limit;
     use crate::{
         Decimal,
         decode::decode,
@@ -630,6 +665,29 @@ mod tests {
             result.is_err(),
             "a fixed size larger than the allocation budget must be rejected, got {result:?}"
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_642_test_decode_recursion_depth_is_bounded() -> TestResult {
+        // With a recursive schema, one wire byte per level drives unbounded
+        // recursion; the decoder must return an error instead of overflowing
+        // the stack (which would abort the process).
+        let schema = Schema::parse_str(
+            r#"{
+                "type": "record",
+                "name": "Node",
+                "fields": [
+                    {"name": "next", "type": ["null", "Node"]}
+                ]
+            }"#,
+        )?;
+        let recursion_depth_trigger = decode_recursion_limit() + 1;
+        // Each 0x02 byte selects the "Node" union branch, one level deeper.
+        let payload = vec![0x02u8; recursion_depth_trigger];
+        let result = decode(&schema, &mut payload.as_slice());
+        assert!(result.is_err(), "unbounded recursion must be rejected");
 
         Ok(())
     }

@@ -18,6 +18,7 @@
 //! Utility functions, like configuring various global settings.
 
 use crate::{AvroResult, error::Details, schema::Documentation};
+use log::warn;
 use serde_json::{Map, Value};
 use std::{
     io::{Read, Write},
@@ -31,6 +32,15 @@ use std::{
 /// See [`max_allocation_bytes`] to change this limit.
 pub const DEFAULT_MAX_ALLOCATION_BYTES: usize = 512 * 1024 * 1024;
 static MAX_ALLOCATION_BYTES: OnceLock<usize> = OnceLock::new();
+
+/// Maximum recursion depth when decoding or resolving Avro-encoded values.
+///
+/// This protects against stack exhaustion (an abort, not a catchable error) from deeply nested
+/// data: a recursive schema lets an attacker drive one recursion level with roughly one wire byte.
+///
+/// See [`max_decode_recursion_depth`] to change this limit.
+pub const DEFAULT_MAX_DECODE_RECURSION_DEPTH: usize = 32;
+static MAX_DECODE_RECURSION_DEPTH: OnceLock<usize> = OnceLock::new();
 
 /// Whether to set serialization & deserialization traits as `human_readable` or not.
 ///
@@ -170,6 +180,30 @@ fn decode_variable<R: Read>(reader: &mut R) -> AvroResult<u64> {
 /// value was already set before.
 pub fn max_allocation_bytes(num_bytes: usize) -> usize {
     *MAX_ALLOCATION_BYTES.get_or_init(|| num_bytes)
+}
+
+/// Set the maximum recursion depth used when decoding or resolving data.
+///
+/// This function only changes the setting once. On subsequent calls the value will stay the same
+/// as the first time it is called. It is automatically called on first decode and defaults to
+/// [`DEFAULT_MAX_DECODE_RECURSION_DEPTH`].
+///
+/// # Returns
+/// The configured maximum, which might be different from what the function was called with if the
+/// value was already set before. In that case a warning is logged.
+pub fn max_decode_recursion_depth(depth: usize) -> usize {
+    let configured = *MAX_DECODE_RECURSION_DEPTH.get_or_init(|| depth);
+    if configured != depth {
+        warn!(
+            "max_decode_recursion_depth({depth}) has no effect: the limit was already set to {configured}"
+        );
+    }
+    configured
+}
+
+/// The effective decode recursion limit, initializing the default if unset.
+pub(crate) fn decode_recursion_limit() -> usize {
+    *MAX_DECODE_RECURSION_DEPTH.get_or_init(|| DEFAULT_MAX_DECODE_RECURSION_DEPTH)
 }
 
 pub(crate) fn safe_len(len: usize) -> AvroResult<usize> {

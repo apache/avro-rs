@@ -24,7 +24,7 @@ use crate::{
     decode::decode_len,
     error::Details,
     schema::{DecimalSchema, InnerDecimalSchema, Name, UnionSchema, UuidSchema},
-    util::{safe_len, zag_i32, zag_i64},
+    util::{decode_recursion_limit, safe_len, zag_i32, zag_i64},
 };
 
 mod block;
@@ -50,6 +50,12 @@ pub struct Config<'s, S: Borrow<Schema>> {
     pub names: &'s HashMap<Name, S>,
     /// Was the data serialized with `human_readable`.
     pub human_readable: bool,
+    /// Current recursion depth of the deserializer.
+    ///
+    /// Every nesting level of the deserialized value creates a new
+    /// [`SchemaAwareDeserializer`], which increments this; the depth is
+    /// bounded by [`crate::util::max_decode_recursion_depth`].
+    pub(crate) recursion_depth: usize,
 }
 
 impl<'s, S: Borrow<Schema>> Config<'s, S> {
@@ -88,8 +94,16 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
     pub fn new(
         reader: &'r mut R,
         schema: &'s Schema,
-        config: Config<'s, S>,
+        mut config: Config<'s, S>,
     ) -> Result<Self, Error> {
+        // Bound the recursion depth so deeply nested (possibly hostile) data
+        // yields an error instead of exhausting the stack. A recursive schema
+        // lets roughly one wire byte drive one nesting level.
+        config.recursion_depth += 1;
+        let maximum = decode_recursion_limit();
+        if config.recursion_depth > maximum {
+            return Err(Details::DecodeRecursionLimit { maximum }.into());
+        }
         if let Schema::Ref { name } = schema {
             let schema = config.get_schema(name)?;
             Ok(Self {
