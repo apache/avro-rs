@@ -332,7 +332,10 @@ fn read_codec(metadata: &HashMap<String, Value>) -> AvroResult<Codec> {
                         if let Some(Value::Bytes(bytes)) =
                             metadata.get("avro.codec.compression_level")
                         {
-                            Ok(Codec::Bzip2(Bzip2Settings::new(bytes[0])))
+                            match bytes.first() {
+                                Some(&level) => Ok(Codec::Bzip2(Bzip2Settings::new(level))),
+                                None => Err(Details::BadCodecMetadata.into()),
+                            }
                         } else {
                             Ok(codec)
                         }
@@ -343,7 +346,10 @@ fn read_codec(metadata: &HashMap<String, Value>) -> AvroResult<Codec> {
                         if let Some(Value::Bytes(bytes)) =
                             metadata.get("avro.codec.compression_level")
                         {
-                            Ok(Codec::Xz(XzSettings::new(bytes[0])))
+                            match bytes.first() {
+                                Some(&level) => Ok(Codec::Xz(XzSettings::new(level))),
+                                None => Err(Details::BadCodecMetadata.into()),
+                            }
                         } else {
                             Ok(codec)
                         }
@@ -354,7 +360,10 @@ fn read_codec(metadata: &HashMap<String, Value>) -> AvroResult<Codec> {
                         if let Some(Value::Bytes(bytes)) =
                             metadata.get("avro.codec.compression_level")
                         {
-                            Ok(Codec::Zstandard(ZstandardSettings::new(bytes[0])))
+                            match bytes.first() {
+                                Some(&level) => Ok(Codec::Zstandard(ZstandardSettings::new(level))),
+                                None => Err(Details::BadCodecMetadata.into()),
+                            }
                         } else {
                             Ok(codec)
                         }
@@ -375,6 +384,45 @@ mod tests {
     use crate::error::Details;
     use crate::{Codec, Schema};
     use apache_avro_test_helper::TestResult;
+
+    #[cfg(any(feature = "bzip", feature = "xz", feature = "zstandard"))]
+    fn empty_compression_level_errors_for(codec_name: &str) {
+        use crate::types::Value;
+        use std::collections::HashMap;
+
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "avro.codec".to_string(),
+            Value::Bytes(codec_name.as_bytes().to_vec()),
+        );
+        metadata.insert(
+            "avro.codec.compression_level".to_string(),
+            Value::Bytes(vec![]),
+        );
+
+        // An empty compression_level in attacker-controlled metadata must be
+        // a clean error, not an index-out-of-bounds panic.
+        let err = super::read_codec(&metadata).unwrap_err().into_details();
+        assert!(matches!(err, Details::BadCodecMetadata), "{err:?}");
+    }
+
+    #[cfg(feature = "bzip")]
+    #[test]
+    fn avro_rs_644_empty_bzip2_compression_level_is_rejected() {
+        empty_compression_level_errors_for("bzip2");
+    }
+
+    #[cfg(feature = "xz")]
+    #[test]
+    fn avro_rs_644_empty_xz_compression_level_is_rejected() {
+        empty_compression_level_errors_for("xz");
+    }
+
+    #[cfg(feature = "zstandard")]
+    #[test]
+    fn avro_rs_644_empty_zstandard_compression_level_is_rejected() {
+        empty_compression_level_errors_for("zstandard");
+    }
 
     #[test]
     fn avro_rs_643_huge_message_count_on_empty_block_is_rejected() -> TestResult {
