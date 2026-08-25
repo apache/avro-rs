@@ -34,13 +34,6 @@ thread_local! {
 #[cfg(not(target_arch = "wasm32"))]
 #[ctor(unsafe)]
 fn before_all() {
-    // better stacktraces in tests
-    better_panic::Settings::new()
-        .most_recent_first(true)
-        .lineno_suffix(false)
-        .backtrace_first(true)
-        .install();
-
     // enable logging in tests
     logger::install();
 }

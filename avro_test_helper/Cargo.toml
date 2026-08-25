@@ -30,7 +30,6 @@ readme = "README.md"
 
 
 [dependencies]
-better-panic = { default-features = false, version = "0.3.0" }
 linktime = { default-features = false, version = "0.19.0", features = ["ctor", "dtor", "proc_macro"]  }
 env_logger = { default-features = false, version = "0.11.10" }
 log = { workspace = true }
