@@ -27,7 +27,7 @@ use serde_json::from_slice;
 
 use crate::{
     AvroResult, Codec, Error,
-    decode::{decode, decode_internal},
+    decode::{DecodeContext, decode, decode_internal},
     error::Details,
     schema::{Names, Schema, resolve_names, resolve_names_with_schemata},
     serde::deser_schema::{Config, SchemaAwareDeserializer},
@@ -195,11 +195,13 @@ impl<'r, R: Read> Block<'r, R> {
         let mut block_bytes = &self.buf[self.buf_idx..];
         let b_original = block_bytes.len();
 
+        let mut ctx = DecodeContext::new();
         let item = decode_internal(
             &self.writer_schema,
             &self.names_refs,
             None,
             &mut block_bytes,
+            &mut ctx,
         )?;
         let item = match read_schema {
             Some(schema) => item.resolve(schema)?,

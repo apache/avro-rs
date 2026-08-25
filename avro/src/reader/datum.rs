@@ -22,7 +22,7 @@ use serde::de::DeserializeOwned;
 
 use crate::{
     AvroResult, AvroSchema, Schema,
-    decode::decode_internal,
+    decode::{DecodeContext, decode_internal},
     schema::{ResolvedOwnedSchema, ResolvedSchema},
     serde::deser_schema::{Config, SchemaAwareDeserializer},
     types::Value,
@@ -130,7 +130,14 @@ impl<'s, S: generic_datum_reader_builder::State> GenericDatumReaderBuilder<'s, S
 impl<'s> GenericDatumReader<'s> {
     /// Read a Avro datum from the reader.
     pub fn read_value<R: Read>(&self, reader: &mut R) -> AvroResult<Value> {
-        let value = decode_internal(self.writer, self.resolved.get_names(), None, reader)?;
+        let mut ctx = DecodeContext::new();
+        let value = decode_internal(
+            self.writer,
+            self.resolved.get_names(),
+            None,
+            reader,
+            &mut ctx,
+        )?;
         if let Some((reader, resolved)) = &self.reader {
             value.resolve_internal(reader, resolved.get_names(), None, None)
         } else {
