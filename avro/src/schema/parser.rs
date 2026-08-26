@@ -772,7 +772,7 @@ impl Parser {
                 .ok_or_else(|| Details::GetFixedSizeFieldPositive(size.clone())),
             None => Err(Details::GetFixedSizeField),
         }?;
-
+        let size = usize::try_from(size).map_err(|e| Details::ConvertU64ToUsize(e, size))?;
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
         let aliases =
             self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace())?;
@@ -781,7 +781,7 @@ impl Parser {
             name: fully_qualified_name.clone(),
             aliases: aliases.clone(),
             doc,
-            size: size as usize,
+            size,
             attributes: self.get_custom_attributes(complex, &["size"]),
         });
 

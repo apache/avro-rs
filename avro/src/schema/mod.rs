@@ -1203,6 +1203,7 @@ fn field_ordering_position(field: &str) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::{DEFAULT_MAX_ALLOCATION_BYTES, max_allocation_bytes};
     use crate::writer::datum::GenericDatumWriter;
     use crate::{error::Details, rabin::Rabin, reader::datum::GenericDatumReader};
     use apache_avro_test_helper::{
@@ -1215,6 +1216,28 @@ mod tests {
     #[test]
     fn test_invalid_schema() {
         assert!(Schema::parse_str("invalid").is_err());
+    }
+
+    #[test]
+    fn avro_rs_640_test_fixed_size_above_allocation_limit_is_rejected_at_parse() -> TestResult {
+        // A fixed schema's size is an allocation directive for decoders, so
+        // parsing must bound it ("schema parsing is safe" is a stated
+        // contract) instead of letting a hostile schema declare a
+        // terabyte-scale allocation.
+        let min_disallowed = max_allocation_bytes(DEFAULT_MAX_ALLOCATION_BYTES) + 1;
+        let result = Schema::parse_str(&format!(
+            r#"\{{"type": "fixed", "name": "huge", "size": {min_disallowed}}}"#
+        ));
+        assert!(result.is_err(), "expected a parse error, got {result:?}");
+
+        // A reasonable size must still parse.
+        let schema = Schema::parse_str(r#"{"type": "fixed", "name": "ok", "size": 16}"#)?;
+        assert!(matches!(
+            schema,
+            Schema::Fixed(FixedSchema { size: 16, .. })
+        ));
+
+        Ok(())
     }
 
     #[test]

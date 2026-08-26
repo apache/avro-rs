@@ -24,7 +24,7 @@ use crate::{
     decode::decode_len,
     error::Details,
     schema::{DecimalSchema, InnerDecimalSchema, Name, UnionSchema, UuidSchema},
-    util::{zag_i32, zag_i64},
+    util::{safe_len, zag_i32, zag_i64},
 };
 
 mod block;
@@ -190,6 +190,10 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
     ///
     /// This does not check the current schema.
     fn read_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error> {
+        // `length` may be schema-declared rather than wire-declared (e.g. a
+        // fixed size from an attacker-supplied OCF writer schema); always
+        // bound it before allocating.
+        let length = safe_len(length)?;
         let mut buf = vec![0; length];
         self.reader
             .read_exact(&mut buf)
@@ -791,6 +795,30 @@ mod tests {
             .read_deser(&mut &buf[..])?;
 
         assert_eq!(decoded_value, value);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_640_fixed_size_above_allocation_limit_is_rejected() -> TestResult {
+        use crate::schema::{FixedSchema, Name};
+
+        // The serde path must bound schema-declared fixed sizes exactly like
+        // the Value path does.
+        let schema = Schema::Fixed(
+            FixedSchema::builder()
+                .name(Name::new("huge")?)
+                .size(usize::MAX / 2)
+                .build(),
+        );
+        let data = [0u8; 4];
+        let result = GenericDatumReader::builder(&schema)
+            .build()?
+            .read_deser::<ByteBuf>(&mut &data[..]);
+        assert!(
+            result.is_err(),
+            "a fixed size larger than the allocation budget must be rejected, got {result:?}"
+        );
 
         Ok(())
     }
