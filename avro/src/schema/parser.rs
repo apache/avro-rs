@@ -22,7 +22,7 @@ use crate::schema::{
     SchemaKind, UnionSchema, UuidSchema,
 };
 use crate::types;
-use crate::util::{MapHelper, safe_len};
+use crate::util::MapHelper;
 use crate::validator::validate_enum_symbol_name;
 use crate::{AvroResult, Error};
 use log::{debug, error, warn};
