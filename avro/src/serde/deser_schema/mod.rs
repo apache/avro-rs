@@ -96,9 +96,7 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
         schema: &'s Schema,
         mut config: Config<'s, S>,
     ) -> Result<Self, Error> {
-        // Bound the recursion depth so deeply nested (possibly hostile) data
-        // yields an error instead of exhausting the stack. A recursive schema
-        // lets roughly one wire byte drive one nesting level.
+        // Bound the recursion depth to guard against stack exhaustion
         config.recursion_depth += 1;
         let maximum = decode_recursion_limit();
         if config.recursion_depth > maximum {

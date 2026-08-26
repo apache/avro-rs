@@ -21,7 +21,7 @@ use apache_avro::util::max_decode_recursion_depth;
 use apache_avro_test_helper::TestResult;
 use serde::{Deserialize, Serialize};
 
-// This is an IT test because it sets the default recursion depth limit (OnceLock).
+// This is an integration test because it sets the default recursion depth limit (OnceLock).
 
 #[test]
 fn avro_rs_642_recursion_depth_is_bounded() -> TestResult {

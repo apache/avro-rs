@@ -35,8 +35,7 @@ static MAX_ALLOCATION_BYTES: OnceLock<usize> = OnceLock::new();
 
 /// Maximum recursion depth when decoding or resolving Avro-encoded values.
 ///
-/// This protects against stack exhaustion (an abort, not a catchable error) from deeply nested
-/// data: a recursive schema lets an attacker drive one recursion level with roughly one wire byte.
+/// This protects against stack exhaustion aborts from deeply nested data.
 ///
 /// See [`max_decode_recursion_depth`] to change this limit.
 pub const DEFAULT_MAX_DECODE_RECURSION_DEPTH: usize = 32;
