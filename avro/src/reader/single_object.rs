@@ -22,7 +22,7 @@ use serde::de::DeserializeOwned;
 
 use crate::{
     AvroResult, AvroSchema, Schema,
-    decode::decode_internal,
+    decode::{DecodeContext, decode_internal},
     error::Details,
     headers::{HeaderBuilder, RabinFingerprintHeader},
     schema::ResolvedOwnedSchema,
@@ -65,6 +65,7 @@ impl GenericSingleObjectReader {
             self.write_schema.get_names(),
             None,
             reader,
+            &mut DecodeContext::new(),
         )
     }
 
