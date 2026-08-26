@@ -569,6 +569,11 @@ pub enum Details {
     #[error("Overflow when decoding integer value")]
     IntegerOverflow,
 
+    #[error(
+        "Maximum decode recursion depth reached (maximum: {maximum}). Change the limit using `apache_avro::util::max_decode_recursion_depth`"
+    )]
+    DecodeRecursionLimit { maximum: usize },
+
     #[error("Failed to read bytes for decoding variable length integer: {0}")]
     ReadVariableIntegerBytes(#[source] std::io::Error),
 

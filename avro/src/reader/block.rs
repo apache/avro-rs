@@ -237,6 +237,7 @@ impl<'r, R: Read> Block<'r, R> {
             let config = Config {
                 names: &self.names_refs,
                 human_readable: self.human_readable,
+                recursion_depth: 0,
             };
             T::deserialize(SchemaAwareDeserializer::new(
                 &mut block_bytes,

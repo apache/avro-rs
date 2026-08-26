@@ -27,6 +27,7 @@ use crate::{
         DecimalSchema, EnumSchema, FixedSchema, Name, Precision, RecordField, RecordSchema,
         ResolvedSchema, Scale, Schema, SchemaKind, UnionSchema,
     },
+    util::decode_recursion_limit,
 };
 use bigdecimal::BigDecimal;
 use log::{debug, error};
@@ -744,12 +745,31 @@ impl Value {
     }
 
     pub(crate) fn resolve_internal<S: Borrow<Schema> + Debug>(
-        mut self,
+        self,
         schema: &Schema,
         names: &HashMap<Name, S>,
         enclosing_namespace: NamespaceRef,
         field_default: Option<&JsonValue>,
     ) -> AvroResult<Self> {
+        self.resolve_internal_depth(schema, names, enclosing_namespace, field_default, 0)
+    }
+
+    fn resolve_internal_depth<S: Borrow<Schema> + Debug>(
+        mut self,
+        schema: &Schema,
+        names: &HashMap<Name, S>,
+        enclosing_namespace: NamespaceRef,
+        field_default: Option<&JsonValue>,
+        depth: usize,
+    ) -> AvroResult<Self> {
+        // Resolution recurses over both the value and the (possibly
+        // attacker-supplied) schema; bound the depth so hostile input yields
+        // an error instead of exhausting the stack.
+        let depth = depth + 1;
+        let maximum = decode_recursion_limit();
+        if depth > maximum {
+            return Err(Details::DecodeRecursionLimit { maximum }.into());
+        }
         // Check if this schema is a union, and if the reader schema is not.
         if SchemaKind::from(&self) == SchemaKind::Union
             && SchemaKind::from(schema) != SchemaKind::Union
@@ -767,7 +787,13 @@ impl Value {
 
                 if let Some(resolved) = names.get(&name) {
                     debug!("Resolved {name:?}");
-                    self.resolve_internal(resolved.borrow(), names, name.namespace(), field_default)
+                    self.resolve_internal_depth(
+                        resolved.borrow(),
+                        names,
+                        name.namespace(),
+                        field_default,
+                        depth,
+                    )
                 } else {
                     error!("Failed to resolve schema {name:?}");
                     Err(Details::SchemaResolutionError(name.into_owned()).into())
@@ -783,16 +809,21 @@ impl Value {
             Schema::String => self.resolve_string(),
             Schema::Fixed(FixedSchema { size, .. }) => self.resolve_fixed(*size),
             Schema::Union(inner) => {
-                self.resolve_union(inner, names, enclosing_namespace, field_default)
+                self.resolve_union(inner, names, enclosing_namespace, field_default, depth)
             }
             Schema::Enum(EnumSchema {
                 symbols, default, ..
             }) => self.resolve_enum(symbols, default, field_default),
-            Schema::Array(inner) => self.resolve_array(&inner.items, names, enclosing_namespace),
-            Schema::Map(inner) => self.resolve_map(&inner.types, names, enclosing_namespace),
-            Schema::Record(RecordSchema { fields, name, .. }) => {
-                self.resolve_record(fields, names, name.namespace().or(enclosing_namespace))
+            Schema::Array(inner) => {
+                self.resolve_array(&inner.items, names, enclosing_namespace, depth)
             }
+            Schema::Map(inner) => self.resolve_map(&inner.types, names, enclosing_namespace, depth),
+            Schema::Record(RecordSchema { fields, name, .. }) => self.resolve_record(
+                fields,
+                names,
+                name.namespace().or(enclosing_namespace),
+                depth,
+            ),
             Schema::Decimal(DecimalSchema {
                 scale,
                 precision,
@@ -1166,6 +1197,7 @@ impl Value {
         names: &HashMap<Name, S>,
         enclosing_namespace: NamespaceRef,
         field_default: Option<&JsonValue>,
+        depth: usize,
     ) -> Result<Self, Error> {
         let v = match self {
             // Both are unions case.
@@ -1182,7 +1214,13 @@ impl Value {
 
         Ok(Value::Union(
             i as u32,
-            Box::new(v.resolve_internal(inner, names, enclosing_namespace, field_default)?),
+            Box::new(v.resolve_internal_depth(
+                inner,
+                names,
+                enclosing_namespace,
+                field_default,
+                depth,
+            )?),
         ))
     }
 
@@ -1191,12 +1229,15 @@ impl Value {
         schema: &Schema,
         names: &HashMap<Name, S>,
         enclosing_namespace: NamespaceRef,
+        depth: usize,
     ) -> Result<Self, Error> {
         match self {
             Value::Array(items) => Ok(Value::Array(
                 items
                     .into_iter()
-                    .map(|item| item.resolve_internal(schema, names, enclosing_namespace, None))
+                    .map(|item| {
+                        item.resolve_internal_depth(schema, names, enclosing_namespace, None, depth)
+                    })
                     .collect::<Result<_, _>>()?,
             )),
             other => Err(Details::GetArray {
@@ -1212,6 +1253,7 @@ impl Value {
         schema: &Schema,
         names: &HashMap<Name, S>,
         enclosing_namespace: NamespaceRef,
+        depth: usize,
     ) -> Result<Self, Error> {
         match self {
             Value::Map(items) => Ok(Value::Map(
@@ -1219,7 +1261,7 @@ impl Value {
                     .into_iter()
                     .map(|(key, value)| {
                         value
-                            .resolve_internal(schema, names, enclosing_namespace, None)
+                            .resolve_internal_depth(schema, names, enclosing_namespace, None, depth)
                             .map(|value| (key, value))
                     })
                     .collect::<Result<_, _>>()?,
@@ -1237,6 +1279,7 @@ impl Value {
         fields: &[RecordField],
         names: &HashMap<Name, S>,
         enclosing_namespace: NamespaceRef,
+        depth: usize,
     ) -> Result<Self, Error> {
         let mut items = match self {
             Value::Map(items) => Ok(items),
@@ -1275,12 +1318,14 @@ impl Value {
                                     _ => Value::Union(
                                         0,
                                         Box::new(
-                                            Value::try_from(value.clone())?.resolve_internal(
-                                                first,
-                                                names,
-                                                enclosing_namespace,
-                                                field.default.as_ref(),
-                                            )?,
+                                            Value::try_from(value.clone())?
+                                                .resolve_internal_depth(
+                                                    first,
+                                                    names,
+                                                    enclosing_namespace,
+                                                    field.default.as_ref(),
+                                                    depth,
+                                                )?,
                                         ),
                                     ),
                                 }
@@ -1293,11 +1338,12 @@ impl Value {
                     },
                 };
                 value
-                    .resolve_internal(
+                    .resolve_internal_depth(
                         &field.schema,
                         names,
                         enclosing_namespace,
                         field.default.as_ref(),
+                        depth,
                     )
                     .map(|value| (field.name.clone(), value))
             })

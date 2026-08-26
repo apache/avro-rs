@@ -161,6 +161,7 @@ impl<'s> GenericDatumReader<'s> {
                 Config {
                     names: self.resolved.get_names(),
                     human_readable: self.human_readable,
+                    recursion_depth: 0,
                 },
             )?)
         }
@@ -203,6 +204,7 @@ impl<T: AvroSchema + DeserializeOwned> SpecificDatumReader<T> {
             Config {
                 names: self.resolved.get_names(),
                 human_readable: self.human_readable,
+                recursion_depth: 0,
             },
         )?)
     }
