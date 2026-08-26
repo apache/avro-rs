@@ -20,7 +20,7 @@ use std::{borrow::Borrow, collections::HashMap, io::Read};
 use serde::de::{Deserializer, Visitor};
 
 use crate::{
-    Error, Schema,
+    AvroResult, Error, Schema,
     decode::decode_len,
     error::Details,
     schema::{DecimalSchema, InnerDecimalSchema, Name, UnionSchema, UuidSchema},
@@ -60,11 +60,26 @@ pub struct Config<'s, S: Borrow<Schema>> {
 
 impl<'s, S: Borrow<Schema>> Config<'s, S> {
     /// Get the schema for this name.
-    fn get_schema(&self, name: &Name) -> Result<&'s Schema, Error> {
+    fn get_schema(&self, name: &Name) -> AvroResult<&'s Schema> {
         self.names
             .get(name)
             .map(Borrow::borrow)
             .ok_or_else(|| Details::SchemaResolutionError(name.clone()).into())
+    }
+
+    /// Increments the recursion depth counter and checks whether it exceeds the defined recursion limit.
+    ///
+    /// # Errors
+    /// Returns an error of type `AvroError` with `DecodeRecursionLimit` details if the recursion depth
+    /// exceeds the configured maximum.
+    fn recurse(&mut self) -> AvroResult<()> {
+        self.recursion_depth += 1;
+        let maximum = decode_recursion_limit();
+        if self.recursion_depth > maximum {
+            Err(Details::DecodeRecursionLimit { maximum }.into())
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -95,13 +110,8 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
         reader: &'r mut R,
         schema: &'s Schema,
         mut config: Config<'s, S>,
-    ) -> Result<Self, Error> {
-        // Bound the recursion depth to guard against stack exhaustion
-        config.recursion_depth += 1;
-        let maximum = decode_recursion_limit();
-        if config.recursion_depth > maximum {
-            return Err(Details::DecodeRecursionLimit { maximum }.into());
-        }
+    ) -> AvroResult<Self> {
+        config.recurse()?;
         if let Schema::Ref { name } = schema {
             let schema = config.get_schema(name)?;
             Ok(Self {
@@ -132,7 +142,8 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
     /// Create a new deserializer with the existing reader and config.
     ///
     /// This will resolve the schema if it is a reference.
-    fn with_different_schema(mut self, schema: &'s Schema) -> Result<Self, Error> {
+    fn with_different_schema(mut self, schema: &'s Schema) -> AvroResult<Self> {
+        self.config.recurse()?;
         self.schema = if let Schema::Ref { name } = schema {
             self.config.get_schema(name)?
         } else {
@@ -144,7 +155,7 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
     /// Read the union and create a new deserializer with the existing reader and config.
     ///
     /// This will resolve the read schema if it is a reference.
-    fn with_union(self, schema: &'s UnionSchema) -> Result<Self, Error> {
+    fn with_union(self, schema: &'s UnionSchema) -> AvroResult<Self> {
         let index = zag_i32(self.reader)?;
         let index = usize::try_from(index).map_err(|e| Details::ConvertI32ToUsize(e, index))?;
         let variant = schema.get_variant(index)?;
@@ -155,7 +166,7 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
     ///
     /// This will check that the current schema is [`Schema::Int`] or a logical type based on that.
     /// It does not read [`Schema::Union`]s.
-    fn checked_read_int(&mut self, original_ty: &'static str) -> Result<i32, Error> {
+    fn checked_read_int(&mut self, original_ty: &'static str) -> AvroResult<i32> {
         match self.schema {
             Schema::Int | Schema::Date | Schema::TimeMillis => zag_i32(self.reader),
             _ => Err(self.error(
@@ -169,7 +180,7 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
     ///
     /// This will check that the current schema is [`Schema::Long`] or a logical type based on that.
     /// It does not read [`Schema::Union`]s.
-    fn checked_read_long(&mut self, original_ty: &'static str) -> Result<i64, Error> {
+    fn checked_read_long(&mut self, original_ty: &'static str) -> AvroResult<i64> {
         match self.schema {
             Schema::Long | Schema::TimeMicros | Schema::TimestampMillis | Schema::TimestampMicros
             | Schema::TimestampNanos | Schema::LocalTimestampMillis | Schema::LocalTimestampMicros
@@ -185,7 +196,7 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
     /// Read a string from the reader.
     ///
     /// This does not check the current schema.
-    fn read_string(&mut self) -> Result<String, Error> {
+    fn read_string(&mut self) -> AvroResult<String> {
         let bytes = self.read_bytes_with_len()?;
         Ok(String::from_utf8(bytes).map_err(Details::ConvertToUtf8)?)
     }
@@ -193,7 +204,7 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
     /// Read a bytes from the reader.
     ///
     /// This does not check the current schema.
-    fn read_bytes_with_len(&mut self) -> Result<Vec<u8>, Error> {
+    fn read_bytes_with_len(&mut self) -> AvroResult<Vec<u8>> {
         let length = decode_len(self.reader)?;
         self.read_bytes(length)
     }
@@ -201,7 +212,7 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
     /// Read `n` bytes from the reader.
     ///
     /// This does not check the current schema.
-    fn read_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error> {
+    fn read_bytes(&mut self, length: usize) -> AvroResult<Vec<u8>> {
         // `length` may be schema-declared rather than wire-declared (e.g. a
         // fixed size from an attacker-supplied OCF writer schema); always
         // bound it before allocating.
@@ -216,7 +227,7 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
     /// Read `n` bytes from the reader.
     ///
     /// This does not check the current schema.
-    fn read_array<const N: usize>(&mut self) -> Result<[u8; N], Error> {
+    fn read_array<const N: usize>(&mut self) -> AvroResult<[u8; N]> {
         let mut buf = [0; N];
         self.reader
             .read_exact(&mut buf)
@@ -227,10 +238,10 @@ impl<'s, 'r, R: Read, S: Borrow<Schema>> SchemaAwareDeserializer<'s, 'r, R, S> {
 
 /// A static string that will bypass name checks in `deserialize_*` functions.
 ///
-/// This is used so that `deserialize_any` can use the `deserialize_*` implementation which take
+/// This is used so that `deserialize_any` can use the `deserialize_*` implementation that takes
 /// a static string.
 ///
-/// We don't want users to abuse this feature so this value is compared by pointer address, therefore
+/// We don't want users to abuse this feature, so this value is compared by pointer address, therefore,
 /// a user providing the string below will not be able to skip name validation.
 static DESERIALIZE_ANY: &str = "This value is compared by pointer value";
 /// A static array so that `deserialize_any` can call `deserialize_*` functions.
