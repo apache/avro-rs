@@ -55,7 +55,7 @@ pub struct Config<'s, S: Borrow<Schema>> {
     /// Every nesting level of the deserialized value creates a new
     /// [`SchemaAwareDeserializer`], which increments this; the depth is
     /// bounded by [`crate::util::max_decode_recursion_depth`].
-    pub(crate) recursion_depth: usize,
+    pub recursion_depth: usize,
 }
 
 impl<'s, S: Borrow<Schema>> Config<'s, S> {
