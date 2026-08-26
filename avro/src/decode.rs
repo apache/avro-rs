@@ -85,7 +85,7 @@ pub(crate) struct DecodeContext {
 
 impl DecodeContext {
     /// Create a new context.
-    /// 
+    ///
     /// This should only be done when a new datum is being decoded, never during the decoding.
     pub(crate) fn new() -> Self {
         Self {
@@ -126,7 +126,13 @@ impl DecodeContext {
 /// Decode a `Value` from avro format given its `Schema`.
 pub fn decode<R: Read>(schema: &Schema, reader: &mut R) -> AvroResult<Value> {
     let rs = ResolvedSchema::try_from(schema)?;
-    decode_internal(schema, rs.get_names(), None, reader, &mut DecodeContext::new())
+    decode_internal(
+        schema,
+        rs.get_names(),
+        None,
+        reader,
+        &mut DecodeContext::new(),
+    )
 }
 
 pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
@@ -448,6 +454,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
 #[cfg(test)]
 #[allow(clippy::expect_fun_call)]
 mod tests {
+    use crate::error::Details;
     use crate::schema::{InnerDecimalSchema, UuidSchema};
     use crate::{
         Decimal,
@@ -579,6 +586,11 @@ mod tests {
         assert!(
             result.is_err(),
             "nested collections must share one allocation budget, got {result:?}"
+        );
+        let details = result.unwrap_err().into_details();
+        assert!(
+            matches!(details, Details::MemoryAllocation { .. }),
+            "Expected memory allocation error, got: {details:?}"
         );
 
         Ok(())
