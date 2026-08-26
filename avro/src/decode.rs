@@ -84,15 +84,19 @@ pub(crate) struct DecodeContext {
 }
 
 impl DecodeContext {
-    /// Create a fresh context. Call once per datum.
+    /// Create a new context.
+    /// 
+    /// This should only be done when a new datum is being decoded, never during the decoding.
     pub(crate) fn new() -> Self {
         Self {
             remaining_budget: max_allocation_bytes(DEFAULT_MAX_ALLOCATION_BYTES),
         }
     }
 
-    /// Debit `bytes` from the per-datum allocation budget, erroring when the
-    /// cumulative allocations for this datum would exceed it.
+    /// Debit `bytes` from the per-datum allocation budget
+    ///
+    /// # Errors
+    /// `Details::MemoryAllocation` if the maximum budget is exceeded.
     fn debit(&mut self, bytes: usize) -> AvroResult<()> {
         match self.remaining_budget.checked_sub(bytes) {
             Some(remaining) => {
@@ -107,9 +111,12 @@ impl DecodeContext {
         }
     }
 
-    /// Debit the budget for `items` collection elements of type `T`.
-    fn debit_items<T>(&mut self, items: usize) -> AvroResult<()> {
-        let bytes = items
+    /// Debit the amount of bytes for `n` items of `T`.
+    ///
+    /// # Errors
+    /// `Details::MemoryAllocation` if the maximum budget is exceeded.
+    fn debit_items<T>(&mut self, n: usize) -> AvroResult<()> {
+        let bytes = n
             .checked_mul(size_of::<T>())
             .ok_or(Details::IntegerOverflow)?;
         self.debit(bytes)
@@ -279,9 +286,6 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
             }
         }
         Schema::Fixed(FixedSchema { size, .. }) => {
-            // The size is schema-declared, not wire-declared, but the schema
-            // itself may be attacker-supplied (e.g. an OCF header), so it must
-            // be debited from the allocation budget like any other length.
             ctx.debit(*size)?;
             let mut buf = vec![0u8; *size];
             reader
@@ -304,9 +308,6 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                     .checked_add(len)
                     .ok_or(Details::IntegerOverflow)?;
                 safe_collection_len::<Value>(total)?;
-                // Elements can be arbitrarily cheap on the wire (e.g. null),
-                // so also debit the per-datum budget: nested collections must
-                // not multiply the allocation budget.
                 ctx.debit_items::<Value>(len)?;
                 // Use reserve_exact as reserve can allocate more than needed defeating the purpose
                 // of the previous check
@@ -341,7 +342,6 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                     .checked_add(len)
                     .ok_or(Details::IntegerOverflow)?;
                 safe_collection_len::<(String, Value)>(total)?;
-                // See the Array arm: nested collections share one budget.
                 ctx.debit_items::<(String, Value)>(len)?;
 
                 items.reserve(len);
@@ -388,8 +388,6 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
         },
         Schema::Record(RecordSchema { name, fields, .. }) => {
             let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
-            // Records can consume zero wire bytes (e.g. all-null fields), so
-            // debit the budget for the field vector and the cloned names.
             ctx.debit_items::<(String, Value)>(fields.len())?;
             // Benchmarks indicate ~10% improvement using this method.
             let mut items = Vec::with_capacity(fields.len());
