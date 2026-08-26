@@ -772,12 +772,7 @@ impl Parser {
                 .ok_or_else(|| Details::GetFixedSizeFieldPositive(size.clone())),
             None => Err(Details::GetFixedSizeField),
         }?;
-        // A fixed schema's size directs decoders to allocate that many bytes,
-        // and the schema itself may be attacker-supplied (e.g. an OCF header).
-        // Always bound it before allocating.
         let size = usize::try_from(size).map_err(|e| Details::ConvertU64ToUsize(e, size))?;
-        let size = safe_len(size)?;
-
         let fully_qualified_name = Name::parse(complex, enclosing_namespace)?;
         let aliases =
             self.fix_aliases_namespace(complex.aliases(), fully_qualified_name.namespace())?;
