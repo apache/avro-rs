@@ -97,7 +97,7 @@ impl DecodeContext {
     ///
     /// # Errors
     /// `Details::MemoryAllocation` if the maximum budget is exceeded.
-    fn debit(&mut self, bytes: usize) -> AvroResult<()> {
+    fn debit_bytes(&mut self, bytes: usize) -> AvroResult<()> {
         match self.remaining_budget.checked_sub(bytes) {
             Some(remaining) => {
                 self.remaining_budget = remaining;
@@ -119,7 +119,7 @@ impl DecodeContext {
         let bytes = n
             .checked_mul(size_of::<T>())
             .ok_or(Details::IntegerOverflow)?;
-        self.debit(bytes)
+        self.debit_bytes(bytes)
     }
 }
 
@@ -263,14 +263,14 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
         }
         Schema::Bytes => {
             let len = decode_len(reader)?;
-            ctx.debit(len)?;
+            ctx.debit_bytes(len)?;
             let mut buf = vec![0u8; len];
             reader.read_exact(&mut buf).map_err(Details::ReadBytes)?;
             Ok(Value::Bytes(buf))
         }
         Schema::String => {
             let len = decode_len(reader)?;
-            ctx.debit(len)?;
+            ctx.debit_bytes(len)?;
             let mut buf = vec![0u8; len];
             match reader.read_exact(&mut buf) {
                 Ok(_) => Ok(Value::String(
@@ -286,7 +286,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
             }
         }
         Schema::Fixed(FixedSchema { size, .. }) => {
-            ctx.debit(*size)?;
+            ctx.debit_bytes(*size)?;
             let mut buf = vec![0u8; *size];
             reader
                 .read_exact(&mut buf)
@@ -392,7 +392,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
             // Benchmarks indicate ~10% improvement using this method.
             let mut items = Vec::with_capacity(fields.len());
             for field in fields {
-                ctx.debit(field.name.len())?;
+                ctx.debit_bytes(field.name.len())?;
                 // TODO: This clone is also expensive. See if we can do away with it...
                 items.push((
                     field.name.clone(),
@@ -414,7 +414,7 @@ pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(
                 if (0..symbols.len()).contains(&index) {
                     // Cloning the symbol allocates without consuming wire
                     // bytes, so it counts against the per-datum budget.
-                    ctx.debit(symbols[index].len())?;
+                    ctx.debit_bytes(symbols[index].len())?;
                     let symbol = symbols[index].clone();
                     Value::Enum(raw_index as u32, symbol)
                 } else {
