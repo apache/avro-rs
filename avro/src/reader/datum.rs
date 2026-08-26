@@ -130,13 +130,12 @@ impl<'s, S: generic_datum_reader_builder::State> GenericDatumReaderBuilder<'s, S
 impl<'s> GenericDatumReader<'s> {
     /// Read a Avro datum from the reader.
     pub fn read_value<R: Read>(&self, reader: &mut R) -> AvroResult<Value> {
-        let mut ctx = DecodeContext::new();
         let value = decode_internal(
             self.writer,
             self.resolved.get_names(),
             None,
             reader,
-            &mut ctx,
+            &mut DecodeContext::new(),
         )?;
         if let Some((reader, resolved)) = &self.reader {
             value.resolve_internal(reader, resolved.get_names(), None, None)

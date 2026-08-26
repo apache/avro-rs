@@ -119,8 +119,7 @@ impl DecodeContext {
 /// Decode a `Value` from avro format given its `Schema`.
 pub fn decode<R: Read>(schema: &Schema, reader: &mut R) -> AvroResult<Value> {
     let rs = ResolvedSchema::try_from(schema)?;
-    let mut ctx = DecodeContext::new();
-    decode_internal(schema, rs.get_names(), None, reader, &mut ctx)
+    decode_internal(schema, rs.get_names(), None, reader, &mut DecodeContext::new())
 }
 
 pub(crate) fn decode_internal<R: Read, S: Borrow<Schema>>(

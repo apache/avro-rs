@@ -60,13 +60,12 @@ impl GenericSingleObjectReader {
 impl GenericSingleObjectReader {
     pub fn read_value<R: Read>(&self, reader: &mut R) -> AvroResult<Value> {
         self.read_header(reader)?;
-        let mut ctx = DecodeContext::new();
         decode_internal(
             self.write_schema.get_root_schema(),
             self.write_schema.get_names(),
             None,
             reader,
-            &mut ctx,
+            &mut DecodeContext::new(),
         )
     }
 

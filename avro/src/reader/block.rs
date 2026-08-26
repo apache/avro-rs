@@ -195,13 +195,12 @@ impl<'r, R: Read> Block<'r, R> {
         let mut block_bytes = &self.buf[self.buf_idx..];
         let b_original = block_bytes.len();
 
-        let mut ctx = DecodeContext::new();
         let item = decode_internal(
             &self.writer_schema,
             &self.names_refs,
             None,
             &mut block_bytes,
-            &mut ctx,
+            &mut DecodeContext::new(),
         )?;
         let item = match read_schema {
             Some(schema) => item.resolve(schema)?,
