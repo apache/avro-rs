@@ -813,7 +813,7 @@ impl Value {
             }
             Schema::Enum(EnumSchema {
                 symbols, default, ..
-            }) => self.resolve_enum(symbols, default, field_default),
+            }) => self.resolve_enum(symbols, default.as_deref()),
             Schema::Array(inner) => {
                 self.resolve_array(&inner.items, names, enclosing_namespace, depth)
             }
@@ -1156,8 +1156,7 @@ impl Value {
     pub(crate) fn resolve_enum(
         self,
         symbols: &[String],
-        enum_default: &Option<String>,
-        _field_default: Option<&JsonValue>,
+        enum_default: Option<&str>,
     ) -> Result<Self, Error> {
         let validate_symbol = |symbol: String, symbols: &[String]| {
             if let Some(index) = symbols.iter().position(|item| item == &symbol) {
@@ -1166,7 +1165,7 @@ impl Value {
                 match enum_default {
                     Some(default) => {
                         if let Some(index) = symbols.iter().position(|item| item == default) {
-                            Ok(Value::Enum(index as u32, default.clone()))
+                            Ok(Value::Enum(index as u32, default.to_string()))
                         } else {
                             Err(Details::GetEnumDefault {
                                 symbol,
@@ -1304,11 +1303,8 @@ impl Value {
                                 ref symbols,
                                 ref default,
                                 ..
-                            }) => Value::try_from(value.clone())?.resolve_enum(
-                                symbols,
-                                default,
-                                field.default.as_ref(),
-                            )?,
+                            }) => Value::try_from(value.clone())?
+                                .resolve_enum(symbols, default.as_deref())?,
                             Schema::Union(ref union_schema) => {
                                 let first = &union_schema.variants()[0];
                                 // NOTE: this match exists only to optimize null defaults for large
