@@ -288,9 +288,9 @@ impl<'r, R: Read> Block<'r, R> {
                 &HashMap::new(),
             )?;
             self.names_refs = names.into_iter().map(|(n, s)| (n, s.clone())).collect();
-            self.writer_schema = Schema::parse_with_names(&json, self.names_refs.clone())?;
+            self.writer_schema = Schema::parse_with_names(json, self.names_refs.clone())?;
         } else {
-            self.writer_schema = Schema::parse(&json)?;
+            self.writer_schema = Schema::parse(json)?;
             let mut names = HashMap::new();
             resolve_names(&self.writer_schema, &mut names, None, &HashMap::new())?;
             self.names_refs = names.into_iter().map(|(n, s)| (n, s.clone())).collect();

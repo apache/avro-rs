@@ -304,6 +304,9 @@ pub enum Details {
     #[error("No `name` field")]
     GetNameField,
 
+    #[error("Expected a string for the `name` field, got a {0}")]
+    GetNamespaceFieldWrongType(&'static str),
+
     #[error("No `name` in record field")]
     GetNameFieldFromRecord,
 
@@ -431,8 +434,20 @@ pub enum Details {
     #[error("No `fields` in record")]
     GetRecordFieldsJson,
 
+    #[error("Expected an object in the array of the `fields` field, got a {0}")]
+    GetRecordFieldsArrayInvalidType(&'static str),
+
+    #[error("Expected an array of objects for the `fields` field, got a {0}")]
+    GetRecordFieldsInvalidType(&'static str),
+
     #[error("No `symbols` field in enum")]
     GetEnumSymbolsField,
+
+    #[error("Expected an array of strings for the `symbols` field, got a {0}")]
+    GetEnumSymbolsFieldInvalidType(&'static str),
+
+    #[error("Expected a string in the array of the `symbols` field, got a {0}")]
+    GetEnumSymbolsFieldArrayInvalidType(&'static str),
 
     #[error("Unable to parse `symbols` in enum")]
     GetEnumSymbols,
@@ -486,6 +501,18 @@ pub enum Details {
 
     #[error("Fixed schema has no `size`")]
     GetFixedSizeField,
+
+    #[error("Expected an unsigned integer for the `size` field, got a {0}")]
+    GetFixedSizeFieldInvalidType(&'static str),
+
+    #[error("Expected an array of strings for the `aliases` field, got a {0}")]
+    GetAliasesFieldInvalidType(&'static str),
+
+    #[error("Expected a string in the array for the `aliases` field, got a {0}")]
+    GetAliasesFieldArrayInvalidType(&'static str),
+
+    #[error("Expected a string for the `{0}` field, got a {1}")]
+    GetStringInvalidType(&'static str, &'static str),
 
     #[deprecated(since = "0.22.0", note = "This error variant is not generated anymore")]
     #[error("Fixed schema's default value length ({0}) does not match its size ({1})")]

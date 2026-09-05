@@ -50,35 +50,72 @@ pub const DEFAULT_SERDE_HUMAN_READABLE: bool = false;
 pub(crate) static SERDE_HUMAN_READABLE: OnceLock<bool> = OnceLock::new();
 
 pub(crate) trait MapHelper {
-    fn string(&self, key: &str) -> Option<&str>;
+    fn string(&mut self, key: &'static str) -> AvroResult<Option<String>>;
 
-    fn name(&self) -> Option<&str> {
-        self.string("name")
+    fn str(&self, key: &'static str) -> AvroResult<Option<&str>>;
+
+    fn name(&mut self) -> AvroResult<String> {
+        self.string("name")?
+            .ok_or_else(|| Details::GetNameField.into())
     }
 
-    fn doc(&self) -> Documentation {
-        self.string("doc").map(Into::into)
+    fn name_ref(&self) -> AvroResult<Option<&str>> {
+        self.str("name")
     }
 
-    fn aliases(&self) -> Option<Vec<String>>;
+    fn doc(&mut self) -> AvroResult<Documentation> {
+        self.string("doc")
+    }
+
+    fn aliases(&mut self) -> AvroResult<Option<Vec<String>>>;
 }
 
 impl MapHelper for Map<String, Value> {
-    fn string(&self, key: &str) -> Option<&str> {
-        self.get(key).and_then(|v| v.as_str())
+    fn string(&mut self, key: &'static str) -> AvroResult<Option<String>> {
+        match self.remove(key) {
+            Some(Value::String(s)) => Ok(Some(s)),
+            Some(value) => Err(Details::GetStringInvalidType(key, value.description()).into()),
+            None => Ok(None),
+        }
     }
 
-    fn aliases(&self) -> Option<Vec<String>> {
-        // FIXME no warning when aliases aren't a json array of json strings
-        self.get("aliases")
-            .and_then(|aliases| aliases.as_array())
-            .and_then(|aliases| {
-                aliases
-                    .iter()
-                    .map(|alias| alias.as_str())
-                    .map(|alias| alias.map(|a| a.to_string()))
-                    .collect::<Option<_>>()
-            })
+    fn str(&self, key: &'static str) -> AvroResult<Option<&str>> {
+        match self.get(key) {
+            Some(Value::String(s)) => Ok(Some(s)),
+            Some(value) => Err(Details::GetStringInvalidType(key, value.description()).into()),
+            None => Ok(None),
+        }
+    }
+
+    fn aliases(&mut self) -> AvroResult<Option<Vec<String>>> {
+        match self.remove("aliases") {
+            Some(Value::Array(array)) => array
+                .into_iter()
+                .map(|v| match v {
+                    Value::String(s) => Ok(s),
+                    _ => Err(Details::GetAliasesFieldArrayInvalidType(v.description()).into()),
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .map(Some),
+            Some(value) => Err(Details::GetAliasesFieldInvalidType(value.description()).into()),
+            None => Ok(None),
+        }
+    }
+}
+
+pub(crate) trait JsonValueDescriber {
+    fn description(&self) -> &'static str;
+}
+impl JsonValueDescriber for Value {
+    fn description(&self) -> &'static str {
+        match self {
+            Value::Null => "null",
+            Value::Bool(_) => "bool",
+            Value::Number(_) => "number",
+            Value::String(_) => "string",
+            Value::Array(_) => "array",
+            Value::Object(_) => "object",
+        }
     }
 }
 
