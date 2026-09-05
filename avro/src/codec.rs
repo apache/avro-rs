@@ -96,9 +96,7 @@ impl Codec {
                     .compress(&stream[..], &mut encoded[..])
                     .map_err(Details::SnappyCompress)?;
 
-                let mut hasher = crc32fast::Hasher::new();
-                hasher.update(&stream[..]);
-                let checksum = hasher.finalize();
+                let checksum = crc_fast::crc32_iso_hdlc(&stream[..]);
                 let checksum_as_bytes = checksum.to_be_bytes();
                 let checksum_len = checksum_as_bytes.len();
                 encoded.truncate(compressed_size + checksum_len);
@@ -191,9 +189,7 @@ impl Codec {
                 last_four.copy_from_slice(&stream[data_end..]);
                 let expected: u32 = u32::from_be_bytes(last_four);
 
-                let mut hasher = crc32fast::Hasher::new();
-                hasher.update(&decoded);
-                let actual = hasher.finalize();
+                let actual = crc_fast::crc32_iso_hdlc(&decoded);
 
                 if expected != actual {
                     return Err(Details::SnappyCrc32{expected, actual}.into());
@@ -352,6 +348,17 @@ mod tests {
     #[test]
     fn snappy_compress_and_decompress() -> TestResult {
         compress_and_decompress(Codec::Snappy)
+    }
+
+    #[cfg(feature = "snappy")]
+    #[test]
+    fn avro_rs_660_snappy_compress_writes_crc32_iso_hdlc_trailer() -> TestResult {
+        let mut stream = b"123456789".to_vec();
+        Codec::Snappy.compress(&mut stream)?;
+
+        assert_eq!(stream[stream.len() - 4..], 0xcbf4_3926_u32.to_be_bytes());
+
+        Ok(())
     }
 
     #[cfg(feature = "snappy")]
