@@ -352,7 +352,7 @@ mod tests {
 
     #[cfg(feature = "snappy")]
     #[test]
-    fn snappy_compress_writes_crc32_iso_hdlc_trailer() -> TestResult {
+    fn avro_rs_660_snappy_compress_writes_crc32_iso_hdlc_trailer() -> TestResult {
         let mut stream = b"123456789".to_vec();
         Codec::Snappy.compress(&mut stream)?;
 
