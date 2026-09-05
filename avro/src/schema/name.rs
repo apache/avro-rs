@@ -15,20 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use serde::{Deserialize, Serialize, Serializer};
-use serde_json::{Map, Value};
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::fmt::{Debug, Display, Formatter};
-use std::str::FromStr;
-
-use crate::util::JsonValueDescriber;
 use crate::{
     AvroResult, Error, Schema,
     error::Details,
     util::MapHelper,
     validator::{validate_namespace, validate_schema_name},
 };
+use serde::{Deserialize, Serialize, Serializer};
+use serde_json::{Map, Value};
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::fmt::{Debug, Display, Formatter};
+use std::str::FromStr;
+use std::sync::Arc;
 
 /// Represents names for `record`, `enum` and `fixed` Avro schemas.
 ///
@@ -43,7 +42,7 @@ use crate::{
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub struct Name {
     /// The full name
-    namespace_and_name: String,
+    namespace_and_name: Arc<str>,
     /// Start byte of the name part
     ///
     /// If this is zero, then there is no namespace.
@@ -92,7 +91,7 @@ impl Name {
         {
             validate_namespace(namespace)?;
             Ok(Self {
-                namespace_and_name: format!("{namespace}.{name_ref}"),
+                namespace_and_name: format!("{namespace}.{name_ref}").into(),
                 index_of_name: namespace.len() + 1,
             })
         } else if index_of_name == 1 {
@@ -103,7 +102,7 @@ impl Name {
             })
         } else {
             Ok(Self {
-                namespace_and_name: name.into(),
+                namespace_and_name: Arc::from(name.into()),
                 index_of_name,
             })
         }
@@ -148,7 +147,7 @@ impl Name {
         {
             format!("{namespace}.{}", self.namespace_and_name)
         } else {
-            self.namespace_and_name.clone()
+            self.namespace_and_name.to_string()
         }
     }
 
@@ -172,7 +171,7 @@ impl Name {
             && !namespace.is_empty()
         {
             Cow::Owned(Self {
-                namespace_and_name: format!("{namespace}.{}", self.namespace_and_name),
+                namespace_and_name: format!("{namespace}.{}", self.namespace_and_name).into(),
                 index_of_name: namespace.len() + 1,
             })
         } else {
@@ -188,7 +187,7 @@ impl Name {
     /// Using this name will cause a panic.
     pub(crate) fn invalid_empty_name() -> Self {
         Self {
-            namespace_and_name: String::new(),
+            namespace_and_name: Arc::default(),
             index_of_name: usize::MAX,
         }
     }
@@ -347,7 +346,7 @@ mod tests {
     /// Zero-length namespace is considered as no-namespace.
     fn test_namespace_from_name_with_empty_value() -> TestResult {
         let name = Name::new(".name")?;
-        assert_eq!(name.namespace_and_name, "name");
+        assert_eq!(name.namespace_and_name.as_ref(), "name");
         assert_eq!(name.index_of_name, 0);
 
         Ok(())
