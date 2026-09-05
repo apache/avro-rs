@@ -18,7 +18,7 @@
 use crate::{
     AvroResult, Error, Schema,
     error::Details,
-    util::MapHelper,
+    util::{JsonValueDescriber, MapHelper},
     validator::{validate_namespace, validate_schema_name},
 };
 use serde::{Deserialize, Serialize, Serializer};
