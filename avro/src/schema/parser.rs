@@ -740,7 +740,7 @@ impl Parser {
         let size = match size_opt {
             Some(Value::Number(size)) => size
                 .as_u64()
-                .ok_or_else(|| Details::GetFixedSizeFieldPositive(Value::Number(size.clone()))),
+                .ok_or(Details::GetFixedSizeFieldPositive(Value::Number(size))),
             Some(v) => Err(Details::GetFixedSizeFieldInvalidType(v.description())),
             None => Err(Details::GetFixedSizeField),
         }?;

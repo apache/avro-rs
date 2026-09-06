@@ -304,7 +304,7 @@ pub enum Details {
     #[error("No `name` field")]
     GetNameField,
 
-    #[error("Expected a string for the `name` field, got a {0}")]
+    #[error("Expected a string for the `namespace` field, got a {0}")]
     GetNamespaceFieldWrongType(&'static str),
 
     #[error("No `name` in record field")]
