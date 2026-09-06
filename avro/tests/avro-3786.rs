@@ -129,10 +129,7 @@ fn avro_3786_deserialize_union_with_different_enum_order() -> TestResult {
         bar_use_parent: Some(BarUseParent { bar_use: Bar::Bar1 }),
     };
     let avro_value = to_value(foo1)?;
-    assert!(
-        avro_value.validate(&writer_schema),
-        "value is valid for schema",
-    );
+    avro_value.validate(&writer_schema)?;
     let datum = GenericDatumWriter::builder(&writer_schema)
         .build()?
         .write_value_to_vec(avro_value)?;
@@ -258,10 +255,7 @@ fn avro_3786_deserialize_union_with_different_enum_order_defined_in_record() -> 
         bar_parent: Some(BarParent { bar: Bar::Bar0 }),
     };
     let avro_value = to_value(foo1)?;
-    assert!(
-        avro_value.validate(&writer_schema),
-        "value is valid for schema",
-    );
+    avro_value.validate(&writer_schema)?;
     let datum = GenericDatumWriter::builder(&writer_schema)
         .build()?
         .write_value_to_vec(avro_value)?;
@@ -376,10 +370,7 @@ fn test_avro_3786_deserialize_union_with_different_enum_order_defined_in_record_
         bar_parent: Some(BarParent { bar: Bar::Bar1 }),
     };
     let avro_value = to_value(foo1)?;
-    assert!(
-        avro_value.validate(&writer_schema),
-        "value is valid for schema",
-    );
+    avro_value.validate(&writer_schema)?;
     let datum = GenericDatumWriter::builder(&writer_schema)
         .build()?
         .write_value_to_vec(avro_value)?;
@@ -494,10 +485,7 @@ fn test_avro_3786_deserialize_union_with_different_enum_order_defined_in_record_
         bar_parent: Some(BarParent { bar: Bar::Bar1 }),
     };
     let avro_value = to_value(foo1)?;
-    assert!(
-        avro_value.validate(&writer_schema),
-        "value is valid for schema",
-    );
+    avro_value.validate(&writer_schema)?;
     let datum = GenericDatumWriter::builder(&writer_schema)
         .build()?
         .write_value_to_vec(avro_value)?;
@@ -612,10 +600,7 @@ fn deserialize_union_with_different_enum_order_defined_in_record() -> TestResult
         bar_parent: Some(BarParent { bar: Bar::Bar2 }),
     };
     let avro_value = to_value(foo1)?;
-    assert!(
-        avro_value.validate(&writer_schema),
-        "value is valid for schema",
-    );
+    avro_value.validate(&writer_schema)?;
     let datum = GenericDatumWriter::builder(&writer_schema)
         .build()?
         .write_value_to_vec(avro_value)?;
@@ -891,10 +876,7 @@ fn deserialize_union_with_record_with_enum_defined_inline_reader_has_different_i
         }),
     };
     let avro_value = to_value(foo1)?;
-    assert!(
-        avro_value.validate(&writer_schema),
-        "value is valid for schema",
-    );
+    avro_value.validate(&writer_schema)?;
     let datum = GenericDatumWriter::builder(&writer_schema)
         .build()?
         .write_value_to_vec(avro_value)?;

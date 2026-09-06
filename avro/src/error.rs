@@ -729,6 +729,12 @@ pub enum Details {
         position: usize,
         total_elements: usize,
     },
+
+    #[error("The value is invalid for the given schema: {0}")]
+    InvalidValueForSchema(String),
+
+    #[error("The value is invalid for all the given schemas: {0:?}")]
+    InvalidValueForAllSchemas(Vec<String>),
 }
 
 #[derive(thiserror::Error, PartialEq)]

@@ -881,7 +881,7 @@ mod tests {
             }"#,
         )
         .unwrap();
-        assert!(value.validate(&schema));
+        value.validate(&schema).unwrap();
     }
 
     #[test]
