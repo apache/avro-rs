@@ -156,6 +156,12 @@ pub enum Details {
     #[error("Failed to convert Fixed bytes to UUID. It must be exactly 16 bytes, got {0}")]
     ConvertFixedToUuid(usize),
 
+    #[error("Failed to convert Bytes to UUID. It must be exactly 16 bytes, got {0}")]
+    ConvertBytesToUuid(usize),
+
+    #[error("Failed to convert String to UUID. Expected at most {0} bytes, got {0}")]
+    ConvertStringToUuid(usize, usize),
+
     #[error("Failed to convert Fixed bytes to UUID: {0}")]
     ConvertSliceToUuid(#[source] uuid::Error),
 
