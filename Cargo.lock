@@ -557,7 +557,6 @@ dependencies = [
  "apache-avro",
  "console_error_panic_hook",
  "serde",
- "wasm-bindgen",
  "wasm-bindgen-test",
 ]
 

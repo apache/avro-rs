@@ -26,7 +26,6 @@ repository.workspace = true
 keywords = ["avro", "data", "serialization", "test"]
 categories.workspace = true
 documentation = "https://docs.rs/apache-avro-test-helper"
-readme = "README.md"
 
 
 [dependencies]
