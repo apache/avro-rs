@@ -17,7 +17,7 @@
 
 use crate::schema::{InnerDecimalSchema, NamespaceRef, UuidSchema};
 use crate::{
-    AvroResult, Error,
+    AvroResult,
     bigdecimal::deserialize_big_decimal,
     decimal::Decimal,
     duration::Duration,
@@ -29,11 +29,7 @@ use crate::{
         safe_collection_len, safe_len, zag_i32, zag_i64,
     },
 };
-use std::{
-    borrow::Borrow,
-    collections::HashMap,
-    io::{ErrorKind, Read},
-};
+use std::{borrow::Borrow, collections::HashMap, io::Read};
 use uuid::Uuid;
 
 #[inline]
