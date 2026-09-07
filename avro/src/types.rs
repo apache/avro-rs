@@ -32,6 +32,7 @@ use crate::{
 use bigdecimal::BigDecimal;
 use log::{debug, error};
 use serde_json::{Number, Value as JsonValue};
+use std::fmt::Formatter;
 use std::{
     borrow::Borrow,
     collections::{BTreeMap, HashMap},
@@ -368,6 +369,67 @@ impl TryFrom<Value> for JsonValue {
     }
 }
 
+pub(crate) enum ValuePath<'a> {
+    Start,
+    Value(&'a Value, &'a ValuePath<'a>),
+    Index(usize, &'a ValuePath<'a>),
+    Key(&'a str, &'a ValuePath<'a>),
+    Field(&'a str, &'a ValuePath<'a>),
+}
+
+impl<'a> std::fmt::Display for ValuePath<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValuePath::Start => {}
+            ValuePath::Value(value, prev) => {
+                prev.fmt(f)?;
+                match value {
+                    Value::Null => write!(f, "Null")?,
+                    Value::Boolean(_) => write!(f, "Boolean")?,
+                    Value::Int(_) => write!(f, "Int")?,
+                    Value::Long(_) => write!(f, "Long")?,
+                    Value::Float(_) => write!(f, "Float")?,
+                    Value::Double(_) => write!(f, "Double")?,
+                    Value::Bytes(_) => write!(f, "Bytes")?,
+                    Value::String(_) => write!(f, "String")?,
+                    Value::Fixed(_, _) => write!(f, "Fixed")?,
+                    Value::Enum(_, _) => write!(f, "Enum")?,
+                    Value::Union(_, _) => write!(f, "Union")?,
+                    Value::Array(_) => write!(f, "Array")?,
+                    Value::Map(_) => write!(f, "Map")?,
+                    Value::Record(_) => write!(f, "Record")?,
+                    Value::Date(_) => write!(f, "Date")?,
+                    Value::Decimal(_) => write!(f, "Decimal")?,
+                    Value::BigDecimal(_) => write!(f, "BigDecimal")?,
+                    Value::TimeMillis(_) => write!(f, "TimeMillis")?,
+                    Value::TimeMicros(_) => write!(f, "TimeMicros")?,
+                    Value::TimestampMillis(_) => write!(f, "TimestampMillis")?,
+                    Value::TimestampMicros(_) => write!(f, "TimestampMicros")?,
+                    Value::TimestampNanos(_) => write!(f, "TimestampNanos")?,
+                    Value::LocalTimestampMillis(_) => write!(f, "LocalTimestampMillis")?,
+                    Value::LocalTimestampMicros(_) => write!(f, "LocalTimestampMicros")?,
+                    Value::LocalTimestampNanos(_) => write!(f, "LocalTimestampNanos")?,
+                    Value::Duration(_) => write!(f, "Duration")?,
+                    Value::Uuid(_) => write!(f, "Uuid")?,
+                }
+            }
+            ValuePath::Index(index, prev) => {
+                prev.fmt(f)?;
+                write!(f, "[{index}].")?;
+            }
+            ValuePath::Key(key, prev) => {
+                prev.fmt(f)?;
+                write!(f, r#"["{key}"]."#)?;
+            }
+            ValuePath::Field(field, prev) => {
+                prev.fmt(f)?;
+                write!(f, ".{field}.")?;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl Value {
     /// Validate the value against the given [`Schema`].
     ///
@@ -379,7 +441,7 @@ impl Value {
     /// for the full set of rules of schema validation.
     pub fn validate(&self, schema: &Schema) -> AvroResult<()> {
         let rs = ResolvedSchema::new(schema)?;
-        match self.validate_internal(schema, rs.get_names(), None) {
+        match self.validate_internal(schema, rs.get_names(), None, &ValuePath::Start) {
             Some(reason) => Err(Details::InvalidValueForSchema(reason).into()),
             None => Ok(()),
         }
@@ -398,7 +460,7 @@ impl Value {
         let schemata_len = schemata.len();
         let mut errors = Vec::with_capacity(schemata_len);
         let found = schemata.iter().any(|schema| {
-            match self.validate_internal(schema, rs.get_names(), None) {
+            match self.validate_internal(schema, rs.get_names(), None, &ValuePath::Start) {
                 Some(reason) => {
                     errors.push(reason);
                     false
@@ -423,7 +485,7 @@ impl Value {
         schema: &Schema,
         names: &HashMap<Name, S>,
     ) -> AvroResult<()> {
-        match self.validate_internal(schema, names, None) {
+        match self.validate_internal(schema, names, None, &ValuePath::Start) {
             Some(reason) => Err(Details::InvalidValueForSchema(reason).into()),
             None => Ok(()),
         }
@@ -444,6 +506,7 @@ impl Value {
         schema: &Schema,
         names: &HashMap<Name, S>,
         enclosing_namespace: NamespaceRef,
+        value_path: &ValuePath,
     ) -> Option<String> {
         match (self, schema) {
             (_, Schema::Ref { name }) => {
@@ -456,7 +519,7 @@ impl Value {
                             names.keys()
                         ))
                     },
-                    |s| self.validate_internal(s.borrow(), names, name.namespace()),
+                    |s| self.validate_internal(s.borrow(), names, name.namespace(), value_path),
                 )
             }
             (&Value::Null, &Schema::Null) => None,
@@ -490,9 +553,10 @@ impl Value {
             (&Value::Bytes(_), &Schema::Bytes) => None,
             (&Value::Bytes(_), &Schema::Decimal { .. }) => None,
             (Value::Bytes(bytes), &Schema::Uuid(UuidSchema::Bytes)) => {
+                let value_path = ValuePath::Value(self, value_path);
                 if bytes.len() != 16 {
                     Some(format!(
-                        "The value's size ({}) is not the right length for a bytes UUID (16)",
+                        "Size of {value_path} ({}) is not the right length for a bytes UUID (16)",
                         bytes.len()
                     ))
                 } else {
@@ -501,10 +565,11 @@ impl Value {
             }
             (&Value::String(_), &Schema::String) => None,
             (Value::String(string), &Schema::Uuid(UuidSchema::String)) => {
+                let value_path = ValuePath::Value(self, value_path);
                 // Non-hyphenated is 32 characters, hyphenated is longer
                 if string.len() < 32 {
                     Some(format!(
-                        "The value's size ({}) is not the right length for a string UUID (>=32)",
+                        "Size of {value_path} ({}) is not the right length for a string UUID (>=32)",
                         string.len()
                     ))
                 } else {
@@ -512,18 +577,20 @@ impl Value {
                 }
             }
             (&Value::Fixed(n, _), &Schema::Fixed(FixedSchema { size, .. })) => {
+                let value_path = ValuePath::Value(self, value_path);
                 if n != size {
                     Some(format!(
-                        "The value's size ({n}) is different than the schema's size ({size})"
+                        "Size of {value_path} ({n}) is different than the schema's size ({size})"
                     ))
                 } else {
                     None
                 }
             }
             (Value::Bytes(b), &Schema::Fixed(FixedSchema { size, .. })) => {
+                let value_path = ValuePath::Value(self, value_path);
                 if b.len() != size {
                     Some(format!(
-                        "The bytes' length ({}) is different than the schema's size ({})",
+                        "Size of {value_path} ({}) is different than the schema's size ({})",
                         b.len(),
                         size
                     ))
@@ -532,23 +599,25 @@ impl Value {
                 }
             }
             (&Value::Fixed(n, _), &Schema::Duration(_)) => {
+                let value_path = ValuePath::Value(self, value_path);
                 if n != 12 {
                     Some(format!(
-                        "The value's size ('{n}') must be exactly 12 to be a Duration"
+                        "Size of {value_path} ({n}) must be exactly 12 to be a Duration"
                     ))
                 } else {
                     None
                 }
             }
             (&Value::Fixed(n, _), Schema::Uuid(UuidSchema::Fixed(size, ..))) => {
+                let value_path = ValuePath::Value(self, value_path);
                 if size.size != 16 {
                     Some(format!(
-                        "The schema's size ('{}') must be exactly 16 to be a Uuid",
+                        "The schema's size ({}) must be exactly 16 to be a Uuid",
                         size.size
                     ))
                 } else if n != 16 {
                     Some(format!(
-                        "The value's size ('{n}') must be exactly 16 to be a Uuid"
+                        "Size of {value_path} ({n}) must be exactly 16 to be a Uuid"
                     ))
                 } else {
                     None
@@ -557,8 +626,12 @@ impl Value {
             // TODO: check precision against n
             (&Value::Fixed(_n, _), &Schema::Decimal { .. }) => None,
             (Value::String(s), Schema::Enum(EnumSchema { symbols, .. })) => {
+                let value_path = ValuePath::Value(self, value_path);
                 if !symbols.contains(s) {
-                    Some(format!("'{s}' is not a member of the possible symbols"))
+                    // By doing s:? we get an escaped string
+                    Some(format!(
+                        "{value_path}({s:?}) is not a member of the possible symbols"
+                    ))
                 } else {
                     None
                 }
@@ -568,42 +641,76 @@ impl Value {
                 Schema::Enum(EnumSchema {
                     symbols, default, ..
                 }),
-            ) => symbols
-                .get(i as usize)
-                .map(|ref symbol| {
-                    if symbol != &s {
-                        Some(format!("Symbol '{s}' is not at position '{i}'"))
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or_else(|| match default {
-                    Some(_) => None,
-                    None => Some(format!("No symbol at position '{i}'")),
-                }),
-            // (&Value::Union(None), &Schema::Union(_)) => None,
-            (&Value::Union(i, ref value), Schema::Union(inner)) => inner
-                .variants()
-                .get(i as usize)
-                .map(|schema| value.validate_internal(schema, names, enclosing_namespace))
-                .unwrap_or_else(|| Some(format!("No schema in the union at position '{i}'"))),
+            ) => {
+                let value_path = ValuePath::Value(self, value_path);
+                symbols
+                    .get(i as usize)
+                    .map(|ref symbol| {
+                        if symbol != &s {
+                            Some(format!("{value_path}({s:?}) is not at position {i} in the schema"))
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_else(|| match default {
+                        Some(_) => None,
+                        None => Some(format!("{value_path}({s:?}) is at position {i} but that position is not in the schema")),
+                    })
+            }
+            (&Value::Union(i, ref value), Schema::Union(inner)) => {
+                let value_path = ValuePath::Value(self, value_path);
+                inner
+                    .variants()
+                    .get(i as usize)
+                    .map(|schema| {
+                        value.validate_internal(
+                            schema,
+                            names,
+                            enclosing_namespace,
+                            &ValuePath::Index(i as usize, &value_path),
+                        )
+                    })
+                    .unwrap_or_else(|| {
+                        Some(format!(
+                            "{} is at position {i} but that position is not in the schema",
+                            ValuePath::Index(i as usize, &value_path)
+                        ))
+                    })
+            }
             (v, Schema::Union(inner)) => {
                 match inner.find_schema_with_known_schemata(v, Some(names), enclosing_namespace) {
                     Some(_) => None,
-                    None => Some("Could not find matching type in union".to_string()),
+                    None => Some(format!(
+                        "Could not find matching type in union for {}",
+                        ValuePath::Value(v, value_path)
+                    )),
                 }
             }
-            (Value::Array(items), Schema::Array(inner)) => items.iter().fold(None, |acc, item| {
-                Value::accumulate(
-                    acc,
-                    item.validate_internal(&inner.items, names, enclosing_namespace),
-                )
-            }),
-            (Value::Map(items), Schema::Map(inner)) => {
-                items.iter().fold(None, |acc, (_, value)| {
+            (Value::Array(items), Schema::Array(inner)) => {
+                let value_path = ValuePath::Value(self, value_path);
+                items.iter().enumerate().fold(None, |acc, (index, item)| {
                     Value::accumulate(
                         acc,
-                        value.validate_internal(&inner.types, names, enclosing_namespace),
+                        item.validate_internal(
+                            &inner.items,
+                            names,
+                            enclosing_namespace,
+                            &ValuePath::Index(index, &value_path),
+                        ),
+                    )
+                })
+            }
+            (Value::Map(items), Schema::Map(inner)) => {
+                let value_path = ValuePath::Value(self, value_path);
+                items.iter().fold(None, |acc, (key, value)| {
+                    Value::accumulate(
+                        acc,
+                        value.validate_internal(
+                            &inner.types,
+                            names,
+                            enclosing_namespace,
+                            &ValuePath::Key(key, &value_path),
+                        ),
                     )
                 })
             }
@@ -616,19 +723,20 @@ impl Value {
                     ..
                 }),
             ) => {
+                let value_path = ValuePath::Value(self, value_path);
                 let non_nullable_fields_count =
                     fields.iter().filter(|&rf| !rf.is_nullable()).count();
 
                 // If the record contains fewer fields as required fields by the schema, it is invalid.
                 if record_fields.len() < non_nullable_fields_count {
                     return Some(format!(
-                        "The value's records length ({}) doesn't match the schema ({} non-nullable fields)",
+                        "{value_path} has {} fields which doesn't match the schema ({} non-nullable fields)",
                         record_fields.len(),
                         non_nullable_fields_count
                     ));
                 } else if record_fields.len() > fields.len() {
                     return Some(format!(
-                        "The value's records length ({}) is greater than the schema's ({} fields)",
+                        "{value_path} has {} fields which is greater than the schema's ({} fields)",
                         record_fields.len(),
                         fields.len(),
                     ));
@@ -647,26 +755,34 @@ impl Value {
                                         &field.schema,
                                         names,
                                         record_namespace,
+                                        &ValuePath::Field(&field.name, &value_path),
                                     ),
                                 )
                             }
                             None => Value::accumulate(
                                 acc,
-                                Some(format!("There is no schema field for field '{field_name}'")),
+                                Some(format!("There is no schema field for field '{field_name}' in {value_path}")),
                             ),
                         }
                     })
             }
             (Value::Map(items), Schema::Record(RecordSchema { fields, .. })) => {
+                let value_path = ValuePath::Value(self, value_path);
                 fields.iter().fold(None, |acc, field| {
                     if let Some(item) = items.get(&field.name) {
-                        let res = item.validate_internal(&field.schema, names, enclosing_namespace);
+                        // ValuePath is a Key, because the Value is a Map not a Record
+                        let res = item.validate_internal(
+                            &field.schema,
+                            names,
+                            enclosing_namespace,
+                            &ValuePath::Key(&field.name, &value_path),
+                        );
                         Value::accumulate(acc, res)
                     } else if !field.is_nullable() {
                         Value::accumulate(
                             acc,
                             Some(format!(
-                                "Field with name '{:?}' is not a member of the map items",
+                                "Field with name {:?} is not a key in {value_path}",
                                 field.name
                             )),
                         )
@@ -675,9 +791,12 @@ impl Value {
                     }
                 })
             }
-            (v, s) => Some(format!(
-                "Unsupported value-schema combination! Value: {v:?}, schema: {s:?}"
-            )),
+            (_, s) => {
+                let value_path = ValuePath::Value(self, value_path);
+                Some(format!(
+                    "Unsupported value-schema combination! Value: {value_path}, schema: {s:?}"
+                ))
+            }
         }
     }
 
@@ -1559,7 +1678,12 @@ mod tests {
         ];
 
         for (value, schema, valid, expected_err_message) in value_schema_valid.into_iter() {
-            let err_message = value.validate_internal::<Schema>(&schema, &HashMap::default(), None);
+            let err_message = value.validate_internal::<Schema>(
+                &schema,
+                &HashMap::default(),
+                None,
+                &ValuePath::Start,
+            );
             assert_eq!(valid, err_message.is_none());
             if !valid {
                 let full_err_message = format!(

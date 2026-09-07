@@ -16,6 +16,7 @@
 // under the License.
 
 //! Logic handling writing in Avro format at user level.
+use crate::types::ValuePath;
 use crate::{
     AvroResult, Codec, Error,
     encode::{encode, encode_internal, encode_to_vec},
@@ -220,6 +221,7 @@ impl<'a, W: Write> Writer<'a, W> {
             self.schema,
             self.resolved_schema.get_names(),
             self.schema.namespace(),
+            &ValuePath::Start,
         ) {
             return Err(Details::ValidationWithReason {
                 value: value.clone(),
