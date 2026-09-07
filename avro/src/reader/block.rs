@@ -91,20 +91,19 @@ impl<'r, R: Read> Block<'r, R> {
 
         let meta_schema = Schema::map(Schema::Bytes).build();
         match decode(&meta_schema, &mut self.reader)? {
-            Value::Map(metadata) => {
-                self.read_writer_schema(&metadata)?;
-                self.codec = read_codec(&metadata)?;
+            Value::Map(mut metadata) => {
+                self.read_writer_schema(&mut metadata)?;
+                self.codec = read_codec(&mut metadata)?;
 
                 for (key, value) in metadata {
-                    if key == "avro.schema"
-                        || key == "avro.codec"
-                        || key == "avro.codec.compression_level"
-                    {
-                        // already processed
-                    } else if key.starts_with("avro.") {
+                    if key.starts_with("avro.") {
                         warn!("Ignoring unknown metadata key: {key}");
                     } else {
-                        self.read_user_metadata(key, value);
+                        let Value::Bytes(bytes) = value else {
+                            unreachable!("Metadata would fail to decode if it is not Value::Bytes");
+                        };
+                        // TODO: We ignore duplicates, is that correct?
+                        self.user_metadata.insert(key, bytes);
                     }
                 }
             }
@@ -268,14 +267,14 @@ impl<'r, R: Read> Block<'r, R> {
         Ok(Some(item))
     }
 
-    fn read_writer_schema(&mut self, metadata: &HashMap<String, Value>) -> AvroResult<()> {
+    fn read_writer_schema(&mut self, metadata: &mut HashMap<String, Value>) -> AvroResult<()> {
         let json: serde_json::Value = metadata
-            .get("avro.schema")
+            .remove("avro.schema")
             .and_then(|bytes| {
-                if let Value::Bytes(ref bytes) = *bytes {
-                    from_slice(bytes.as_ref()).ok()
+                if let Value::Bytes(bytes) = bytes {
+                    from_slice(&bytes).ok()
                 } else {
-                    None
+                    unreachable!("Metadata would fail to decode if it is not Value::Bytes")
                 }
             })
             .ok_or(Details::GetAvroSchemaFromMap)?;
@@ -297,40 +296,29 @@ impl<'r, R: Read> Block<'r, R> {
         }
         Ok(())
     }
-
-    fn read_user_metadata(&mut self, key: String, value: Value) {
-        match value {
-            Value::Bytes(ref vec) => {
-                self.user_metadata.insert(key, vec.clone());
-            }
-            wrong => {
-                warn!("User metadata values must be Value::Bytes, found {wrong:?}");
-            }
-        }
-    }
 }
 
-fn read_codec(metadata: &HashMap<String, Value>) -> AvroResult<Codec> {
+fn read_codec(metadata: &mut HashMap<String, Value>) -> AvroResult<Codec> {
     let result = metadata
-        .get("avro.codec")
+        .remove("avro.codec")
         .map(|codec| {
-            if let Value::Bytes(ref bytes) = *codec {
-                match std::str::from_utf8(bytes.as_ref()) {
+            if let Value::Bytes(bytes) = codec {
+                match String::from_utf8(bytes) {
                     Ok(utf8) => Ok(utf8),
-                    Err(utf8_error) => Err(Details::ConvertToUtf8Error(utf8_error).into()),
+                    Err(utf8_error) => Err(Details::ConvertToUtf8(utf8_error).into()),
                 }
             } else {
-                Err(Details::BadCodecMetadata.into())
+                unreachable!("Metadata would fail to decode if it is not Value::Bytes")
             }
         })
         .map(|codec_res| match codec_res {
-            Ok(codec) => match Codec::from_str(codec) {
+            Ok(codec) => match Codec::from_str(&codec) {
                 Ok(codec) => match codec {
                     #[cfg(feature = "bzip")]
                     Codec::Bzip2(_) => {
                         use crate::Bzip2Settings;
                         if let Some(Value::Bytes(bytes)) =
-                            metadata.get("avro.codec.compression_level")
+                            metadata.remove("avro.codec.compression_level")
                         {
                             match bytes.first() {
                                 Some(&level) => Ok(Codec::Bzip2(Bzip2Settings::new(level))),
@@ -344,7 +332,7 @@ fn read_codec(metadata: &HashMap<String, Value>) -> AvroResult<Codec> {
                     Codec::Xz(_) => {
                         use crate::XzSettings;
                         if let Some(Value::Bytes(bytes)) =
-                            metadata.get("avro.codec.compression_level")
+                            metadata.remove("avro.codec.compression_level")
                         {
                             match bytes.first() {
                                 Some(&level) => Ok(Codec::Xz(XzSettings::new(level))),
@@ -358,7 +346,7 @@ fn read_codec(metadata: &HashMap<String, Value>) -> AvroResult<Codec> {
                     Codec::Zstandard(_) => {
                         use crate::ZstandardSettings;
                         if let Some(Value::Bytes(bytes)) =
-                            metadata.get("avro.codec.compression_level")
+                            metadata.remove("avro.codec.compression_level")
                         {
                             match bytes.first() {
                                 Some(&level) => Ok(Codec::Zstandard(ZstandardSettings::new(level))),
@@ -402,7 +390,7 @@ mod tests {
 
         // An empty compression_level in attacker-controlled metadata must be
         // a clean error, not an index-out-of-bounds panic.
-        let err = super::read_codec(&metadata).unwrap_err().into_details();
+        let err = super::read_codec(&mut metadata).unwrap_err().into_details();
         assert!(matches!(err, Details::BadCodecMetadata), "{err:?}");
     }
 
