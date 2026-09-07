@@ -232,9 +232,7 @@ fn decode_internal_body<R: Read, S: Borrow<Schema>>(
             let len = decode_len(reader)?;
             if len == 16 {
                 let mut buf = [0u8; 16];
-                reader
-                    .read_exact(&mut buf)
-                    .map_err(|e| Details::ReadFixed(e, 16))?;
+                reader.read_exact(&mut buf).map_err(Details::ReadBytes)?;
                 let uuid = Uuid::from_slice(&buf).map_err(Details::ConvertSliceToUuid)?;
                 Ok(Value::Uuid(uuid))
             } else {
