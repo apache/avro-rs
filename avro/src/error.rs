@@ -428,8 +428,14 @@ pub enum Details {
     #[error("logicalType must be a string, but is {0:?}")]
     GetLogicalTypeFieldType(serde_json::Value),
 
+    #[error("logicalType must be a string, but is {0:?}")]
+    GetLogicalTypeFieldType2(sonic_rs::JsonType),
+
     #[error("Unknown complex type: {0}")]
     GetComplexType(serde_json::Value),
+
+    #[error("Unknown complex type: {0:?}")]
+    GetComplexType2(sonic_rs::JsonType),
 
     #[error("No `type` in complex type")]
     GetComplexTypeField,
@@ -729,6 +735,12 @@ pub enum Details {
         position: usize,
         total_elements: usize,
     },
+
+    #[error("{0}")]
+    Sonic(sonic_rs::Error),
+
+    #[error("{0}")]
+    Custom(String),
 }
 
 #[derive(thiserror::Error, PartialEq)]
