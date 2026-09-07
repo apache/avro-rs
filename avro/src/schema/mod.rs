@@ -546,7 +546,16 @@ impl Schema {
             let json = json.as_ref();
             let schema: JsonValue = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
             if let JsonValue::Object(inner) = &schema {
-                let name = Name::parse(inner, None)?;
+                // Only clone the values needed for the name parsing, can be a significant time/memory
+                // save on large schemas
+                let mut name_json = Map::with_capacity(2);
+                if let Some(v) = inner.get("name") {
+                    name_json.insert("name".into(), v.clone());
+                }
+                if let Some(v) = inner.get("namespace") {
+                    name_json.insert("namespace".into(), v.clone());
+                }
+                let name = Name::parse(&mut name_json, None)?;
                 let previous_value = input_schemas.insert(name.clone(), schema);
                 if previous_value.is_some() {
                     return Err(Details::NameCollision(name.fullname(None)).into());
@@ -588,7 +597,16 @@ impl Schema {
             let json = json.as_ref();
             let schema: JsonValue = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
             if let JsonValue::Object(inner) = &schema {
-                let name = Name::parse(inner, None)?;
+                // Only clone the values needed for the name parsing, can be a significant time/memory
+                // save on large schemas
+                let mut name_json = Map::with_capacity(2);
+                if let Some(v) = inner.get("name") {
+                    name_json.insert("name".into(), v.clone());
+                }
+                if let Some(v) = inner.get("namespace") {
+                    name_json.insert("namespace".into(), v.clone());
+                }
+                let name = Name::parse(&mut name_json, None)?;
                 if let Some(_previous) = input_schemas.insert(name.clone(), schema) {
                     return Err(Details::NameCollision(name.fullname(None)).into());
                 }
@@ -605,7 +623,7 @@ impl Schema {
         parser.parse_input_schemas()?;
 
         let value = serde_json::from_str(schema).map_err(Details::ParseSchemaJson)?;
-        let schema = parser.parse(&value, None)?;
+        let schema = parser.parse(value, None)?;
         let schemata = parser.parse_list()?;
         Ok((schema, schemata))
     }
@@ -620,14 +638,14 @@ impl Schema {
     }
 
     /// Parses an Avro schema from JSON.
-    pub fn parse(value: &JsonValue) -> AvroResult<Schema> {
+    pub fn parse(value: JsonValue) -> AvroResult<Schema> {
         let mut parser = Parser::default();
         parser.parse(value, None)
     }
 
     /// Parses an Avro schema from JSON.
     /// Any `Schema::Ref`s must be known in the `names` map.
-    pub(crate) fn parse_with_names(value: &JsonValue, names: Names) -> AvroResult<Schema> {
+    pub(crate) fn parse_with_names(value: JsonValue, names: Names) -> AvroResult<Schema> {
         let mut parser = Parser::new(HashMap::with_capacity(1), Vec::with_capacity(1), names);
         parser.parse(value, None)
     }
@@ -3094,7 +3112,7 @@ mod tests {
           ]
         });
 
-        let parse_result = Schema::parse(&schema);
+        let parse_result = Schema::parse(schema);
         assert!(
             parse_result.is_ok(),
             "parse result must be ok, got: {parse_result:?}"
@@ -3341,7 +3359,7 @@ mod tests {
             }
         );
 
-        let parse_result = Schema::parse(&schema);
+        let parse_result = Schema::parse(schema);
         assert!(
             parse_result.is_ok(),
             "parse result must be ok, got: {parse_result:?}"
@@ -3631,7 +3649,7 @@ mod tests {
         };
 
         // Serialize using the writer schema.
-        let writer_schema = Schema::parse(&writer_schema)?;
+        let writer_schema = Schema::parse(writer_schema)?;
         let avro_value = crate::to_value(s)?;
         assert!(
             avro_value.validate(&writer_schema),
@@ -3642,7 +3660,7 @@ mod tests {
             .write_value_to_vec(avro_value)?;
 
         // Now, attempt to deserialize using the reader schema.
-        let reader_schema = Schema::parse(&reader_schema)?;
+        let reader_schema = Schema::parse(reader_schema)?;
         let mut x = &datum[..];
 
         // Deserialization should succeed and we should be able to resolve the schema.
@@ -4328,7 +4346,7 @@ mod tests {
           "precision": 9,
           "scale": 2
         });
-        let parse_result = Schema::parse(&schema)?;
+        let parse_result = Schema::parse(schema)?;
         assert!(matches!(
             parse_result,
             Schema::Decimal(DecimalSchema {
@@ -4345,7 +4363,7 @@ mod tests {
           "name": "LongDecimal",
           "logicalType": "decimal"
         });
-        let parse_result = Schema::parse(&schema)?;
+        let parse_result = Schema::parse(schema)?;
         // assert!(matches!(parse_result, Schema::Long));
         assert_eq!(parse_result, Schema::Long);
 
@@ -4361,7 +4379,7 @@ mod tests {
           "name": "StringUUID",
           "logicalType": "uuid"
         });
-        let parse_result = Schema::parse(&schema)?;
+        let parse_result = Schema::parse(schema)?;
         assert_eq!(parse_result, Schema::Uuid(UuidSchema::String));
 
         Ok(())
@@ -4376,7 +4394,7 @@ mod tests {
             "size": 16,
             "logicalType": "uuid"
         });
-        let parse_result = Schema::parse(&schema)?;
+        let parse_result = Schema::parse(schema)?;
         assert_eq!(
             parse_result,
             Schema::Uuid(UuidSchema::Fixed(FixedSchema {
@@ -4402,7 +4420,7 @@ mod tests {
           "name": "BytesUUID",
           "logicalType": "uuid"
         });
-        let parse_result = Schema::parse(&schema)?;
+        let parse_result = Schema::parse(schema)?;
         assert_eq!(parse_result, Schema::Uuid(UuidSchema::Bytes));
 
         Ok(())
@@ -4417,7 +4435,7 @@ mod tests {
             "size": 6,
             "logicalType": "uuid"
         });
-        let parse_result = Schema::parse(&schema)?;
+        let parse_result = Schema::parse(schema)?;
 
         assert_eq!(
             parse_result,
@@ -4445,7 +4463,7 @@ mod tests {
           "name": "LongTimestampMillis",
           "logicalType": "timestamp-millis"
         });
-        let parse_result = Schema::parse(&schema)?;
+        let parse_result = Schema::parse(schema)?;
         assert_eq!(parse_result, Schema::TimestampMillis);
 
         // int timestamp-millis, represents as native complex type.
@@ -4455,7 +4473,7 @@ mod tests {
             "name": "IntTimestampMillis",
             "logicalType": "timestamp-millis"
         });
-        let parse_result = Schema::parse(&schema)?;
+        let parse_result = Schema::parse(schema)?;
         assert_eq!(parse_result, Schema::Int);
 
         Ok(())
@@ -4470,7 +4488,7 @@ mod tests {
             "name": "BytesLog",
             "logicalType": "custom"
         });
-        let parse_result = Schema::parse(&schema)?;
+        let parse_result = Schema::parse(schema)?;
         assert_eq!(parse_result, Schema::Bytes);
         assert_eq!(parse_result.custom_attributes(), None);
 
@@ -5230,6 +5248,157 @@ mod tests {
         assert_ne!(
             three.unique_normalized_name(),
             four.unique_normalized_name()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_654_unknown_logical_type_must_survive_roundtrip() -> TestResult {
+        let schema_str = r#"{
+          "type": "array",
+          "logicalType": "map",
+          "items": {
+            "type": "record",
+            "name": "k12_v13",
+            "fields": [
+              {
+                "name": "key",
+                "type": "int",
+                "field-id": 12
+              },
+              {
+                "name": "value",
+                "type": "string",
+                "field-id": 13
+              }
+            ]
+          }
+        }"#;
+        let Schema::Array(schema) = Schema::parse_str(schema_str)? else {
+            panic!("This must be an array schema")
+        };
+        assert_eq!(
+            schema.attributes.get("logicalType").unwrap(),
+            &serde_json::Value::String("map".into())
+        );
+
+        let schema_str_2 = serde_json::to_string(&Schema::Array(schema))?;
+
+        let Schema::Array(schema) = Schema::parse_str(&schema_str_2)? else {
+            panic!("This must be an array schema")
+        };
+        assert_eq!(
+            schema.attributes.get("logicalType").unwrap(),
+            &serde_json::Value::String("map".into())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_654_preserve_unknown_logical_type_on_outer_item() -> TestResult {
+        let raw_schema = r#"{
+        "type": "array",
+        "logicalType": "blub",
+        "items": {
+            "type": "record",
+            "name": "k12_v13",
+            "fields": [
+                {
+                    "name": "key",
+                    "type": "int",
+                    "field-id": 12
+                },
+                {
+                    "name": "value",
+                    "type": "string",
+                    "field-id": 13
+                }
+            ]
+        }
+    }"#;
+
+        let schema = Schema::parse_str(raw_schema)?;
+
+        let output = serde_json::to_string_pretty(&schema).unwrap();
+        pretty_assertions::assert_eq!(
+            r#"{
+  "type": "array",
+  "items": {
+    "type": "record",
+    "name": "k12_v13",
+    "fields": [
+      {
+        "name": "key",
+        "type": "int",
+        "field-id": 12
+      },
+      {
+        "name": "value",
+        "type": "string",
+        "field-id": 13
+      }
+    ]
+  },
+  "logicalType": "blub"
+}"#,
+            output
+        );
+
+        let logical_type = schema.custom_attributes().unwrap().get("logicalType");
+        assert_eq!(
+            logical_type,
+            Some(&serde_json::Value::String("blub".to_string()))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_654_preserve_unknown_logical_type_on_inner_item() -> TestResult {
+        let raw_schema = r#"{
+        "type": "record",
+        "name": "test_record",
+        "fields": [
+            {
+            "name": "example_map",
+            "type": {
+                "type": "array",
+                "logicalType": "fish",
+                "items": {
+                    "type": "record",
+                    "name": "k12_v13",
+                    "fields": [
+                        {
+                            "name": "key",
+                            "type": "int",
+                            "field-id": 12
+                        },
+                        {
+                            "name": "value",
+                            "type": "string",
+                            "field-id": 13
+                        }
+                    ]
+                }
+            }
+            }
+        ]
+    }"#;
+
+        let schema = Schema::parse_str(raw_schema)?;
+        let Schema::Record(record) = &schema else {
+            panic!("Expected a record schema");
+        };
+        let example_map_schema = &record.fields[0].schema;
+        let logical_type = example_map_schema
+            .custom_attributes()
+            .unwrap()
+            .get("logicalType");
+        assert_eq!(
+            logical_type,
+            Some(&serde_json::Value::String("fish".to_string()))
         );
 
         Ok(())
