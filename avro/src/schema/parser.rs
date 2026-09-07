@@ -446,7 +446,7 @@ impl Parser {
             // The spec says to ignore invalid logical types and just pass through the
             // underlying type. It is unclear whether that applies to this case or not, where the
             // `logicalType` is not a string.
-            Some((_, value)) => return Err(Details::GetLogicalTypeFieldType(value.clone()).into()),
+            Some((_, value)) => return Err(Details::GetLogicalTypeFieldType(value).into()),
             _ => {}
         }
         match complex.remove("type") {

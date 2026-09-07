@@ -546,7 +546,7 @@ impl Schema {
             let json = json.as_ref();
             let schema: JsonValue = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
             if let JsonValue::Object(inner) = &schema {
-                // Only clone the keys needed for the name parsing, can be a significant time/memory
+                // Only clone the values needed for the name parsing, can be a significant time/memory
                 // save on large schemas
                 let mut name_json = Map::with_capacity(2);
                 if let Some(v) = inner.get("name") {
@@ -597,7 +597,7 @@ impl Schema {
             let json = json.as_ref();
             let schema: JsonValue = serde_json::from_str(json).map_err(Details::ParseSchemaJson)?;
             if let JsonValue::Object(inner) = &schema {
-                // Only clone the keys needed for the name parsing, can be a significant time/memory
+                // Only clone the values needed for the name parsing, can be a significant time/memory
                 // save on large schemas
                 let mut name_json = Map::with_capacity(2);
                 if let Some(v) = inner.get("name") {
@@ -5291,6 +5291,114 @@ mod tests {
         assert_eq!(
             schema.attributes.get("logicalType").unwrap(),
             &serde_json::Value::String("map".into())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_654_preserve_unknown_logical_type_on_outer_item() -> TestResult {
+        let raw_schema = r#"{
+        "type": "array",
+        "logicalType": "blub",
+        "items": {
+            "type": "record",
+            "name": "k12_v13",
+            "fields": [
+                {
+                    "name": "key",
+                    "type": "int",
+                    "field-id": 12
+                },
+                {
+                    "name": "value",
+                    "type": "string",
+                    "field-id": 13
+                }
+            ]
+        }
+    }"#;
+
+        let schema = Schema::parse_str(raw_schema)?;
+
+        let output = serde_json::to_string_pretty(&schema).unwrap();
+        pretty_assertions::assert_eq!(
+            r#"{
+  "type": "array",
+  "items": {
+    "type": "record",
+    "name": "k12_v13",
+    "fields": [
+      {
+        "name": "key",
+        "type": "int",
+        "field-id": 12
+      },
+      {
+        "name": "value",
+        "type": "string",
+        "field-id": 13
+      }
+    ]
+  },
+  "logicalType": "blub"
+}"#,
+            output
+        );
+
+        let logical_type = schema.custom_attributes().unwrap().get("logicalType");
+        assert_eq!(
+            logical_type,
+            Some(&serde_json::Value::String("blub".to_string()))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_654_preserve_unknown_logical_type_on_inner_item() -> TestResult {
+        let raw_schema = r#"{
+        "type": "record",
+        "name": "test_record",
+        "fields": [
+            {
+            "name": "example_map",
+            "type": {
+                "type": "array",
+                "logicalType": "fish",
+                "items": {
+                    "type": "record",
+                    "name": "k12_v13",
+                    "fields": [
+                        {
+                            "name": "key",
+                            "type": "int",
+                            "field-id": 12
+                        },
+                        {
+                            "name": "value",
+                            "type": "string",
+                            "field-id": 13
+                        }
+                    ]
+                }
+            }
+            }
+        ]
+    }"#;
+
+        let schema = Schema::parse_str(raw_schema)?;
+        let Schema::Record(record) = &schema else {
+            panic!("Expected a record schema");
+        };
+        let example_map_schema = &record.fields[0].schema;
+        let logical_type = example_map_schema
+            .custom_attributes()
+            .unwrap()
+            .get("logicalType");
+        assert_eq!(
+            logical_type,
+            Some(&serde_json::Value::String("fish".to_string()))
         );
 
         Ok(())
