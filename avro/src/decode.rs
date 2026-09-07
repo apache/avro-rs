@@ -17,7 +17,7 @@
 
 use crate::schema::{InnerDecimalSchema, NamespaceRef, UuidSchema};
 use crate::{
-    AvroResult, Error,
+    AvroResult,
     bigdecimal::deserialize_big_decimal,
     decimal::Decimal,
     duration::Duration,
@@ -29,11 +29,7 @@ use crate::{
         safe_collection_len, safe_len, zag_i32, zag_i64,
     },
 };
-use std::{
-    borrow::Borrow,
-    collections::HashMap,
-    io::{ErrorKind, Read},
-};
+use std::{borrow::Borrow, collections::HashMap, io::Read};
 use uuid::Uuid;
 
 #[inline]
@@ -216,46 +212,40 @@ fn decode_internal_body<R: Read, S: Borrow<Schema>>(
             }
         }
         Schema::Uuid(UuidSchema::String) => {
-            let Value::String(string) =
-                decode_internal(&Schema::String, names, enclosing_namespace, reader, ctx)?
-            else {
-                // decoding a String can also return a Null, indicating EOF
-                return Err(Error::new(Details::ReadBytes(std::io::Error::from(
-                    ErrorKind::UnexpectedEof,
-                ))));
-            };
-            let uuid = Uuid::parse_str(&string).map_err(Details::ConvertStrToUuid)?;
-            Ok(Value::Uuid(uuid))
+            let len = decode_len(reader)?;
+            if len <= uuid::fmt::Urn::LENGTH {
+                let mut buf = [0u8; uuid::fmt::Urn::LENGTH];
+                reader
+                    .read_exact(&mut buf[..len])
+                    .map_err(Details::ReadString)?;
+                let uuid = Uuid::try_parse_ascii(&buf[..len]).map_err(Details::ConvertStrToUuid)?;
+                Ok(Value::Uuid(uuid))
+            } else {
+                Err(Details::ConvertStringToUuid(uuid::fmt::Urn::LENGTH, len).into())
+            }
         }
         Schema::Uuid(UuidSchema::Bytes) => {
-            let Value::Bytes(bytes) =
-                decode_internal(&Schema::Bytes, names, enclosing_namespace, reader, ctx)?
-            else {
-                unreachable!(
-                    "decode_internal(Schema::Bytes) can only return a Value::Bytes or an error"
-                )
-            };
-            let uuid = Uuid::from_slice(&bytes).map_err(Details::ConvertSliceToUuid)?;
-            Ok(Value::Uuid(uuid))
+            let len = decode_len(reader)?;
+            if len == 16 {
+                let mut buf = [0u8; 16];
+                reader.read_exact(&mut buf).map_err(Details::ReadBytes)?;
+                let uuid = Uuid::from_slice(&buf).map_err(Details::ConvertSliceToUuid)?;
+                Ok(Value::Uuid(uuid))
+            } else {
+                Err(Details::ConvertBytesToUuid(len).into())
+            }
         }
         Schema::Uuid(UuidSchema::Fixed(fixed)) => {
-            let Value::Fixed(n, bytes) = decode_internal(
-                &Schema::Fixed(fixed.copy_only_size()),
-                names,
-                enclosing_namespace,
-                reader,
-                ctx,
-            )?
-            else {
-                unreachable!(
-                    "decode_internal(Schema::Fixed) can only return a Value::Fixed or an error"
-                )
-            };
-            if n != 16 {
-                return Err(Details::ConvertFixedToUuid(n).into());
+            if fixed.size == 16 {
+                let mut buf = [0u8; 16];
+                reader
+                    .read_exact(&mut buf)
+                    .map_err(|e| Details::ReadFixed(e, 16))?;
+                let uuid = Uuid::from_slice(&buf).map_err(Details::ConvertSliceToUuid)?;
+                Ok(Value::Uuid(uuid))
+            } else {
+                Err(Details::ConvertFixedToUuid(fixed.size).into())
             }
-            let uuid = Uuid::from_slice(&bytes).map_err(Details::ConvertSliceToUuid)?;
-            Ok(Value::Uuid(uuid))
         }
         Schema::Int => decode_int(reader),
         Schema::Date => zag_i32(reader).map(Value::Date),
