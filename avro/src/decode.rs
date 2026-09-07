@@ -180,19 +180,13 @@ fn decode_internal_body<R: Read, S: Borrow<Schema>>(
         Schema::Null => Ok(Value::Null),
         Schema::Boolean => {
             let mut buf = [0u8; 1];
-            match reader.read_exact(&mut buf[..]) {
-                Ok(_) => match buf[0] {
-                    0u8 => Ok(Value::Boolean(false)),
-                    1u8 => Ok(Value::Boolean(true)),
-                    _ => Err(Details::BoolValue(buf[0]).into()),
-                },
-                Err(io_err) => {
-                    if let ErrorKind::UnexpectedEof = io_err.kind() {
-                        Ok(Value::Null)
-                    } else {
-                        Err(Details::ReadBoolean(io_err).into())
-                    }
-                }
+            reader
+                .read_exact(&mut buf[..])
+                .map_err(Details::ReadBoolean)?;
+            match buf[0] {
+                0u8 => Ok(Value::Boolean(false)),
+                1u8 => Ok(Value::Boolean(true)),
+                _ => Err(Details::BoolValue(buf[0]).into()),
             }
         }
         Schema::Decimal(DecimalSchema { inner, .. }) => match inner {
@@ -312,18 +306,10 @@ fn decode_internal_body<R: Read, S: Borrow<Schema>>(
             let len = decode_len(reader)?;
             ctx.debit_bytes(len)?;
             let mut buf = vec![0u8; len];
-            match reader.read_exact(&mut buf) {
-                Ok(_) => Ok(Value::String(
-                    String::from_utf8(buf).map_err(Details::ConvertToUtf8)?,
-                )),
-                Err(io_err) => {
-                    if let ErrorKind::UnexpectedEof = io_err.kind() {
-                        Ok(Value::Null)
-                    } else {
-                        Err(Details::ReadString(io_err).into())
-                    }
-                }
-            }
+            reader.read_exact(&mut buf).map_err(Details::ReadString)?;
+            Ok(Value::String(
+                String::from_utf8(buf).map_err(Details::ConvertToUtf8)?,
+            ))
         }
         Schema::Fixed(FixedSchema { size, .. }) => {
             ctx.debit_bytes(*size)?;
@@ -405,27 +391,18 @@ fn decode_internal_body<R: Read, S: Borrow<Schema>>(
 
             Ok(Value::Map(items))
         }
-        Schema::Union(inner) => match zag_i64(reader).map_err(Error::into_details) {
-            Ok(index) => {
-                let variants = inner.variants();
-                let variant = variants
-                    .get(usize::try_from(index).map_err(|e| Details::ConvertI64ToUsize(e, index))?)
-                    .ok_or(Details::GetUnionVariant {
-                        index,
-                        num_variants: variants.len(),
-                    })?;
-                let value = decode_internal(variant, names, enclosing_namespace, reader, ctx)?;
-                Ok(Value::Union(index as u32, Box::new(value)))
-            }
-            Err(Details::ReadVariableIntegerBytes(io_err)) => {
-                if let ErrorKind::UnexpectedEof = io_err.kind() {
-                    Ok(Value::Union(0, Box::new(Value::Null)))
-                } else {
-                    Err(Details::ReadVariableIntegerBytes(io_err).into())
-                }
-            }
-            Err(io_err) => Err(Error::new(io_err)),
-        },
+        Schema::Union(inner) => {
+            let index = zag_i64(reader)?;
+            let variants = inner.variants();
+            let variant = variants
+                .get(usize::try_from(index).map_err(|e| Details::ConvertI64ToUsize(e, index))?)
+                .ok_or(Details::GetUnionVariant {
+                    index,
+                    num_variants: variants.len(),
+                })?;
+            let value = decode_internal(variant, names, enclosing_namespace, reader, ctx)?;
+            Ok(Value::Union(index as u32, Box::new(value)))
+        }
         Schema::Record(RecordSchema { name, fields, .. }) => {
             let fully_qualified_name = name.fully_qualified_name(enclosing_namespace);
             ctx.debit_items::<(String, Value)>(fields.len())?;
