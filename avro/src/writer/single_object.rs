@@ -23,7 +23,7 @@ use serde::Serialize;
 use crate::Error;
 use crate::encode::encode_internal;
 use crate::serde::ser_schema::{Config, SchemaAwareSerializer};
-use crate::types::ValuePath;
+use crate::types::{SchemaPath, ValuePath};
 use crate::util::is_human_readable;
 use crate::{
     AvroResult, AvroSchema, Schema,
@@ -239,6 +239,7 @@ fn write_value_ref_owned_resolved<W: Write>(
         resolved_schema.get_names(),
         root_schema.namespace(),
         &ValuePath::Start,
+        &SchemaPath::Start,
     ) {
         return Err(Details::ValidationWithReason {
             value: value.clone(),

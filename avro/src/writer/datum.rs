@@ -19,7 +19,7 @@ use bon::bon;
 use serde::Serialize;
 use std::io::Write;
 
-use crate::types::ValuePath;
+use crate::types::{SchemaPath, ValuePath};
 use crate::{
     AvroResult, Schema,
     encode::encode_internal,
@@ -131,6 +131,7 @@ impl GenericDatumWriter<'_> {
                     self.resolved.get_names(),
                     None,
                     &ValuePath::Start,
+                    &SchemaPath::Start,
                 )
                 .is_some()
         {
