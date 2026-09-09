@@ -20,10 +20,12 @@
 mod builders;
 mod name;
 mod parser;
+mod parser2;
 mod record;
 mod resolve;
 mod union;
 
+use crate::schema::parser2::Parser2;
 pub(crate) use crate::schema::resolve::{
     ResolvedOwnedSchema, resolve_names, resolve_names_with_schemata,
 };
@@ -528,6 +530,10 @@ impl Schema {
     pub fn parse_str(input: &str) -> Result<Schema, Error> {
         let mut parser = Parser::default();
         parser.parse_str(input)
+    }
+
+    pub fn parse_str2(input: &str) -> Result<Schema, Error> {
+        Parser2::parse_str(input)
     }
 
     /// Create an array of `Schema`'s from a list of named JSON Avro schemas (Record, Enum, and

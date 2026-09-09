@@ -47,6 +47,10 @@ name = "serde"
 harness = false
 name = "single"
 
+[[bench]]
+harness = false
+name = "schema_parsing"
+
 [dependencies]
 apache-avro-derive = { default-features = false, version = "0.23.0", path = "../avro_derive", optional = true }
 bigdecimal = { default-features = false, version = "0.4.10", features = ["std", "serde"] }
@@ -68,6 +72,7 @@ thiserror = { default-features = false, version = "2.0.18" }
 uuid = { workspace = true }
 liblzma = { default-features = false, version = "0.4.6", optional = true }
 zstd = { default-features = false, version = "0.13.3", optional = true }
+sonic-rs = "0.5.8"
 
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
