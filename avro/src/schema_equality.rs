@@ -267,6 +267,7 @@ mod tests {
     use apache_avro_test_helper::TestResult;
     use serde_json::Value;
     use std::collections::BTreeMap;
+    use std::num::NonZero;
 
     const SPECIFICATION_EQ: SpecificationEq = SpecificationEq;
     const STRUCT_FIELD_EQ: StructFieldEq = StructFieldEq {
@@ -505,7 +506,7 @@ mod tests {
     #[test]
     fn test_avro_3939_compare_decimal_schemata() {
         let schema_one = Schema::Decimal(DecimalSchema {
-            precision: 10,
+            precision: NonZero::new(10).unwrap(),
             scale: 2,
             inner: InnerDecimalSchema::Bytes,
         });
@@ -513,7 +514,7 @@ mod tests {
         assert!(!STRUCT_FIELD_EQ.compare(&schema_one, &Schema::Boolean));
 
         let schema_two = Schema::Decimal(DecimalSchema {
-            precision: 10,
+            precision: NonZero::new(10).unwrap(),
             scale: 2,
             inner: InnerDecimalSchema::Bytes,
         });

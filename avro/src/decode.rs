@@ -471,6 +471,7 @@ mod tests {
     use apache_avro_test_helper::TestResult;
     use pretty_assertions::assert_eq;
     use std::collections::HashMap;
+    use std::num::NonZero;
     use uuid::Uuid;
 
     #[test]
@@ -692,7 +693,7 @@ mod tests {
                     .size(2)
                     .build(),
             ),
-            precision: 4,
+            precision: NonZero::new(4).unwrap(),
             scale: 2,
         });
         let bigint = (-423).to_bigint().unwrap();
@@ -720,7 +721,7 @@ mod tests {
                 doc: None,
                 attributes: Default::default(),
             }),
-            precision: 4,
+            precision: NonZero::new(4).unwrap(),
             scale: 2,
         });
         let value = Value::Decimal(Decimal::from(

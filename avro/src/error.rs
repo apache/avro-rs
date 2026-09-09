@@ -15,12 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::{error::Error as _, fmt};
-
 use crate::{
     schema::{Name, RecordSchema, Schema, SchemaKind, UnionSchema},
     types::{Value, ValueKind},
 };
+use std::num::NonZero;
+use std::{error::Error as _, fmt};
 
 /// Errors encountered by Avro.
 ///
@@ -183,12 +183,18 @@ pub enum Details {
     GetEnumUnknownIndexValue,
 
     #[error("Scale {scale} is greater than precision {precision}")]
-    GetScaleAndPrecision { scale: usize, precision: usize },
+    GetScaleAndPrecision {
+        scale: usize,
+        precision: NonZero<usize>,
+    },
 
     #[error(
         "Fixed type number of bytes {size} is not large enough to hold decimal values of precision {precision}"
     )]
-    GetScaleWithFixedSize { size: usize, precision: usize },
+    GetScaleWithFixedSize {
+        size: usize,
+        precision: NonZero<usize>,
+    },
 
     #[error("Expected Value::Uuid, got: {0:?}")]
     GetUuid(Value),
@@ -212,7 +218,10 @@ pub enum Details {
     GetU8(Value),
 
     #[error("Precision {precision} too small to hold decimal values with {num_bytes} bytes")]
-    ComparePrecisionAndSize { precision: usize, num_bytes: usize },
+    ComparePrecisionAndSize {
+        precision: NonZero<usize>,
+        num_bytes: usize,
+    },
 
     #[error("Cannot convert length to i32: {1}")]
     ConvertLengthToI32(#[source] std::num::TryFromIntError, usize),
@@ -403,9 +412,12 @@ pub enum Details {
     },
 
     #[error("The decimal precision ({precision}) must be bigger or equal to the scale ({scale})")]
-    DecimalPrecisionLessThanScale { precision: usize, scale: usize },
+    DecimalPrecisionLessThanScale {
+        precision: NonZero<usize>,
+        scale: usize,
+    },
 
-    #[error("The decimal precision ({precision}) must be a positive number")]
+    #[error("The decimal precision ({precision}) must be a non-zero positive number")]
     DecimalPrecisionMuBePositive { precision: usize },
 
     #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
@@ -771,9 +783,9 @@ pub enum CompatibilityError {
         "Incompatible schemata! Decimal precision and/or scale don't match, reader: ({r_precision},{r_scale}), writer: ({w_precision},{w_scale})"
     )]
     DecimalMismatch {
-        r_precision: usize,
+        r_precision: NonZero<usize>,
         r_scale: usize,
-        w_precision: usize,
+        w_precision: NonZero<usize>,
         w_scale: usize,
     },
 

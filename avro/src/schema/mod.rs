@@ -47,6 +47,7 @@ use serde::{
 use serde_json::{Map, Value as JsonValue};
 use std::borrow::Cow;
 use std::fmt::Formatter;
+use std::num::NonZero;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fmt,
@@ -454,9 +455,8 @@ pub enum UuidSchema {
     Fixed(FixedSchema),
 }
 
-type DecimalMetadata = usize;
-pub(crate) type Precision = DecimalMetadata;
-pub(crate) type Scale = DecimalMetadata;
+pub(crate) type Precision = NonZero<usize>;
+pub(crate) type Scale = usize;
 
 impl Schema {
     /// Converts `self` into its [Parsing Canonical Form].
@@ -4347,14 +4347,14 @@ mod tests {
           "scale": 2
         });
         let parse_result = Schema::parse(schema)?;
-        assert!(matches!(
+        assert_eq!(
             parse_result,
             Schema::Decimal(DecimalSchema {
-                precision: 9,
+                precision: NonZero::new(9).unwrap(),
                 scale: 2,
-                ..
+                inner: InnerDecimalSchema::Bytes
             })
-        ));
+        );
 
         // long decimal, represents as native complex type.
         let schema = json!(
@@ -4579,7 +4579,7 @@ mod tests {
     #[test]
     fn test_avro_3925_serialize_decimal_inner_fixed() -> TestResult {
         let schema = Schema::Decimal(DecimalSchema {
-            precision: 36,
+            precision: NonZero::new(36).unwrap(),
             scale: 10,
             inner: InnerDecimalSchema::Fixed(FixedSchema {
                 name: Name::new("decimal_36_10").unwrap(),
@@ -4609,7 +4609,7 @@ mod tests {
     #[test]
     fn test_avro_3925_serialize_decimal_inner_bytes() -> TestResult {
         let schema = Schema::Decimal(DecimalSchema {
-            precision: 36,
+            precision: NonZero::new(36).unwrap(),
             scale: 10,
             inner: InnerDecimalSchema::Bytes,
         });
