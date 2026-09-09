@@ -2975,7 +2975,7 @@ mod tests {
         };
 
         let avro_value = crate::to_value(foo)?;
-        assert!(avro_value.validate(&schema));
+        avro_value.validate(&schema)?;
 
         let mut writer = crate::Writer::new(&schema, Vec::new())?;
 
@@ -3065,10 +3065,7 @@ mod tests {
             bar_use: Bar::Bar1,
         };
         let avro_value = crate::to_value(foo)?;
-        assert!(
-            avro_value.validate(&writer_schema),
-            "value is valid for schema",
-        );
+        avro_value.validate(&writer_schema)?;
         let datum = GenericDatumWriter::builder(&writer_schema)
             .build()?
             .write_value_to_vec(avro_value)?;
@@ -3651,10 +3648,7 @@ mod tests {
         // Serialize using the writer schema.
         let writer_schema = Schema::parse(writer_schema)?;
         let avro_value = crate::to_value(s)?;
-        assert!(
-            avro_value.validate(&writer_schema),
-            "value is valid for schema",
-        );
+        avro_value.validate(&writer_schema)?;
         let datum = GenericDatumWriter::builder(&writer_schema)
             .build()?
             .write_value_to_vec(avro_value)?;
@@ -3668,7 +3662,7 @@ mod tests {
             .reader_schema(&reader_schema)
             .build()?
             .read_value(&mut x)?;
-        assert!(deser_value.validate(&reader_schema));
+        deser_value.validate(&reader_schema)?;
 
         // Verify that we can read a field from the record.
         let d: MyRecordReader = crate::from_value(&deser_value)?;

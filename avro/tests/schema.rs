@@ -952,10 +952,7 @@ fn test_avro_3785_deserialize_namespace_with_nullable_type_containing_reference_
         bar_use_parent: Some(BarUseParent { bar_use: Bar::Bar1 }),
     };
     let avro_value = to_value(foo1)?;
-    assert!(
-        avro_value.validate(&writer_schema),
-        "value is valid for schema",
-    );
+    avro_value.validate(&writer_schema)?;
     let datum = GenericDatumWriter::builder(&writer_schema)
         .build()?
         .write_value_to_vec(avro_value)?;

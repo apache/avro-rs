@@ -32,6 +32,7 @@ use crate::{
 use bigdecimal::BigDecimal;
 use log::{debug, error};
 use serde_json::{Number, Value as JsonValue};
+use std::fmt::Formatter;
 use std::{
     borrow::Borrow,
     collections::{BTreeMap, HashMap},
@@ -39,6 +40,7 @@ use std::{
     hash::BuildHasher,
     str::FromStr,
 };
+use strum::IntoDiscriminant;
 use uuid::Uuid;
 
 /// Compute the maximum decimal value precision of a byte array of length `len` could hold.
@@ -368,6 +370,154 @@ impl TryFrom<Value> for JsonValue {
     }
 }
 
+pub(crate) enum ValuePath<'a> {
+    Start,
+    Value(&'a Value, &'a ValuePath<'a>),
+    Index(usize, &'a ValuePath<'a>),
+    Key(&'a str, &'a ValuePath<'a>),
+    Field(&'a str, &'a ValuePath<'a>),
+}
+
+impl<'a> std::fmt::Display for ValuePath<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValuePath::Start => {}
+            ValuePath::Value(value, prev) => {
+                prev.fmt(f)?;
+                match value {
+                    Value::Null => write!(f, "Null")?,
+                    Value::Boolean(_) => write!(f, "Boolean")?,
+                    Value::Int(_) => write!(f, "Int")?,
+                    Value::Long(_) => write!(f, "Long")?,
+                    Value::Float(_) => write!(f, "Float")?,
+                    Value::Double(_) => write!(f, "Double")?,
+                    Value::Bytes(_) => write!(f, "Bytes")?,
+                    Value::String(_) => write!(f, "String")?,
+                    Value::Fixed(_, _) => write!(f, "Fixed")?,
+                    Value::Enum(_, _) => write!(f, "Enum")?,
+                    Value::Union(_, _) => write!(f, "Union")?,
+                    Value::Array(_) => write!(f, "Array")?,
+                    Value::Map(_) => write!(f, "Map")?,
+                    Value::Record(_) => write!(f, "Record")?,
+                    Value::Date(_) => write!(f, "Date")?,
+                    Value::Decimal(_) => write!(f, "Decimal")?,
+                    Value::BigDecimal(_) => write!(f, "BigDecimal")?,
+                    Value::TimeMillis(_) => write!(f, "TimeMillis")?,
+                    Value::TimeMicros(_) => write!(f, "TimeMicros")?,
+                    Value::TimestampMillis(_) => write!(f, "TimestampMillis")?,
+                    Value::TimestampMicros(_) => write!(f, "TimestampMicros")?,
+                    Value::TimestampNanos(_) => write!(f, "TimestampNanos")?,
+                    Value::LocalTimestampMillis(_) => write!(f, "LocalTimestampMillis")?,
+                    Value::LocalTimestampMicros(_) => write!(f, "LocalTimestampMicros")?,
+                    Value::LocalTimestampNanos(_) => write!(f, "LocalTimestampNanos")?,
+                    Value::Duration(_) => write!(f, "Duration")?,
+                    Value::Uuid(_) => write!(f, "Uuid")?,
+                }
+            }
+            ValuePath::Index(index, prev) => {
+                prev.fmt(f)?;
+                write!(f, "[{index}].")?;
+            }
+            ValuePath::Key(key, prev) => {
+                prev.fmt(f)?;
+                write!(f, r#"["{key}"]."#)?;
+            }
+            ValuePath::Field(field, prev) => {
+                prev.fmt(f)?;
+                write!(f, ".{field}.")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+pub(crate) enum SchemaPath<'a> {
+    Start,
+    Schema(&'a Schema, &'a SchemaPath<'a>),
+    Index(usize, &'a SchemaPath<'a>),
+    Field(&'a str, &'a SchemaPath<'a>),
+}
+
+impl<'a> std::fmt::Display for SchemaPath<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.fmt_inner(f).map(|_| ())
+    }
+}
+
+impl<'a> SchemaPath<'a> {
+    fn fmt_inner(&self, f: &mut Formatter<'_>) -> Result<NamespaceRef<'_>, std::fmt::Error> {
+        match self {
+            SchemaPath::Start => Ok(None),
+            SchemaPath::Schema(schema, prev) => {
+                let enclosing_namespace = prev.fmt_inner(f)?;
+                match schema {
+                    Schema::Null => write!(f, "Null")?,
+                    Schema::Boolean => write!(f, "Boolean")?,
+                    Schema::Int => write!(f, "Int")?,
+                    Schema::Long => write!(f, "Long")?,
+                    Schema::Float => write!(f, "Float")?,
+                    Schema::Double => write!(f, "Double")?,
+                    Schema::Bytes => write!(f, "Bytes")?,
+                    Schema::String => write!(f, "String")?,
+                    Schema::Array(_) => write!(f, "Array")?,
+                    Schema::Map(_) => write!(f, "Map")?,
+                    Schema::Union(_) => write!(f, "Union")?,
+                    Schema::Record(_) => write!(f, "Record")?,
+                    Schema::Enum(_) => write!(f, "Enum")?,
+                    Schema::Fixed(_) => write!(f, "Fixed")?,
+                    Schema::Decimal(DecimalSchema {
+                        inner: InnerDecimalSchema::Fixed(_),
+                        ..
+                    }) => write!(f, "Decimal(Fixed)")?,
+                    Schema::Decimal(DecimalSchema {
+                        inner: InnerDecimalSchema::Bytes,
+                        ..
+                    }) => write!(f, "Decimal(Bytes)")?,
+                    Schema::BigDecimal => write!(f, "BigDecimal")?,
+                    Schema::Uuid(UuidSchema::Fixed(_)) => write!(f, "Uuid(Bytes)")?,
+                    Schema::Uuid(UuidSchema::Bytes) => write!(f, "Uuid(String)")?,
+                    Schema::Uuid(UuidSchema::String) => write!(f, "Uuid(Fixed)")?,
+                    Schema::Date => write!(f, "Date")?,
+                    Schema::TimeMillis => write!(f, "TimeMillis")?,
+                    Schema::TimeMicros => write!(f, "TimeMicros")?,
+                    Schema::TimestampMillis => write!(f, "TimestampMillis")?,
+                    Schema::TimestampMicros => write!(f, "TimestampMicros")?,
+                    Schema::TimestampNanos => write!(f, "TimestampNanos")?,
+                    Schema::LocalTimestampMillis => write!(f, "LocalTimestampMillis")?,
+                    Schema::LocalTimestampMicros => write!(f, "LocalTimestampMicros")?,
+                    Schema::LocalTimestampNanos => write!(f, "LocalTimestampNanos")?,
+                    Schema::Duration(_) => write!(f, "Duration")?,
+                    Schema::Ref { .. } => write!(f, "&")?,
+                }
+
+                if schema.discriminant() != SchemaKind::Ref
+                    && let Some(name) = schema.name()
+                {
+                    if name.namespace().is_none() || name.namespace() == enclosing_namespace {
+                        write!(f, "{{{}}}", name.name())?;
+                        Ok(enclosing_namespace)
+                    } else {
+                        write!(f, "{{{name}}}")?;
+                        Ok(name.namespace())
+                    }
+                } else {
+                    Ok(enclosing_namespace)
+                }
+            }
+            SchemaPath::Index(index, prev) => {
+                let enclosing_namespace = prev.fmt_inner(f)?;
+                write!(f, "[{index}].")?;
+                Ok(enclosing_namespace)
+            }
+            SchemaPath::Field(field, prev) => {
+                let enclosing_namespace = prev.fmt_inner(f)?;
+                write!(f, ".{field}.")?;
+                Ok(enclosing_namespace)
+            }
+        }
+    }
+}
+
 impl Value {
     /// Validate the value against the given [`Schema`].
     ///
@@ -377,11 +527,18 @@ impl Value {
     ///
     /// See the [Avro specification](https://avro.apache.org/docs/++version++/specification)
     /// for the full set of rules of schema validation.
-    ///
-    /// # Panics
-    /// Will panic if the schema contain unresolved references or duplicate named types.
-    pub fn validate(&self, schema: &Schema) -> bool {
-        self.validate_schemata(&[schema])
+    pub fn validate(&self, schema: &Schema) -> AvroResult<()> {
+        let rs = ResolvedSchema::new(schema)?;
+        match self.validate_internal(
+            schema,
+            rs.get_names(),
+            None,
+            &ValuePath::Start,
+            &SchemaPath::Start,
+        ) {
+            Some(reason) => Err(Details::InvalidValueForSchema(reason).into()),
+            None => Ok(()),
+        }
     }
 
     /// Validate the value against the given schemata.
@@ -392,28 +549,31 @@ impl Value {
     ///
     /// See the [Avro specification](https://avro.apache.org/docs/++version++/specification)
     /// for the full set of rules of schema validation.
-    ///
-    /// # Panics
-    /// Will panic if the schemata contain unresolved references or duplicate schemas.
-    pub fn validate_schemata(&self, schemata: &[&Schema]) -> bool {
-        let rs = ResolvedSchema::try_from(schemata.to_vec())
-            .expect("Schemata didn't successfully resolve");
+    pub fn validate_schemata(&self, schemata: &[&Schema]) -> AvroResult<()> {
+        let rs = ResolvedSchema::try_from(schemata.to_vec())?;
         let schemata_len = schemata.len();
-        schemata.iter().any(
-            |schema| match self.validate_internal(schema, rs.get_names(), None) {
+        let mut errors = Vec::with_capacity(schemata_len);
+        let found = schemata.iter().enumerate().any(|(index, schema)| {
+            match self.validate_internal(
+                schema,
+                rs.get_names(),
+                None,
+                &ValuePath::Start,
+                &SchemaPath::Index(index, &SchemaPath::Start),
+            ) {
                 Some(reason) => {
-                    let log_message =
-                        format!("Invalid value: {self:?} for schema: {schema:?}. Reason: {reason}");
-                    if schemata_len == 1 {
-                        error!("{log_message}");
-                    } else {
-                        debug!("{log_message}");
-                    };
+                    errors.push(reason);
                     false
                 }
                 None => true,
-            },
-        )
+            }
+        });
+
+        if found {
+            Ok(())
+        } else {
+            Err(Details::InvalidValueForAllSchemas(errors).into())
+        }
     }
 
     /// Validate the value against the given schema using `names` to resolve any references.
@@ -424,13 +584,10 @@ impl Value {
         &self,
         schema: &Schema,
         names: &HashMap<Name, S>,
-    ) -> bool {
-        match self.validate_internal(schema, names, None) {
-            Some(reason) => {
-                error!("Invalid value: {self:?} for schema: {schema:?}. Reason: {reason}");
-                false
-            }
-            None => true,
+    ) -> AvroResult<()> {
+        match self.validate_internal(schema, names, None, &ValuePath::Start, &SchemaPath::Start) {
+            Some(reason) => Err(Details::InvalidValueForSchema(reason).into()),
+            None => Ok(()),
         }
     }
 
@@ -449,6 +606,8 @@ impl Value {
         schema: &Schema,
         names: &HashMap<Name, S>,
         enclosing_namespace: NamespaceRef,
+        value_path: &ValuePath,
+        schema_path: &SchemaPath,
     ) -> Option<String> {
         match (self, schema) {
             (_, Schema::Ref { name }) => {
@@ -461,7 +620,15 @@ impl Value {
                             names.keys()
                         ))
                     },
-                    |s| self.validate_internal(s.borrow(), names, name.namespace()),
+                    |s| {
+                        self.validate_internal(
+                            s.borrow(),
+                            names,
+                            name.namespace(),
+                            value_path,
+                            &SchemaPath::Schema(schema, schema_path),
+                        )
+                    },
                 )
             }
             (&Value::Null, &Schema::Null) => None,
@@ -495,10 +662,12 @@ impl Value {
             (&Value::Bytes(_), &Schema::Bytes) => None,
             (&Value::Bytes(_), &Schema::Decimal { .. }) => None,
             (Value::Bytes(bytes), &Schema::Uuid(UuidSchema::Bytes)) => {
+                let value_path = ValuePath::Value(self, value_path);
                 if bytes.len() != 16 {
                     Some(format!(
-                        "The value's size ({}) is not the right length for a bytes UUID (16)",
-                        bytes.len()
+                        "Size of {value_path} ({}) is not the right length for {} (16)",
+                        bytes.len(),
+                        SchemaPath::Schema(schema, schema_path)
                     ))
                 } else {
                     None
@@ -506,54 +675,67 @@ impl Value {
             }
             (&Value::String(_), &Schema::String) => None,
             (Value::String(string), &Schema::Uuid(UuidSchema::String)) => {
-                // Non-hyphenated is 32 characters, hyphenated is longer
-                if string.len() < 32 {
+                let value_path = ValuePath::Value(self, value_path);
+                if string.len() < uuid::fmt::Simple::LENGTH || string.len() > uuid::fmt::Urn::LENGTH
+                {
                     Some(format!(
-                        "The value's size ({}) is not the right length for a string UUID (>=32)",
-                        string.len()
+                        "Size of {value_path} ({}) is not the right length for {} ({}..={})",
+                        string.len(),
+                        SchemaPath::Schema(schema, schema_path),
+                        uuid::fmt::Simple::LENGTH,
+                        uuid::fmt::Urn::LENGTH,
                     ))
                 } else {
                     None
                 }
             }
             (&Value::Fixed(n, _), &Schema::Fixed(FixedSchema { size, .. })) => {
+                let value_path = ValuePath::Value(self, value_path);
                 if n != size {
                     Some(format!(
-                        "The value's size ({n}) is different than the schema's size ({size})"
+                        "Size of {value_path} ({n}) is different than {} ({size})",
+                        SchemaPath::Schema(schema, schema_path),
                     ))
                 } else {
                     None
                 }
             }
             (Value::Bytes(b), &Schema::Fixed(FixedSchema { size, .. })) => {
+                let value_path = ValuePath::Value(self, value_path);
                 if b.len() != size {
                     Some(format!(
-                        "The bytes' length ({}) is different than the schema's size ({})",
+                        "Size of {value_path} ({}) is different than {} ({})",
                         b.len(),
-                        size
+                        size,
+                        SchemaPath::Schema(schema, schema_path),
                     ))
                 } else {
                     None
                 }
             }
             (&Value::Fixed(n, _), &Schema::Duration(_)) => {
+                let value_path = ValuePath::Value(self, value_path);
                 if n != 12 {
                     Some(format!(
-                        "The value's size ('{n}') must be exactly 12 to be a Duration"
+                        "Size of {value_path} ({n}) must be exactly 12 for {}",
+                        SchemaPath::Schema(schema, schema_path),
                     ))
                 } else {
                     None
                 }
             }
             (&Value::Fixed(n, _), Schema::Uuid(UuidSchema::Fixed(size, ..))) => {
+                let value_path = ValuePath::Value(self, value_path);
                 if size.size != 16 {
                     Some(format!(
-                        "The schema's size ('{}') must be exactly 16 to be a Uuid",
-                        size.size
+                        "Invalid schema: {} must be exactly 16 not {}",
+                        SchemaPath::Schema(schema, schema_path),
+                        size.size,
                     ))
                 } else if n != 16 {
                     Some(format!(
-                        "The value's size ('{n}') must be exactly 16 to be a Uuid"
+                        "Size of {value_path} ({n}) must be exactly 16 for {}",
+                        SchemaPath::Schema(schema, schema_path),
                     ))
                 } else {
                     None
@@ -562,8 +744,13 @@ impl Value {
             // TODO: check precision against n
             (&Value::Fixed(_n, _), &Schema::Decimal { .. }) => None,
             (Value::String(s), Schema::Enum(EnumSchema { symbols, .. })) => {
+                let value_path = ValuePath::Value(self, value_path);
                 if !symbols.contains(s) {
-                    Some(format!("'{s}' is not a member of the possible symbols"))
+                    // By doing s:? we get an escaped string
+                    Some(format!(
+                        "{value_path}({s:?}) is not a symbol in {}",
+                        SchemaPath::Schema(schema, schema_path),
+                    ))
                 } else {
                     None
                 }
@@ -573,42 +760,85 @@ impl Value {
                 Schema::Enum(EnumSchema {
                     symbols, default, ..
                 }),
-            ) => symbols
-                .get(i as usize)
-                .map(|ref symbol| {
-                    if symbol != &s {
-                        Some(format!("Symbol '{s}' is not at position '{i}'"))
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or_else(|| match default {
-                    Some(_) => None,
-                    None => Some(format!("No symbol at position '{i}'")),
-                }),
-            // (&Value::Union(None), &Schema::Union(_)) => None,
-            (&Value::Union(i, ref value), Schema::Union(inner)) => inner
-                .variants()
-                .get(i as usize)
-                .map(|schema| value.validate_internal(schema, names, enclosing_namespace))
-                .unwrap_or_else(|| Some(format!("No schema in the union at position '{i}'"))),
+            ) => {
+                let value_path = ValuePath::Value(self, value_path);
+                symbols
+                    .get(i as usize)
+                    .map(|ref symbol| {
+                        if symbol != &s {
+                            Some(format!("{value_path}({s:?}) does not exist at {i} in {}",
+                                         SchemaPath::Schema(schema, schema_path),))
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_else(|| match default {
+                        Some(_) => None,
+                        None => Some(format!("{value_path}({s:?}) is at position {i} but that position does not exist in {}",
+                                             SchemaPath::Schema(schema, schema_path),)),
+                    })
+            }
+            (&Value::Union(i, ref value), Schema::Union(inner)) => {
+                let value_path = ValuePath::Value(self, value_path);
+                let schema_path = SchemaPath::Schema(schema, schema_path);
+                inner
+                    .variants()
+                    .get(i as usize)
+                    .map(|schema| {
+                        value.validate_internal(
+                            schema,
+                            names,
+                            enclosing_namespace,
+                            &ValuePath::Index(i as usize, &value_path),
+                            &SchemaPath::Index(i as usize, &schema_path),
+                        )
+                    })
+                    .unwrap_or_else(|| {
+                        Some(format!(
+                            "{} is at position {i} but that position does not exist in {schema_path}",
+                            ValuePath::Value(value, &ValuePath::Index(i as usize, &value_path)),
+                        ))
+                    })
+            }
             (v, Schema::Union(inner)) => {
                 match inner.find_schema_with_known_schemata(v, Some(names), enclosing_namespace) {
                     Some(_) => None,
-                    None => Some("Could not find matching type in union".to_string()),
+                    None => Some(format!(
+                        "Could not find type matching {} in {}",
+                        ValuePath::Value(v, value_path),
+                        SchemaPath::Schema(schema, schema_path),
+                    )),
                 }
             }
-            (Value::Array(items), Schema::Array(inner)) => items.iter().fold(None, |acc, item| {
-                Value::accumulate(
-                    acc,
-                    item.validate_internal(&inner.items, names, enclosing_namespace),
-                )
-            }),
-            (Value::Map(items), Schema::Map(inner)) => {
-                items.iter().fold(None, |acc, (_, value)| {
+            (Value::Array(items), Schema::Array(inner)) => {
+                let value_path = ValuePath::Value(self, value_path);
+                let schema_path = SchemaPath::Schema(schema, schema_path);
+                items.iter().enumerate().fold(None, |acc, (index, item)| {
                     Value::accumulate(
                         acc,
-                        value.validate_internal(&inner.types, names, enclosing_namespace),
+                        item.validate_internal(
+                            &inner.items,
+                            names,
+                            enclosing_namespace,
+                            &ValuePath::Index(index, &value_path),
+                            &SchemaPath::Index(index, &schema_path),
+                        ),
+                    )
+                })
+            }
+            (Value::Map(items), Schema::Map(inner)) => {
+                let value_path = ValuePath::Value(self, value_path);
+                let schema_path = SchemaPath::Schema(schema, schema_path);
+                items.iter().fold(None, |acc, (key, value)| {
+                    Value::accumulate(
+                        acc,
+                        value.validate_internal(
+                            &inner.types,
+                            names,
+                            enclosing_namespace,
+                            &ValuePath::Key(key, &value_path),
+                            &schema_path,
+                        ),
                     )
                 })
             }
@@ -621,19 +851,21 @@ impl Value {
                     ..
                 }),
             ) => {
+                let value_path = ValuePath::Value(self, value_path);
+                let schema_path = SchemaPath::Schema(schema, schema_path);
                 let non_nullable_fields_count =
                     fields.iter().filter(|&rf| !rf.is_nullable()).count();
 
                 // If the record contains fewer fields as required fields by the schema, it is invalid.
                 if record_fields.len() < non_nullable_fields_count {
                     return Some(format!(
-                        "The value's records length ({}) doesn't match the schema ({} non-nullable fields)",
+                        "{value_path} has {} fields which doesn't match {schema_path} ({} non-nullable fields)",
                         record_fields.len(),
                         non_nullable_fields_count
                     ));
                 } else if record_fields.len() > fields.len() {
                     return Some(format!(
-                        "The value's records length ({}) is greater than the schema's ({} fields)",
+                        "{value_path} has {} fields which is greater than {schema_path} ({} fields)",
                         record_fields.len(),
                         fields.len(),
                     ));
@@ -652,27 +884,38 @@ impl Value {
                                         &field.schema,
                                         names,
                                         record_namespace,
+                                        &ValuePath::Field(&field.name, &value_path),
+                                        &SchemaPath::Field(&field.name, &schema_path),
                                     ),
                                 )
                             }
                             None => Value::accumulate(
                                 acc,
-                                Some(format!("There is no schema field for field '{field_name}'")),
+                                Some(format!("{value_path} has a field '{field_name}' but that does not exist in {schema_path}")),
                             ),
                         }
                     })
             }
             (Value::Map(items), Schema::Record(RecordSchema { fields, .. })) => {
+                let value_path = ValuePath::Value(self, value_path);
+                let schema_path = SchemaPath::Schema(schema, schema_path);
                 fields.iter().fold(None, |acc, field| {
                     if let Some(item) = items.get(&field.name) {
-                        let res = item.validate_internal(&field.schema, names, enclosing_namespace);
+                        // ValuePath is a Key, because the Value is a Map not a Record
+                        let res = item.validate_internal(
+                            &field.schema,
+                            names,
+                            enclosing_namespace,
+                            &ValuePath::Key(&field.name, &value_path),
+                            &SchemaPath::Field(&field.name, &schema_path),
+                        );
                         Value::accumulate(acc, res)
                     } else if !field.is_nullable() {
                         Value::accumulate(
                             acc,
                             Some(format!(
-                                "Field with name '{:?}' is not a member of the map items",
-                                field.name
+                                "{} is not a key in {value_path}",
+                                SchemaPath::Field(&field.name, &schema_path),
                             )),
                         )
                     } else {
@@ -680,9 +923,13 @@ impl Value {
                     }
                 })
             }
-            (v, s) => Some(format!(
-                "Unsupported value-schema combination! Value: {v:?}, schema: {s:?}"
-            )),
+            (_, _) => {
+                let value_path = ValuePath::Value(self, value_path);
+                let schema_path = SchemaPath::Schema(schema, schema_path);
+                Some(format!(
+                    "Unsupported value-schema combination! Value: {value_path}, schema: {schema_path}"
+                ))
+            }
         }
     }
 
@@ -1369,10 +1616,7 @@ mod tests {
         error::Details,
         to_value,
     };
-    use apache_avro_test_helper::{
-        TestResult,
-        logger::{assert_logged, assert_not_logged},
-    };
+    use apache_avro_test_helper::TestResult;
     use num_bigint::BigInt;
     use pretty_assertions::assert_eq;
     use serde_json::json;
@@ -1423,40 +1667,38 @@ mod tests {
             ]),
         )]);
 
-        assert!(value.validate(&schema));
+        value.validate(&schema)?;
         Ok(())
     }
 
     #[test]
     fn validate() -> TestResult {
         let value_schema_valid = vec![
-            (Value::Int(42), Schema::Int, true, ""),
-            (Value::Int(43), Schema::Long, true, ""),
-            (Value::Float(43.2), Schema::Float, true, ""),
-            (Value::Float(45.9), Schema::Double, true, ""),
+            (Value::Int(42), Schema::Int, None),
+            (Value::Int(43), Schema::Long, None),
+            (Value::Float(43.2), Schema::Float, None),
+            (Value::Float(45.9), Schema::Double, None),
             (
                 Value::Int(42),
                 Schema::Boolean,
-                false,
-                "Invalid value: Int(42) for schema: Boolean. Reason: Unsupported value-schema combination! Value: Int(42), schema: Boolean",
+                Some("Unsupported value-schema combination! Value: Int, schema: Boolean"),
             ),
             (
                 Value::Union(0, Box::new(Value::Null)),
                 Schema::Union(UnionSchema::new(vec![Schema::Null, Schema::Int])?),
-                true,
-                "",
+                None,
             ),
             (
                 Value::Union(1, Box::new(Value::Int(42))),
                 Schema::Union(UnionSchema::new(vec![Schema::Null, Schema::Int])?),
-                true,
-                "",
+                None,
             ),
             (
                 Value::Union(0, Box::new(Value::Null)),
                 Schema::Union(UnionSchema::new(vec![Schema::Double, Schema::Int])?),
-                false,
-                "Invalid value: Union(0, Null) for schema: Union(UnionSchema { schemas: [Double, Int] }). Reason: Unsupported value-schema combination! Value: Null, schema: Double",
+                Some(
+                    "Unsupported value-schema combination! Value: Union[0].Null, schema: Union[0].Double",
+                ),
             ),
             (
                 Value::Union(3, Box::new(Value::Int(42))),
@@ -1466,8 +1708,7 @@ mod tests {
                     Schema::String,
                     Schema::Int,
                 ])?),
-                true,
-                "",
+                None,
             ),
             (
                 Value::Union(1, Box::new(Value::Long(42i64))),
@@ -1475,32 +1716,36 @@ mod tests {
                     Schema::Null,
                     Schema::TimestampMillis,
                 ])?),
-                true,
-                "",
+                None,
             ),
             (
                 Value::Union(2, Box::new(Value::Long(1_i64))),
                 Schema::Union(UnionSchema::new(vec![Schema::Null, Schema::Int])?),
-                false,
-                "Invalid value: Union(2, Long(1)) for schema: Union(UnionSchema { schemas: [Null, Int] }). Reason: No schema in the union at position '2'",
+                Some("Union[2].Long is at position 2 but that position does not exist in Union"),
             ),
             (
                 Value::Array(vec![Value::Long(42i64)]),
                 Schema::array(Schema::Long).build(),
-                true,
-                "",
+                None,
             ),
             (
                 Value::Array(vec![Value::Boolean(true)]),
                 Schema::array(Schema::Long).build(),
-                false,
-                "Invalid value: Array([Boolean(true)]) for schema: Array(ArraySchema { items: Long, .. }). Reason: Unsupported value-schema combination! Value: Boolean(true), schema: Long",
+                Some(
+                    "Unsupported value-schema combination! Value: Array[0].Boolean, schema: Array[0].Long",
+                ),
+            ),
+            (
+                Value::Array(vec![Value::Long(42), Value::Boolean(true)]),
+                Schema::array(Schema::Long).build(),
+                Some(
+                    "Unsupported value-schema combination! Value: Array[1].Boolean, schema: Array[1].Long",
+                ),
             ),
             (
                 Value::Record(vec![]),
                 Schema::Null,
-                false,
-                "Invalid value: Record([]) for schema: Null. Reason: Unsupported value-schema combination! Value: Record([]), schema: Null",
+                Some("Unsupported value-schema combination! Value: Record, schema: Null"),
             ),
             (
                 Value::Fixed(12, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
@@ -1511,8 +1756,7 @@ mod tests {
                     size: 12,
                     attributes: BTreeMap::new(),
                 }),
-                true,
-                "",
+                None,
             ),
             (
                 Value::Fixed(11, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
@@ -1523,8 +1767,7 @@ mod tests {
                     size: 12,
                     attributes: BTreeMap::new(),
                 }),
-                false,
-                r#"Invalid value: Fixed(11, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) for schema: Duration(FixedSchema { name: Name { name: "TestName", .. }, size: 12, .. }). Reason: The value's size ('11') must be exactly 12 to be a Duration"#,
+                Some("Size of Fixed (11) must be exactly 12 for Duration{TestName}"),
             ),
             (
                 Value::Record(vec![("unknown_field_name".to_string(), Value::Null)]),
@@ -1541,8 +1784,9 @@ mod tests {
                     lookup: Default::default(),
                     attributes: Default::default(),
                 }),
-                false,
-                r#"Invalid value: Record([("unknown_field_name", Null)]) for schema: Record(RecordSchema { name: Name { name: "record_name", .. }, fields: [RecordField { name: "field_name", schema: Int, .. }], .. }). Reason: There is no schema field for field 'unknown_field_name'"#,
+                Some(
+                    "Record has a field 'unknown_field_name' but that does not exist in Record{record_name}",
+                ),
             ),
             (
                 Value::Record(vec![("field_name".to_string(), Value::Null)]),
@@ -1561,23 +1805,21 @@ mod tests {
                     lookup: [("field_name".to_string(), 0)].iter().cloned().collect(),
                     attributes: Default::default(),
                 }),
-                false,
-                r#"Invalid value: Record([("field_name", Null)]) for schema: Record(RecordSchema { name: Name { name: "record_name", .. }, fields: [RecordField { name: "field_name", schema: Ref { name: Name { name: "missing", .. } }, .. }], .. }). Reason: Unresolved schema reference: 'Name { name: "missing", .. }'. Parsed names: []"#,
+                Some(
+                    r#"Unresolved schema reference: 'Name { name: "missing", .. }'. Parsed names: []"#,
+                ),
             ),
         ];
 
-        for (value, schema, valid, expected_err_message) in value_schema_valid.into_iter() {
-            let err_message = value.validate_internal::<Schema>(&schema, &HashMap::default(), None);
-            assert_eq!(valid, err_message.is_none());
-            if !valid {
-                let full_err_message = format!(
-                    "Invalid value: {:?} for schema: {:?}. Reason: {}",
-                    value,
-                    schema,
-                    err_message.unwrap()
-                );
-                assert_eq!(expected_err_message, full_err_message);
-            }
+        for (value, schema, expected_err_message) in value_schema_valid.into_iter() {
+            let err_message = value.validate_internal::<Schema>(
+                &schema,
+                &HashMap::default(),
+                None,
+                &ValuePath::Start,
+                &SchemaPath::Start,
+            );
+            assert_eq!(err_message.as_deref(), expected_err_message);
         }
 
         Ok(())
@@ -1593,26 +1835,22 @@ mod tests {
             attributes: Default::default(),
         });
 
-        assert!(Value::Fixed(4, vec![0, 0, 0, 0]).validate(&schema));
+        Value::Fixed(4, vec![0, 0, 0, 0]).validate(&schema)?;
         let value = Value::Fixed(5, vec![0, 0, 0, 0, 0]);
-        assert!(!value.validate(&schema));
-        assert_logged(
-            format!(
-                "Invalid value: {:?} for schema: {:?}. Reason: {}",
-                value, schema, "The value's size (5) is different than the schema's size (4)"
-            )
-            .as_str(),
+        assert_eq!(
+            value.validate(&schema).unwrap_err().to_string(),
+            "The value is invalid for the given schema: Size of Fixed (5) is different than Fixed{some_fixed} (4)"
+        );
+        assert_eq!(
+            value.validate(&schema).unwrap_err().to_string(),
+            "The value is invalid for the given schema: Size of Fixed (5) is different than Fixed{some_fixed} (4)"
         );
 
-        assert!(Value::Bytes(vec![0, 0, 0, 0]).validate(&schema));
+        Value::Bytes(vec![0, 0, 0, 0]).validate(&schema)?;
         let value = Value::Bytes(vec![0, 0, 0, 0, 0]);
-        assert!(!value.validate(&schema));
-        assert_logged(
-            format!(
-                "Invalid value: {:?} for schema: {:?}. Reason: {}",
-                value, schema, "The bytes' length (5) is different than the schema's size (4)"
-            )
-            .as_str(),
+        assert_eq!(
+            value.validate(&schema).unwrap_err().to_string(),
+            "The value is invalid for the given schema: Size of Bytes (5) is different than 4 (Fixed{some_fixed})"
         );
 
         Ok(())
@@ -1634,37 +1872,25 @@ mod tests {
             attributes: Default::default(),
         });
 
-        assert!(Value::Enum(0, "spades".to_string()).validate(&schema));
-        assert!(Value::String("spades".to_string()).validate(&schema));
+        Value::Enum(0, "spades".to_string()).validate(&schema)?;
+        Value::String("spades".to_string()).validate(&schema)?;
 
         let value = Value::Enum(1, "spades".to_string());
-        assert!(!value.validate(&schema));
-        assert_logged(
-            format!(
-                "Invalid value: {:?} for schema: {:?}. Reason: {}",
-                value, schema, "Symbol 'spades' is not at position '1'"
-            )
-            .as_str(),
+        assert_eq!(
+            value.validate(&schema).unwrap_err().to_string(),
+            r#"The value is invalid for the given schema: Enum("spades") does not exist at 1 in Enum{some_enum}"#
         );
 
         let value = Value::Enum(1000, "spades".to_string());
-        assert!(!value.validate(&schema));
-        assert_logged(
-            format!(
-                "Invalid value: {:?} for schema: {:?}. Reason: {}",
-                value, schema, "No symbol at position '1000'"
-            )
-            .as_str(),
+        assert_eq!(
+            value.validate(&schema).unwrap_err().to_string(),
+            r#"The value is invalid for the given schema: Enum("spades") is at position 1000 but that position does not exist in Enum{some_enum}"#
         );
 
         let value = Value::String("lorem".to_string());
-        assert!(!value.validate(&schema));
-        assert_logged(
-            format!(
-                "Invalid value: {:?} for schema: {:?}. Reason: {}",
-                value, schema, "'lorem' is not a member of the possible symbols"
-            )
-            .as_str(),
+        assert_eq!(
+            value.validate(&schema).unwrap_err().to_string(),
+            r#"The value is invalid for the given schema: String("lorem") is not a symbol in Enum{some_enum}"#
         );
 
         let other_schema = Schema::Enum(EnumSchema {
@@ -1682,13 +1908,9 @@ mod tests {
         });
 
         let value = Value::Enum(0, "spades".to_string());
-        assert!(!value.validate(&other_schema));
-        assert_logged(
-            format!(
-                "Invalid value: {:?} for schema: {:?}. Reason: {}",
-                value, other_schema, "Symbol 'spades' is not at position '0'"
-            )
-            .as_str(),
+        assert_eq!(
+            value.validate(&other_schema).unwrap_err().to_string(),
+            r#"The value is invalid for the given schema: Enum("spades") does not exist at 0 in Enum{some_other_enum}"#
         );
 
         Ok(())
@@ -1741,48 +1963,43 @@ mod tests {
             attributes: Default::default(),
         });
 
-        assert!(
-            Value::Record(vec![
-                ("a".to_string(), Value::Long(42i64)),
-                ("b".to_string(), Value::String("foo".to_string())),
-            ])
-            .validate(&schema)
-        );
+        Value::Record(vec![
+            ("a".to_string(), Value::Long(42i64)),
+            ("b".to_string(), Value::String("foo".to_string())),
+        ])
+        .validate(&schema)?;
 
         let value = Value::Record(vec![
             ("b".to_string(), Value::String("foo".to_string())),
             ("a".to_string(), Value::Long(42i64)),
         ]);
-        assert!(value.validate(&schema));
+        value.validate(&schema)?;
 
         let value = Value::Record(vec![
             ("a".to_string(), Value::Boolean(false)),
             ("b".to_string(), Value::String("foo".to_string())),
         ]);
-        assert!(!value.validate(&schema));
-        assert_logged(
-            r#"Invalid value: Record([("a", Boolean(false)), ("b", String("foo"))]) for schema: Record(RecordSchema { name: Name { name: "some_record", .. }, fields: [RecordField { name: "a", schema: Long, .. }, RecordField { name: "b", schema: String, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), .. }], .. }). Reason: Unsupported value-schema combination! Value: Boolean(false), schema: Long"#,
+        assert_eq!(
+            value.validate(&schema).unwrap_err().to_string(),
+            "The value is invalid for the given schema: Unsupported value-schema combination! Value: Record.a.Boolean, schema: Record{some_record}.a.Long"
         );
 
         let value = Value::Record(vec![
             ("a".to_string(), Value::Long(42i64)),
             ("c".to_string(), Value::String("foo".to_string())),
         ]);
-        assert!(!value.validate(&schema));
-        assert_logged(
-            r#"Invalid value: Record([("a", Long(42)), ("c", String("foo"))]) for schema: Record(RecordSchema { name: Name { name: "some_record", .. }, fields: [RecordField { name: "a", schema: Long, .. }, RecordField { name: "b", schema: String, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), .. }], .. }). Reason: Could not find matching type in union"#,
-        );
-        assert_not_logged(
-            r#"Invalid value: String("foo") for schema: Int. Reason: Unsupported value-schema combination"#,
+        assert_eq!(
+            value.validate(&schema).unwrap_err().to_string(),
+            "The value is invalid for the given schema: Could not find type matching Record.c.String in Record{some_record}.c.Union",
         );
 
         let value = Value::Record(vec![
             ("a".to_string(), Value::Long(42i64)),
             ("d".to_string(), Value::String("foo".to_string())),
         ]);
-        assert!(!value.validate(&schema));
-        assert_logged(
-            r#"Invalid value: Record([("a", Long(42)), ("d", String("foo"))]) for schema: Record(RecordSchema { name: Name { name: "some_record", .. }, fields: [RecordField { name: "a", schema: Long, .. }, RecordField { name: "b", schema: String, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), .. }], .. }). Reason: There is no schema field for field 'd'"#,
+        assert_eq!(
+            value.validate(&schema).unwrap_err().to_string(),
+            "The value is invalid for the given schema: Record has a field 'd' but that does not exist in Record{some_record}",
         );
 
         let value = Value::Record(vec![
@@ -1791,63 +2008,56 @@ mod tests {
             ("c".to_string(), Value::Null),
             ("d".to_string(), Value::Null),
         ]);
-        assert!(!value.validate(&schema));
-        assert_logged(
-            r#"Invalid value: Record([("a", Long(42)), ("b", String("foo")), ("c", Null), ("d", Null)]) for schema: Record(RecordSchema { name: Name { name: "some_record", .. }, fields: [RecordField { name: "a", schema: Long, .. }, RecordField { name: "b", schema: String, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), .. }], .. }). Reason: The value's records length (4) is greater than the schema's (3 fields)"#,
+        assert_eq!(
+            value.validate(&schema).unwrap_err().to_string(),
+            "The value is invalid for the given schema: Record has 4 fields which is greater than Record{some_record} (3 fields)",
         );
 
-        assert!(
+        Value::Map(
+            vec![
+                ("a".to_string(), Value::Long(42i64)),
+                ("b".to_string(), Value::String("foo".to_string())),
+            ]
+            .into_iter()
+            .collect(),
+        )
+        .validate(&schema)?;
+
+        assert_eq!(
             Value::Map(
-                vec![
-                    ("a".to_string(), Value::Long(42i64)),
-                    ("b".to_string(), Value::String("foo".to_string())),
-                ]
-                .into_iter()
-                .collect()
-            )
-            .validate(&schema)
-        );
-
-        assert!(
-            !Value::Map(
                 vec![("d".to_string(), Value::Long(123_i64)),]
                     .into_iter()
                     .collect()
             )
             .validate(&schema)
-        );
-        assert_logged(
-            r#"Invalid value: Map({"d": Long(123)}) for schema: Record(RecordSchema { name: Name { name: "some_record", .. }, fields: [RecordField { name: "a", schema: Long, .. }, RecordField { name: "b", schema: String, .. }, RecordField { name: "c", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), .. }], .. }). Reason: Field with name '"a"' is not a member of the map items
-Field with name '"b"' is not a member of the map items"#,
+            .unwrap_err()
+            .to_string(),
+            "The value is invalid for the given schema: Record{some_record}.a. is not a key in Map\nRecord{some_record}.b. is not a key in Map",
         );
 
         let union_schema = Schema::Union(UnionSchema::new(vec![Schema::Null, schema])?);
 
-        assert!(
-            Value::Union(
-                1,
-                Box::new(Value::Record(vec![
+        Value::Union(
+            1,
+            Box::new(Value::Record(vec![
+                ("a".to_string(), Value::Long(42i64)),
+                ("b".to_string(), Value::String("foo".to_string())),
+            ])),
+        )
+        .validate(&union_schema)?;
+
+        Value::Union(
+            1,
+            Box::new(Value::Map(
+                vec![
                     ("a".to_string(), Value::Long(42i64)),
                     ("b".to_string(), Value::String("foo".to_string())),
-                ]))
-            )
-            .validate(&union_schema)
-        );
-
-        assert!(
-            Value::Union(
-                1,
-                Box::new(Value::Map(
-                    vec![
-                        ("a".to_string(), Value::Long(42i64)),
-                        ("b".to_string(), Value::String("foo".to_string())),
-                    ]
-                    .into_iter()
-                    .collect()
-                ))
-            )
-            .validate(&union_schema)
-        );
+                ]
+                .into_iter()
+                .collect(),
+            )),
+        )
+        .validate(&union_schema)?;
 
         Ok(())
     }
@@ -1888,7 +2098,10 @@ Field with name '"b"' is not a member of the map items"#,
     #[test]
     fn resolve_bytes_failure() {
         let value = Value::Array(vec![Value::Int(2000), Value::Int(-42)]);
-        assert!(value.resolve(&Schema::Bytes).is_err());
+        assert_eq!(
+            value.resolve(&Schema::Bytes).unwrap_err().to_string(),
+            "Unable to convert to u8, got Int(2000)"
+        );
     }
 
     #[test]
@@ -1899,7 +2112,10 @@ Field with name '"b"' is not a member of the map items"#,
             scale: 4,
             inner: InnerDecimalSchema::Bytes,
         }))?;
-        assert!(value.resolve(&Schema::String).is_err());
+        assert_eq!(
+            value.resolve(&Schema::String).unwrap_err().to_string(),
+            "Expected Value::String, Value::Bytes or Value::Fixed, got: Decimal(Decimal { value: 4328719365, len: 5 })"
+        );
 
         Ok(())
     }
@@ -1929,14 +2145,16 @@ Field with name '"b"' is not a member of the map items"#,
         );
 
         let value = Value::String("\u{0100}".to_string());
-        assert!(
+        assert_eq!(
             value
                 .resolve(&Schema::Decimal(DecimalSchema {
                     precision: 10,
                     scale: 4,
                     inner: InnerDecimalSchema::Bytes,
                 }))
-                .is_err()
+                .unwrap_err()
+                .to_string(),
+            r#"Expected Value::Decimal, Value::Bytes, Value::Fixed or Value::String, got: String("Ā")"#
         );
 
         Ok(())
@@ -1970,132 +2188,202 @@ Field with name '"b"' is not a member of the map items"#,
     #[test]
     fn resolve_decimal_invalid_scale() {
         let value = Value::Decimal(Decimal::from(vec![1, 2]));
-        assert!(
+        assert_eq!(
             value
                 .resolve(&Schema::Decimal(DecimalSchema {
                     precision: 2,
                     scale: 3,
                     inner: InnerDecimalSchema::Bytes,
                 }))
-                .is_err()
+                .unwrap_err()
+                .to_string(),
+            "Scale 3 is greater than precision 2"
         );
     }
 
     #[test]
     fn resolve_decimal_invalid_precision_for_length() {
         let value = Value::Decimal(Decimal::from((1u8..=8u8).rev().collect::<Vec<_>>()));
-        assert!(
-            value
-                .resolve(&Schema::Decimal(DecimalSchema {
-                    precision: 1,
-                    scale: 0,
-                    inner: InnerDecimalSchema::Bytes,
-                }))
-                .is_ok()
-        );
+        value
+            .resolve(&Schema::Decimal(DecimalSchema {
+                precision: 1,
+                scale: 0,
+                inner: InnerDecimalSchema::Bytes,
+            }))
+            .unwrap();
     }
 
     #[test]
     fn resolve_decimal_fixed() {
         let value = Value::Decimal(Decimal::from(vec![1, 2, 3, 4, 5]));
-        assert!(
-            value
-                .clone()
-                .resolve(&Schema::Decimal(DecimalSchema {
-                    precision: 10,
-                    scale: 1,
-                    inner: InnerDecimalSchema::Fixed(FixedSchema {
-                        name: Name::new("decimal").unwrap(),
-                        aliases: None,
-                        size: 20,
-                        doc: None,
-                        attributes: Default::default(),
-                    })
-                }))
-                .is_ok()
+        value
+            .clone()
+            .resolve(&Schema::Decimal(DecimalSchema {
+                precision: 10,
+                scale: 1,
+                inner: InnerDecimalSchema::Fixed(FixedSchema {
+                    name: Name::new("decimal").unwrap(),
+                    aliases: None,
+                    size: 20,
+                    doc: None,
+                    attributes: Default::default(),
+                }),
+            }))
+            .unwrap();
+        assert_eq!(
+            value.resolve(&Schema::String).unwrap_err().to_string(),
+            "Expected Value::String, Value::Bytes or Value::Fixed, got: Decimal(Decimal { value: 4328719365, len: 5 })"
         );
-        assert!(value.resolve(&Schema::String).is_err());
     }
 
     #[test]
     fn resolve_date() {
         let value = Value::Date(2345);
-        assert!(value.clone().resolve(&Schema::Date).is_ok());
-        assert!(value.resolve(&Schema::String).is_err());
+        value.clone().resolve(&Schema::Date).unwrap();
+        assert_eq!(
+            value.resolve(&Schema::String).unwrap_err().to_string(),
+            "Expected Value::String, Value::Bytes or Value::Fixed, got: Date(2345)"
+        );
     }
 
     #[test]
     fn resolve_time_millis() {
         let value = Value::TimeMillis(10);
-        assert!(value.clone().resolve(&Schema::TimeMillis).is_ok());
-        assert!(value.resolve(&Schema::TimeMicros).is_err());
+        value.clone().resolve(&Schema::TimeMillis).unwrap();
+        assert_eq!(
+            value.resolve(&Schema::TimeMicros).unwrap_err().to_string(),
+            "Expected Value::TimeMicros, Value::Long or Value::Int, got: TimeMillis(10)"
+        );
     }
 
     #[test]
     fn resolve_time_micros() {
         let value = Value::TimeMicros(10);
-        assert!(value.clone().resolve(&Schema::TimeMicros).is_ok());
-        assert!(value.resolve(&Schema::TimeMillis).is_err());
+        value.clone().resolve(&Schema::TimeMicros).unwrap();
+        assert_eq!(
+            value.resolve(&Schema::TimeMillis).unwrap_err().to_string(),
+            "Expected Value::TimeMillis or Value::Int, got: TimeMicros(10)"
+        );
     }
 
     #[test]
     fn resolve_timestamp_millis() {
         let value = Value::TimestampMillis(10);
-        assert!(value.clone().resolve(&Schema::TimestampMillis).is_ok());
-        assert!(value.resolve(&Schema::Float).is_err());
+        value.clone().resolve(&Schema::TimestampMillis).unwrap();
+        assert_eq!(
+            value.resolve(&Schema::Float).unwrap_err().to_string(),
+            r#"Expected Value::Float, Value::Double, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: TimestampMillis(10)"#
+        );
 
         let value = Value::Float(10.0f32);
-        assert!(value.resolve(&Schema::TimestampMillis).is_err());
+        assert_eq!(
+            value
+                .resolve(&Schema::TimestampMillis)
+                .unwrap_err()
+                .to_string(),
+            "Expected Value::TimestampMillis, Value::Long or Value::Int, got: Float(10.0)"
+        );
     }
 
     #[test]
     fn resolve_timestamp_micros() {
         let value = Value::TimestampMicros(10);
-        assert!(value.clone().resolve(&Schema::TimestampMicros).is_ok());
-        assert!(value.resolve(&Schema::Int).is_err());
+        value.clone().resolve(&Schema::TimestampMicros).unwrap();
+        assert_eq!(
+            value.resolve(&Schema::Int).unwrap_err().to_string(),
+            "Expected Value::Int, got: TimestampMicros(10)"
+        );
 
         let value = Value::Double(10.0);
-        assert!(value.resolve(&Schema::TimestampMicros).is_err());
+        assert_eq!(
+            value
+                .resolve(&Schema::TimestampMicros)
+                .unwrap_err()
+                .to_string(),
+            "Expected Value::TimestampMicros, Value::Long or Value::Int, got: Double(10.0)"
+        );
     }
 
     #[test]
     fn test_avro_3914_resolve_timestamp_nanos() {
         let value = Value::TimestampNanos(10);
-        assert!(value.clone().resolve(&Schema::TimestampNanos).is_ok());
-        assert!(value.resolve(&Schema::Int).is_err());
+        value.clone().resolve(&Schema::TimestampNanos).unwrap();
+        assert_eq!(
+            value.resolve(&Schema::Int).unwrap_err().to_string(),
+            "Expected Value::Int, got: TimestampNanos(10)"
+        );
 
         let value = Value::Double(10.0);
-        assert!(value.resolve(&Schema::TimestampNanos).is_err());
+        assert_eq!(
+            value
+                .resolve(&Schema::TimestampNanos)
+                .unwrap_err()
+                .to_string(),
+            "Expected Value::TimestampNanos, Value::Long or Value::Int, got: Double(10.0)"
+        );
     }
 
     #[test]
     fn test_avro_3853_resolve_timestamp_millis() {
         let value = Value::LocalTimestampMillis(10);
-        assert!(value.clone().resolve(&Schema::LocalTimestampMillis).is_ok());
-        assert!(value.resolve(&Schema::Float).is_err());
+        value
+            .clone()
+            .resolve(&Schema::LocalTimestampMillis)
+            .unwrap();
+        assert_eq!(
+            value.resolve(&Schema::Float).unwrap_err().to_string(),
+            r#"Expected Value::Float, Value::Double, Value::Int, Value::Long or Value::String ("NaN", "INF", "Infinity", "-INF" or "-Infinity"), got: LocalTimestampMillis(10)"#
+        );
 
         let value = Value::Float(10.0f32);
-        assert!(value.resolve(&Schema::LocalTimestampMillis).is_err());
+        assert_eq!(
+            value
+                .resolve(&Schema::LocalTimestampMillis)
+                .unwrap_err()
+                .to_string(),
+            "Expected Value::LocalTimestampMillis, Value::Long or Value::Int, got: Float(10.0)"
+        );
     }
 
     #[test]
     fn test_avro_3853_resolve_timestamp_micros() {
         let value = Value::LocalTimestampMicros(10);
-        assert!(value.clone().resolve(&Schema::LocalTimestampMicros).is_ok());
-        assert!(value.resolve(&Schema::Int).is_err());
+        value
+            .clone()
+            .resolve(&Schema::LocalTimestampMicros)
+            .unwrap();
+        assert_eq!(
+            value.resolve(&Schema::Int).unwrap_err().to_string(),
+            "Expected Value::Int, got: LocalTimestampMicros(10)"
+        );
 
         let value = Value::Double(10.0);
-        assert!(value.resolve(&Schema::LocalTimestampMicros).is_err());
+        assert_eq!(
+            value
+                .resolve(&Schema::LocalTimestampMicros)
+                .unwrap_err()
+                .to_string(),
+            "Expected Value::LocalTimestampMicros, Value::Long or Value::Int, got: Double(10.0)"
+        );
     }
 
     #[test]
     fn test_avro_3916_resolve_timestamp_nanos() {
         let value = Value::LocalTimestampNanos(10);
-        assert!(value.clone().resolve(&Schema::LocalTimestampNanos).is_ok());
-        assert!(value.resolve(&Schema::Int).is_err());
+        value.clone().resolve(&Schema::LocalTimestampNanos).unwrap();
+        assert_eq!(
+            value.resolve(&Schema::Int).unwrap_err().to_string(),
+            "Expected Value::Int, got: LocalTimestampNanos(10)"
+        );
 
         let value = Value::Double(10.0);
-        assert!(value.resolve(&Schema::LocalTimestampNanos).is_err());
+        assert_eq!(
+            value
+                .resolve(&Schema::LocalTimestampNanos)
+                .unwrap_err()
+                .to_string(),
+            "Expected Value::LocalTimestampNanos, Value::Long or Value::Int, got: Double(10.0)"
+        );
     }
 
     #[test]
@@ -2105,20 +2393,24 @@ Field with name '"b"' is not a member of the map items"#,
             Days::new(5),
             Millis::new(3000),
         ));
-        assert!(
+        value
+            .clone()
+            .resolve(&Schema::Duration(FixedSchema {
+                name: Name::try_from("TestName").expect("Name is valid"),
+                aliases: None,
+                doc: None,
+                size: 12,
+                attributes: BTreeMap::new(),
+            }))
+            .unwrap();
+        assert_eq!(
             value
-                .clone()
-                .resolve(&Schema::Duration(FixedSchema {
-                    name: Name::try_from("TestName").expect("Name is valid"),
-                    aliases: None,
-                    doc: None,
-                    size: 12,
-                    attributes: BTreeMap::new()
-                }))
-                .is_ok()
+                .resolve(&Schema::TimestampMicros)
+                .unwrap_err()
+                .to_string(),
+            "Expected Value::TimestampMicros, Value::Long or Value::Int, got: Duration(Duration { months: Months(10), days: Days(5), millis: Millis(3000) })"
         );
-        assert!(value.resolve(&Schema::TimestampMicros).is_err());
-        assert!(
+        assert_eq!(
             Value::Long(1i64)
                 .resolve(&Schema::Duration(FixedSchema {
                     name: Name::try_from("TestName").expect("Name is valid"),
@@ -2127,38 +2419,33 @@ Field with name '"b"' is not a member of the map items"#,
                     size: 12,
                     attributes: BTreeMap::new()
                 }))
-                .is_err()
+                .unwrap_err()
+                .to_string(),
+            "Expected Value::Duration or Value::Fixed(12), got: Long(1)"
         );
     }
 
     #[test]
     fn resolve_uuid() -> TestResult {
         let value = Value::Uuid(Uuid::parse_str("1481531d-ccc9-46d9-a56f-5b67459c0537")?);
-        assert!(
+        value.clone().resolve(&Schema::Uuid(UuidSchema::String))?;
+        value.clone().resolve(&Schema::Uuid(UuidSchema::Bytes))?;
+        value
+            .clone()
+            .resolve(&Schema::Uuid(UuidSchema::Fixed(FixedSchema {
+                name: Name::new("some_name")?,
+                aliases: None,
+                doc: None,
+                size: 16,
+                attributes: Default::default(),
+            })))?;
+        assert_eq!(
             value
-                .clone()
-                .resolve(&Schema::Uuid(UuidSchema::String))
-                .is_ok()
+                .resolve(&Schema::TimestampMicros)
+                .unwrap_err()
+                .to_string(),
+            "Expected Value::TimestampMicros, Value::Long or Value::Int, got: Uuid(1481531d-ccc9-46d9-a56f-5b67459c0537)"
         );
-        assert!(
-            value
-                .clone()
-                .resolve(&Schema::Uuid(UuidSchema::Bytes))
-                .is_ok()
-        );
-        assert!(
-            value
-                .clone()
-                .resolve(&Schema::Uuid(UuidSchema::Fixed(FixedSchema {
-                    name: Name::new("some_name")?,
-                    aliases: None,
-                    doc: None,
-                    size: 16,
-                    attributes: Default::default(),
-                })))
-                .is_ok()
-        );
-        assert!(value.resolve(&Schema::TimestampMicros).is_err());
 
         Ok(())
     }
@@ -2166,7 +2453,7 @@ Field with name '"b"' is not a member of the map items"#,
     #[test]
     fn avro_3678_resolve_float_to_double() {
         let value = Value::Float(2345.1);
-        assert!(value.resolve(&Schema::Double).is_ok());
+        value.resolve(&Schema::Double).unwrap();
     }
 
     #[test]
@@ -2209,13 +2496,16 @@ Field with name '"b"' is not a member of the map items"#,
             "event".to_string(),
             Value::Record(vec![("amount".to_string(), Value::Int(200))]),
         )]);
-        assert!(value.resolve(&schema).is_ok());
+        value.resolve(&schema)?;
 
         let value = Value::Record(vec![(
             "event".to_string(),
             Value::Record(vec![("size".to_string(), Value::Int(1))]),
         )]);
-        assert!(value.resolve(&schema).is_err());
+        assert_eq!(
+            value.resolve(&schema).unwrap_err().to_string(),
+            r#"Could not find matching type in UnionSchema { schemas: [Null, Record(RecordSchema { name: Name { name: "event", .. }, fields: [RecordField { name: "amount", schema: Int, .. }, RecordField { name: "size", default: Null, schema: Union(UnionSchema { schemas: [Null, Int] }), .. }], .. })] } for Record([("size", Int(1))])"#
+        );
 
         Ok(())
     }
@@ -2974,14 +3264,14 @@ Field with name '"b"' is not a member of the map items"#,
             ("b".into(), inner_value_wrong2),
         ]);
 
-        assert!(
-            !outer1.validate(&schema),
-            "field b record is invalid against the schema"
-        ); // this should pass, but doesn't
-        assert!(
-            !outer2.validate(&schema),
-            "field b record is invalid against the schema"
-        ); // this should pass, but doesn't
+        assert_eq!(
+            outer1.validate(&schema).unwrap_err().to_string(),
+            "The value is invalid for the given schema: Unsupported value-schema combination! Value: Record.b.Record.z.Null, schema: Record{TestStruct}.b.&Record{Inner}.z.Int",
+        );
+        assert_eq!(
+            outer2.validate(&schema).unwrap_err().to_string(),
+            "The value is invalid for the given schema: Record.b.Record has a field 'a' but that does not exist in Record{TestStruct}.b.&Record{Inner}"
+        );
 
         Ok(())
     }
@@ -3056,17 +3346,17 @@ Field with name '"b"' is not a member of the map items"#,
         let test_outer2: Value = to_value(test_outer2)?;
         let test_outer3: Value = to_value(test_outer3)?;
 
-        assert!(
-            !test_outer1.validate(&schema),
-            "field b record is invalid against the schema"
+        assert_eq!(
+            test_outer1.validate(&schema).unwrap_err().to_string(),
+            "The value is invalid for the given schema: Unsupported value-schema combination! Value: Record.b.String, schema: Record{TestStruct}.b.&Record{Inner}"
         );
-        assert!(
-            !test_outer2.validate(&schema),
-            "field b record is invalid against the schema"
+        assert_eq!(
+            test_outer2.validate(&schema).unwrap_err().to_string(),
+            "The value is invalid for the given schema: Unsupported value-schema combination! Value: Record.b.Int, schema: Record{TestStruct}.b.&Record{Inner}"
         );
-        assert!(
-            !test_outer3.validate(&schema),
-            "field b record is invalid against the schema"
+        assert_eq!(
+            test_outer3.validate(&schema).unwrap_err().to_string(),
+            "The value is invalid for the given schema: Unsupported value-schema combination! Value: Record.b.Union, schema: Record{TestStruct}.b.&Record{Inner}"
         );
 
         Ok(())
@@ -3144,11 +3434,8 @@ Field with name '"b"' is not a member of the map items"#,
         };
 
         let test_value: Value = to_value(msg)?;
-        assert!(test_value.validate(&schema), "test_value should validate");
-        assert!(
-            test_value.resolve(&schema).is_ok(),
-            "test_value should resolve"
-        );
+        test_value.validate(&schema)?;
+        test_value.resolve(&schema)?;
 
         Ok(())
     }
@@ -3225,11 +3512,8 @@ Field with name '"b"' is not a member of the map items"#,
         };
 
         let test_value: Value = to_value(msg)?;
-        assert!(test_value.validate(&schema), "test_value should validate");
-        assert!(
-            test_value.resolve(&schema).is_ok(),
-            "test_value should resolve"
-        );
+        test_value.validate(&schema)?;
+        test_value.resolve(&schema)?;
 
         Ok(())
     }
@@ -3265,17 +3549,11 @@ Field with name '"b"' is not a member of the map items"#,
         let main_schema = schemas.first().unwrap();
         let schemata: Vec<_> = schemas.iter().skip(1).collect();
 
-        let resolve_result = avro_value.clone().resolve_schemata(main_schema, schemata);
+        avro_value.clone().resolve_schemata(main_schema, schemata)?;
 
-        assert!(
-            resolve_result.is_ok(),
-            "result of resolving with schemata should be ok, got: {resolve_result:?}"
-        );
-
-        let resolve_result = avro_value.resolve(main_schema);
-        assert!(
-            resolve_result.is_err(),
-            "result of resolving without schemata should be err, got: {resolve_result:?}"
+        assert_eq!(
+            avro_value.resolve(main_schema).unwrap_err().to_string(),
+            "Unresolved schema reference: enumForReference"
         );
 
         Ok(())
@@ -3308,10 +3586,7 @@ Field with name '"b"' is not a member of the map items"#,
         let resolve_result = avro_value.resolve_schemata(main_schema, other_schemata)?;
 
         let schemata_ref = schemata.iter().collect::<Vec<_>>();
-        assert!(
-            resolve_result.validate_schemata(&schemata_ref),
-            "result of validation with schemata should be true"
-        );
+        resolve_result.validate_schemata(&schemata_ref)?;
 
         Ok(())
     }
@@ -3324,11 +3599,7 @@ Field with name '"b"' is not a member of the map items"#,
             BigInt::from(12345678u32).to_signed_bytes_be(),
         ));
         let schema = Schema::parse_str(schema)?;
-        let resolve_result = avro_value.resolve(&schema);
-        assert!(
-            resolve_result.is_ok(),
-            "resolve result must be ok, got: {resolve_result:?}"
-        );
+        avro_value.resolve(&schema)?;
 
         Ok(())
     }
@@ -3340,11 +3611,7 @@ Field with name '"b"' is not a member of the map items"#,
 
         let avro_value = Value::BigDecimal(BigDecimal::from(12345678u32));
         let schema = Schema::parse_str(schema)?;
-        let resolve_result: AvroResult<Value> = avro_value.resolve(&schema);
-        assert!(
-            resolve_result.is_ok(),
-            "resolve result must be ok, got: {resolve_result:?}"
-        );
+        avro_value.resolve(&schema)?;
 
         Ok(())
     }
@@ -3364,7 +3631,7 @@ Field with name '"b"' is not a member of the map items"#,
         );
 
         let value = Value::Bytes(vec![97, 99]);
-        assert!(
+        assert_eq!(
             value
                 .resolve(&Schema::Fixed(FixedSchema {
                     name: "test".try_into()?,
@@ -3373,11 +3640,13 @@ Field with name '"b"' is not a member of the map items"#,
                     size: 3,
                     attributes: Default::default()
                 }))
-                .is_err(),
+                .unwrap_err()
+                .to_string(),
+            "Fixed size mismatch, expected: 3, got: 2"
         );
 
         let value = Value::Bytes(vec![97, 98, 99, 100]);
-        assert!(
+        assert_eq!(
             value
                 .resolve(&Schema::Fixed(FixedSchema {
                     name: "test".try_into()?,
@@ -3386,7 +3655,9 @@ Field with name '"b"' is not a member of the map items"#,
                     size: 3,
                     attributes: Default::default()
                 }))
-                .is_err(),
+                .unwrap_err()
+                .to_string(),
+            "Fixed size mismatch, expected: 3, got: 4"
         );
 
         Ok(())
