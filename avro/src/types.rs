@@ -796,7 +796,7 @@ impl Value {
                     .unwrap_or_else(|| {
                         Some(format!(
                             "{} is at position {i} but that position does not exist in {schema_path}",
-                            ValuePath::Index(i as usize, &value_path)
+                            ValuePath::Value(value, &ValuePath::Index(i as usize, &value_path)),
                         ))
                     })
             }
@@ -1721,7 +1721,7 @@ mod tests {
             (
                 Value::Union(2, Box::new(Value::Long(1_i64))),
                 Schema::Union(UnionSchema::new(vec![Schema::Null, Schema::Int])?),
-                Some("Union[2]. is at position 2 but that position does not exist in Union"),
+                Some("Union[2].Long is at position 2 but that position does not exist in Union"),
             ),
             (
                 Value::Array(vec![Value::Long(42i64)]),
