@@ -239,6 +239,7 @@ pub fn to_avro_datum_schemata<T: Into<Value>>(
 #[cfg(test)]
 mod tests {
     use apache_avro_test_helper::TestResult;
+    use std::num::NonZero;
 
     use super::*;
     use crate::reader::datum::GenericDatumReader;
@@ -456,7 +457,7 @@ mod tests {
         logical_type_test(
             r#"{"type": {"type": "fixed", "size": 30, "name": "decimal"}, "logicalType": "decimal", "precision": 20, "scale": 5}"#,
             &Schema::Decimal(DecimalSchema {
-                precision: 20,
+                precision: NonZero::new(20).unwrap(),
                 scale: 5,
                 inner,
             }),
@@ -472,7 +473,7 @@ mod tests {
         logical_type_test(
             r#"{"type": "bytes", "logicalType": "decimal", "precision": 4, "scale": 3}"#,
             &Schema::Decimal(DecimalSchema {
-                precision: 4,
+                precision: NonZero::new(4).unwrap(),
                 scale: 3,
                 inner: InnerDecimalSchema::Bytes,
             }),
