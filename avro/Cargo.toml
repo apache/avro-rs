@@ -85,7 +85,7 @@ md-5 = { default-features = false, version = "0.11.0" }
 pretty_assertions = { workspace = true }
 sha2 = { default-features = false, version = "0.11.0" }
 paste = { default-features = false, version = "1.0.15" }
-rstest = { default-features = false, version = "0.26.1" }
+rstest = { default-features = false, version = "0.27.0" }
 
 [package.metadata.docs.rs]
 all-features = true
