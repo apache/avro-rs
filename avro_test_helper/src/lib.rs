@@ -62,8 +62,3 @@ impl<Err: Display + Debug> From<Err> for TestError {
 }
 
 pub type TestResult = Result<(), TestError>;
-
-/// Does nothing. Just loads the crate.
-/// Should be used in the integration tests, because they do not use [dev-dependencies]
-/// and do not auto-load this crate.
-pub const fn init() {}

@@ -18,7 +18,7 @@
 use apache_avro::reader::datum::GenericDatumReader;
 use apache_avro::writer::datum::GenericDatumWriter;
 use apache_avro::{Codec, Reader, Schema, Writer, types::Value};
-use apache_avro_test_helper::{TestResult, init};
+use apache_avro_test_helper::TestResult;
 
 static SCHEMA_A_STR: &str = r#"{
         "name": "A",
@@ -38,8 +38,6 @@ static SCHEMA_B_STR: &str = r#"{
 
 #[test]
 fn test_avro_3683_multiple_schemata_to_from_avro_datum() -> TestResult {
-    init();
-
     let record: Value = Value::Record(vec![(
         String::from("field_b"),
         Value::Record(vec![(String::from("field_a"), Value::Float(1.0))]),
@@ -68,8 +66,6 @@ fn test_avro_3683_multiple_schemata_to_from_avro_datum() -> TestResult {
 
 #[test]
 fn avro_rs_106_test_multiple_schemata_to_from_avro_datum_with_resolution() -> TestResult {
-    init();
-
     let record: Value = Value::Record(vec![(
         String::from("field_b"),
         Value::Record(vec![(String::from("field_a"), Value::Float(1.0))]),
@@ -100,8 +96,6 @@ fn avro_rs_106_test_multiple_schemata_to_from_avro_datum_with_resolution() -> Te
 
 #[test]
 fn test_avro_3683_multiple_schemata_writer_reader() -> TestResult {
-    init();
-
     let record: Value = Value::Record(vec![(
         String::from("field_b"),
         Value::Record(vec![(String::from("field_a"), Value::Float(1.0))]),

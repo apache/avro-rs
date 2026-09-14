@@ -813,7 +813,7 @@ impl Value {
             }
             Schema::Enum(EnumSchema {
                 symbols, default, ..
-            }) => self.resolve_enum(symbols, default, field_default),
+            }) => self.resolve_enum(symbols, default.as_deref()),
             Schema::Array(inner) => {
                 self.resolve_array(&inner.items, names, enclosing_namespace, depth)
             }
@@ -901,12 +901,12 @@ impl Value {
         scale: Scale,
         inner: &InnerDecimalSchema,
     ) -> Result<Self, Error> {
-        if scale > precision {
+        if scale > precision.get() {
             return Err(Details::GetScaleAndPrecision { scale, precision }.into());
         }
         match inner {
             &InnerDecimalSchema::Fixed(FixedSchema { size, .. }) => {
-                if max_prec_for_len(size)? < precision {
+                if max_prec_for_len(size)? < precision.get() {
                     return Err(Details::GetScaleWithFixedSize { size, precision }.into());
                 }
             }
@@ -915,7 +915,7 @@ impl Value {
         match self {
             Value::Decimal(num) => {
                 let num_bytes = num.len();
-                if max_prec_for_len(num_bytes)? < precision {
+                if max_prec_for_len(num_bytes)? < precision.get() {
                     Err(Details::ComparePrecisionAndSize {
                         precision,
                         num_bytes,
@@ -927,7 +927,7 @@ impl Value {
                 // check num.bits() here
             }
             Value::Fixed(_, bytes) | Value::Bytes(bytes) => {
-                if max_prec_for_len(bytes.len())? < precision {
+                if max_prec_for_len(bytes.len())? < precision.get() {
                     Err(Details::ComparePrecisionAndSize {
                         precision,
                         num_bytes: bytes.len(),
@@ -1156,8 +1156,7 @@ impl Value {
     pub(crate) fn resolve_enum(
         self,
         symbols: &[String],
-        enum_default: &Option<String>,
-        _field_default: Option<&JsonValue>,
+        enum_default: Option<&str>,
     ) -> Result<Self, Error> {
         let validate_symbol = |symbol: String, symbols: &[String]| {
             if let Some(index) = symbols.iter().position(|item| item == &symbol) {
@@ -1166,7 +1165,7 @@ impl Value {
                 match enum_default {
                     Some(default) => {
                         if let Some(index) = symbols.iter().position(|item| item == default) {
-                            Ok(Value::Enum(index as u32, default.clone()))
+                            Ok(Value::Enum(index as u32, default.to_string()))
                         } else {
                             Err(Details::GetEnumDefault {
                                 symbol,
@@ -1304,11 +1303,8 @@ impl Value {
                                 ref symbols,
                                 ref default,
                                 ..
-                            }) => Value::try_from(value.clone())?.resolve_enum(
-                                symbols,
-                                default,
-                                field.default.as_ref(),
-                            )?,
+                            }) => Value::try_from(value.clone())?
+                                .resolve_enum(symbols, default.as_deref())?,
                             Schema::Union(ref union_schema) => {
                                 let first = &union_schema.variants()[0];
                                 // NOTE: this match exists only to optimize null defaults for large
@@ -1380,6 +1376,7 @@ mod tests {
     use num_bigint::BigInt;
     use pretty_assertions::assert_eq;
     use serde_json::json;
+    use std::num::NonZero;
 
     #[test]
     fn avro_3809_validate_nested_records_with_implicit_namespace() -> TestResult {
@@ -1899,7 +1896,7 @@ Field with name '"b"' is not a member of the map items"#,
     fn resolve_decimal_bytes() -> TestResult {
         let value = Value::Decimal(Decimal::from(vec![1, 2, 3, 4, 5]));
         value.clone().resolve(&Schema::Decimal(DecimalSchema {
-            precision: 10,
+            precision: NonZero::new(10).unwrap(),
             scale: 4,
             inner: InnerDecimalSchema::Bytes,
         }))?;
@@ -1912,7 +1909,7 @@ Field with name '"b"' is not a member of the map items"#,
     fn avro_rs_580_resolve_decimal_from_string_default() -> TestResult {
         let value = Value::String("\u{0000}".to_string());
         let resolved = value.resolve(&Schema::Decimal(DecimalSchema {
-            precision: 10,
+            precision: NonZero::new(10).unwrap(),
             scale: 4,
             inner: InnerDecimalSchema::Bytes,
         }))?;
@@ -1923,7 +1920,7 @@ Field with name '"b"' is not a member of the map items"#,
             all_bytes_str.push(char::from_u32(b as u32).unwrap());
         }
         let resolved = Value::String(all_bytes_str).resolve(&Schema::Decimal(DecimalSchema {
-            precision: 10,
+            precision: NonZero::new(10).unwrap(),
             scale: 0,
             inner: InnerDecimalSchema::Bytes,
         }))?;
@@ -1936,7 +1933,7 @@ Field with name '"b"' is not a member of the map items"#,
         assert!(
             value
                 .resolve(&Schema::Decimal(DecimalSchema {
-                    precision: 10,
+                    precision: NonZero::new(10).unwrap(),
                     scale: 4,
                     inner: InnerDecimalSchema::Bytes,
                 }))
@@ -1977,7 +1974,7 @@ Field with name '"b"' is not a member of the map items"#,
         assert!(
             value
                 .resolve(&Schema::Decimal(DecimalSchema {
-                    precision: 2,
+                    precision: NonZero::new(2).unwrap(),
                     scale: 3,
                     inner: InnerDecimalSchema::Bytes,
                 }))
@@ -1991,7 +1988,7 @@ Field with name '"b"' is not a member of the map items"#,
         assert!(
             value
                 .resolve(&Schema::Decimal(DecimalSchema {
-                    precision: 1,
+                    precision: NonZero::new(1).unwrap(),
                     scale: 0,
                     inner: InnerDecimalSchema::Bytes,
                 }))
@@ -2006,7 +2003,7 @@ Field with name '"b"' is not a member of the map items"#,
             value
                 .clone()
                 .resolve(&Schema::Decimal(DecimalSchema {
-                    precision: 10,
+                    precision: NonZero::new(10).unwrap(),
                     scale: 1,
                     inner: InnerDecimalSchema::Fixed(FixedSchema {
                         name: Name::new("decimal").unwrap(),

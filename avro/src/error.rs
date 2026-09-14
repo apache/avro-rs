@@ -15,12 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::{error::Error as _, fmt};
-
 use crate::{
     schema::{Name, RecordSchema, Schema, SchemaKind, UnionSchema},
     types::{Value, ValueKind},
 };
+use std::num::NonZero;
+use std::{error::Error as _, fmt};
 
 /// Errors encountered by Avro.
 ///
@@ -156,6 +156,12 @@ pub enum Details {
     #[error("Failed to convert Fixed bytes to UUID. It must be exactly 16 bytes, got {0}")]
     ConvertFixedToUuid(usize),
 
+    #[error("Failed to convert Bytes to UUID. It must be exactly 16 bytes, got {0}")]
+    ConvertBytesToUuid(usize),
+
+    #[error("Failed to convert String to UUID. Expected at most {0} bytes, got {0}")]
+    ConvertStringToUuid(usize, usize),
+
     #[error("Failed to convert Fixed bytes to UUID: {0}")]
     ConvertSliceToUuid(#[source] uuid::Error),
 
@@ -177,12 +183,18 @@ pub enum Details {
     GetEnumUnknownIndexValue,
 
     #[error("Scale {scale} is greater than precision {precision}")]
-    GetScaleAndPrecision { scale: usize, precision: usize },
+    GetScaleAndPrecision {
+        scale: usize,
+        precision: NonZero<usize>,
+    },
 
     #[error(
         "Fixed type number of bytes {size} is not large enough to hold decimal values of precision {precision}"
     )]
-    GetScaleWithFixedSize { size: usize, precision: usize },
+    GetScaleWithFixedSize {
+        size: usize,
+        precision: NonZero<usize>,
+    },
 
     #[error("Expected Value::Uuid, got: {0:?}")]
     GetUuid(Value),
@@ -206,7 +218,10 @@ pub enum Details {
     GetU8(Value),
 
     #[error("Precision {precision} too small to hold decimal values with {num_bytes} bytes")]
-    ComparePrecisionAndSize { precision: usize, num_bytes: usize },
+    ComparePrecisionAndSize {
+        precision: NonZero<usize>,
+        num_bytes: usize,
+    },
 
     #[error("Cannot convert length to i32: {1}")]
     ConvertLengthToI32(#[source] std::num::TryFromIntError, usize),
@@ -304,6 +319,9 @@ pub enum Details {
     #[error("No `name` field")]
     GetNameField,
 
+    #[error("Expected a string for the `namespace` field, got a {0}")]
+    GetNamespaceFieldWrongType(&'static str),
+
     #[error("No `name` in record field")]
     GetNameFieldFromRecord,
 
@@ -394,9 +412,12 @@ pub enum Details {
     },
 
     #[error("The decimal precision ({precision}) must be bigger or equal to the scale ({scale})")]
-    DecimalPrecisionLessThanScale { precision: usize, scale: usize },
+    DecimalPrecisionLessThanScale {
+        precision: NonZero<usize>,
+        scale: usize,
+    },
 
-    #[error("The decimal precision ({precision}) must be a positive number")]
+    #[error("The decimal precision ({precision}) must be a non-zero positive number")]
     DecimalPrecisionMuBePositive { precision: usize },
 
     #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
@@ -431,8 +452,20 @@ pub enum Details {
     #[error("No `fields` in record")]
     GetRecordFieldsJson,
 
+    #[error("Expected an object in the array of the `fields` field, got a {0}")]
+    GetRecordFieldsArrayInvalidType(&'static str),
+
+    #[error("Expected an array of objects for the `fields` field, got a {0}")]
+    GetRecordFieldsInvalidType(&'static str),
+
     #[error("No `symbols` field in enum")]
     GetEnumSymbolsField,
+
+    #[error("Expected an array of strings for the `symbols` field, got a {0}")]
+    GetEnumSymbolsFieldInvalidType(&'static str),
+
+    #[error("Expected a string in the array of the `symbols` field, got a {0}")]
+    GetEnumSymbolsFieldArrayInvalidType(&'static str),
 
     #[error("Unable to parse `symbols` in enum")]
     GetEnumSymbols,
@@ -486,6 +519,18 @@ pub enum Details {
 
     #[error("Fixed schema has no `size`")]
     GetFixedSizeField,
+
+    #[error("Expected an unsigned integer for the `size` field, got a {0}")]
+    GetFixedSizeFieldInvalidType(&'static str),
+
+    #[error("Expected an array of strings for the `aliases` field, got a {0}")]
+    GetAliasesFieldInvalidType(&'static str),
+
+    #[error("Expected a string in the array for the `aliases` field, got a {0}")]
+    GetAliasesFieldArrayInvalidType(&'static str),
+
+    #[error("Expected a string for the `{0}` field, got a {1}")]
+    GetStringInvalidType(&'static str, &'static str),
 
     #[deprecated(since = "0.22.0", note = "This error variant is not generated anymore")]
     #[error("Fixed schema's default value length ({0}) does not match its size ({1})")]
@@ -738,9 +783,9 @@ pub enum CompatibilityError {
         "Incompatible schemata! Decimal precision and/or scale don't match, reader: ({r_precision},{r_scale}), writer: ({w_precision},{w_scale})"
     )]
     DecimalMismatch {
-        r_precision: usize,
+        r_precision: NonZero<usize>,
         r_scale: usize,
-        w_precision: usize,
+        w_precision: NonZero<usize>,
         w_scale: usize,
     },
 

@@ -18,7 +18,7 @@
 use crate::{
     AvroResult, Error, Schema,
     error::Details,
-    util::MapHelper,
+    util::{JsonValueDescriber, MapHelper},
     validator::{validate_namespace, validate_schema_name},
 };
 use serde::{Deserialize, Serialize, Serializer};
@@ -110,14 +110,18 @@ impl Name {
 
     /// Parse a `serde_json::Value` into a `Name`.
     pub(crate) fn parse(
-        complex: &Map<String, Value>,
+        complex: &mut Map<String, Value>,
         enclosing_namespace: NamespaceRef,
     ) -> AvroResult<Self> {
-        let name_field = complex.name().ok_or(Details::GetNameField)?;
-        Self::new_with_enclosing_namespace(
-            name_field,
-            complex.string("namespace").or(enclosing_namespace),
-        )
+        let name_field = complex.name()?;
+        let namespace = match complex.remove("namespace") {
+            Some(Value::String(s)) => Some(s),
+            Some(Value::Null) | None => None,
+            Some(value) => {
+                return Err(Details::GetNamespaceFieldWrongType(value.description()).into());
+            }
+        };
+        Self::new_with_enclosing_namespace(name_field, namespace.as_deref().or(enclosing_namespace))
     }
 
     pub fn name(&self) -> &str {
@@ -253,8 +257,8 @@ impl<'de> Deserialize<'de> for Name {
     {
         Value::deserialize(deserializer).and_then(|value| {
             use serde::de::Error;
-            if let Value::Object(json) = value {
-                Name::parse(&json, None).map_err(Error::custom)
+            if let Value::Object(mut json) = value {
+                Name::parse(&mut json, None).map_err(Error::custom)
             } else {
                 Err(Error::custom(format!("Expected a JSON object: {value:?}")))
             }

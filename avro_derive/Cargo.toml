@@ -26,7 +26,6 @@ rust-version.workspace = true
 keywords = ["avro", "data", "serialization", "derive"]
 categories.workspace = true
 documentation = "https://docs.rs/apache-avro-derive"
-readme = "README.md"
 
 [lib]
 proc-macro = true

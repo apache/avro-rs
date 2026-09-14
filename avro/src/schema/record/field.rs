@@ -83,15 +83,17 @@ impl Debug for RecordField {
 impl RecordField {
     /// Parse a `serde_json::Value` into a `RecordField`.
     pub(crate) fn parse(
-        field: &Map<String, Value>,
+        mut field: Map<String, Value>,
         parser: &mut Parser,
         enclosing_record: &Name,
     ) -> AvroResult<Self> {
-        let name = field.name().ok_or(Details::GetNameFieldFromRecord)?;
+        let name = field.name()?;
 
-        validate_record_field_name(name)?;
+        validate_record_field_name(&name)?;
 
-        let ty = field.get("type").ok_or(Details::GetRecordFieldTypeField)?;
+        let ty = field
+            .remove("type")
+            .ok_or(Details::GetRecordFieldTypeField)?;
         let schema = parser.parse(ty, enclosing_record.namespace())?;
 
         if let Some(logical_type) = field.get("logicalType") {
@@ -100,34 +102,23 @@ impl RecordField {
             );
         }
 
-        let default = field.get("default").cloned();
+        let default = field.remove("default");
         Self::resolve_default_value(
             &schema,
-            name,
+            &name,
             &enclosing_record.fullname(None),
             parser.get_parsed_schemas(),
             &default,
         )?;
 
-        let aliases = field
-            .get("aliases")
-            .and_then(|aliases| {
-                aliases.as_array().map(|aliases| {
-                    aliases
-                        .iter()
-                        .flat_map(|alias| alias.as_str())
-                        .map(|alias| alias.to_string())
-                        .collect::<Vec<String>>()
-                })
-            })
-            .unwrap_or_default();
+        let aliases = field.aliases()?.unwrap_or_default();
 
         Ok(RecordField {
-            name: name.into(),
-            doc: field.doc(),
+            name,
+            doc: field.doc()?,
             default,
             aliases,
-            custom_attributes: RecordField::get_field_custom_attributes(field),
+            custom_attributes: field.into_iter().collect(),
             schema,
         })
     }
@@ -182,17 +173,6 @@ impl RecordField {
         }
 
         Ok(())
-    }
-
-    fn get_field_custom_attributes(field: &Map<String, Value>) -> BTreeMap<String, Value> {
-        let mut custom_attributes: BTreeMap<String, Value> = BTreeMap::new();
-        for (key, value) in field {
-            match key.as_str() {
-                "type" | "name" | "doc" | "default" | "aliases" => continue,
-                _ => custom_attributes.insert(key.clone(), value.clone()),
-            };
-        }
-        custom_attributes
     }
 
     /// Returns true if this `RecordField` is nullable, meaning the schema is a `UnionSchema` where the first variant is `Null`.

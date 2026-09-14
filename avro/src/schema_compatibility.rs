@@ -444,8 +444,6 @@ impl Checker {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
     use super::*;
     use crate::{
         Codec, Decimal, Reader, Writer,
@@ -454,6 +452,8 @@ mod tests {
     };
     use apache_avro_test_helper::TestResult;
     use rstest::*;
+    use std::collections::BTreeMap;
+    use std::num::NonZero;
 
     fn int_array_schema() -> Schema {
         Schema::parse_str(r#"{"type":"array", "items":"int"}"#).unwrap()
@@ -1691,12 +1691,12 @@ mod tests {
     #[test]
     fn avro_rs_342_decimal_fixed_and_bytes() -> TestResult {
         let bytes = Schema::Decimal(DecimalSchema {
-            precision: 20,
+            precision: NonZero::new(20).unwrap(),
             scale: 0,
             inner: InnerDecimalSchema::Bytes,
         });
         let fixed = Schema::Decimal(DecimalSchema {
-            precision: 20,
+            precision: NonZero::new(20).unwrap(),
             scale: 0,
             inner: InnerDecimalSchema::Fixed(FixedSchema {
                 name: Name::new("DecimalFixed")?,
