@@ -1447,7 +1447,7 @@ mod tests {
 
         let names = HashMap::new();
 
-        let val = Decimal::from(&[251, 155]);
+        let val = Decimal::new([251, 155])?;
         assert_serialize(val, &schema, &names, &[4, 251, 155]);
         assert_serialize_err(
             (),
@@ -1474,7 +1474,7 @@ mod tests {
 
         let names = HashMap::new();
 
-        let val = Decimal::from(&[0, 0, 0, 0, 0, 0, 251, 155]);
+        let val = Decimal::new([0, 0, 0, 0, 0, 0, 251, 155])?;
         assert_serialize(val, &schema, &names, &[0, 0, 0, 0, 0, 0, 251, 155]);
         assert_serialize_err(
             (),

@@ -461,7 +461,7 @@ mod tests {
                 scale: 5,
                 inner,
             }),
-            Value::Decimal(Decimal::from(value.clone())),
+            Value::Decimal(Decimal::new(&value)?),
             &Schema::Fixed(fixed),
             Value::Fixed(size, value),
         )
@@ -477,7 +477,7 @@ mod tests {
                 scale: 3,
                 inner: InnerDecimalSchema::Bytes,
             }),
-            Value::Decimal(Decimal::from(value.clone())),
+            Value::Decimal(Decimal::new(&value)?),
             &Schema::Bytes,
             value,
         )

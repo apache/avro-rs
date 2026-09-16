@@ -18,11 +18,12 @@
 use crate::{AvroResult, Error, error::Details};
 use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize, Serializer, de::SeqAccess};
+use std::num::NonZero;
 
 #[derive(Debug, Clone, Eq)]
 pub struct Decimal {
     value: BigInt,
-    len: usize,
+    len: NonZero<usize>,
 }
 
 impl Serialize for Decimal {
@@ -53,18 +54,19 @@ impl<'de> Deserialize<'de> for Decimal {
             where
                 E: serde::de::Error,
             {
-                Ok(Decimal::from(v))
+                Decimal::new(v).map_err(E::custom)
             }
             fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
             where
                 A: SeqAccess<'de>,
             {
+                use serde::de::Error;
                 let mut bytes = Vec::new();
                 while let Some(value) = seq.next_element::<u8>()? {
                     bytes.push(value);
                 }
 
-                Ok(Decimal::from(bytes))
+                Decimal::new(bytes).map_err(A::Error::custom)
             }
         }
         deserializer.deserialize_bytes(DecimalVisitor)
@@ -80,12 +82,20 @@ impl PartialEq for Decimal {
 }
 
 impl Decimal {
+    pub fn new(bytes: impl AsRef<[u8]>) -> AvroResult<Self> {
+        let bytes_ref = bytes.as_ref();
+        Ok(Self {
+            value: BigInt::from_signed_bytes_be(bytes_ref),
+            len: NonZero::new(bytes_ref.len()).ok_or(Details::DecimalIsZeroLength)?,
+        })
+    }
+
     pub(crate) fn len(&self) -> usize {
-        self.len
+        self.len.get()
     }
 
     pub(crate) fn to_vec(&self) -> AvroResult<Vec<u8>> {
-        self.to_sign_extended_bytes_with_len(self.len)
+        self.to_sign_extended_bytes_with_len(self.len.get())
     }
 
     pub(crate) fn to_sign_extended_bytes_with_len(&self, len: usize) -> AvroResult<Vec<u8>> {
@@ -111,13 +121,14 @@ impl From<Decimal> for BigInt {
 /// Gets the internal byte array representation of a referenced decimal.
 /// Usage:
 /// ```
-/// use apache_avro::Decimal;
-/// use std::convert::TryFrom;
-///
-/// let decimal = Decimal::from(vec![1, 24]);
-/// let maybe_bytes = <Vec<u8>>::try_from(&decimal);
+/// # use std::convert::TryFrom;
+/// # use apache_avro::{Decimal, Error};
+/// #
+/// let decimal = Decimal::new([1, 24])?;
+/// let maybe_bytes = <Vec<u8>>::try_from(decimal);
+/// # Ok::<(), Error>(())
 /// ```
-impl std::convert::TryFrom<&Decimal> for Vec<u8> {
+impl TryFrom<&Decimal> for Vec<u8> {
     type Error = Error;
 
     fn try_from(decimal: &Decimal) -> Result<Self, Self::Error> {
@@ -128,27 +139,18 @@ impl std::convert::TryFrom<&Decimal> for Vec<u8> {
 /// Gets the internal byte array representation of an owned decimal.
 /// Usage:
 /// ```
-/// use apache_avro::Decimal;
-/// use std::convert::TryFrom;
-///
-/// let decimal = Decimal::from(vec![1, 24]);
+/// # use std::convert::TryFrom;
+/// # use apache_avro::{Decimal, Error};
+/// #
+/// let decimal = Decimal::new([1, 24])?;
 /// let maybe_bytes = <Vec<u8>>::try_from(decimal);
+/// # Ok::<(), Error>(())
 /// ```
-impl std::convert::TryFrom<Decimal> for Vec<u8> {
+impl TryFrom<Decimal> for Vec<u8> {
     type Error = Error;
 
     fn try_from(decimal: Decimal) -> Result<Self, Self::Error> {
         decimal.to_vec()
-    }
-}
-
-impl<T: AsRef<[u8]>> From<T> for Decimal {
-    fn from(bytes: T) -> Self {
-        let bytes_ref = bytes.as_ref();
-        Self {
-            value: BigInt::from_signed_bytes_be(bytes_ref),
-            len: bytes_ref.len(),
-        }
     }
 }
 
@@ -161,7 +163,7 @@ mod tests {
     #[test]
     fn test_decimal_from_bytes_from_ref_decimal() -> TestResult {
         let input = vec![1, 24];
-        let d = Decimal::from(&input);
+        let d = Decimal::new(&input)?;
 
         let output = <Vec<u8>>::try_from(&d)?;
         assert_eq!(output, input);
@@ -172,7 +174,7 @@ mod tests {
     #[test]
     fn test_decimal_from_bytes_from_owned_decimal() -> TestResult {
         let input = vec![1, 24];
-        let d = Decimal::from(&input);
+        let d = Decimal::new(&input)?;
 
         let output = <Vec<u8>>::try_from(d)?;
         assert_eq!(output, input);
@@ -182,7 +184,7 @@ mod tests {
 
     #[test]
     fn avro_3949_decimal_serde() -> TestResult {
-        let decimal = Decimal::from(&[1, 2, 3]);
+        let decimal = Decimal::new([1, 2, 3])?;
 
         let ser = serde_json::to_string(&decimal)?;
         let de = serde_json::from_str(&ser)?;

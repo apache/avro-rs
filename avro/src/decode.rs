@@ -194,13 +194,13 @@ fn decode_internal_body<R: Read, S: Borrow<Schema>>(
                     reader,
                     ctx,
                 )? {
-                    Value::Fixed(_, bytes) => Ok(Value::Decimal(Decimal::from(bytes))),
+                    Value::Fixed(_, bytes) => Ok(Value::Decimal(Decimal::new(bytes)?)),
                     value => Err(Details::FixedValue(value).into()),
                 }
             }
             InnerDecimalSchema::Bytes => {
                 match decode_internal(&Schema::Bytes, names, enclosing_namespace, reader, ctx)? {
-                    Value::Bytes(bytes) => Ok(Value::Decimal(Decimal::from(bytes))),
+                    Value::Bytes(bytes) => Ok(Value::Decimal(Decimal::new(bytes)?)),
                     value => Err(Details::BytesValue(value).into()),
                 }
             }
@@ -697,7 +697,7 @@ mod tests {
             scale: 2,
         });
         let bigint = (-423).to_bigint().unwrap();
-        let value = Value::Decimal(Decimal::from(bigint.to_signed_bytes_be()));
+        let value = Value::Decimal(Decimal::new(bigint.to_signed_bytes_be())?);
 
         let mut buffer = Vec::new();
         encode(&value, &schema, &mut buffer).expect(&success(&value, &schema));
@@ -724,9 +724,9 @@ mod tests {
             precision: NonZero::new(4).unwrap(),
             scale: 2,
         });
-        let value = Value::Decimal(Decimal::from(
+        let value = Value::Decimal(Decimal::new(
             ((-423).to_bigint().unwrap()).to_signed_bytes_be(),
-        ));
+        )?);
         let mut buffer = Vec::<u8>::new();
 
         encode(&value, &schema, &mut buffer).expect(&success(&value, &schema));
@@ -1179,6 +1179,18 @@ mod tests {
 
         let result = decode(&Schema::Uuid(UuidSchema::Bytes), &mut &buffer[..])?;
         assert_eq!(result, value);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_680_decimal_bytes_zero_length() -> TestResult {
+        let schema =
+            Schema::parse_str(r#"{"type": "bytes", "logicalType": "decimal", "precision": 4}"#)?;
+        // 0x00 is the varint encoding of length 0 (zero-length bytes)
+        let mut buf: &[u8] = &[0x00];
+        let error = decode(&schema, &mut buf).unwrap_err().into_details();
+        assert_eq!(error.to_string(), "Decimal bytes cannot be zero length");
 
         Ok(())
     }
