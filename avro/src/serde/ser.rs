@@ -689,7 +689,7 @@ mod tests {
         let test = Test {
             a: 27,
             b: "foo".to_owned(),
-            decimal: Decimal::from(vec![1, 24]),
+            decimal: Decimal::new([1, 24])?,
         };
         let expected = Value::Record(vec![
             ("a".to_owned(), Value::Long(27)),

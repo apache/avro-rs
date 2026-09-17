@@ -92,6 +92,9 @@ pub enum Details {
     #[error("Not a fixed or bytes type, required for decimal schema, got: {0:?}")]
     ResolveDecimalSchema(SchemaKind),
 
+    #[error("Decimal bytes cannot be zero length")]
+    DecimalIsZeroLength,
+
     #[error("Invalid utf-8 string")]
     ConvertToUtf8(#[source] std::string::FromUtf8Error),
 

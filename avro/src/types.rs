@@ -935,7 +935,7 @@ impl Value {
                     .into())
                 } else {
                     // precision and scale match, can we assume the underlying type can hold the data?
-                    Ok(Value::Decimal(Decimal::from(bytes)))
+                    Ok(Value::Decimal(Decimal::new(bytes)?))
                 }
             }
 
@@ -956,7 +956,7 @@ impl Value {
                         }
                     })
                     .collect::<Result<Vec<u8>, Error>>()?;
-                Ok(Value::Decimal(Decimal::from(bytes)))
+                Ok(Value::Decimal(Decimal::new(bytes)?))
             }
             other => Err(Details::ResolveDecimal(other).into()),
         }
@@ -1894,7 +1894,7 @@ Field with name '"b"' is not a member of the map items"#,
 
     #[test]
     fn resolve_decimal_bytes() -> TestResult {
-        let value = Value::Decimal(Decimal::from(vec![1, 2, 3, 4, 5]));
+        let value = Value::Decimal(Decimal::new([1, 2, 3, 4, 5])?);
         value.clone().resolve(&Schema::Decimal(DecimalSchema {
             precision: NonZero::new(10).unwrap(),
             scale: 4,
@@ -1913,7 +1913,7 @@ Field with name '"b"' is not a member of the map items"#,
             scale: 4,
             inner: InnerDecimalSchema::Bytes,
         }))?;
-        assert_eq!(resolved, Value::Decimal(Decimal::from(vec![0u8])));
+        assert_eq!(resolved, Value::Decimal(Decimal::new([0u8])?));
 
         let mut all_bytes_str = String::new();
         for b in 0u8..=255u8 {
@@ -1926,7 +1926,7 @@ Field with name '"b"' is not a member of the map items"#,
         }))?;
         assert_eq!(
             resolved,
-            Value::Decimal(Decimal::from((0u8..=255u8).collect::<Vec<_>>()))
+            Value::Decimal(Decimal::new((0u8..=255u8).collect::<Vec<_>>())?)
         );
 
         let value = Value::String("\u{0100}".to_string());
@@ -1970,7 +1970,7 @@ Field with name '"b"' is not a member of the map items"#,
 
     #[test]
     fn resolve_decimal_invalid_scale() {
-        let value = Value::Decimal(Decimal::from(vec![1, 2]));
+        let value = Value::Decimal(Decimal::new([1, 2]).unwrap());
         assert!(
             value
                 .resolve(&Schema::Decimal(DecimalSchema {
@@ -1984,7 +1984,7 @@ Field with name '"b"' is not a member of the map items"#,
 
     #[test]
     fn resolve_decimal_invalid_precision_for_length() {
-        let value = Value::Decimal(Decimal::from((1u8..=8u8).rev().collect::<Vec<_>>()));
+        let value = Value::Decimal(Decimal::new((1u8..=8u8).rev().collect::<Vec<_>>()).unwrap());
         assert!(
             value
                 .resolve(&Schema::Decimal(DecimalSchema {
@@ -1998,7 +1998,7 @@ Field with name '"b"' is not a member of the map items"#,
 
     #[test]
     fn resolve_decimal_fixed() {
-        let value = Value::Decimal(Decimal::from(vec![1, 2, 3, 4, 5]));
+        let value = Value::Decimal(Decimal::new([1, 2, 3, 4, 5]).unwrap());
         assert!(
             value
                 .clone()
@@ -2325,7 +2325,7 @@ Field with name '"b"' is not a member of the map items"#,
             JsonValue::Number(1.into())
         );
         assert_eq!(
-            JsonValue::try_from(Value::Decimal(vec![1, 2, 3].into()))?,
+            JsonValue::try_from(Value::Decimal(Decimal::new([1, 2, 3])?))?,
             JsonValue::Array(vec![
                 JsonValue::Number(1.into()),
                 JsonValue::Number(2.into()),
@@ -3321,9 +3321,9 @@ Field with name '"b"' is not a member of the map items"#,
     fn test_avro_3782_incorrect_decimal_resolving() -> TestResult {
         let schema = r#"{"name": "decimalSchema", "logicalType": "decimal", "type": "fixed", "precision": 8, "scale": 0, "size": 8}"#;
 
-        let avro_value = Value::Decimal(Decimal::from(
+        let avro_value = Value::Decimal(Decimal::new(
             BigInt::from(12345678u32).to_signed_bytes_be(),
-        ));
+        )?);
         let schema = Schema::parse_str(schema)?;
         let resolve_result = avro_value.resolve(&schema);
         assert!(
