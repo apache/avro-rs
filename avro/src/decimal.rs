@@ -125,7 +125,7 @@ impl From<Decimal> for BigInt {
 /// # use apache_avro::{Decimal, Error};
 /// #
 /// let decimal = Decimal::new([1, 24])?;
-/// let maybe_bytes = <Vec<u8>>::try_from(decimal);
+/// let maybe_bytes = <Vec<u8>>::try_from(&decimal);
 /// # Ok::<(), Error>(())
 /// ```
 impl TryFrom<&Decimal> for Vec<u8> {
