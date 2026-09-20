@@ -355,6 +355,10 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
 
     fn serialize_bytes(mut self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
         match self.schema {
+            Schema::Decimal(DecimalSchema {
+                inner: InnerDecimalSchema::Bytes,
+                ..
+            }) if v.is_empty() => Err(Details::DecimalIsZeroLength.into()),
             Schema::Bytes | Schema::BigDecimal | Schema::Decimal(DecimalSchema { inner: InnerDecimalSchema::Bytes, ..}) | Schema::Uuid(UuidSchema::Bytes) => {
                 self.write_bytes_with_len(v)
             }
@@ -757,14 +761,18 @@ mod tests {
     use num_bigint::{BigInt, Sign};
     use pretty_assertions::assert_eq;
     use serde::{Deserialize, Serialize};
-    use serde_bytes::Bytes;
+    use serde_bytes::{ByteBuf, Bytes};
     use uuid::Uuid;
 
     use super::*;
     use crate::{
         Days, Duration, Millis, Months,
         decimal::Decimal,
+        error::Details,
+        reader::datum::GenericDatumReader,
         schema::{FixedSchema, ResolvedSchema},
+        types::Value,
+        writer::{Writer, datum::GenericDatumWriter},
     };
 
     #[track_caller]
@@ -1454,6 +1462,158 @@ mod tests {
             &schema,
             &names,
             "Failed to serialize value of type `unit` using Schema::Decimal(DecimalSchema { precision: 16, scale: 2, inner: Bytes }): Expected Schema::Null",
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_683_rejects_direct_empty_decimal_bytes() -> TestResult {
+        let decimal =
+            Schema::parse_str(r#"{"type":"bytes","logicalType":"decimal","precision":4}"#)?;
+        let writer = GenericDatumWriter::builder(&decimal).build()?;
+        let mut buffer = Vec::new();
+        let error = writer
+            .write_ser(&mut buffer, &ByteBuf::new())
+            .expect_err("empty Decimal bytes must be rejected");
+        assert!(matches!(error.into_details(), Details::DecimalIsZeroLength));
+        assert!(buffer.is_empty());
+
+        let mut writer = Writer::new(&decimal, Vec::new())?;
+        let error = writer
+            .append_ser(ByteBuf::new())
+            .expect_err("Writer::append_ser must reject empty Decimal bytes");
+        assert!(matches!(error.into_details(), Details::DecimalIsZeroLength));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_683_rejects_union_empty_decimal_bytes() -> TestResult {
+        let union_first = Schema::parse_str(
+            r#"[{"type":"bytes","logicalType":"decimal","precision":4},"string"]"#,
+        )?;
+        let union_second = Schema::parse_str(
+            r#"["string",{"type":"bytes","logicalType":"decimal","precision":4}]"#,
+        )?;
+        for schema in [&union_first, &union_second] {
+            let writer = GenericDatumWriter::builder(schema).build()?;
+            let error = writer
+                .write_ser_to_vec(&ByteBuf::new())
+                .expect_err("empty union Decimal bytes must be rejected");
+            assert!(matches!(error.into_details(), Details::DecimalIsZeroLength));
+
+            let mut writer = Writer::new(schema, Vec::new())?;
+            let error = writer
+                .append_ser(ByteBuf::new())
+                .expect_err("Writer::append_ser must reject empty union Decimal bytes");
+            assert!(matches!(error.into_details(), Details::DecimalIsZeroLength));
+        }
+
+        let nullable = Schema::parse_str(
+            r#"["null",{"type":"bytes","logicalType":"decimal","precision":4}]"#,
+        )?;
+        let writer = GenericDatumWriter::builder(&nullable).build()?;
+        let error = writer
+            .write_ser_to_vec(&Some(ByteBuf::new()))
+            .expect_err("Some(empty Decimal bytes) must be rejected");
+        assert!(matches!(error.into_details(), Details::DecimalIsZeroLength));
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_683_union_error_writes_no_prefix() -> TestResult {
+        let schema = Schema::parse_str(
+            r#"[{"type":"bytes","logicalType":"decimal","precision":4},"string"]"#,
+        )?;
+        let writer = GenericDatumWriter::builder(&schema).build()?;
+        let mut buffer = Vec::new();
+        let error = writer
+            .write_ser(&mut buffer, &ByteBuf::new())
+            .expect_err("empty Decimal bytes must be rejected");
+        assert!(matches!(error.into_details(), Details::DecimalIsZeroLength));
+        assert!(buffer.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_683_controls() -> TestResult {
+        let decimal =
+            Schema::parse_str(r#"{"type":"bytes","logicalType":"decimal","precision":4}"#)?;
+        let union_first = Schema::parse_str(
+            r#"[{"type":"bytes","logicalType":"decimal","precision":4},"string"]"#,
+        )?;
+        let union_second = Schema::parse_str(
+            r#"["string",{"type":"bytes","logicalType":"decimal","precision":4}]"#,
+        )?;
+
+        let bytes = Schema::parse_str(r#"["bytes","string"]"#)?;
+        let writer = GenericDatumWriter::builder(&bytes).build()?;
+        let encoded = writer.write_ser_to_vec(&ByteBuf::new())?;
+        assert_eq!(encoded, [0, 0]);
+        let reader = GenericDatumReader::builder(&bytes).build()?;
+        assert!(reader.read_value(&mut &encoded[..]).is_ok());
+
+        let direct_bytes = Schema::Bytes;
+        let writer = GenericDatumWriter::builder(&direct_bytes).build()?;
+        let encoded = writer.write_ser_to_vec(&ByteBuf::new())?;
+        assert_eq!(encoded, [0]);
+        let reader = GenericDatumReader::builder(&direct_bytes).build()?;
+        assert!(reader.read_value(&mut &encoded[..]).is_ok());
+
+        let decimal_zero = Decimal::new([0])?;
+        let direct_writer = GenericDatumWriter::builder(&decimal).build()?;
+        let direct = direct_writer.write_ser_to_vec(&decimal_zero)?;
+        assert_eq!(direct, [2, 0]);
+        let direct_reader = GenericDatumReader::builder(&decimal).build()?;
+        assert_eq!(
+            direct_reader.read_value(&mut &direct[..])?,
+            Value::Decimal(decimal_zero.clone())
+        );
+
+        let decimal_nonzero = Decimal::new([251, 155])?;
+        let nonzero = direct_writer.write_ser_to_vec(&decimal_nonzero)?;
+        assert_eq!(nonzero, [4, 251, 155]);
+        assert_eq!(
+            direct_reader.read_value(&mut &nonzero[..])?,
+            Value::Decimal(decimal_nonzero)
+        );
+
+        for (schema, expected) in [(&union_first, [0, 2, 0]), (&union_second, [2, 2, 0])] {
+            let writer = GenericDatumWriter::builder(schema).build()?;
+            let encoded = writer.write_ser_to_vec(&decimal_zero)?;
+            assert_eq!(encoded, expected);
+            let reader = GenericDatumReader::builder(schema).build()?;
+            let index = u32::from(expected[0] / 2);
+            assert_eq!(
+                reader.read_value(&mut &encoded[..])?,
+                Value::Union(index, Box::new(Value::Decimal(decimal_zero.clone())))
+            );
+        }
+
+        let fixed_first = Schema::parse_str(
+            r#"[{"type":"fixed","name":"OneByte","size":1},{"type":"bytes","logicalType":"decimal","precision":4}]"#,
+        )?;
+        let decimal_first = Schema::parse_str(
+            r#"[{"type":"bytes","logicalType":"decimal","precision":4},{"type":"fixed","name":"OneByte","size":1}]"#,
+        )?;
+        let writer = GenericDatumWriter::builder(&fixed_first).build()?;
+        assert_eq!(writer.write_ser_to_vec(&ByteBuf::from(vec![7]))?, [0, 7]);
+        let writer = GenericDatumWriter::builder(&decimal_first).build()?;
+        assert_eq!(writer.write_ser_to_vec(&ByteBuf::from(vec![7]))?, [0, 2, 7]);
+
+        let fixed_decimal = Schema::parse_str(
+            r#"{"type":"fixed","name":"FixedZero","size":2,"logicalType":"decimal","precision":4}"#,
+        )?;
+        let fixed_zero = Decimal::new([0, 0])?;
+        let writer = GenericDatumWriter::builder(&fixed_decimal).build()?;
+        let encoded = writer.write_ser_to_vec(&fixed_zero)?;
+        assert_eq!(encoded, [0, 0]);
+        let reader = GenericDatumReader::builder(&fixed_decimal).build()?;
+        assert_eq!(
+            reader.read_value(&mut &encoded[..])?,
+            Value::Decimal(fixed_zero)
         );
 
         Ok(())

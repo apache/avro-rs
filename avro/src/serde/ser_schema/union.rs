@@ -314,6 +314,18 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
                 }
             }
         };
+        if with_len
+            && v.is_empty()
+            && matches!(
+                self.union.get_variant(index)?,
+                Schema::Decimal(crate::schema::DecimalSchema {
+                    inner: crate::schema::InnerDecimalSchema::Bytes,
+                    ..
+                })
+            )
+        {
+            return Err(Details::DecimalIsZeroLength.into());
+        }
         let mut bytes_written = zig_i32(index as i32, &mut *self.writer)?;
         if with_len {
             bytes_written += self.write_bytes_with_len(v)?;
