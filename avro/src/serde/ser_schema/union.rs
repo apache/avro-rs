@@ -324,7 +324,7 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for UnionSerializer<'s, 'w,
                 })
             )
         {
-            return Err(Details::DecimalIsZeroLength.into());
+            return Err(self.error("bytes", "Bytes cannot be empty for a Schema::Decimal"));
         }
         let mut bytes_written = zig_i32(index as i32, &mut *self.writer)?;
         if with_len {
