@@ -355,6 +355,10 @@ impl<'s, 'w, W: Write, S: Borrow<Schema>> Serializer for SchemaAwareSerializer<'
 
     fn serialize_bytes(mut self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
         match self.schema {
+            Schema::Decimal(DecimalSchema {
+                inner: InnerDecimalSchema::Bytes,
+                ..
+            }) if v.is_empty() => Err(self.error("bytes", "Bytes cannot be empty for a Schema::Decimal")),
             Schema::Bytes | Schema::BigDecimal | Schema::Decimal(DecimalSchema { inner: InnerDecimalSchema::Bytes, ..}) | Schema::Uuid(UuidSchema::Bytes) => {
                 self.write_bytes_with_len(v)
             }
@@ -1454,6 +1458,40 @@ mod tests {
             &schema,
             &names,
             "Failed to serialize value of type `unit` using Schema::Decimal(DecimalSchema { precision: 16, scale: 2, inner: Bytes }): Expected Schema::Null",
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_683_empty_decimal_bytes() -> TestResult {
+        let schema =
+            Schema::parse_str(r#"{"type": "bytes", "logicalType": "decimal", "precision": 42}"#)?;
+        let names = HashMap::new();
+
+        assert_serialize(Bytes::new(&[0]), &schema, &names, &[0x2, 0x0]);
+        assert_serialize_err(
+            Bytes::new(&[]),
+            &schema,
+            &names,
+            r"Failed to serialize value of type `bytes` using Schema::Decimal(DecimalSchema { precision: 42, scale: 0, inner: Bytes }): Bytes cannot be empty for a Schema::Decimal",
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_683_union_empty_decimal_bytes() -> TestResult {
+        let schema =
+            Schema::parse_str(r#"[{"type": "bytes", "logicalType": "decimal", "precision": 42}]"#)?;
+        let names = HashMap::new();
+
+        assert_serialize(Bytes::new(&[0]), &schema, &names, &[0x00, 0x2, 0x0]);
+        assert_serialize_err(
+            Bytes::new(&[]),
+            &schema,
+            &names,
+            r"Failed to serialize value of type `bytes` using Schema::Union(UnionSchema { schemas: [Decimal(DecimalSchema { precision: 42, scale: 0, inner: Bytes })] }): Bytes cannot be empty for a Schema::Decimal",
         );
 
         Ok(())
