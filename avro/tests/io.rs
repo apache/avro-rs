@@ -219,10 +219,7 @@ fn long_record_datum() -> &'static Value {
 fn test_validate() -> TestResult {
     for (raw_schema, value) in schemas_to_validate().iter() {
         let schema = Schema::parse_str(raw_schema)?;
-        assert!(
-            value.validate(&schema),
-            "value {value:?} does not validate schema: {raw_schema}"
-        );
+        value.validate(&schema)?;
     }
 
     Ok(())

@@ -130,10 +130,7 @@ fn avro_3787_deserialize_union_with_unknown_symbol() -> TestResult {
         bar_use_parent: Some(BarUseParent { bar_use: Bar::Bar2 }),
     };
     let avro_value = to_value(foo1)?;
-    assert!(
-        avro_value.validate(&writer_schema),
-        "value is valid for schema",
-    );
+    avro_value.validate(&writer_schema)?;
     let datum = GenericDatumWriter::builder(&writer_schema)
         .build()?
         .write_value_to_vec(avro_value)?;
@@ -266,10 +263,7 @@ fn avro_3787_deserialize_union_with_unknown_symbol_no_ref() -> TestResult {
         bar_parent: Some(BarParent { bar: Bar::Bar2 }),
     };
     let avro_value = to_value(foo2)?;
-    assert!(
-        avro_value.validate(&writer_schema),
-        "value is valid for schema",
-    );
+    avro_value.validate(&writer_schema)?;
     let datum = GenericDatumWriter::builder(&writer_schema)
         .build()?
         .write_value_to_vec(avro_value)?;

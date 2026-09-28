@@ -19,6 +19,7 @@ use bon::bon;
 use serde::Serialize;
 use std::io::Write;
 
+use crate::types::{SchemaPath, ValuePath};
 use crate::{
     AvroResult, Schema,
     encode::encode_internal,
@@ -125,7 +126,13 @@ impl GenericDatumWriter<'_> {
     pub fn write_value_ref<W: Write>(&self, writer: &mut W, value: &Value) -> AvroResult<usize> {
         if self.validate
             && value
-                .validate_internal(self.schema, self.resolved.get_names(), None)
+                .validate_internal(
+                    self.schema,
+                    self.resolved.get_names(),
+                    None,
+                    &ValuePath::Start,
+                    &SchemaPath::Start,
+                )
                 .is_some()
         {
             return Err(Details::Validation.into());
