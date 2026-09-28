@@ -474,9 +474,9 @@ impl<'a> SchemaPath<'a> {
                         ..
                     }) => write!(f, "Decimal(Bytes)")?,
                     Schema::BigDecimal => write!(f, "BigDecimal")?,
-                    Schema::Uuid(UuidSchema::Fixed(_)) => write!(f, "Uuid(Bytes)")?,
-                    Schema::Uuid(UuidSchema::Bytes) => write!(f, "Uuid(String)")?,
-                    Schema::Uuid(UuidSchema::String) => write!(f, "Uuid(Fixed)")?,
+                    Schema::Uuid(UuidSchema::Fixed(_)) => write!(f, "Uuid(Fixed)")?,
+                    Schema::Uuid(UuidSchema::Bytes) => write!(f, "Uuid(Bytes)")?,
+                    Schema::Uuid(UuidSchema::String) => write!(f, "Uuid(String)")?,
                     Schema::Date => write!(f, "Date")?,
                     Schema::TimeMillis => write!(f, "TimeMillis")?,
                     Schema::TimeMicros => write!(f, "TimeMicros")?,
