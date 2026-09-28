@@ -17,9 +17,9 @@
 
 use crate::error::Details;
 use crate::schema::{
-    Alias, Aliases, ArraySchema, DecimalMetadata, DecimalSchema, EnumSchema, FixedSchema,
-    MapSchema, Name, Names, NamespaceRef, Precision, RecordField, RecordSchema, Scale, Schema,
-    SchemaKind, UnionSchema, UuidSchema,
+    Alias, Aliases, ArraySchema, DecimalSchema, EnumSchema, FixedSchema, MapSchema, Name, Names,
+    NamespaceRef, Precision, RecordField, RecordSchema, Scale, Schema, SchemaKind, UnionSchema,
+    UuidSchema,
 };
 use crate::util::{JsonValueDescriber, MapHelper};
 use crate::validator::validate_enum_symbol_name;
@@ -27,6 +27,7 @@ use crate::{AvroResult, Error};
 use log::{debug, error, warn};
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::num::NonZero;
 
 #[derive(Default)]
 pub(crate) struct Parser {
@@ -190,40 +191,43 @@ impl Parser {
         Ok(Schema::Ref { name: full_name })
     }
 
-    fn get_decimal_integer(
-        &self,
-        complex: &Map<String, Value>,
-        key: &'static str,
-    ) -> AvroResult<DecimalMetadata> {
-        match complex.get(key) {
-            Some(Value::Number(value)) => self.parse_json_integer_for_decimal(value),
-            None => {
-                if key == "scale" {
-                    Ok(0)
-                } else {
-                    Err(Details::GetDecimalMetadataFromJson(key).into())
-                }
-            }
-            Some(value) => Err(Details::GetDecimalMetadataValueFromJson {
-                key: key.into(),
-                value: value.clone(),
-            }
-            .into()),
-        }
-    }
-
     fn parse_precision_and_scale(
         &self,
         complex: &Map<String, Value>,
     ) -> AvroResult<(Precision, Scale)> {
-        let precision = self.get_decimal_integer(complex, "precision")?;
-        let scale = self.get_decimal_integer(complex, "scale")?;
+        let precision = match complex.get("precision") {
+            Some(Value::Number(value)) if value.is_u64() => {
+                let value = value.as_u64().expect("Is u64");
+                let value =
+                    usize::try_from(value).map_err(|e| Details::ConvertU64ToUsize(e, value))?;
+                NonZero::new(value)
+                    .ok_or(Details::DecimalPrecisionMuBePositive { precision: value })?
+            }
+            Some(value) => {
+                return Err(Details::GetDecimalMetadataValueFromJson {
+                    key: "precision".into(),
+                    value: value.clone(),
+                }
+                .into());
+            }
+            None => return Err(Details::GetDecimalMetadataFromJson("precision").into()),
+        };
+        let scale = match complex.get("scale") {
+            Some(Value::Number(value)) if value.is_u64() => {
+                let value = value.as_u64().expect("Is u64");
+                usize::try_from(value).map_err(|e| Details::ConvertU64ToUsize(e, value))?
+            }
+            Some(value) => {
+                return Err(Details::GetDecimalMetadataValueFromJson {
+                    key: "scale".into(),
+                    value: value.clone(),
+                }
+                .into());
+            }
+            None => 0,
+        };
 
-        if precision < 1 {
-            return Err(Details::DecimalPrecisionMuBePositive { precision }.into());
-        }
-
-        if precision < scale {
+        if precision.get() < scale {
             Err(Details::DecimalPrecisionLessThanScale { precision, scale }.into())
         } else {
             Ok((precision, scale))
@@ -797,26 +801,5 @@ impl Parser {
             },
             _ => Ok(name),
         }
-    }
-
-    fn parse_json_integer_for_decimal(
-        &self,
-        value: &serde_json::Number,
-    ) -> AvroResult<DecimalMetadata> {
-        Ok(if value.is_u64() {
-            let num = value
-                .as_u64()
-                .ok_or_else(|| Details::GetU64FromJson(value.clone()))?;
-            num.try_into()
-                .map_err(|e| Details::ConvertU64ToUsize(e, num))?
-        } else if value.is_i64() {
-            let num = value
-                .as_i64()
-                .ok_or_else(|| Details::GetI64FromJson(value.clone()))?;
-            num.try_into()
-                .map_err(|e| Details::ConvertI64ToUsize(e, num))?
-        } else {
-            return Err(Details::GetPrecisionOrScaleFromJson(value.clone()).into());
-        })
     }
 }

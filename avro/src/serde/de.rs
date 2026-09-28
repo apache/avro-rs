@@ -1150,12 +1150,12 @@ mod tests {
         let test = Value::Record(vec![
             ("a".to_owned(), Value::Long(27)),
             ("b".to_owned(), Value::String("foo".to_owned())),
-            ("c".to_owned(), Value::Decimal(Decimal::from(vec![1, 24]))),
+            ("c".to_owned(), Value::Decimal(Decimal::new([1, 24])?)),
         ]);
         let expected = Test {
             a: 27,
             b: "foo".to_owned(),
-            c: Decimal::from(vec![1, 24]),
+            c: Decimal::new([1, 24])?,
         };
         let final_value: Test = from_value(&test)?;
         assert_eq!(final_value, expected);
@@ -1166,7 +1166,7 @@ mod tests {
                 Value::Record(vec![
                     ("a".to_owned(), Value::Long(27)),
                     ("b".to_owned(), Value::String("foo".to_owned())),
-                    ("c".to_owned(), Value::Decimal(Decimal::from(vec![1, 24]))),
+                    ("c".to_owned(), Value::Decimal(Decimal::new([1, 24])?)),
                 ]),
             ),
             ("b".to_owned(), Value::Int(35)),
@@ -1794,11 +1794,11 @@ mod tests {
     #[test]
     fn test_avro_3892_deserialize_bytes_from_decimal() -> TestResult {
         let expected_bytes = BigInt::from(123456789).to_signed_bytes_be();
-        let value = Value::Decimal(Decimal::from(&expected_bytes));
+        let value = Value::Decimal(Decimal::new(&expected_bytes)?);
         let raw_bytes = from_value::<Bytes>(&value)?;
         assert_eq!(raw_bytes.0, expected_bytes);
 
-        let value = Value::Union(0, Box::new(Value::Decimal(Decimal::from(&expected_bytes))));
+        let value = Value::Union(0, Box::new(Value::Decimal(Decimal::new(&expected_bytes)?)));
         let raw_bytes = from_value::<Option<Bytes>>(&value)?;
         assert_eq!(raw_bytes.unwrap().0, expected_bytes);
         Ok(())

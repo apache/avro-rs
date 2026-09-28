@@ -1148,12 +1148,12 @@ impl Value {
         scale: Scale,
         inner: &InnerDecimalSchema,
     ) -> Result<Self, Error> {
-        if scale > precision {
+        if scale > precision.get() {
             return Err(Details::GetScaleAndPrecision { scale, precision }.into());
         }
         match inner {
             &InnerDecimalSchema::Fixed(FixedSchema { size, .. }) => {
-                if max_prec_for_len(size)? < precision {
+                if max_prec_for_len(size)? < precision.get() {
                     return Err(Details::GetScaleWithFixedSize { size, precision }.into());
                 }
             }
@@ -1162,7 +1162,7 @@ impl Value {
         match self {
             Value::Decimal(num) => {
                 let num_bytes = num.len();
-                if max_prec_for_len(num_bytes)? < precision {
+                if max_prec_for_len(num_bytes)? < precision.get() {
                     Err(Details::ComparePrecisionAndSize {
                         precision,
                         num_bytes,
@@ -1174,7 +1174,7 @@ impl Value {
                 // check num.bits() here
             }
             Value::Fixed(_, bytes) | Value::Bytes(bytes) => {
-                if max_prec_for_len(bytes.len())? < precision {
+                if max_prec_for_len(bytes.len())? < precision.get() {
                     Err(Details::ComparePrecisionAndSize {
                         precision,
                         num_bytes: bytes.len(),
@@ -1182,7 +1182,7 @@ impl Value {
                     .into())
                 } else {
                     // precision and scale match, can we assume the underlying type can hold the data?
-                    Ok(Value::Decimal(Decimal::from(bytes)))
+                    Ok(Value::Decimal(Decimal::new(bytes)?))
                 }
             }
 
@@ -1203,7 +1203,7 @@ impl Value {
                         }
                     })
                     .collect::<Result<Vec<u8>, Error>>()?;
-                Ok(Value::Decimal(Decimal::from(bytes)))
+                Ok(Value::Decimal(Decimal::new(bytes)?))
             }
             other => Err(Details::ResolveDecimal(other).into()),
         }
@@ -1620,6 +1620,7 @@ mod tests {
     use num_bigint::BigInt;
     use pretty_assertions::assert_eq;
     use serde_json::json;
+    use std::num::NonZero;
 
     #[test]
     fn avro_3809_validate_nested_records_with_implicit_namespace() -> TestResult {
@@ -2106,9 +2107,9 @@ mod tests {
 
     #[test]
     fn resolve_decimal_bytes() -> TestResult {
-        let value = Value::Decimal(Decimal::from(vec![1, 2, 3, 4, 5]));
+        let value = Value::Decimal(Decimal::new([1, 2, 3, 4, 5])?);
         value.clone().resolve(&Schema::Decimal(DecimalSchema {
-            precision: 10,
+            precision: NonZero::new(10).unwrap(),
             scale: 4,
             inner: InnerDecimalSchema::Bytes,
         }))?;
@@ -2124,31 +2125,31 @@ mod tests {
     fn avro_rs_580_resolve_decimal_from_string_default() -> TestResult {
         let value = Value::String("\u{0000}".to_string());
         let resolved = value.resolve(&Schema::Decimal(DecimalSchema {
-            precision: 10,
+            precision: NonZero::new(10).unwrap(),
             scale: 4,
             inner: InnerDecimalSchema::Bytes,
         }))?;
-        assert_eq!(resolved, Value::Decimal(Decimal::from(vec![0u8])));
+        assert_eq!(resolved, Value::Decimal(Decimal::new([0u8])?));
 
         let mut all_bytes_str = String::new();
         for b in 0u8..=255u8 {
             all_bytes_str.push(char::from_u32(b as u32).unwrap());
         }
         let resolved = Value::String(all_bytes_str).resolve(&Schema::Decimal(DecimalSchema {
-            precision: 10,
+            precision: NonZero::new(10).unwrap(),
             scale: 0,
             inner: InnerDecimalSchema::Bytes,
         }))?;
         assert_eq!(
             resolved,
-            Value::Decimal(Decimal::from((0u8..=255u8).collect::<Vec<_>>()))
+            Value::Decimal(Decimal::new((0u8..=255u8).collect::<Vec<_>>())?)
         );
 
         let value = Value::String("\u{0100}".to_string());
         assert_eq!(
             value
                 .resolve(&Schema::Decimal(DecimalSchema {
-                    precision: 10,
+                    precision: NonZero::new(10).unwrap(),
                     scale: 4,
                     inner: InnerDecimalSchema::Bytes,
                 }))
@@ -2187,11 +2188,11 @@ mod tests {
 
     #[test]
     fn resolve_decimal_invalid_scale() {
-        let value = Value::Decimal(Decimal::from(vec![1, 2]));
-        assert_eq!(
+        let value = Value::Decimal(Decimal::new([1, 2]).unwrap());
+        assert!(
             value
                 .resolve(&Schema::Decimal(DecimalSchema {
-                    precision: 2,
+                    precision: NonZero::new(2).unwrap(),
                     scale: 3,
                     inner: InnerDecimalSchema::Bytes,
                 }))
@@ -2203,7 +2204,7 @@ mod tests {
 
     #[test]
     fn resolve_decimal_invalid_precision_for_length() {
-        let value = Value::Decimal(Decimal::from((1u8..=8u8).rev().collect::<Vec<_>>()));
+        let value = Value::Decimal(Decimal::new((1u8..=8u8).rev().collect::<Vec<_>>()).unwrap());
         value
             .resolve(&Schema::Decimal(DecimalSchema {
                 precision: 1,
@@ -2215,7 +2216,7 @@ mod tests {
 
     #[test]
     fn resolve_decimal_fixed() {
-        let value = Value::Decimal(Decimal::from(vec![1, 2, 3, 4, 5]));
+        let value = Value::Decimal(Decimal::new([1, 2, 3, 4, 5]).unwrap());
         value
             .clone()
             .resolve(&Schema::Decimal(DecimalSchema {
@@ -2614,7 +2615,7 @@ mod tests {
             JsonValue::Number(1.into())
         );
         assert_eq!(
-            JsonValue::try_from(Value::Decimal(vec![1, 2, 3].into()))?,
+            JsonValue::try_from(Value::Decimal(Decimal::new([1, 2, 3])?))?,
             JsonValue::Array(vec![
                 JsonValue::Number(1.into()),
                 JsonValue::Number(2.into()),
@@ -3595,9 +3596,9 @@ mod tests {
     fn test_avro_3782_incorrect_decimal_resolving() -> TestResult {
         let schema = r#"{"name": "decimalSchema", "logicalType": "decimal", "type": "fixed", "precision": 8, "scale": 0, "size": 8}"#;
 
-        let avro_value = Value::Decimal(Decimal::from(
+        let avro_value = Value::Decimal(Decimal::new(
             BigInt::from(12345678u32).to_signed_bytes_be(),
-        ));
+        )?);
         let schema = Schema::parse_str(schema)?;
         avro_value.resolve(&schema)?;
 

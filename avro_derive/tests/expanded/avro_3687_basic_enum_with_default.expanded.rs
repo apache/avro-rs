@@ -55,7 +55,7 @@ impl ::apache_avro::AvroSchemaComponent for Basic {
 #[automatically_derived]
 impl ::core::default::Default for Basic {
     #[inline]
-    fn default() -> Basic {
+    fn default() -> Self {
         Self::A
     }
 }

@@ -991,7 +991,7 @@ mod tests {
         let test = Test {
             a: 27,
             b: "foo".to_string(),
-            c: Decimal::from(vec![1, 24]),
+            c: Decimal::new([1, 24])?,
         };
 
         assert_roundtrip(test.clone(), &schemas[0], Vec::new())?;
@@ -1845,7 +1845,7 @@ mod tests {
         )?;
 
         let expected_bytes = BigInt::from(123456789).to_signed_bytes_be();
-        let value = Decimal::from(&expected_bytes);
+        let value = Decimal::new(&expected_bytes)?;
 
         assert_roundtrip(value.clone(), &schema, Vec::new())?;
         assert_roundtrip(value.clone(), &Schema::union(vec![schema])?, Vec::new())?;
