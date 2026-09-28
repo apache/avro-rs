@@ -2189,7 +2189,7 @@ mod tests {
     #[test]
     fn resolve_decimal_invalid_scale() {
         let value = Value::Decimal(Decimal::new([1, 2]).unwrap());
-        assert!(
+        assert_eq!(
             value
                 .resolve(&Schema::Decimal(DecimalSchema {
                     precision: NonZero::new(2).unwrap(),
@@ -2207,7 +2207,7 @@ mod tests {
         let value = Value::Decimal(Decimal::new((1u8..=8u8).rev().collect::<Vec<_>>()).unwrap());
         value
             .resolve(&Schema::Decimal(DecimalSchema {
-                precision: 1,
+                precision: NonZero::new(1).unwrap(),
                 scale: 0,
                 inner: InnerDecimalSchema::Bytes,
             }))
@@ -2220,7 +2220,7 @@ mod tests {
         value
             .clone()
             .resolve(&Schema::Decimal(DecimalSchema {
-                precision: 10,
+                precision: NonZero::new(10).unwrap(),
                 scale: 1,
                 inner: InnerDecimalSchema::Fixed(FixedSchema {
                     name: Name::new("decimal").unwrap(),
