@@ -25,6 +25,11 @@
 //!
 //! If Serde adds new attributes they need to be added here too.
 
+// `darling` generates `field: field` for `#[darling(multiple)]` fields using the field's own
+// span, which Clippy 1.99+ reports as `redundant_field_names` on the struct definition.
+// TODO: Remove once https://github.com/TedDriggs/darling/pull/441 is released
+#![expect(clippy::redundant_field_names)]
+
 use darling::{FromAttributes, FromMeta};
 use syn::Expr;
 
