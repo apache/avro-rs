@@ -21,6 +21,11 @@
 //! Although a user will mostly use the Serde attributes, there are some Avro specific attributes
 //! a user can use. These add extra metadata to the generated schema.
 
+// `darling` generates `field: field` for `#[darling(multiple)]` fields using the field's own
+// span, which Clippy 1.99+ reports as `redundant_field_names` on the struct definition.
+// TODO: Remove once https://github.com/TedDriggs/darling/pull/441 is released
+#![expect(clippy::redundant_field_names)]
+
 use crate::attributes::FieldDefault;
 use crate::case::RenameRule;
 use darling::FromMeta;
