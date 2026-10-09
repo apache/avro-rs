@@ -126,14 +126,14 @@ fn default_value_examples() -> &'static Vec<(&'static str, &'static str, Value)>
             (r#""double""#, r#""NaN""#, Value::Double(f64::NAN)),
             (
                 r#"{"type": "fixed", "name": "F", "size": 2}"#,
-                r#""a""#,
-                Value::Fixed(1, vec![97]),
-            ), // ASCII 'a' => one byte
+                r#""ab""#,
+                Value::Fixed(2, vec![97, 98]),
+            ), // Each codepoint maps to one byte, and the default must fill the fixed size
             (
                 r#"{"type": "fixed", "name": "F", "size": 2}"#,
-                r#""\u00FF""#,
-                Value::Fixed(2, vec![195, 191]),
-            ), // The value is between U+0080 and U+07FF => two bytes
+                r#""\u00FF\u0000""#,
+                Value::Fixed(2, vec![255, 0]),
+            ), // Codepoints 0-255 map directly to byte values, they are not UTF-8 encoded
             (
                 r#"{"type": "enum", "name": "F", "symbols": ["FOO", "BAR"]}"#,
                 r#""FOO""#,

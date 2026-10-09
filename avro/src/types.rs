@@ -1388,7 +1388,28 @@ impl Value {
                     Err(Details::CompareFixedSizes { size, n }.into())
                 }
             }
-            Value::String(s) => Ok(Value::Fixed(s.len(), s.into_bytes())),
+            // The spec says a fixed value can be encoded as a JSON string
+            // whose codepoints (0-255) map directly to byte values. This applies
+            // to defaults and any other String to Fixed resolution.
+            Value::String(s) => {
+                let bytes = s
+                    .chars()
+                    .map(|c| {
+                        let cp = c as u32;
+                        if cp > 0xFF {
+                            Err(Details::ResolveFixed(Value::String(s.clone())).into())
+                        } else {
+                            Ok(cp as u8)
+                        }
+                    })
+                    .collect::<Result<Vec<u8>, Error>>()?;
+                if bytes.len() == size {
+                    Ok(Value::Fixed(size, bytes))
+                } else {
+                    let n = bytes.len();
+                    Err(Details::CompareFixedSizes { size, n }.into())
+                }
+            }
             Value::Bytes(s) => {
                 if s.len() == size {
                     Ok(Value::Fixed(size, s))
@@ -3659,6 +3680,80 @@ mod tests {
                 .unwrap_err()
                 .to_string(),
             "Fixed size mismatch, expected: 3, got: 4"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_fixed_from_string_checks_size() -> TestResult {
+        let fixed = |size| {
+            Ok::<_, Error>(Schema::Fixed(FixedSchema {
+                name: "test".try_into()?,
+                aliases: None,
+                doc: None,
+                size,
+                attributes: Default::default(),
+            }))
+        };
+
+        assert_eq!(
+            Value::String("abc".into()).resolve(&fixed(3)?)?,
+            Value::Fixed(3, vec![97, 98, 99])
+        );
+
+        assert_eq!(
+            Value::String("ab".into())
+                .resolve(&fixed(3)?)
+                .unwrap_err()
+                .to_string(),
+            "Fixed size mismatch, expected: 3, got: 2"
+        );
+
+        assert_eq!(
+            Value::String("abcd".into())
+                .resolve(&fixed(3)?)
+                .unwrap_err()
+                .to_string(),
+            "Fixed size mismatch, expected: 3, got: 4"
+        );
+
+        // Codepoints 0-255 map to one byte each, they are not UTF-8 encoded.
+        assert_eq!(
+            Value::String("\u{ff}\u{ff}\u{ff}".into()).resolve(&fixed(3)?)?,
+            Value::Fixed(3, vec![0xFF, 0xFF, 0xFF])
+        );
+
+        assert_eq!(
+            Value::String("\u{100}".into())
+                .resolve(&fixed(1)?)
+                .unwrap_err()
+                .to_string(),
+            "String codepoints must be in the range 0-255 to resolve to Fixed, got: String(\"Ā\")"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_fixed_default_from_schema_checks_size() -> TestResult {
+        let schema = |default: &str| {
+            Schema::parse_str(&format!(
+                r#"{{"type": "record", "name": "r", "fields": [
+                     {{"name": "a", "type": {{"type": "fixed", "name": "f", "size": 4}},
+                      "default": "{default}"}}
+                   ]}}"#
+            ))
+        };
+
+        // A default whose size does not match the fixed size is not a valid schema.
+        assert!(schema("abcdefghij").is_err());
+        assert!(schema("ab").is_err());
+
+        let schema = schema("abcd")?;
+        assert_eq!(
+            Value::Record(vec![]).resolve(&schema)?,
+            Value::Record(vec![("a".into(), Value::Fixed(4, vec![97, 98, 99, 100]))])
         );
 
         Ok(())
