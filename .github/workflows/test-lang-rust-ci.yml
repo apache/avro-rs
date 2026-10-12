@@ -38,7 +38,7 @@ jobs:
   license-check:
     runs-on: ubuntu-24.04
     steps:
-      - uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: hawkeye
       - name: Checkout
@@ -64,12 +64,12 @@ jobs:
             target: aarch64-unknown-linux-gnu
 
     steps:
-      - uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         if: matrix.rust == 'nightly'
         with:
           tool: cargo-expand
 
-      - uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         if: matrix.rust == 'stable' && matrix.runner.target == 'x86_64-unknown-linux-gnu'
         with:
           tool: cargo-rdme@1.4.2
