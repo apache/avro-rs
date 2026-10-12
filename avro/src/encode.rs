@@ -107,9 +107,12 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
         | Value::LocalTimestampMicros(i)
         | Value::LocalTimestampNanos(i)
         | Value::TimeMicros(i) => encode_long(*i, writer),
-        Value::Float(x) => writer
-            .write(&x.to_le_bytes())
-            .map_err(|e| Details::WriteBytes(e).into()),
+        Value::Float(x) => match schema {
+            // AVRO-3678: Support writing float value to field defined as double
+            Schema::Double => writer.write(&f64::from(*x).to_le_bytes()),
+            _ => writer.write(&x.to_le_bytes()),
+        }
+        .map_err(|e| Details::WriteBytes(e).into()),
         Value::Double(x) => writer
             .write(&x.to_le_bytes())
             .map_err(|e| Details::WriteBytes(e).into()),
