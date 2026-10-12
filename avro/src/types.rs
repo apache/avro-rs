@@ -3686,7 +3686,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_fixed_from_string_checks_size() -> TestResult {
+    fn avro_rs_700_resolve_fixed_from_string_checks_size() -> TestResult {
         let fixed = |size| {
             Ok::<_, Error>(Schema::Fixed(FixedSchema {
                 name: "test".try_into()?,
@@ -3736,7 +3736,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_fixed_default_from_schema_checks_size() -> TestResult {
+    fn avro_rs_700_resolve_fixed_default_from_schema_checks_size() -> TestResult {
         let schema = |default: &str| {
             Schema::parse_str(&format!(
                 r#"{{"type": "record", "name": "r", "fields": [
