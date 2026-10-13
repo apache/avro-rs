@@ -289,6 +289,9 @@ pub enum Details {
     #[error("String expected for fixed, got: {0:?}")]
     GetStringForFixed(Value),
 
+    #[error("String codepoints must be in the range 0-255 to resolve to Fixed, got: {0:?}")]
+    ResolveFixed(Value),
+
     #[error("Enum default {symbol:?} is not among allowed symbols {symbols:?}")]
     GetEnumDefault {
         symbol: String,

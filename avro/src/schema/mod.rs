@@ -1788,7 +1788,7 @@ mod tests {
                         "name": "EmployeeId",
                         "size": 16
                       },
-                      "default": "female"
+                      "default": "0123456789abcdef"
                     }
                   ]
                 },
