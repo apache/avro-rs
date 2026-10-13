@@ -107,9 +107,12 @@ pub(crate) fn encode_internal<W: Write, S: Borrow<Schema>>(
         | Value::LocalTimestampMicros(i)
         | Value::LocalTimestampNanos(i)
         | Value::TimeMicros(i) => encode_long(*i, writer),
-        Value::Float(x) => writer
-            .write(&x.to_le_bytes())
-            .map_err(|e| Details::WriteBytes(e).into()),
+        Value::Float(x) => match schema {
+            // Automatically resolve float to double to match `.validate()` implementation
+            Schema::Double => writer.write(&f64::from(*x).to_le_bytes()),
+            _ => writer.write(&x.to_le_bytes()),
+        }
+        .map_err(|e| Details::WriteBytes(e).into()),
         Value::Double(x) => writer
             .write(&x.to_le_bytes())
             .map_err(|e| Details::WriteBytes(e).into()),
@@ -986,6 +989,19 @@ pub(crate) mod tests {
             }
             _ => panic!("Expected Details::ConvertFixedToUuid"),
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_706_encode_float_with_schema_double() -> TestResult {
+        let schema = Schema::Double;
+        let value = Value::Float(0.1);
+
+        value.validate(&schema)?;
+
+        let encoded = encode_to_vec(&value, &schema)?;
+        assert_eq!(encoded, &[0x0, 0x0, 0x0, 0xA0, 0x99, 0x99, 0xB9, 0x3F]);
 
         Ok(())
     }
