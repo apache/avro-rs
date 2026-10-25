@@ -2214,17 +2214,19 @@ mod tests {
 
     #[test]
     fn resolve_decimal_value_with_more_digits_than_precision() -> TestResult {
-        for (unscaled, precision, fits) in [
-            (12345, 4, false),
-            (12345, 5, true),
-            (-99999, 5, true),
-            (-100000, 5, false),
+        // decimal(5, 2) holds at most 5 digits: 999.99 and -999.99, but not 1234.56 or -1000.00
+        let precision = 5;
+        let schema = Schema::Decimal(DecimalSchema {
+            precision: NonZero::new(precision).unwrap(),
+            scale: 2,
+            inner: InnerDecimalSchema::Bytes,
+        });
+        for (unscaled, fits) in [
+            (99999, true),
+            (-99999, true),
+            (123456, false),
+            (-100000, false),
         ] {
-            let schema = Schema::Decimal(DecimalSchema {
-                precision: NonZero::new(precision).unwrap(),
-                scale: 0,
-                inner: InnerDecimalSchema::Bytes,
-            });
             let bytes = BigInt::from(unscaled).to_signed_bytes_be();
             let num_bytes = bytes.len();
             let expected = Value::Decimal(Decimal::new(&bytes)?);
