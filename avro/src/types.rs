@@ -1159,31 +1159,12 @@ impl Value {
             }
             InnerDecimalSchema::Bytes => (),
         };
+        // The length of a value does not limit the precision it can be read with: 2.56 in a
+        // `decimal(5, 2)` takes only two bytes.
         match self {
-            Value::Decimal(num) => {
-                let num_bytes = num.len();
-                if max_prec_for_len(num_bytes)? < precision.get() {
-                    Err(Details::ComparePrecisionAndSize {
-                        precision,
-                        num_bytes,
-                    }
-                    .into())
-                } else {
-                    Ok(Value::Decimal(num))
-                }
-                // check num.bits() here
-            }
+            Value::Decimal(num) => Ok(Value::Decimal(num)),
             Value::Fixed(_, bytes) | Value::Bytes(bytes) => {
-                if max_prec_for_len(bytes.len())? < precision.get() {
-                    Err(Details::ComparePrecisionAndSize {
-                        precision,
-                        num_bytes: bytes.len(),
-                    }
-                    .into())
-                } else {
-                    // precision and scale match, can we assume the underlying type can hold the data?
-                    Ok(Value::Decimal(Decimal::new(bytes)?))
-                }
+                Ok(Value::Decimal(Decimal::new(bytes)?))
             }
 
             // Per spec §Records, a decimal value can be encoded as a JSON string
@@ -2204,6 +2185,21 @@ mod tests {
             ]
         }"#;
         Schema::parse_str(schema_json)?;
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_decimal_value_shorter_than_precision() -> TestResult {
+        // 2.56 as a decimal(5, 2) is 256, which takes two bytes
+        let schema = Schema::Decimal(DecimalSchema {
+            precision: NonZero::new(5).unwrap(),
+            scale: 2,
+            inner: InnerDecimalSchema::Bytes,
+        });
+        let expected = Value::Decimal(Decimal::new([1, 0])?);
+        assert_eq!(expected.clone().resolve(&schema)?, expected);
+        assert_eq!(Value::Bytes(vec![1, 0]).resolve(&schema)?, expected);
+
         Ok(())
     }
 
