@@ -1159,13 +1159,22 @@ impl Value {
             }
             InnerDecimalSchema::Bytes => (),
         };
-        // The length of a value does not limit the precision it can be read with: 2.56 in a
-        // `decimal(5, 2)` takes only two bytes.
-        match self {
-            Value::Decimal(num) => Ok(Value::Decimal(num)),
-            Value::Fixed(_, bytes) | Value::Bytes(bytes) => {
-                Ok(Value::Decimal(Decimal::new(bytes)?))
+        // A value can be shorter than the precision allows (2.56 in a `decimal(5, 2)` takes two
+        // bytes), but it can't have more digits.
+        let check_digits = |num: Decimal| {
+            if num.digits() > precision.get() as u64 {
+                Err(Details::ComparePrecisionAndSize {
+                    precision,
+                    num_bytes: num.len(),
+                }
+                .into())
+            } else {
+                Ok(Value::Decimal(num))
             }
+        };
+        match self {
+            Value::Decimal(num) => check_digits(num),
+            Value::Fixed(_, bytes) | Value::Bytes(bytes) => check_digits(Decimal::new(bytes)?),
 
             // Per spec §Records, a decimal value can be encoded as a JSON string
             // whose codepoints (0-255) map directly to byte values. This applies
@@ -2204,6 +2213,40 @@ mod tests {
     }
 
     #[test]
+    fn resolve_decimal_value_with_more_digits_than_precision() -> TestResult {
+        for (unscaled, precision, fits) in [
+            (12345, 4, false),
+            (12345, 5, true),
+            (-99999, 5, true),
+            (-100000, 5, false),
+        ] {
+            let schema = Schema::Decimal(DecimalSchema {
+                precision: NonZero::new(precision).unwrap(),
+                scale: 0,
+                inner: InnerDecimalSchema::Bytes,
+            });
+            let bytes = BigInt::from(unscaled).to_signed_bytes_be();
+            let num_bytes = bytes.len();
+            let expected = Value::Decimal(Decimal::new(&bytes)?);
+            for value in [expected.clone(), Value::Bytes(bytes)] {
+                let resolved = value.resolve(&schema);
+                if fits {
+                    assert_eq!(resolved?, expected);
+                } else {
+                    assert_eq!(
+                        resolved.unwrap_err().to_string(),
+                        format!(
+                            "Precision {precision} too small to hold decimal values with {num_bytes} bytes"
+                        )
+                    );
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
     fn resolve_decimal_invalid_scale() {
         let value = Value::Decimal(Decimal::new([1, 2]).unwrap());
         assert_eq!(
@@ -2228,7 +2271,7 @@ mod tests {
                 scale: 0,
                 inner: InnerDecimalSchema::Bytes,
             }))
-            .unwrap();
+            .unwrap_err();
     }
 
     #[test]
