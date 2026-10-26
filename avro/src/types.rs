@@ -1162,12 +1162,9 @@ impl Value {
         // A value can be shorter than the precision allows (2.56 in a `decimal(5, 2)` takes two
         // bytes), but it can't have more digits.
         let check_digits = |num: Decimal| {
-            if num.digits() > precision.get() as u64 {
-                Err(Details::ComparePrecisionAndSize {
-                    precision,
-                    num_bytes: num.len(),
-                }
-                .into())
+            let digits = num.digits();
+            if digits > precision.get() {
+                Err(Details::ComparePrecisionAndDigits { precision, digits }.into())
             } else {
                 Ok(Value::Decimal(num))
             }
@@ -2214,31 +2211,33 @@ mod tests {
 
     #[test]
     fn resolve_decimal_value_with_more_digits_than_precision() -> TestResult {
-        // decimal(5, 2) holds at most 5 digits: 999.99 and -999.99, but not 1234.56 or -1000.00
+        // decimal(5, 2) holds at most 5 digits: 0.00, 999.99 and -999.99, but not 1000.00,
+        // -1000.00 or 1234.56
         let precision = 5;
         let schema = Schema::Decimal(DecimalSchema {
             precision: NonZero::new(precision).unwrap(),
             scale: 2,
             inner: InnerDecimalSchema::Bytes,
         });
-        for (unscaled, fits) in [
-            (99999, true),
-            (-99999, true),
-            (123456, false),
-            (-100000, false),
+        for (unscaled, digits) in [
+            (0, 1),
+            (99999, 5),
+            (-99999, 5),
+            (100000, 6),
+            (-100000, 6),
+            (123456, 6),
         ] {
             let bytes = BigInt::from(unscaled).to_signed_bytes_be();
-            let num_bytes = bytes.len();
             let expected = Value::Decimal(Decimal::new(&bytes)?);
             for value in [expected.clone(), Value::Bytes(bytes)] {
                 let resolved = value.resolve(&schema);
-                if fits {
+                if digits <= precision {
                     assert_eq!(resolved?, expected);
                 } else {
                     assert_eq!(
                         resolved.unwrap_err().to_string(),
                         format!(
-                            "Precision {precision} too small to hold decimal values with {num_bytes} bytes"
+                            "Precision {precision} too small to hold a decimal value with {digits} digits"
                         )
                     );
                 }
@@ -2267,13 +2266,17 @@ mod tests {
     #[test]
     fn resolve_decimal_invalid_precision_for_length() {
         let value = Value::Decimal(Decimal::new((1u8..=8u8).rev().collect::<Vec<_>>()).unwrap());
-        value
-            .resolve(&Schema::Decimal(DecimalSchema {
-                precision: NonZero::new(1).unwrap(),
-                scale: 0,
-                inner: InnerDecimalSchema::Bytes,
-            }))
-            .unwrap_err();
+        assert_eq!(
+            value
+                .resolve(&Schema::Decimal(DecimalSchema {
+                    precision: NonZero::new(1).unwrap(),
+                    scale: 0,
+                    inner: InnerDecimalSchema::Bytes,
+                }))
+                .unwrap_err()
+                .to_string(),
+            "Precision 1 too small to hold a decimal value with 18 digits"
+        );
     }
 
     #[test]
