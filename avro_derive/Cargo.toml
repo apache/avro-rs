@@ -31,24 +31,24 @@ documentation = "https://docs.rs/apache-avro-derive"
 proc-macro = true
 
 [dependencies]
-darling = { default-features = false, version = "0.24.0" }
-proc-macro2 = { default-features = false, version = "1.0.106" }
-quote = { default-features = false, version = "1.0.45" }
+darling = { default-features = false, version = "0.24.1" }
+proc-macro2 = { default-features = false, version = "1.0.107" }
+quote = { default-features = false, version = "1.0.47" }
 serde_json = { workspace = true }
-syn = { default-features = false, version = "3.0.3", features = ["full", "fold"] }
+syn = { default-features = false, version = "3.0.9", features = ["full", "fold"] }
 
 [dev-dependencies]
 apache-avro = { default-features = false, path = "../avro", features = ["derive"] }
 macrotest = { version = "1.2.1", default-features = false }
 pretty_assertions = { workspace = true }
-proptest = { default-features = false, version = "1.11.0", features = ["std"] }
-rustversion = "1.0.22"
+proptest = { default-features = false, version = "1.12.0", features = ["std"] }
+rustversion = "1.0.23"
 serde = { workspace = true }
-trybuild = "1.0.116"
+trybuild = "1.0.122"
 uuid = { workspace = true }
 
 [build-dependencies]
-rustversion = "1.0.22"
+rustversion = "1.0.23"
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
