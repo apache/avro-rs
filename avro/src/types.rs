@@ -2195,7 +2195,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_decimal_value_shorter_than_precision() -> TestResult {
+    fn avro_rs_717_resolve_decimal_value_shorter_than_precision() -> TestResult {
         // 2.56 as a decimal(5, 2) is 256, which takes two bytes
         let schema = Schema::Decimal(DecimalSchema {
             precision: NonZero::new(5).unwrap(),
@@ -2210,7 +2210,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_decimal_value_with_more_digits_than_precision() -> TestResult {
+    fn avro_rs_717_resolve_decimal_value_with_more_digits_than_precision() -> TestResult {
         // decimal(5, 2) holds at most 5 digits: 0.00, 999.99 and -999.99, but not 1000.00,
         // -1000.00 or 1234.56
         let precision = 5;

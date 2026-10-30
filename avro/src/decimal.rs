@@ -184,7 +184,7 @@ mod tests {
     }
 
     #[test]
-    fn decimal_digits() -> TestResult {
+    fn avro_rs_717_decimal_digits() -> TestResult {
         for (unscaled, digits) in [
             (0, 1),
             (1, 1),
