@@ -39,7 +39,7 @@ apache-avro = { path = "../avro" }
 apache-avro = { path = "../avro" }
 serde = { workspace = true }
 console_error_panic_hook = { version = "0.1.7" }
-wasm-bindgen-test = "0.3.64"
+wasm-bindgen-test = "0.3.79"
 
 [lints]
 workspace = true

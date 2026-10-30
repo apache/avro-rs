@@ -1130,6 +1130,7 @@ fn pcf_map(schema: &Map<String, JsonValue>, defined_names: &mut HashSet<String>)
             || k == "doc"
             || k == "aliases"
             || k == "logicalType"
+            || k == "order"
         {
             continue;
         }
@@ -2202,6 +2203,32 @@ mod tests {
         assert_eq!(
             "92f2ccef718c6754",
             format!("{}", schema.fingerprint::<Rabin>())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_canonical_form_strips_field_order() -> TestResult {
+        // Test vector 026 from the specification's share/test/data/schema-tests.txt
+        let schema = Schema::parse_str(
+            r#"{
+                "fields": [
+                    {"type": "boolean", "aliases": [], "name": "f1", "default": true},
+                    {"order": "descending", "name": "f2", "doc": "Hello", "type": "int"}
+                ],
+                "type": "record",
+                "name": "foo"
+            }"#,
+        )?;
+        assert_eq!(
+            schema.canonical_form(),
+            r#"{"name":"foo","type":"record","fields":[{"name":"f1","type":"boolean"},{"name":"f2","type":"int"}]}"#
+        );
+        // -4860222112080293046 in schema-tests.txt, as little-endian bytes
+        assert_eq!(
+            format!("{}", schema.fingerprint::<Rabin>()),
+            "4a93f457bd058dbc"
         );
 
         Ok(())
