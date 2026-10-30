@@ -1159,32 +1159,19 @@ impl Value {
             }
             InnerDecimalSchema::Bytes => (),
         };
+        // A value can be shorter than the precision allows (2.56 in a `decimal(5, 2)` takes two
+        // bytes), but it can't have more digits.
+        let check_digits = |num: Decimal| {
+            let digits = num.digits();
+            if digits > precision.get() {
+                Err(Details::ComparePrecisionAndDigits { precision, digits }.into())
+            } else {
+                Ok(Value::Decimal(num))
+            }
+        };
         match self {
-            Value::Decimal(num) => {
-                let num_bytes = num.len();
-                if max_prec_for_len(num_bytes)? < precision.get() {
-                    Err(Details::ComparePrecisionAndSize {
-                        precision,
-                        num_bytes,
-                    }
-                    .into())
-                } else {
-                    Ok(Value::Decimal(num))
-                }
-                // check num.bits() here
-            }
-            Value::Fixed(_, bytes) | Value::Bytes(bytes) => {
-                if max_prec_for_len(bytes.len())? < precision.get() {
-                    Err(Details::ComparePrecisionAndSize {
-                        precision,
-                        num_bytes: bytes.len(),
-                    }
-                    .into())
-                } else {
-                    // precision and scale match, can we assume the underlying type can hold the data?
-                    Ok(Value::Decimal(Decimal::new(bytes)?))
-                }
-            }
+            Value::Decimal(num) => check_digits(num),
+            Value::Fixed(_, bytes) | Value::Bytes(bytes) => check_digits(Decimal::new(bytes)?),
 
             // Per spec §Records, a decimal value can be encoded as a JSON string
             // whose codepoints (0-255) map directly to byte values. This applies
@@ -2208,6 +2195,59 @@ mod tests {
     }
 
     #[test]
+    fn avro_rs_717_resolve_decimal_value_shorter_than_precision() -> TestResult {
+        // 2.56 as a decimal(5, 2) is 256, which takes two bytes
+        let schema = Schema::Decimal(DecimalSchema {
+            precision: NonZero::new(5).unwrap(),
+            scale: 2,
+            inner: InnerDecimalSchema::Bytes,
+        });
+        let expected = Value::Decimal(Decimal::new([1, 0])?);
+        assert_eq!(expected.clone().resolve(&schema)?, expected);
+        assert_eq!(Value::Bytes(vec![1, 0]).resolve(&schema)?, expected);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_717_resolve_decimal_value_with_more_digits_than_precision() -> TestResult {
+        // decimal(5, 2) holds at most 5 digits: 0.00, 999.99 and -999.99, but not 1000.00,
+        // -1000.00 or 1234.56
+        let precision = 5;
+        let schema = Schema::Decimal(DecimalSchema {
+            precision: NonZero::new(precision).unwrap(),
+            scale: 2,
+            inner: InnerDecimalSchema::Bytes,
+        });
+        for (unscaled, digits) in [
+            (0, 1),
+            (99999, 5),
+            (-99999, 5),
+            (100000, 6),
+            (-100000, 6),
+            (123456, 6),
+        ] {
+            let bytes = BigInt::from(unscaled).to_signed_bytes_be();
+            let expected = Value::Decimal(Decimal::new(&bytes)?);
+            for value in [expected.clone(), Value::Bytes(bytes)] {
+                let resolved = value.resolve(&schema);
+                if digits <= precision {
+                    assert_eq!(resolved?, expected);
+                } else {
+                    assert_eq!(
+                        resolved.unwrap_err().to_string(),
+                        format!(
+                            "Precision {precision} too small to hold a decimal value with {digits} digits"
+                        )
+                    );
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
     fn resolve_decimal_invalid_scale() {
         let value = Value::Decimal(Decimal::new([1, 2]).unwrap());
         assert_eq!(
@@ -2226,13 +2266,17 @@ mod tests {
     #[test]
     fn resolve_decimal_invalid_precision_for_length() {
         let value = Value::Decimal(Decimal::new((1u8..=8u8).rev().collect::<Vec<_>>()).unwrap());
-        value
-            .resolve(&Schema::Decimal(DecimalSchema {
-                precision: NonZero::new(1).unwrap(),
-                scale: 0,
-                inner: InnerDecimalSchema::Bytes,
-            }))
-            .unwrap();
+        assert_eq!(
+            value
+                .resolve(&Schema::Decimal(DecimalSchema {
+                    precision: NonZero::new(1).unwrap(),
+                    scale: 0,
+                    inner: InnerDecimalSchema::Bytes,
+                }))
+                .unwrap_err()
+                .to_string(),
+            "Precision 1 too small to hold a decimal value with 18 digits"
+        );
     }
 
     #[test]

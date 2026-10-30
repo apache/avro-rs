@@ -1712,7 +1712,7 @@ mod tests {
             SchemaCompatibility::mutual_read(&bytes, &fixed)?
         );
 
-        let value = Value::Decimal(Decimal::new([1; 10])?);
+        let value = Value::Decimal(Decimal::new([1; 8])?);
         let fixed_value = value.clone().resolve(&fixed)?;
         let bytes_value = value.resolve(&bytes)?;
 

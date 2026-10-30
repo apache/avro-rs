@@ -90,8 +90,9 @@ impl Decimal {
         })
     }
 
-    pub(crate) fn len(&self) -> usize {
-        self.len.get()
+    /// The number of decimal digits of the unscaled value, without the sign.
+    pub(crate) fn digits(&self) -> usize {
+        self.value.magnitude().to_str_radix(10).len()
     }
 
     pub(crate) fn to_vec(&self) -> AvroResult<Vec<u8>> {
@@ -178,6 +179,32 @@ mod tests {
 
         let output = <Vec<u8>>::try_from(d)?;
         assert_eq!(output, input);
+
+        Ok(())
+    }
+
+    #[test]
+    fn avro_rs_717_decimal_digits() -> TestResult {
+        for (unscaled, digits) in [
+            (0, 1),
+            (1, 1),
+            (-1, 1),
+            (99999, 5),
+            (-99999, 5),
+            (100000, 6),
+            (-100000, 6),
+            (i128::from(i64::MAX), 19),
+            (i128::from(i64::MIN), 19),
+            (i128::MAX, 39),
+            (i128::MIN, 39),
+        ] {
+            let decimal = Decimal::new(BigInt::from(unscaled).to_signed_bytes_be())?;
+            assert_eq!(decimal.digits(), digits, "{unscaled}");
+        }
+
+        // sign extension bytes don't add digits
+        assert_eq!(Decimal::new([0, 0, 1])?.digits(), 1);
+        assert_eq!(Decimal::new([0xFF, 0xFF, 0xFF])?.digits(), 1);
 
         Ok(())
     }

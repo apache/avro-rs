@@ -220,10 +220,17 @@ pub enum Details {
     #[error("Unable to convert to u8, got {0:?}")]
     GetU8(Value),
 
+    #[deprecated(since = "0.23.0", note = "This error variant is not generated anymore")]
     #[error("Precision {precision} too small to hold decimal values with {num_bytes} bytes")]
     ComparePrecisionAndSize {
         precision: NonZero<usize>,
         num_bytes: usize,
+    },
+
+    #[error("Precision {precision} too small to hold a decimal value with {digits} digits")]
+    ComparePrecisionAndDigits {
+        precision: NonZero<usize>,
+        digits: usize,
     },
 
     #[error("Cannot convert length to i32: {1}")]
