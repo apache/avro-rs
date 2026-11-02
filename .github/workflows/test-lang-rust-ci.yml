@@ -213,7 +213,7 @@ jobs:
       - name: Rust reads interop files created by Java and Rust
         run: INTEROP_ROOT_FOLDER="main-repo" ./build.sh interop-data-test
 
-      - uses: shogo82148/actions-setup-perl@8b574cdc2dffdae49f803204a4f2b716a2fa1db7 # v1.44.2
+      - uses: shogo82148/actions-setup-perl@3b59bd33efdae98406a9bc4b75a4aa041e11993a # v1.44.4
         with:
           perl-version: 5.32
 
