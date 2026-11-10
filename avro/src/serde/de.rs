@@ -939,7 +939,7 @@ impl<'de> de::Deserializer<'de> for StringDeserializer {
     }
 }
 
-/// Interpret a `Value` as an instance of type `D`.
+/// Deserialize a `Value` into a type implementing `Deserialize` type.
 ///
 /// This conversion can fail if the structure of the `Value` does not match the
 /// structure expected by `D`.

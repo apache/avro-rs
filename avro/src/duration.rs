@@ -17,8 +17,7 @@
 
 use serde::{Deserialize, Serialize, de};
 
-/// A struct representing duration that hides the details of endianness and conversion between
-/// platform-native u32 and byte arrays.
+/// A duration as specified in the Avro specification.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Duration {
     months: Months,
@@ -26,6 +25,7 @@ pub struct Duration {
     millis: Millis,
 }
 
+/// The months part of a duration as specified in the Avro specification.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Months(u32);
 
@@ -51,6 +51,7 @@ impl From<[u8; 4]> for Months {
     }
 }
 
+/// The days part of a duration as specified in the Avro specification.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Days(u32);
 
@@ -76,6 +77,7 @@ impl From<[u8; 4]> for Days {
     }
 }
 
+/// The milliseconds part of a duration as specified in the Avro specification.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Millis(u32);
 

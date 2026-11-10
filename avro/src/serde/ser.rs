@@ -473,7 +473,7 @@ impl ser::SerializeStructVariant for StructVariantSerializer {
     }
 }
 
-/// Interpret a serializeable instance as a `Value`.
+/// Serialize a type implementing `Serialize` into a `Value`.
 ///
 /// This conversion can fail if the value is not valid as per the Avro specification.
 /// e.g: `HashMap` with non-string keys.

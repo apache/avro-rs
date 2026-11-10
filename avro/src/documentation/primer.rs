@@ -78,10 +78,8 @@
 //! schema and can therefore not be decoded without the reader knowing **exactly** which schema was
 //! used to write it.
 //!
-//! This file format can be used via the [`to_avro_datum`](crate::to_avro_datum), [`from_avro_datum`](crate::from_avro_datum),
-//! [`to_avro_datum_schemata`](crate::to_avro_datum_schemata), [`from_avro_datum_schemata`](crate::from_avro_datum_schemata),
-//! [`from_avro_datum_reader_schemata`](crate::from_avro_datum_reader_schemata), and
-//! [`write_avro_datum_ref`](crate::write_avro_datum_ref) functions.
+//! This file format can be used via the [`GenericDatumWriter`](crate::writer::datum::GenericDatumWriter)
+//! and [`GenericDatumReader`](crate::reader::datum::GenericDatumReader) functions.
 //!
 //! #### [Avro JSON](https://avro.apache.org/docs/++version++/specification/#json-encoding)
 //! Not be confused with the schema definition which is also in JSON. This is the Avro data encoded

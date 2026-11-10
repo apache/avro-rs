@@ -169,29 +169,6 @@ impl GenericDatumWriter<'_> {
     }
 }
 
-/// Deprecated. Use [`GenericDatumWriter`] instead.
-///
-/// This is equivalent to:
-/// ```ignore
-/// GenericDatumWriter::builder(schema)
-///     .build()?
-///     .write_value_to_vec(value)
-/// ```
-///
-/// Encode a value into raw Avro data, also performs schema validation.
-///
-/// **NOTE**: This function has a quite small niche of usage and does NOT generate headers and sync
-/// markers; use [`Writer`] to be fully Avro-compatible if you don't know what
-/// you are doing, instead.
-///
-/// [`Writer`]: crate::Writer
-#[deprecated(since = "0.22.0", note = "Use GenericDatumWriter instead")]
-pub fn to_avro_datum<T: Into<Value>>(schema: &Schema, value: T) -> AvroResult<Vec<u8>> {
-    GenericDatumWriter::builder(schema)
-        .build()?
-        .write_value_to_vec(value)
-}
-
 /// Write the referenced [Serialize]able object to the provided [Write] object.
 ///
 /// It is recommended to use [`GenericDatumWriter`] instead.
@@ -215,32 +192,6 @@ pub fn write_avro_datum_ref<T: Serialize, W: Write>(
         human_readable: is_human_readable(),
     };
     data.serialize(SchemaAwareSerializer::new(writer, schema, config)?)
-}
-
-/// Deprecated. Use [`GenericDatumWriter`] instead.
-///
-/// This is equivalent to:
-/// ```ignore
-/// GenericDatumWriter::builder(schema)
-///     .schemata(schemata)?
-///     .build()?
-///     .write_value_to_vec(value)
-/// ```
-///
-/// Encode a value into raw Avro data, also performs schema validation.
-///
-/// If the provided `schema` is incomplete then its dependencies must be
-/// provided in `schemata`
-#[deprecated(since = "0.22.0", note = "Use GenericDatumWriter instead")]
-pub fn to_avro_datum_schemata<T: Into<Value>>(
-    schema: &Schema,
-    schemata: Vec<&Schema>,
-    value: T,
-) -> AvroResult<Vec<u8>> {
-    GenericDatumWriter::builder(schema)
-        .schemata(schemata)?
-        .build()?
-        .write_value_to_vec(value)
 }
 
 #[cfg(test)]

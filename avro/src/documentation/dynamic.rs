@@ -228,13 +228,6 @@
 //!
 //! ```
 //! use apache_avro::{Codec, DeflateSettings, Reader, Schema, Writer, from_value, types::Record, Error};
-//! use serde::{Deserialize, Serialize};
-//!
-//! #[derive(Debug, Deserialize, Serialize)]
-//! struct Test {
-//!     a: i64,
-//!     b: String,
-//! }
 //!
 //! fn main() -> Result<(), Error> {
 //!     let raw_schema = r#"
@@ -260,18 +253,12 @@
 //!
 //!     writer.append_value(record)?;
 //!
-//!     let test = Test {
-//!         a: 27,
-//!         b: "foo".to_owned(),
-//!     };
-//!
-//!     writer.append_ser(test)?;
-//!
 //!     let input = writer.into_inner()?;
 //!     let reader = Reader::builder(&input[..]).reader_schema(&schema).build()?;
 //!
 //!     for record in reader {
-//!         println!("{:?}", from_value::<Test>(&record?));
+//!         let record = record?;
+//!         println!("{record:?}");
 //!     }
 //!     Ok(())
 //! }

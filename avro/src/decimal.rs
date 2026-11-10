@@ -20,6 +20,7 @@ use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize, Serializer, de::SeqAccess};
 use std::num::NonZero;
 
+/// A decimal as specified in the Avro specification.
 #[derive(Debug, Clone, Eq)]
 pub struct Decimal {
     value: BigInt,

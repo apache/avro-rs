@@ -33,9 +33,9 @@ use crate::{
     types::Value,
 };
 
-/// Writer that encodes messages according to the single object encoding v1 spec
-/// Uses an API similar to the current File Writer
-/// Writes all object bytes at once, and drains internal buffer
+/// Encode `Value`s to the single object encoding.
+///
+/// Use [`SpecificSingleObjectWriter`] if you need to serialize Rust types.
 pub struct GenericSingleObjectWriter {
     buffer: Vec<u8>,
     resolved: ResolvedOwnedSchema,
@@ -93,7 +93,9 @@ impl GenericSingleObjectWriter {
     }
 }
 
-/// Writer that encodes messages according to the single object encoding v1 spec
+/// Encode Rust types to the single object encoding.
+///
+/// Use [`GenericSingleObjectWriter`] if you need to serialize `Value`s that are not linked to a type.
 #[derive(Builder)]
 pub struct SpecificSingleObjectWriter<T>
 where
@@ -154,12 +156,6 @@ where
             target_block_size: None,
             _model: PhantomData,
         })
-    }
-
-    /// Deprecated. Use [`SpecificSingleObjectWriter::new`] instead.
-    #[deprecated(since = "0.22.0", note = "Use new() instead")]
-    pub fn with_capacity(_buffer_cap: usize) -> AvroResult<Self> {
-        Self::new()
     }
 }
 

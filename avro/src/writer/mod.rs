@@ -191,12 +191,6 @@ impl<'a, W: Write> Writer<'a, W> {
         self.schema
     }
 
-    /// Deprecated. Use [`Writer::append_value`] instead.
-    #[deprecated(since = "0.22.0", note = "Use `Writer::append_value` instead")]
-    pub fn append<T: Into<Value>>(&mut self, value: T) -> AvroResult<usize> {
-        self.append_value(value)
-    }
-
     /// Append a value to the `Writer`, also performs schema validation.
     ///
     /// Returns the number of bytes written (it might be 0, see below).
