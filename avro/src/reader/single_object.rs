@@ -31,6 +31,9 @@ use crate::{
     util::is_human_readable,
 };
 
+/// Read `Value`s from a single object encoding.
+///
+/// Use [`SpecificSingleObjectReader`] if you need to deserialize into Rust types.
 pub struct GenericSingleObjectReader {
     write_schema: ResolvedOwnedSchema,
     expected_header: Vec<u8>,
@@ -96,6 +99,9 @@ impl GenericSingleObjectReader {
     }
 }
 
+/// Read Rust types from a single object encoding.
+///
+/// Use [`GenericSingleObjectReader`] if you need `Value`s that are not linked to a type.
 pub struct SpecificSingleObjectReader<T>
 where
     T: AvroSchema,

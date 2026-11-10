@@ -15,6 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+//! Types for dealing with errors.
+
 use crate::{
     schema::{Name, RecordSchema, Schema, SchemaKind, UnionSchema},
     types::{Value, ValueKind},
@@ -375,10 +377,6 @@ pub enum Details {
     #[error("Cannot convert u64 to usize: {1}")]
     ConvertU64ToUsize(#[source] std::num::TryFromIntError, u64),
 
-    #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
-    #[error("Cannot convert u32 to usize: {1}")]
-    ConvertU32ToUsize(#[source] std::num::TryFromIntError, u32),
-
     #[error("Cannot convert i64 to usize: {1}")]
     ConvertI64ToUsize(#[source] std::num::TryFromIntError, i64),
 
@@ -433,19 +431,11 @@ pub enum Details {
     #[error("The decimal precision ({precision}) must be a non-zero positive number")]
     DecimalPrecisionMuBePositive { precision: usize },
 
-    #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
-    #[error("Unreadable big decimal sign")]
-    BigDecimalSign,
-
     #[error("Unreadable length for big decimal inner bytes: {0}")]
     BigDecimalLen(#[source] Box<Error>),
 
     #[error("Unreadable big decimal scale")]
     BigDecimalScale,
-
-    #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
-    #[error("Unexpected `type` {0} variant for `logicalType`")]
-    GetLogicalTypeVariant(serde_json::Value),
 
     #[error("No `type` field found for `logicalType`")]
     GetLogicalTypeField,
@@ -544,19 +534,6 @@ pub enum Details {
 
     #[error("Expected a string for the `{0}` field, got a {1}")]
     GetStringInvalidType(&'static str, &'static str),
-
-    #[deprecated(since = "0.22.0", note = "This error variant is not generated anymore")]
-    #[error("Fixed schema's default value length ({0}) does not match its size ({1})")]
-    FixedDefaultLenSizeMismatch(usize, u64),
-
-    #[deprecated(since = "0.20.0", note = "This error variant is not generated anymore")]
-    #[error("Failed to compress with flate: {0}")]
-    DeflateCompress(#[source] std::io::Error),
-
-    // no longer possible after migration from libflate to miniz_oxide
-    #[deprecated(since = "0.19.0", note = "This error can no longer occur")]
-    #[error("Failed to finish flate compressor: {0}")]
-    DeflateCompressFinish(#[source] std::io::Error),
 
     #[error("Failed to decompress with flate: {0}")]
     DeflateDecompress(#[source] std::io::Error),

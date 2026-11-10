@@ -255,6 +255,7 @@ impl Codec {
 pub mod bzip {
     use bzip2::Compression;
 
+    /// Settings for configuring bzip2 compression.
     #[derive(Clone, Copy, Eq, PartialEq, Debug)]
     pub struct Bzip2Settings {
         pub compression_level: u8,
@@ -279,6 +280,7 @@ pub mod bzip {
 
 #[cfg(feature = "zstandard")]
 pub mod zstandard {
+    /// Settings for configuring zstandard compression.
     #[derive(Clone, Copy, Eq, PartialEq, Debug)]
     pub struct ZstandardSettings {
         pub compression_level: u8,
@@ -299,6 +301,7 @@ pub mod zstandard {
 
 #[cfg(feature = "xz")]
 pub mod xz {
+    /// Settings for configuring xz compression.
     #[derive(Clone, Copy, Eq, PartialEq, Debug)]
     pub struct XzSettings {
         pub compression_level: u8,

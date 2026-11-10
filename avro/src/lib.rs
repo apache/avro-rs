@@ -54,7 +54,6 @@
 #![cfg_attr(docsrs, allow(internal_features))]
 
 mod bigdecimal;
-mod bytes;
 mod codec;
 mod decimal;
 mod decode;
@@ -76,89 +75,47 @@ pub mod util;
 pub mod validator;
 pub mod writer;
 
-#[expect(deprecated)]
+// Re-export types from private module
 pub use crate::{
     bigdecimal::BigDecimal,
-    bytes::{
-        serde_avro_bytes, serde_avro_bytes_opt, serde_avro_fixed, serde_avro_fixed_opt,
-        serde_avro_slice, serde_avro_slice_opt,
+    codec::{Codec, DeflateSettings},
+    decimal::Decimal,
+    duration::{Days, Duration, Millis, Months},
+};
+
+// Re-export types from private modules that need to be behind feature gates
+#[cfg(feature = "bzip")]
+pub use crate::codec::bzip::Bzip2Settings;
+#[cfg(feature = "xz")]
+pub use crate::codec::xz::XzSettings;
+#[cfg(feature = "zstandard")]
+pub use crate::codec::zstandard::ZstandardSettings;
+
+// Re-exports that are available at their respective paths but are made available in the root for
+// convenience.
+#[doc(inline)]
+pub use crate::{
+    error::Error,
+    reader::{
+        Reader,
+        single_object::{GenericSingleObjectReader, SpecificSingleObjectReader},
+    },
+    schema::Schema,
+    serde::{AvroSchema, AvroSchemaComponent, from_value, to_value},
+    writer::{
+        Clearable, Writer, WriterBuilder,
+        single_object::{GenericSingleObjectWriter, SpecificSingleObjectWriter},
     },
 };
-#[cfg(feature = "bzip")]
-pub use codec::bzip::Bzip2Settings;
-#[cfg(feature = "xz")]
-pub use codec::xz::XzSettings;
-#[cfg(feature = "zstandard")]
-pub use codec::zstandard::ZstandardSettings;
-pub use codec::{Codec, DeflateSettings};
-pub use decimal::Decimal;
-pub use duration::{Days, Duration, Millis, Months};
-pub use error::Error;
-#[expect(
-    deprecated,
-    reason = "Still need to export it until we remove it completely"
-)]
-pub use reader::{
-    Reader,
-    datum::{from_avro_datum, from_avro_datum_reader_schemata, from_avro_datum_schemata},
-    read_marker,
-    single_object::{GenericSingleObjectReader, SpecificSingleObjectReader},
-};
-pub use schema::Schema;
-pub use serde::{AvroSchema, AvroSchemaComponent, from_value, to_value};
+
+// Re-exports from other crates
 pub use uuid::Uuid;
-#[expect(
-    deprecated,
-    reason = "Still need to export it until we remove it completely"
-)]
-pub use writer::{
-    Clearable, Writer, WriterBuilder,
-    datum::{to_avro_datum, to_avro_datum_schemata, write_avro_datum_ref},
-    single_object::{GenericSingleObjectWriter, SpecificSingleObjectWriter},
-};
 
 #[cfg(feature = "derive")]
 pub use apache_avro_derive::AvroSchema;
 
 /// A convenience type alias for `Result`s with `Error`s.
 pub type AvroResult<T> = Result<T, Error>;
-
-/// Set the maximum number of bytes that can be allocated when decoding data.
-///
-/// This function only changes the setting once. On subsequent calls the value will stay the same
-/// as the first time it is called. It is automatically called on first allocation and defaults to
-/// [`util::DEFAULT_MAX_ALLOCATION_BYTES`].
-///
-/// # Returns
-/// The configured maximum, which might be different from what the function was called with if the
-/// value was already set before.
-#[deprecated(
-    since = "0.21.0",
-    note = "Please use apache_avro::util::max_allocation_bytes"
-)]
-pub fn max_allocation_bytes(num_bytes: usize) -> usize {
-    util::max_allocation_bytes(num_bytes)
-}
-
-/// Set whether the serializer and deserializer should indicate to types that the format is human-readable.
-///
-/// This function only changes the setting once. On subsequent calls the value will stay the same
-/// as the first time it is called. It is automatically called on first allocation and defaults to
-/// [`util::DEFAULT_SERDE_HUMAN_READABLE`].
-///
-/// *NOTE*: Changing this setting can change the output of [`from_value`] and the
-/// accepted input of [`to_value`].
-///
-/// # Returns
-/// The configured human-readable value, which might be different from what the function was called
-/// with if the value was already set before.
-#[deprecated(
-    since = "0.21.0",
-    note = "Please use apache_avro::util::set_serde_human_readable"
-)]
-pub fn set_serde_human_readable(human_readable: bool) -> bool {
-    util::set_serde_human_readable(human_readable)
-}
 
 #[cfg(test)]
 mod tests {

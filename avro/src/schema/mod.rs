@@ -230,18 +230,6 @@ impl SchemaKind {
                 | SchemaKind::String,
         )
     }
-
-    #[deprecated(since = "0.22.0", note = "Use Schema::is_named instead")]
-    pub fn is_named(self) -> bool {
-        matches!(
-            self,
-            SchemaKind::Record
-                | SchemaKind::Enum
-                | SchemaKind::Fixed
-                | SchemaKind::Ref
-                | SchemaKind::Duration
-        )
-    }
 }
 
 impl From<&types::Value> for SchemaKind {

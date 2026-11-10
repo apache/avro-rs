@@ -189,7 +189,7 @@ where
         // FIXME: this is incorrect in case first type in union is not "none"
         Self::Union(
             value.is_some() as u32,
-            Box::new(value.map_or_else(|| Self::Null, Into::into)),
+            Box::new(value.map_or(Self::Null, Into::into)),
         )
     }
 }
