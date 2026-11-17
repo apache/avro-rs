@@ -46,7 +46,7 @@ checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
 
 [[package]]
 name = "apache-avro"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "apache-avro-derive",
  "apache-avro-test-helper",
@@ -82,7 +82,7 @@ dependencies = [
 
 [[package]]
 name = "apache-avro-derive"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "apache-avro",
  "darling",
@@ -101,7 +101,7 @@ dependencies = [
 
 [[package]]
 name = "apache-avro-test-helper"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "env_logger",
  "linktime",
