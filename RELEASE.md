@@ -75,18 +75,26 @@ Martin
 ## After a successful vote
 
 ```
-git checkout -b release-0.23.0-rc0 rel/release-0.23.0-rc0
+git checkout -b release-$AVRO_RS_VERSION-$AVRO_RC_VERSION rel/release-$AVRO_RS_VERSION-$AVRO_RC_VERSION
 
 cargo publish -p apache-avro-derive
 cargo publish -p apache-avro-test-helper
 cargo publish -p apache-avro
 
-git tag -s rel/release-0.23.0 -m "Apache Avro Rust SDK 0.23.0 release."
+git tag -s rel/release-$AVRO_RS_VERSION -m "Apache Avro Rust SDK $AVRO_RS_VERSION release."
 git push --tags
 ```
 
+## Move the sources to SVN release area
+```
+svn mv https://dist.apache.org/repos/dist/dev/avro/avro-rs/$AVRO_RS_VERSION https://dist.apache.org/repos/release/dev/avro/avro-rs/$AVRO_RS_VERSION
+```
 
 ## Create a Github release
+
+mv apache-avro-"$AVRO_RS_VERSION"-"$AVRO_RC_VERSION".tgz apache-avro-rs-"$AVRO_RS_VERSION".tgz
+sha256sum apache-avro-rs-"$AVRO_RS_VERSION".tgz > apache-avro-rs-"$AVRO_RS_VERSION".tgz.sha256
+gpg --armor --output apache-avro-rs-"$AVRO_RS_VERSION".tgz.asc --detach-sig apache-avro-rs-"$AVRO_RS_VERSION".tgz
 
 1. Go to https://github.com/apache/avro-rs/releases/new
 2. Select `rel/release-0.23.0` as the release tag and `auto` as the previous one (or select one manually)
@@ -121,9 +129,19 @@ New Contributors:
 * contributor 1
 * contributor 2
 
-https://github.com/apache/avro-rs/releases/tag/rel%2Frelease-0.23.0```
+Git tag: https://github.com/apache/avro-rs/releases/tag/rel%2Frelease-0.23.0
+
+Martin
+on behalf of the Avro team
+```
 
 The items could be taken from the body of the Github release ignoring the Dependabot updates:
 1. Copy the body of the Github release and paste it in a temporary file, e.g. `/tmp/v0.23.0`
-2. `cat /tmp/v0.23.0 | grep -v dependabot`
+2. `cat /tmp/v0.23.0 | rg -v dependabot`
 3. Paste the output in the email body
+
+# Yank the RC version
+
+cargo yank --version "$AVRO_RS_VERSION-$AVRO_RC_VERSION" apache-avro
+cargo yank --version "$AVRO_RS_VERSION-$AVRO_RC_VERSION" apache-avro-test-helper
+cargo yank --version "$AVRO_RS_VERSION-$AVRO_RC_VERSION" apache-avro-derive
