@@ -1081,6 +1081,16 @@ fn parsing_canonical_form(schema: &JsonValue, defined_names: &mut HashSet<String
 
 fn pcf_map(schema: &Map<String, JsonValue>, defined_names: &mut HashSet<String>) -> String {
     let typ = schema.get("type").and_then(|v| v.as_str());
+
+    // Reduce primitive types to their simple form, after stripping ([PRIMITIVES] and [STRIP] rules).
+    if let Some(typ) = typ
+        && schema
+            .keys()
+            .all(|k| k == "type" || field_ordering_position(k).is_none())
+    {
+        return pcf_string(typ);
+    }
+
     let name = if is_named_type(typ) {
         let ns = schema.get("namespace").and_then(|v| v.as_str());
         let raw_name = schema.get("name").and_then(|v| v.as_str());
@@ -1104,22 +1114,8 @@ fn pcf_map(schema: &Map<String, JsonValue>, defined_names: &mut HashSet<String>)
 
     let mut fields = Vec::new();
     for (k, v) in schema {
-        // Reduce primitive types to their simple form. ([PRIMITIVE] rule)
-        if schema.len() == 1 && k == "type" {
-            // Invariant: function is only callable from a valid schema, so this is acceptable.
-            if let JsonValue::String(s) = v {
-                return pcf_string(s);
-            }
-        }
-
         // Strip out unused fields ([STRIP] rule)
-        if field_ordering_position(k).is_none()
-            || k == "default"
-            || k == "doc"
-            || k == "aliases"
-            || k == "logicalType"
-            || k == "order"
-        {
+        if field_ordering_position(k).is_none() {
             continue;
         }
 
@@ -1132,7 +1128,7 @@ fn pcf_map(schema: &Map<String, JsonValue>, defined_names: &mut HashSet<String>)
         }
 
         // Strip off quotes surrounding "size" type, if they exist ([INTEGERS] rule).
-        if k == "size" || k == "precision" || k == "scale" {
+        if k == "size" {
             let i = match v.as_str() {
                 Some(s) => s.parse::<i64>().expect("Only valid schemas are accepted!"),
                 None => v.as_i64().unwrap(),
@@ -1183,20 +1179,7 @@ fn pcf_string(s: &str) -> String {
 }
 
 const RESERVED_FIELDS: &[&str] = &[
-    "name",
-    "type",
-    "fields",
-    "symbols",
-    "items",
-    "values",
-    "size",
-    "logicalType",
-    "order",
-    "doc",
-    "aliases",
-    "default",
-    "precision",
-    "scale",
+    "name", "type", "fields", "symbols", "items", "values", "size",
 ];
 
 // Used to define the ordering and inclusion of fields.
@@ -2180,16 +2163,16 @@ mod tests {
 
         let schema = Schema::parse_str(raw_schema)?;
         assert_eq!(
-            "7eb3b28d73dfc99bdd9af1848298b40804a2f8ad5d2642be2ecc2ad34842b987",
+            "8e72f58f2d84a59d6a08e8db5fdc6484dee35babf33179cea72889ae63083f36",
             format!("{}", schema.fingerprint::<Sha256>())
         );
 
         assert_eq!(
-            "cb11615e412ee5d872620d8df78ff6ae",
+            "384f46367ef8c22dbbf44109b82ff7aa",
             format!("{}", schema.fingerprint::<Md5>())
         );
         assert_eq!(
-            "92f2ccef718c6754",
+            "385501e341b00a1c",
             format!("{}", schema.fingerprint::<Rabin>())
         );
 
@@ -4780,10 +4763,10 @@ mod tests {
         let canonical_form = schema.canonical_form();
         let fp_rabin = schema.fingerprint::<Rabin>();
         assert_eq!(
-            r#"{"name":"test","type":"record","fields":[{"name":"a","type":"long"},{"name":"b","type":"string"},{"name":"c","type":{"type":"long"}}]}"#,
+            r#"{"name":"test","type":"record","fields":[{"name":"a","type":"long"},{"name":"b","type":"string"},{"name":"c","type":"long"}]}"#,
             canonical_form
         );
-        assert_eq!("92f2ccef718c6754", fp_rabin.to_string());
+        assert_eq!("385501e341b00a1c", fp_rabin.to_string());
         Ok(())
     }
 
