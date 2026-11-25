@@ -1081,6 +1081,14 @@ fn parsing_canonical_form(schema: &JsonValue, defined_names: &mut HashSet<String
 
 fn pcf_map(schema: &Map<String, JsonValue>, defined_names: &mut HashSet<String>) -> String {
     let typ = schema.get("type").and_then(|v| v.as_str());
+
+    // Reduce primitive types to their simple form, after stripping ([PRIMITIVES] and [STRIP] rules).
+    if let Some(typ) = typ
+        && schema.keys().all(|k| k == "type" || is_strippable_field(k))
+    {
+        return pcf_string(typ);
+    }
+
     let name = if is_named_type(typ) {
         let ns = schema.get("namespace").and_then(|v| v.as_str());
         let raw_name = schema.get("name").and_then(|v| v.as_str());
@@ -1104,22 +1112,8 @@ fn pcf_map(schema: &Map<String, JsonValue>, defined_names: &mut HashSet<String>)
 
     let mut fields = Vec::new();
     for (k, v) in schema {
-        // Reduce primitive types to their simple form. ([PRIMITIVE] rule)
-        if schema.len() == 1 && k == "type" {
-            // Invariant: function is only callable from a valid schema, so this is acceptable.
-            if let JsonValue::String(s) = v {
-                return pcf_string(s);
-            }
-        }
-
         // Strip out unused fields ([STRIP] rule)
-        if field_ordering_position(k).is_none()
-            || k == "default"
-            || k == "doc"
-            || k == "aliases"
-            || k == "logicalType"
-            || k == "order"
-        {
+        if is_strippable_field(k) {
             continue;
         }
 
@@ -1132,7 +1126,7 @@ fn pcf_map(schema: &Map<String, JsonValue>, defined_names: &mut HashSet<String>)
         }
 
         // Strip off quotes surrounding "size" type, if they exist ([INTEGERS] rule).
-        if k == "size" || k == "precision" || k == "scale" {
+        if k == "size" {
             let i = match v.as_str() {
                 Some(s) => s.parse::<i64>().expect("Only valid schemas are accepted!"),
                 None => v.as_i64().unwrap(),
@@ -1153,7 +1147,9 @@ fn pcf_map(schema: &Map<String, JsonValue>, defined_names: &mut HashSet<String>)
     }
 
     // Sort the fields by their canonical ordering ([ORDER] rule).
-    fields.sort_unstable_by_key(|(k, _)| field_ordering_position(k).unwrap());
+    fields.sort_unstable_by_key(|(k, _)| {
+        field_ordering_position(k).expect("All fields remaining are reserved fields")
+    });
     let inter = fields
         .into_iter()
         .map(|(_, v)| v)
@@ -1183,20 +1179,7 @@ fn pcf_string(s: &str) -> String {
 }
 
 const RESERVED_FIELDS: &[&str] = &[
-    "name",
-    "type",
-    "fields",
-    "symbols",
-    "items",
-    "values",
-    "size",
-    "logicalType",
-    "order",
-    "doc",
-    "aliases",
-    "default",
-    "precision",
-    "scale",
+    "name", "type", "fields", "symbols", "items", "values", "size",
 ];
 
 // Used to define the ordering and inclusion of fields.
@@ -1205,6 +1188,11 @@ fn field_ordering_position(field: &str) -> Option<usize> {
         .iter()
         .position(|&f| f == field)
         .map(|pos| pos + 1)
+}
+
+/// Check if a field can be stripped
+fn is_strippable_field(field: &str) -> bool {
+    RESERVED_FIELDS.iter().all(|&f| f != field)
 }
 
 #[cfg(test)]
@@ -2180,16 +2168,16 @@ mod tests {
 
         let schema = Schema::parse_str(raw_schema)?;
         assert_eq!(
-            "7eb3b28d73dfc99bdd9af1848298b40804a2f8ad5d2642be2ecc2ad34842b987",
+            "8e72f58f2d84a59d6a08e8db5fdc6484dee35babf33179cea72889ae63083f36",
             format!("{}", schema.fingerprint::<Sha256>())
         );
 
         assert_eq!(
-            "cb11615e412ee5d872620d8df78ff6ae",
+            "384f46367ef8c22dbbf44109b82ff7aa",
             format!("{}", schema.fingerprint::<Md5>())
         );
         assert_eq!(
-            "92f2ccef718c6754",
+            "385501e341b00a1c",
             format!("{}", schema.fingerprint::<Rabin>())
         );
 
@@ -4780,10 +4768,10 @@ mod tests {
         let canonical_form = schema.canonical_form();
         let fp_rabin = schema.fingerprint::<Rabin>();
         assert_eq!(
-            r#"{"name":"test","type":"record","fields":[{"name":"a","type":"long"},{"name":"b","type":"string"},{"name":"c","type":{"type":"long"}}]}"#,
+            r#"{"name":"test","type":"record","fields":[{"name":"a","type":"long"},{"name":"b","type":"string"},{"name":"c","type":"long"}]}"#,
             canonical_form
         );
-        assert_eq!("92f2ccef718c6754", fp_rabin.to_string());
+        assert_eq!("385501e341b00a1c", fp_rabin.to_string());
         Ok(())
     }
 
@@ -5409,6 +5397,56 @@ mod tests {
             logical_type,
             Some(&serde_json::Value::String("fish".to_string()))
         );
+
+        Ok(())
+    }
+
+    // The expected fingerprints were generated with Java Avro 1.12.0:
+    // `SchemaNormalization.parsingFingerprint("CRC-64-AVRO", new Schema.Parser().parse(schema))`.
+    #[test]
+    fn avro_rs_748_rabin_fingerprint_matches_java() -> TestResult {
+        use crate::rabin::Rabin;
+
+        #[rustfmt::skip]
+        let cases = [
+            (r#""int""#, "8f5c393f1ad57572"),
+            (r#""long""#, "b71df49344e154d0"),
+            (r#""string""#, "c70345637248018f"),
+            (r#""bytes""#, "651920c3da16c04f"),
+            (r#"{"type":"fixed","name":"F","size":16}"#, "f6415af3085f5ae7"),
+            // Logical types have the same fingerprint as their underlying type
+            (r#"{"type":"int","logicalType":"date"}"#, "8f5c393f1ad57572"),
+            (r#"{"type":"int","logicalType":"time-millis"}"#, "8f5c393f1ad57572"),
+            (r#"{"type":"long","logicalType":"time-micros"}"#, "b71df49344e154d0"),
+            (r#"{"type":"long","logicalType":"timestamp-millis"}"#, "b71df49344e154d0"),
+            (r#"{"type":"long","logicalType":"timestamp-micros"}"#, "b71df49344e154d0"),
+            (r#"{"type":"long","logicalType":"timestamp-nanos"}"#, "b71df49344e154d0"),
+            (r#"{"type":"long","logicalType":"local-timestamp-millis"}"#, "b71df49344e154d0"),
+            (r#"{"type":"long","logicalType":"local-timestamp-micros"}"#, "b71df49344e154d0"),
+            (r#"{"type":"long","logicalType":"local-timestamp-nanos"}"#, "b71df49344e154d0"),
+            (r#"{"type":"string","logicalType":"uuid"}"#, "c70345637248018f"),
+            (r#"{"type":"bytes","logicalType":"big-decimal"}"#, "651920c3da16c04f"),
+            (r#"{"type":"bytes","logicalType":"decimal","precision":9,"scale":2}"#, "651920c3da16c04f"),
+            (r#"{"type":"fixed","name":"F","size":16,"logicalType":"uuid"}"#, "f6415af3085f5ae7"),
+            (r#"{"type":"fixed","name":"F","size":12,"logicalType":"duration"}"#, "3a82509712eed7f3"),
+            (r#"{"type":"fixed","name":"F","size":8,"logicalType":"decimal","precision":9,"scale":2}"#, "c9ad1b38e17263f4"),
+            // Nested in a record and a union
+            (r#"{"type":"record","name":"R","fields":[
+                {"name":"a","type":{"type":"long","logicalType":"timestamp-micros"}},
+                {"name":"b","type":["null",{"type":"string","logicalType":"uuid"},
+                    {"type":"fixed","name":"F","size":8,"logicalType":"decimal","precision":9,"scale":2}]}
+            ]}"#, "e4bd9022ab4cb390"),
+        ];
+
+        for (input, java_fingerprint) in cases {
+            let schema = Schema::parse_str(input)?;
+            assert_eq!(
+                schema.fingerprint::<Rabin>().to_string(),
+                java_fingerprint,
+                "{input} has canonical form {}",
+                schema.canonical_form()
+            );
+        }
 
         Ok(())
     }

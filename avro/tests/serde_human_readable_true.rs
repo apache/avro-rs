@@ -78,10 +78,9 @@ fn avro_rs_440_uuid_string() -> TestResult {
     let writer = SpecificSingleObjectWriter::new()?;
     writer.write(uuid, &mut buffer)?;
 
-    assert_eq!(
-        String::from_utf8_lossy(&buffer),
-        "�\u{1}'G�8�[\u{4}�H550e8400-e29b-41d4-a716-446655440000"
-    );
+    let mut expected = vec![195, 1, 199, 3, 69, 99, 114, 72, 1, 143, 72];
+    expected.extend_from_slice(b"550e8400-e29b-41d4-a716-446655440000");
+    assert_eq!(buffer, expected);
 
     Ok(())
 }
