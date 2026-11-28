@@ -21,6 +21,7 @@ use crate::schema::{
     RecordSchema, UnionSchema, UuidSchema,
 };
 use crate::{AvroResult, Error, Schema};
+use self_cell::self_cell;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -92,17 +93,17 @@ impl<'s> TryFrom<Vec<&'s Schema>> for ResolvedSchema<'s> {
     }
 }
 
-/// Implementation detail of [`ResolvedOwnedSchema`]
-///
-/// This struct is self-referencing. The references in `names` point to `root_schema`.
-/// This allows resolving an owned schema without having to clone all the named schemas.
-#[ouroboros::self_referencing]
-struct InnerResolvedOwnedSchema {
-    root_schema: Schema,
-    #[borrows(root_schema)]
-    #[covariant]
-    names: NamesRef<'this>,
-}
+self_cell!(
+    /// Implementation detail of [`ResolvedOwnedSchema`]
+    ///
+    /// This struct is self-referencing. The references in `dependent` point to `owner`.
+    /// This allows resolving an owned schema without having to clone all the named schemas.
+    struct InnerResolvedOwnedSchema {
+        owner: Schema,
+        #[covariant]
+        dependent: NamesRef,
+    }
+);
 
 /// A variant of [`ResolvedSchema`] that owns the schema
 pub struct ResolvedOwnedSchema {
@@ -112,23 +113,19 @@ pub struct ResolvedOwnedSchema {
 impl ResolvedOwnedSchema {
     pub fn new(root_schema: Schema) -> AvroResult<Self> {
         Ok(Self {
-            inner: InnerResolvedOwnedSchemaTryBuilder {
-                root_schema,
-                names_builder: |schema: &Schema| {
-                    let mut names = HashMap::new();
-                    resolve_names(schema, &mut names, None, &HashMap::new())?;
-                    Ok::<_, Error>(names)
-                },
-            }
-            .try_build()?,
+            inner: InnerResolvedOwnedSchema::try_new(root_schema, |schema: &Schema| {
+                let mut names = HashMap::new();
+                resolve_names(schema, &mut names, None, &HashMap::new())?;
+                Ok::<_, Error>(names)
+            })?,
         })
     }
 
     pub fn get_root_schema(&self) -> &Schema {
-        self.inner.borrow_root_schema()
+        self.inner.borrow_owner()
     }
     pub fn get_names(&self) -> &NamesRef<'_> {
-        self.inner.borrow_names()
+        self.inner.borrow_dependent()
     }
 }
 
